@@ -45,6 +45,9 @@
       p.yearsWithTeam = p.contract && p.contract.rookie ? Math.min(p.yearsPro, 3) : 2;
       p.draft = null; p.personality = personalityFor(p.id, rng); p.mood = 60;
       p.stashedUntil = null; p.gleague = false; p.careerStats = []; p.awards = []; p.retired = false; p.hof = false;
+      // potential = the real career peak from the history targets, when known
+      var tg = W.TARGETS && W.TARGETS[p.id];
+      if (tg) { var peak = p.ovr; for (var ty in tg) if (ty !== "retire" && typeof tg[ty] === "number") peak = Math.max(peak, tg[ty]); p.pot = Math.min(99, peak); }
       state.players[p.id] = p;
     });
     if (W.DRAFTS) Object.keys(W.DRAFTS).forEach(function (yr) {
@@ -120,6 +123,14 @@
     if (mod("MOOD") && rng() < days / 30) safe("mood", function () { W.MOOD.update(state); });
     if (mod("PROG") && rng() < days / 30) safe("inSeason", function () { W.PROG.inSeason(state, rng); });
     if (mod("GLEAGUE") && days >= 7) safe("gleague", function () { W.GLEAGUE.simWeek(state, rng); });
+    // real-world headlines (elections, COVID, other sports) for the dates just simmed
+    var now = currentDate(state);
+    if (now && mod("NEWS") && W.NEWS.worldFor) safe("worldNews", function () {
+      (W.NEWS.worldFor(state.lastNewsDate || "2012-10-01", now) || []).forEach(function (ev) {
+        state.news.unshift({ year: state.year, day: state.day, date: ev.date, headline: ev.headline, body: ev.body || "", ids: [], world: true });
+      });
+    });
+    if (now) state.lastNewsDate = now;
     return res;
   }
 
@@ -172,6 +183,9 @@
         (order || []).forEach(function (slot) { if (slot.team !== state.userTeam || slot.auto) W.DRAFT.aiPick(state, slot.team, slot); });
         W.DRAFT.signRookies(state);
       });
+      // players who sat out their first season hurt, not overseas
+      var REDSHIRT = { noelne01: 1, embiijo01: 1, simmobe01: 1, portemi01: 1, gilesha01: 1 };
+      for (var rid in REDSHIRT) { var rp = state.players[rid]; if (rp && rp.injury && rp.injury.type === "Playing overseas") rp.injury.type = "Recovering from injury (redshirt season)"; }
       state.phase = "resign";
     } else if (phase === "resign") {
       if (mod("FA")) safe("startOffseason", function () { W.FA.startOffseason(state); });
