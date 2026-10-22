@@ -110,7 +110,7 @@
     M.player = new window.YT.Player(holder, {
       width: 200, height: 113,
       videoId: t && t.yt ? idFor(M.idx) : undefined,
-      playerVars: { autoplay: 0, controls: 0, playsinline: 1, rel: 0, modestbranding: 1 },
+      playerVars: { autoplay: 0, controls: 0, playsinline: 1, rel: 0, modestbranding: 1, origin: location.origin },
       events: {
         onReady: () => {
           M.ready = true;

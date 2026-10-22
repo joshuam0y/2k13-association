@@ -12,7 +12,6 @@
   // Chances (per 1000) of the number 1 pick for the 14 lottery teams, worst record first.
   var ODDS_1994 = [250, 199, 156, 119, 88, 63, 43, 28, 17, 11, 8, 7, 6, 5];
   var ODDS_2019 = [140, 140, 140, 125, 105, 90, 75, 60, 45, 30, 20, 15, 10, 5];
-  var LOTTERY_TEAMS = 14;
 
   // ---------------------------------------------------------------------------
   // Helpers

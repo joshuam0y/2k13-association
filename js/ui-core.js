@@ -16,6 +16,8 @@
   // The engine season object always comes from the league state (it is replaced each new season).
   Object.defineProperty(UI.state, 'season', { get() { return this.game ? this.game.season : null; } });
   UI.canPlay = () => !!(UI.state.L && UI.state.engine);
+  // The active league state, for pages added by other modules.
+  UI.getState = UI.getLeagueState = () => UI.state.game;
 
   // ---------- DOM and text ----------
   const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };

@@ -102,7 +102,13 @@
     let seed = Number(st.rngSeed);
     if (!isFinite(seed) || seed <= 0) seed = 1 + Math.floor(Math.random() * 2147483646);
     st.rngSeed = (seed * 1103515245 + 12345) % 2147483647;
-    return UI.rng(st.rngSeed);
+    let a = st.rngSeed >>> 0;
+    return function () {   // mulberry32, as in js/league.js
+      a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
   };
 
   // Autosave through the existing save helper.
@@ -148,39 +154,6 @@
 
   F.phaseName = ph => ({ preseason: 'Preseason', regular: 'Regular season', playoffs: 'Playoffs', draftLottery: 'Draft lottery',
     draft: 'Draft', resign: 'Re-signing', freeAgency: 'Free agency', training: 'Training camp' }[ph] || ph || '-');
-
-  // ---------- routing for the feature pages ----------
-  // ui.js has a fixed route list; wrap the router so #/trade, #/fa and #/draft reach these pages.
-  const MINE = { trade: 'trade', fa: 'fa', draft: 'draft' };
-  if (!UI.__featRoute && typeof UI.route === 'function') {
-    UI.__featRoute = true;
-    const orig = UI.route;
-    UI.route = function () {
-      const parts = (location.hash || '#/home').replace(/^#\/?/, '').split('/');
-      const page = parts[0];
-      if (!MINE[page] || !P[page]) return orig.apply(this, arguments);
-      const app = document.getElementById('app');
-      UI.$$('#mainnav a').forEach(a => a.classList.toggle('on', a.getAttribute('data-nav') === page));
-      if (!UI.state.league && UI.notBuilt) { app.innerHTML = UI.notBuilt('data'); return; }
-      const arg = parts.slice(1).join('/');
-      try { P[page](app, arg ? decodeURIComponent(arg) : ''); } catch (e) {
-        console.warn('Page failed', page, e);
-        app.innerHTML = UI.empty('SOMETHING WENT WRONG', 'This page could not be drawn: ' + esc(e && e.message ? e.message : e), '<a class="btn" href="#/home">HOME</a>');
-      }
-    };
-  }
-  // Add nav links once, before Saves, unless the header already has them.
-  (function addNav() {
-    const nav = document.getElementById('mainnav');
-    if (!nav) { document.addEventListener('DOMContentLoaded', addNav, { once: true }); return; }
-    const before = nav.querySelector('[data-nav="saves"]');
-    [['trade', 'Trades'], ['fa', 'Free Agency'], ['draft', 'Draft']].forEach(([k, label]) => {
-      if (nav.querySelector('[data-nav="' + k + '"]') || nav.querySelector('a[href="#/' + k + '"]')) return;
-      const a = document.createElement('a');
-      a.href = '#/' + k; a.setAttribute('data-nav', k); a.textContent = label;
-      nav.insertBefore(a, before || null);
-    });
-  })();
 
   // ---------- trade page ----------
   let deal = { user: null, partner: null, sel: {} };

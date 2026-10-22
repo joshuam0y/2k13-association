@@ -218,13 +218,11 @@
         catch (e) { console.warn('[fantasy] could not restore the draft', e); lsDel(); }
       }
     }
-    if (!API.current) {
-      app.innerHTML = UI.empty('NO FANTASY DRAFT IN PROGRESS', 'Start a fantasy draft: every 2012-13 player goes back into one pool and all 30 teams draft from scratch.',
-        '<div class="row-btns"><a class="btn btn-gold" href="#/fantasy/new">START A FANTASY DRAFT</a><a class="btn" href="#/home">HOME</a></div>');
-      return;
-    }
+    if (!API.current) { drawSetup(app); return; }
     drawBoard(app);
   };
+  P.fantasy.navLabel = 'Fantasy Draft';
+  P.fantasy.navDesc = 'Every 2012-13 player back in one pool: a 30-team, 15-round snake draft';
 
   function drawSetup(app) {
     var teams = UI.teams();
@@ -366,7 +364,7 @@
             X.log(state, 'draft', 'Fantasy draft complete: ' + f.picks.length + ' players drafted by 30 teams.', []);
             await X.persist();
           } else {
-            UI.state.lg = state; W.A13_STATE = state; UI.state.season = state.season;
+            UI.state.game = state; W.A13_STATE = state;
             if (UI.bump) UI.bump();
           }
           lsDel();

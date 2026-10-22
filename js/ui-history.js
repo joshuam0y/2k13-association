@@ -117,7 +117,7 @@
     return r ? { kind: 'single', items: [r] } : null;
   }
   function awardKeys(a) {
-    const keys = Object.keys(a || {}).filter(k => a[k] != null && typeof a[k] !== 'function' && k !== 'year');
+    const keys = Object.keys(a || {}).filter(k => a[k] != null && typeof a[k] !== 'function' && k !== 'year' && k !== 'ballots');
     const known = AWARD_ORDER.map(x => x[0]).filter(k => keys.includes(k));
     return known.concat(keys.filter(k => !known.includes(k)));
   }
@@ -148,7 +148,10 @@
   }
   function awardsGrid(s, awards, year, opts) {
     const keys = awardKeys(awards);
-    const html = keys.map(k => awardCard(s, k, awards[k], year, opts)).join('');
+    const ballots = awards && awards.ballots && typeof awards.ballots === 'object' ? awards.ballots : {};
+    // a ballot (the full race) wins over the bare winner id when the module provides one
+    const valueOf = k => (Array.isArray(ballots[k]) && ballots[k].length ? ballots[k] : awards[k]);
+    const html = keys.map(k => awardCard(s, k, valueOf(k), year, opts)).join('');
     return html ? `<div class="fr-awards">${html}</div>` : '';
   }
 
@@ -169,7 +172,9 @@
       return {
         year: num(it.year || it.season),
         team: it.champion || it.team || it.winner || it.abbr || (v ? v[0] : it.value),
+        abbr: it.abbr || null,
         runner: it.runnerUp || it.runnerup || it.loser || it.opponent || (v ? v[1] : null),
+        runnerAbbr: it.runnerUpAbbr || null,
         fmvp: it.finalsMvp || it.fmvp || null,
         series: it.series || it.result || null
       };
@@ -188,7 +193,8 @@
       year: num(it.year || it.season),
       name: it.name || (typeof it.player === 'string' ? it.player : it.player && it.player.name) || it.value || '',
       id: it.id || it.playerId || null,
-      team: it.team || it.abbr || null
+      team: it.team || it.abbr || null,
+      abbr: it.abbr || null
     })).filter(x => x.year && x.name).sort((a, b) => b.year - a.year);
   }
   function priorRetired(H) {
@@ -311,7 +317,7 @@
         : '<p class="muted">No seasons finished yet. Winners are added at the end of every season.</p>'}
       ${mv.length ? `${UI.header('MVPS BEFORE 2012', 'The real winners, from the league\'s history.')}
         <div class="tscroll fr-short"><table class="stats"><thead><tr><th class="l">SEASON</th><th class="l">MVP</th><th class="l">TEAM</th></tr></thead><tbody>${mv.slice(0, 15).map(m =>
-          `<tr><td class="l">${esc(fr.seasonLabel(m.year))}</td><td class="l">${m.id && playerOf(s, m.id) ? fr.plink(playerOf(s, m.id)) : esc(m.name)}</td><td class="l">${esc(m.team || '')}</td></tr>`).join('')}</tbody></table></div>
+          `<tr><td class="l">${esc(fr.seasonLabel(m.year))}</td><td class="l">${m.id && playerOf(s, m.id) ? fr.plink(playerOf(s, m.id)) : esc(m.name)}</td><td class="l">${m.abbr && s.teams[m.abbr] ? `<span class="fr-st-team">${fr.logo(m.abbr, 22)} ${esc(m.team || m.abbr)}</span>` : esc(m.team || '')}</td></tr>`).join('')}</tbody></table></div>
         <a class="more" href="#/history/prior">ALL PAST MVPS AND CHAMPIONS</a>` : ''}`;
   };
 
@@ -454,22 +460,32 @@
 
   function jerseysTab(s) {
     const H = prior(s);
-    const all = H ? priorRetired(H).map(x => Object.assign({ before: true }, x)) : [];
+    const book = s.history && s.history.retiredJerseys;
+    let all;
+    if (book && typeof book === 'object') {
+      all = [];
+      Object.keys(book).forEach(t => (book[t] || []).forEach(x => {
+        const p = x && x.id ? playerOf(s, x.id) : null;
+        all.push({ team: t, number: x.number != null ? x.number : '', name: x.name || (p && p.name) || '', year: x.year || null, p, before: !x.id && !(x.year && x.year >= 2013) });
+      }));
+    } else all = H ? priorRetired(H).map(x => Object.assign({ before: true }, x)) : [];
+    const dup = (team, name, number) => all.some(a => a.team === team && (a.name === name || (number != null && number !== '' && String(a.number) === String(number) && a.name === name)));
     // jerseys retired during this Association
     Object.keys(s.teams || {}).forEach(abbr => {
       const t = s.teams[abbr];
       (t.retired || t.retiredJerseys || t.retiredNumbers || []).forEach(it => {
         const p = it && (it.id || it.playerId) ? playerOf(s, it.id || it.playerId) : null;
+        if (dup(abbr, p ? p.name : it.name, it.number)) return;
         all.push({ team: abbr, number: it.number != null ? it.number : it.no || '', name: p ? p.name : it.name || '', year: it.year || null, p });
       });
     });
     Object.keys(s.players || {}).forEach(id => {
       const p = s.players[id];
-      const jr = p && (p.jerseyRetired || p.retiredJersey);
+      const jr = p && (p.jerseysRetired || p.jerseyRetired || p.retiredJersey);
       if (!jr) return;
       (Array.isArray(jr) ? jr : [jr]).forEach(x => {
         const team = typeof x === 'string' ? x : x && x.team;
-        if (team && !all.some(a => a.team === team && a.name === p.name)) all.push({ team, number: x.number || p.number || '', name: p.name, year: x.year || null, p });
+        if (team && !dup(team, p.name)) all.push({ team, number: (x && x.number) || p.jersey || p.number || '', name: p.name, year: (x && x.year) || null, p });
       });
     });
     if (!all.length) {
@@ -490,19 +506,20 @@
     const champs = priorChampions(H), mvps = priorMvps(H);
     const mvpBy = {};
     mvps.forEach(m => { mvpBy[m.year] = m; });
-    const titles = {};
-    champs.forEach(c => { titles[c.team] = (titles[c.team] || 0) + 1; });
-    const label = abbr => (s.teams[abbr] || (UI.teams && UI.teams().some(t => t.abbr === abbr))) ? `${fr.logo(abbr, 22)} ${esc(fr.teamName(s, abbr))}` : esc(abbr);
+    let titles = H.titles && typeof H.titles === 'object' && !Array.isArray(H.titles) ? H.titles : null;
+    if (!titles) { titles = {}; champs.forEach(c => { const k = c.abbr || c.team; titles[k] = (titles[k] || 0) + 1; }); }
+    const known = abbr => !!(abbr && s.teams[abbr]);
+    const label = (name, abbr) => known(abbr) ? `${fr.logo(abbr, 22)} ${esc(name && name !== abbr ? name : fr.teamName(s, abbr))}` : known(name) ? `${fr.logo(name, 22)} ${esc(fr.teamName(s, name))}` : esc(name);
     const years = Array.from(new Set(champs.map(c => c.year).concat(mvps.map(m => m.year)))).sort((a, b) => b - a);
     const rows = years.map(y => {
       const c = champs.find(x => x.year === y), m = mvpBy[y];
-      return `<tr><td class="l">${esc(fr.seasonLabel(y))}</td><td class="l"><span class="fr-st-team">${c ? label(c.team) : '-'}</span></td>
-        <td class="l hide-sm">${c && c.runner ? `<span class="fr-st-team">${label(c.runner)}</span>` : '<span class="muted">-</span>'}</td>
+      return `<tr><td class="l">${esc(fr.seasonLabel(y))}</td><td class="l"><span class="fr-st-team">${c ? label(c.team, c.abbr) : '-'}</span></td>
+        <td class="l hide-sm">${c && c.runner ? `<span class="fr-st-team">${label(c.runner, c.runnerAbbr)}</span>` : '<span class="muted">-</span>'}</td>
         <td class="l hide-sm">${c && c.fmvp ? esc(c.fmvp) : '<span class="muted">-</span>'}</td>
-        <td class="l">${m ? esc(m.name) + (m.team ? ` <small class="muted">${esc(m.team)}</small>` : '') : '<span class="muted">-</span>'}</td></tr>`;
+        <td class="l">${m ? esc(m.name) + (m.team ? ` <small class="muted">${esc(m.abbr || m.team)}</small>` : '') : '<span class="muted">-</span>'}</td></tr>`;
     }).join('');
     const tl = Object.keys(titles).sort((a, b) => titles[b] - titles[a]).slice(0, 12);
-    return `${tl.length ? `${UI.header('MOST TITLES', 'Before the 2012-13 season')}<div class="fr-titles">${tl.map(t => `<span>${fr.logo(t, 30)}<b>${titles[t]}</b><small>${esc(t)}</small></span>`).join('')}</div>` : ''}
+    return `${tl.length ? `${UI.header('MOST TITLES', 'Before the 2012-13 season')}<div class="fr-titles">${tl.map(t => `<span>${known(t) ? fr.logo(t, 30) : ''}<b>${titles[t]}</b><small>${esc(t)}</small></span>`).join('')}</div>` : ''}
       ${UI.header('CHAMPIONS AND MVPS', 'The real NBA, year by year.')}
       ${rows ? `<div class="tscroll"><table class="stats"><thead><tr><th class="l">SEASON</th><th class="l">CHAMPION</th><th class="l hide-sm">RUNNER-UP</th><th class="l hide-sm">FINALS MVP</th><th class="l">MVP</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="muted">The history file has no champions or MVPs listed.</p>'}`;
   }

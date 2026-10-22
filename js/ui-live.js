@@ -17,12 +17,12 @@
   const looksLikeState = o => !!(o && typeof o === 'object' && o.players && typeof o.players === 'object' &&
     !Array.isArray(o.players) && o.teams && typeof o.teams === 'object' && o.season && Array.isArray(o.season.days));
 
-  // The full league state (contract-v2). The UI may keep it under several names; take the first that fits.
+  // The full league state (contract-v2). The UI keeps it in UI.state.game; older names are tried too.
   X.getState = function () {
-    const cands = [];
-    try { if (typeof UI.getLeagueState === 'function') cands.push(UI.getLeagueState()); } catch (e) { /* ignore */ }
     const st = UI.state || {};
-    cands.push(st.lg, st.franchise, st.leagueState, st.lstate, st.assoc, st.game, st.save && st.save.state, st.season, window.A13_STATE);
+    const cands = [st.game];
+    try { if (typeof UI.getLeagueState === 'function') cands.push(UI.getLeagueState()); } catch (e) { /* ignore */ }
+    cands.push(st.lg, st.franchise, st.leagueState, window.A13_STATE);
     for (let i = 0; i < cands.length; i++) if (looksLikeState(cands[i])) return cands[i];
     return null;
   };
@@ -48,22 +48,17 @@
     return (s && s.userTeam) || (UI.userTeam && UI.userTeam()) || null;
   };
 
-  // Make a league state the active one.
+  // Make a league state the active one (in a save slot when the save module is there).
   X.setState = function (state, opts) {
     opts = opts || {};
-    if (typeof UI.setLeagueState === 'function') return UI.setLeagueState(state, opts);
-    UI.state.lg = state;
-    window.A13_STATE = state;
-    UI.state.season = state.season;
-    UI.state.save = Object.assign({}, UI.state.save || {}, {
-      name: opts.name || (UI.state.save && UI.state.save.name) || 'My Association',
-      userTeam: state.userTeam,
-      created: (UI.state.save && UI.state.save.created) || Date.now(),
-      updated: Date.now(),
-      seed: (state.rngSeed >>> 0) || 1, sims: 0, bracket: null
-    });
-    if (opts.slot) UI.state.slot = Number(opts.slot);
-    else if (!UI.state.slot && UI.saves && typeof UI.saves.firstEmpty === 'function') UI.state.slot = UI.saves.firstEmpty() || 1;
+    const S = UI.saves;
+    if (S && typeof S.activate === 'function') {
+      const slot = Number(opts.slot) || (typeof S.firstEmpty === 'function' && S.firstEmpty()) || UI.state.slot || 1;
+      S.activate(slot, state, { name: opts.name || null, created: Date.now() });
+    } else {
+      UI.state.game = state;
+      window.A13_STATE = state;
+    }
     if (UI.bump) UI.bump();
     return state;
   };
@@ -71,8 +66,7 @@
   // Save after a change, with whatever the save module offers.
   X.persist = async function () {
     try {
-      const s = X.getState();
-      if (s && typeof UI.saveLeagueState === 'function') return await UI.saveLeagueState(s);
+      if (typeof UI.saveNow === 'function') return await UI.saveNow();
       if (UI.saves && typeof UI.saves.write === 'function') return await UI.saves.write();
     } catch (e) {
       console.warn('[extras] save failed', e);
@@ -173,11 +167,14 @@
     const parts = (location.hash || '#/home').replace(/^#\/?/, '').split('/');
     const page = parts[0] || 'home';
     const arg = parts.slice(1).join('/');
-    if (MINE.indexOf(page) >= 0 && typeof P[page] === 'function') {
+    // An older router that only knows its own pages: draw ours here.
+    if (typeof UI.extraPages !== 'function' && MINE.indexOf(page) >= 0 && typeof P[page] === 'function') {
       const app = document.getElementById('app');
       UI.$$('#mainnav a').forEach(a => a.classList.toggle('on', a.getAttribute('data-nav') === NAV[page]));
       if (!UI.state.league) { app.innerHTML = UI.notBuilt ? UI.notBuilt('data') : X.msg('LEAGUE DATA NOT LOADED', 'The league file did not load.'); return; }
-      try { P[page](app, arg ? decodeURIComponent(arg) : ''); }
+      let decoded = arg;
+      try { decoded = decodeURIComponent(arg); } catch (e) { /* keep raw */ }
+      try { P[page](app, decoded); }
       catch (e) {
         console.warn('Page failed', page, e);
         app.innerHTML = X.msg('SOMETHING WENT WRONG', 'This page could not be drawn: ' + esc(e && e.message ? e.message : e));
@@ -567,6 +564,9 @@
     }
     drawPregame(app, found);
   };
+
+  P.live.navLabel = 'Watch Live';
+  P.live.navDesc = 'Watch your next game play by play with a live box score';
 
   function recordOf(season, abbr) {
     const s = season.standings && season.standings[abbr];

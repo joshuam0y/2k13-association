@@ -44,8 +44,8 @@
         ${tile('#/playoffs', '16 TEAMS', 'PLAYOFFS', 'The bracket to the Larry O\'Brien Trophy')}
         ${tile('#/soundtrack', '24 SONGS', 'SOUNDTRACK', 'The official 2K13 tracklist')}
         ${tile('#/saves', '5 SLOTS', 'SAVES', 'Load, rename, export and import leagues')}
-      </div>
-      ${UI.extraPages().length ? `${UI.header('FRONT OFFICE')}<div class="menu-grid">${UI.extraPages().map(x => tile('#/' + x.route, x.kicker || 'FRONT OFFICE', esc(x.label.toUpperCase()), x.desc || '')).join('')}</div>` : ''}`;
+        ${UI.extraPages().map(x => tile('#/' + x.route, esc(x.kicker || 'FRONT OFFICE'), esc(x.label.toUpperCase()), esc(x.desc || ''))).join('')}
+      </div>`;
   };
 
   // ---------- New league: pick a team ----------

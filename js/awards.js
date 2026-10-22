@@ -99,7 +99,8 @@
         group: posGroup(p.pos), rookie: isRookie(p, year), teamDef: def[team] || 0
       };
       // overall value: game score with a nod to scoring volume
-      c.value = line.gmsc + 0.25 * line.ppg;
+      c.value = line.gmsc + 0.25 * line.ppg + 0.2 * line.apg;
+      c.rep = clamp(((p.ovr || 75) - 80) * 0.2, -3, 4);   // voters lean on reputation a little
       // defensive value: stocks, defensive boards, ratings and team defense
       c.defense = 3.2 * line.spg + 2.6 * line.bpg + 0.45 * line.drpg + 0.12 * (attrAvg(p, ['perD', 'intD', 'diq']) - 60) +
         0.35 * c.teamDef + 0.06 * line.mpg;
@@ -137,7 +138,7 @@
   function mvpScore(c) {
     // winning matters: a top seed adds a lot, a losing record sinks a case
     var seedBonus = c.seed <= 1 ? 4 : c.seed <= 2 ? 3 : c.seed <= 4 ? 1.5 : c.seed <= 8 ? 0 : -4;
-    return c.value * (0.75 + 0.5 * c.winPct) + (c.winPct - 0.5) * 18 + seedBonus;
+    return c.value * (0.75 + 0.5 * c.winPct) + (c.winPct - 0.5) * 18 + seedBonus + 0.5 * c.rep;
   }
 
   function teamsOf(ranked, count, perTeam, positional) {
@@ -210,7 +211,7 @@
     var eligible = all.filter(function (c) { return c.line.g >= minG && c.line.mpg >= 20; });
     if (eligible.length < 15) eligible = sortBy(all, 'value').slice(0, Math.max(15, eligible.length));
 
-    eligible.forEach(function (c) { c.mvp = mvpScore(c); c.nba = c.value * (0.9 + 0.3 * c.winPct) + 0.1 * c.line.ppg; });
+    eligible.forEach(function (c) { c.mvp = mvpScore(c); c.nba = c.value * (0.9 + 0.3 * c.winPct) + 0.1 * c.line.ppg + c.rep; });
     var mvpList = sortBy(eligible, 'mvp');
 
     var defList = sortBy(eligible.filter(function (c) { return c.line.mpg >= 24; }), 'defense');

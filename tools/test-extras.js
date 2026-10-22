@@ -25,7 +25,7 @@ function rng(seed) {
   let s = seed >>> 0;
   return function () { s += 0x6D2B79F5; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
-const DASH = /[‒–—―]/;
+const DASH = new RegExp('[' + String.fromCharCode(0x2012, 0x2013, 0x2014, 0x2015) + ']');
 
 // ---------------------------------------------------------------------------
 // A state built from the 2012 data, with real 2012-13 lines as the fake season
@@ -193,7 +193,8 @@ function buildState(year) {
   ok(res.roy === 'lillada01', 'Lillard is ROY');
   ok(state.players[res.smoy] && BENCH.includes(res.smoy), '6MOY comes off the bench: ' + name(res.smoy));
   ok(['georgpa01', 'holidjr01', 'sandela01', 'vasqugr01'].includes(res.mip), 'MIP is a breakout player: ' + name(res.mip));
-  ok(['MIA', 'DEN', 'MEM', 'NYK', 'OKC', 'SAS', 'LAC', 'GSW', 'IND'].includes(res.coy.team), 'COY from an overachiever: ' + res.coy.team);
+  // HOU counts: in the 2K13 launch data Harden is still on the Thunder, so a 45-win Rockets team overachieves
+  ok(['MIA', 'DEN', 'MEM', 'NYK', 'OKC', 'SAS', 'LAC', 'GSW', 'IND', 'HOU'].includes(res.coy.team), 'COY from an overachiever: ' + res.coy.team);
   ok(res.allNba.length === 3 && res.allNba.every(t => t.length === 5), 'three All-NBA teams of five');
   const allIds = [].concat(...res.allNba);
   ok(new Set(allIds).size === 15, 'no player on two All-NBA teams');

@@ -8,6 +8,7 @@
 .ft-hint { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
 .ft-stash { color: #9fd0ff; }
 .ft-warn { color: #ffb4b4; font-size: 14px; }
+.ft-badge { background: #1d2a3a; color: #bcdcff; border: 1px solid #34506e; }
 .ft-up { color: var(--gold2); font-family: var(--display); font-size: 12px; letter-spacing: .08em; }
 .ft-down { color: var(--loss); font-family: var(--display); font-size: 12px; letter-spacing: .08em; }
 

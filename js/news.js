@@ -6,9 +6,11 @@
   'use strict';
 
   var MAX_NEWS = 600;
+  // figure dash, en dash, em dash, horizontal bar (built from char codes so this file holds none of them)
+  var DASHES = new RegExp('[' + String.fromCharCode(0x2012, 0x2013, 0x2014, 0x2015) + ']', 'g');
 
   function yearOf(state) { return (state && state.year) || 2013; }
-  function clean(s) { return String(s == null ? '' : s).replace(/[‒–—―]/g, '-'); }
+  function clean(s) { return String(s == null ? '' : s).replace(DASHES, '-'); }
   function hash(s) { var h = 0; s = String(s); for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); }
   function pick(list, seed) { return list[hash(seed) % list.length]; }
   function comma(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
@@ -70,7 +72,7 @@
     var headline;
     if (best && teams.length === 2) {
       var to = receiver(best.from);
-      if ((best.p.ovr || 0) >= 85) headline = pick(['BLOCKBUSTER: ' + nick(state, to) + ' Land ' + best.p.name,
+      if ((best.p.ovr || 0) >= 84 || (best.p.ovr || 0) >= 80 && (best.p.age || 30) <= 24) headline = pick(['BLOCKBUSTER: ' + nick(state, to) + ' Land ' + best.p.name,
         best.p.name + ' Traded To ' + full(state, to) + ' In Stunning Deal',
         'Shockwaves: ' + nick(state, best.from) + ' Ship ' + best.p.name + ' To ' + team(state, to).city], ids.join());
       else if ((best.p.ovr || 0) >= 76) headline = pick([nick(state, to) + ' Acquire ' + best.p.name + ' From ' + nick(state, best.from),
@@ -88,9 +90,10 @@
   function signing(state, abbr, playerId, info) {
     info = info || {};
     var p = player(state, playerId);
-    var sal = info.salaries || (p.contract && p.contract.salaries) || [];
+    var sal = info.salaries || (info.amount ? [] : (p.contract && p.contract.salaries) || []);
     var years = info.years || sal.length || 1;
-    var total = info.total || (sal.length ? sal.reduce(function (s, x) { return s + (x.amount || 0); }, 0) : (info.amount || 0) * years);
+    var total = info.total || (info.amount ? info.amount * years : sal.reduce(function (s, x) { return s + (x.amount || 0); }, 0));
+    if (!sal.length && info.amount) sal = [{ amount: info.amount }];
     var twoWay = info.twoWay || (p.contract && p.contract.twoWay);
     var headline, body;
     if (twoWay) {
@@ -120,21 +123,23 @@
   function injury(state, playerId, inj) {
     var p = player(state, playerId);
     inj = inj || p.injury || { type: 'Injury', games: 1 };
-    var type = String(inj.type || 'injury').toLowerCase();
+    var raw = String(inj.type || 'Injury');
+    var type = raw.split(' ').map(function (w) { return w === w.toUpperCase() ? w : w.toLowerCase(); }).join(' ');
+    var Type = title(type);
     var t = p.team ? nick(state, p.team) : '';
     var headline, body;
     if (inj.games >= 999 || inj.games >= 70) {
-      headline = 'Devastating: ' + p.name + ' Out For Season With ' + title(type);
+      headline = 'Devastating: ' + p.name + ' Out For Season With ' + Type;
       body = (t ? 'The ' + t + ' announced that ' : '') + p.name + ' will miss the rest of the season with a ' + type + '.';
     } else if (inj.games >= 15) {
       var weeks = Math.max(2, Math.round(inj.games / 3.5));
-      headline = p.name + ' Sidelined ' + weeks + ' Weeks With ' + title(type);
+      headline = p.name + ' Sidelined ' + weeks + ' Weeks With ' + Type;
       body = p.name + ' is expected to miss about ' + inj.games + ' games with a ' + type + '.';
     } else if (inj.games >= 4) {
-      headline = p.name + ' To Miss Time With ' + title(type);
+      headline = p.name + ' To Miss Time With ' + Type;
       body = p.name + ' is out for about ' + inj.games + ' games with a ' + type + '.';
     } else {
-      headline = p.name + ' Day-To-Day With ' + title(type);
+      headline = p.name + ' Day-To-Day With ' + Type;
       body = p.name + ' suffered a ' + type + ' and is listed as day-to-day.';
     }
     return item(state, 'injury', headline, body, [playerId]);

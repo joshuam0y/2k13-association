@@ -62,6 +62,9 @@
     else drawPlayers(body, state);
   };
 
+  P.commish.navLabel = 'Commissioner';
+  P.commish.navDesc = 'Edit players and contracts, force trades, change the rules';
+
   // ---------- players ----------
   const listOpts = { q: '', team: '' };
   function drawPlayers(body, state) {

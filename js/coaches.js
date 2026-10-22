@@ -51,7 +51,7 @@
     Object.keys(teams).forEach(function (abbr) {
       var t = teams[abbr];
       if (t.coach && state.coaches[t.coach]) return;
-      var id = d.startByTeam[abbr];
+      var id = d.startByTeam[abbr] || d.startByTeam[{ NOP: 'NOH', CHH: 'CHA' }[abbr]];
       if (id && state.coaches[id] && state.coaches[id].status !== 'retired' &&
           (!state.coaches[id].team || state.coaches[id].team === abbr)) {
         place(state, abbr, id, state.coaches[id].hiredYear || yearOf(state));
@@ -268,8 +268,9 @@
       }
     });
     if (year >= 2026) {
+      // after the real coaching pool ends, a couple of new fictional names enter every offseason
       var free = available(state, year + 1).length;
-      for (var i = free; i < 8; i++) generate(state, year + 1, rng);
+      for (var i = 0; i < Math.max(2, 8 - free); i++) generate(state, year + 1, rng);
     }
     var filled = [];
     Object.keys(state.teams || {}).forEach(function (abbr) {

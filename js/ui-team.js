@@ -7,6 +7,7 @@
   const P = UI.pages = UI.pages || {};
   const esc = UI.esc || (s => String(s == null ? '' : s));
   const fr = UI.fr = UI.fr || {};
+  const f1 = v => (v == null || isNaN(v) ? '-' : Number(v).toFixed(1));
 
   // ---------- the league state (contract-v2), found wherever the UI keeps it ----------
   const isLeagueState = x => !!(x && typeof x === 'object' && x.players && typeof x.players === 'object' && !Array.isArray(x.players)
@@ -402,6 +403,11 @@
   // ---------- G League ----------
   function affiliate(s, abbr) {
     const G = window.GLEAGUE;
+    if (G && typeof G.affiliateOf === 'function') {
+      const id = fr.call('affiliateOf', () => G.affiliateOf(abbr, s.year), null);
+      if (!id) return 'Flexible assignment (no affiliate this season)';
+      return typeof G.clubName === 'function' ? fr.call('clubName', () => G.clubName(id, s.year), id) : id;
+    }
     if (G && typeof G.affiliate === 'function') {
       const a = fr.call('affiliate', () => G.affiliate(s, abbr, s.year), null);
       if (a) return typeof a === 'string' ? a : ((a.city ? a.city + ' ' : '') + (a.name || a.id || '')).trim();
@@ -416,11 +422,12 @@
     const nm = (club.names || []).filter(n => n.from <= s.year).pop() || (club.names || [])[0];
     return nm ? nm.city + ' ' + nm.name : club.id;
   }
-  function gleagueCall(fnName, s, p) {
+  // GLEAGUE.assign(state, playerId, opts) and GLEAGUE.recall(state, playerId)
+  function gleagueCall(fnName, s, p, opts) {
     const G = window.GLEAGUE;
     const fn = G && G[fnName];
     if (typeof fn !== 'function') return { ok: false, reason: 'not built' };
-    const r = fn.length >= 3 ? fn.call(G, s, s.userTeam, p.id) : fn.call(G, s, p.id);
+    const r = opts ? fn.call(G, s, p.id, opts) : fn.call(G, s, p.id);
     if (r && typeof r === 'object' && 'ok' in r) return r;
     return { ok: r !== false };
   }
@@ -431,23 +438,40 @@
     const aff = affiliate(s, s.userTeam);
     const can = G && typeof G.assign === 'function' && typeof G.recall === 'function';
     const twoWays = all.filter(p => p.contract && p.contract.twoWay).length;
+    const extra = p => {
+      const bits = [];
+      if (G && typeof G.playerStats === 'function') {
+        const st = fr.call('gl stats', () => G.playerStats(s, p.id), null);
+        if (st && st.g) bits.push(`${st.g} G | ${f1(st.pts)} PTS | ${f1(st.reb)} REB | ${f1(st.ast)} AST`);
+      }
+      if (p.contract && p.contract.twoWay && tw && tw.allowed && G && typeof G.usage === 'function') {
+        const u = fr.call('gl usage', () => G.usage(s, p.id), null);
+        if (u) bits.push(`NBA ${esc(tw.limitType)} used: ${esc(u[tw.limitType] || 0)} of ${esc(tw.limit)}`);
+      }
+      return bits.length ? `<span class="fr-rot-meta fr-gl-stats">${bits.join(' | ')}</span>` : '';
+    };
     const line = (p, act) => `<li class="fr-gl-row">
       <span class="fr-rot-hs">${fr.head(p)}</span>
-      <span class="fr-rot-main"><span class="fr-rot-name">${fr.plink(p)}</span><span class="fr-rot-meta">${esc(p.pos || '')} | ${esc(p.age || '-')} yrs | ${esc(p.yearsPro != null ? p.yearsPro + ' yrs pro' : '')} ${fr.badges(p)}</span></span>
+      <span class="fr-rot-main"><span class="fr-rot-name">${fr.plink(p)}</span><span class="fr-rot-meta">${esc(p.pos || '')} | ${esc(p.age || '-')} yrs | ${esc(p.yearsPro != null ? p.yearsPro + ' yrs pro' : '')} ${fr.badges(p)}</span>${extra(p)}</span>
       ${fr.ovr(p)}
       ${can ? `<button type="button" class="btn btn-small${act === 'recall' ? ' btn-gold' : ''}" data-${act}="${esc(p.id)}">${act === 'recall' ? 'RECALL' : 'ASSIGN'}</button>` : '<span></span>'}
     </li>`;
-    const eligible = up.filter(p => (p.yearsPro || 0) <= 3 || (p.contract && p.contract.twoWay));
-    body.innerHTML = `${UI.header('G LEAGUE', aff ? 'Affiliate: <b>' + esc(aff) + '</b>' : 'Assign young players to get them minutes, then recall them.')}
+    const eligible = up.filter(p => (p.yearsPro || 0) < 3 || (p.contract && p.contract.twoWay));
+    const lname = G && typeof G.leagueName === 'function' ? fr.call('leagueName', () => G.leagueName(s.year), 'G League') : 'G League';
+    const tw = G && typeof G.twoWayRules === 'function' ? fr.call('twoWayRules', () => G.twoWayRules(s.year), null) : null;
+    body.innerHTML = `${UI.header(String(lname).replace(/^NBA /, '').toUpperCase(), (aff ? 'Affiliate: <b>' + esc(aff) + '</b>. ' : '') + 'Assign players to get them minutes, then recall them.' + (tw ? (tw.allowed ? ' Two-way slots: ' + esc(tw.slots) + ', limit ' + esc(tw.limit) + ' NBA ' + esc(tw.limitType) + '.' : ' Two-way contracts start in 2017-18.') : ''))}
       ${can ? '' : fr.building('G League assignments', 'The G League module (<code>js/gleague.js</code>) has not loaded, so assignments, recalls and G League games are not available yet. Your roster is shown with two-way players marked.')}
       <div class="fr-stats3"><div><small>IN THE G LEAGUE</small><b>${down.length}</b></div><div><small>TWO-WAY CONTRACTS</small><b>${twoWays}</b></div><div><small>ELIGIBLE TO ASSIGN</small><b>${eligible.length}</b></div></div>
       <div class="two-col fr-gl">
         <section>${UI.header('ASSIGNED', 'Playing for the affiliate')}<ul class="fr-gl-list">${down.map(p => line(p, 'recall')).join('') || '<li class="muted fr-gl-none">Nobody is on assignment.</li>'}</ul></section>
-        <section>${UI.header('NBA ROSTER', 'Players with three years or less, and two-way players, can go down')}<ul class="fr-gl-list">${(can ? eligible : up).map(p => line(p, 'assign')).join('') || '<li class="muted fr-gl-none">No eligible players.</li>'}</ul></section>
+        <section>${UI.header('NBA ROSTER', 'Two-way players and players with under three years of service go down freely; veterans must agree')}<ul class="fr-gl-list">${up.map(p => line(p, 'assign')).join('') || '<li class="muted fr-gl-none">No players.</li>'}</ul></section>
       </div>`;
     const act = (kind, id) => {
       const p = s.players[id];
-      const r = fr.call(kind, () => gleagueCall(kind, s, p), { ok: false, reason: 'error' });
+      let r = fr.call(kind, () => gleagueCall(kind, s, p), { ok: false, reason: 'error' });
+      if (!r.ok && kind === 'assign' && /agree/i.test(r.reason || '') && window.confirm((r.reason || '') + ' Ask him to accept the assignment?')) {
+        r = fr.call(kind, () => gleagueCall(kind, s, p, { consent: true }), { ok: false, reason: 'error' });
+      }
       if (r.ok) { UI.toast && UI.toast(p.name + (kind === 'assign' ? ' assigned to the G League.' : ' recalled.')); fr.persist(); }
       else UI.toast && UI.toast(r.reason || r.message || 'That move is not allowed.', 'error');
       gleagueTab(body, s);

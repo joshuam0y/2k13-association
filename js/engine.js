@@ -25,19 +25,20 @@
   var T = {
     playMean: 14.2,           // seconds for the first play of a possession
     secondMean: 7.5,          // seconds for a play after an offensive rebound or a non-bonus foul
-    typeBase: { close: 0.38, post: 0.08, mid: 0.35, three: 0.16 },
+    typeBase: { close: 0.38, post: 0.08, mid: 0.35, three: 0.155 },
     typeK: { close: 0.9, post: 1.1, mid: 0.8, three: 1.5 },
-    makeBase: { close: 0.55, post: 0.415, mid: 0.36, three: 0.36 },
-    makeOff: { close: 0.025, post: 0.021, mid: 0.018, three: 0.018 },
-    makeDef: { close: 0.013, post: 0.013, mid: 0.008, three: 0.008 },
-    makeOvr: 0.004,           // per (softened) z of shooter overall vs his defender
+    makeBase: { close: 0.545, post: 0.41, mid: 0.358, three: 0.36 },
+    makeOff: { close: 0.018, post: 0.015, mid: 0.013, three: 0.013 },
+    makeDef: { close: 0.009, post: 0.009, mid: 0.0056, three: 0.0056 },
+    makeOvr: 0.0028,           // per (softened) z of shooter overall vs his defender
     teamEdge: 0.0010,         // per point of lineup average overall vs the opponent lineup
-    formSd: 0.04,             // per-game shooting form of a team (hot and cold nights)
-    soft: 0.6,                // regression of elite shot-making toward the mean (diminishing returns)
+    formSd: 0.015,             // per-game shooting form of a team (hot and cold nights)
+    soft: 0.7,                // regression of elite shot-making toward the mean (diminishing returns)
     starDrain: 0.2,           // extra fatigue per unit of usage above average
+    rubber: 0.0014,           // leading teams ease off and trailing teams push (per point of lead, capped at 20)
     minorK: 0.3,              // scale of the secondary team rating effects (turnovers, rebounding, blocks)
-    usageK: 0.30,
-    foulShot: { close: 0.23, post: 0.17, mid: 0.05, three: 0.014 },
+    usageK: 0.34,
+    foulShot: { close: 0.22, post: 0.165, mid: 0.048, three: 0.014 },
     andOneFactor: 0.62,
     blockGivenMiss: { close: 0.27, post: 0.185, mid: 0.065, three: 0.031 },
     astChance: { close: 0.57, post: 0.37, mid: 0.65, three: 0.85 },
@@ -50,7 +51,7 @@
     putback: 0.33,
     ftBase: 0.753,
     ftK: 0.085,
-    homeMake: 0.0065,
+    homeMake: 0.009,
     fatigueZ: 2.2,            // z lost per unit of energy below 1
     rebK: 0.42,
     astK: 0.55,
@@ -552,7 +553,8 @@
 
     // One play. Returns { next: team with the ball, dead, second (continuation), putback }
     function play(off, def, putbackBy) {
-      var edge = (lineupOvr(off) - lineupOvr(def)) * T.teamEdge + (off === H ? homeEdge : -homeEdge);
+      var edge = (lineupOvr(off) - lineupOvr(def)) * T.teamEdge + (off === H ? homeEdge : -homeEdge) -
+        T.rubber * clamp(off.pts - def.pts, -20, 20);
       if (!putbackBy) {
         // ---- turnover ----
         var hand = lineupZ(off, 'handle') * 0.6 + lineupZ(off, 'pass') * 0.4;
