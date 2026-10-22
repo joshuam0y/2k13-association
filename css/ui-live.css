@@ -36,7 +36,7 @@
 
 .lv-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; margin-bottom: 20px; }
 .lv-ck { font-family: var(--display); font-size: 11px; letter-spacing: .22em; color: var(--muted); margin-right: 4px; }
-.lv-speed.on { background: linear-gradient(180deg, var(--gold2), var(--gold)); color: #111; border-color: var(--gold); }
+.lv-speed.on, .lv-speed.on:hover:not(:disabled) { background: linear-gradient(180deg, var(--gold2), var(--gold)); color: #111; border-color: var(--gold); }
 
 .lv-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 22px; align-items: start; }
 .lv-feed { max-height: 380px; min-height: 200px; }
@@ -110,9 +110,10 @@
 .fd-filters input { flex: 1 1 160px; min-width: 0; background: var(--bg3); border: 1px solid var(--line); color: #fff; padding: 8px 10px; font: inherit; }
 .fd-filters input:focus { border-color: var(--gold); outline: none; }
 .fd-pos { padding: 6px 10px; font-size: 12px; }
-.fd-pos.on { background: var(--gold); color: #111; border-color: var(--gold); }
+.fd-pos.on, .fd-pos.on:hover:not(:disabled) { background: var(--gold); color: #111; border-color: var(--gold); }
 .fd-pool td .btn { padding: 5px 10px; font-size: 11px; }
-.fd-pool .hs { width: 34px; height: 25px; object-fit: cover; vertical-align: middle; margin-right: 6px; background: var(--bg3); }
+.fd-pool .hs { display: inline-block; width: 34px; height: 25px; object-fit: cover; vertical-align: middle; margin: 0 6px 0 0; background: var(--bg3); }
+.fd-pool td.l { white-space: nowrap; }
 .fd-side section { margin-bottom: 20px; }
 .fd-mine li, .fd-recent li { display: flex; align-items: center; gap: 8px; }
 .fd-mine .fd-n, .fd-recent .fd-n { font-family: var(--display); color: var(--muted); font-size: 12px; min-width: 42px; }

@@ -78,8 +78,8 @@
     return p && p.contractEnd || null;
   };
   fr.dateOf = function (s, year, day) {
-    if (s && s.season && s.year === year && Array.isArray(s.season.days)) {
-      const d = s.season.days[Math.max(0, Math.min(day || 0, s.season.days.length - 1))];
+    if (s && s.season && s.year === year && Array.isArray(s.season.days) && (day || 0) < s.season.days.length) {
+      const d = s.season.days[Math.max(0, day || 0)];
       if (d && d.date) {
         const dt = new Date(d.date + 'T12:00:00');
         if (!isNaN(dt)) return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });

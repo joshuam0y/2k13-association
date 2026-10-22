@@ -127,9 +127,23 @@
     return null;
   }
 
+  // Coach of the Year items can carry only a team: find who coached it that season.
+  function coachForTeam(s, abbr, year) {
+    const cs = (s && s.coaches) || {};
+    const ids = Object.keys(cs);
+    let c = ids.map(k => cs[k]).find(x => Array.isArray(x.seasons) && x.seasons.some(z => z.year === year && z.team === abbr));
+    if (!c) c = ids.map(k => cs[k]).find(x => x.team === abbr && x.status === 'employed' && (x.hiredYear || 0) <= year);
+    if (!c && year === 2013 && window.COACHES && window.COACHES.startByTeam) c = coachById(s, window.COACHES.startByTeam[abbr]);
+    return c || null;
+  }
   function awardCard(s, key, v, year, opts) {
     const n = normAward(s, v);
     if (!n) return '';
+    if (key === 'coy' && n.items) n.items = n.items.map(r => {
+      if (r.kind !== 'team') return r;
+      const c = coachForTeam(s, r.abbr, year);
+      return c ? Object.assign({}, r, { kind: 'coach', name: c.name, team: r.abbr }) : r;
+    });
     const showLine = r => (r.kind === 'player' ? (r.line || lineFor(s, r.id, year)) : r.kind === 'coach' && r.team ? fr.teamName(s, r.team) : r.line || '');
     const face = r => (r.kind === 'player' ? fr.head(r.p) : r.kind === 'team' ? fr.logo(r.abbr, 44) : refTeam(r) ? fr.logo(refTeam(r), 44) : '');
     let inner = '';
@@ -497,7 +511,7 @@
       <div class="fr-jerseys">${teams.map(t => `<section class="fr-jt" style="--c1:${esc(UI.teamColor(t))}">
         <div class="fr-jt-h">${fr.logo(t, 34)}<b>${esc(fr.teamName(s, t))}</b></div>
         <div class="fr-jt-list">${all.filter(x => x.team === t).sort((a, b) => (num(a.number) || 0) - (num(b.number) || 0)).map(x =>
-          `<span class="fr-jersey${x.before ? '' : ' new'}" title="${esc(x.name)}${x.year ? ', ' + esc(x.year) : ''}"><b>${esc(x.number !== '' && x.number != null ? x.number : '?')}</b><small>${x.p ? fr.plink(x.p) : esc(x.name)}</small></span>`).join('')}</div></section>`).join('')}</div>`;
+          `<span class="fr-jersey${x.before ? '' : ' new'}${String(x.number).length > 3 ? ' long' : ''}" title="${esc(x.name)}${x.year ? ', ' + esc(x.year) : ''}"><b>${esc(x.number !== '' && x.number != null ? x.number : '?')}</b><small>${x.p ? fr.plink(x.p) : esc(x.name)}</small></span>`).join('')}</div></section>`).join('')}</div>`;
   }
 
   function priorTab(s) {

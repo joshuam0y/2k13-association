@@ -269,12 +269,13 @@ i.m-great { background: var(--gold2); } i.m-good { background: #8fcf6a; } i.m-ok
 .fr-hof-d, .fr-hof-a { font-size: 12px; color: var(--muted); }
 .fr-hof-s { font-size: 13px; color: var(--text2); }
 
-.fr-jerseys { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.fr-jerseys { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
 .fr-jt { border: 1px solid var(--line); border-top: 3px solid var(--c1, var(--gold)); background: var(--bg2); padding: 12px 14px; min-width: 0; }
 .fr-jt-h { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-size: 16px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 10px; }
 .fr-jt-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .fr-jersey { display: flex; flex-direction: column; align-items: center; width: 84px; padding: 8px 4px 6px; background: linear-gradient(180deg, color-mix(in srgb, var(--c1, #333) 55%, #111), #111); border: 1px solid #33333a; text-align: center; }
 .fr-jersey.new { border-color: var(--gold); }
+.fr-jersey.long b { font-size: 16px; line-height: 1.75; }
 .fr-jersey b { font-family: var(--display); font-weight: 700; font-size: 28px; line-height: 1; }
 .fr-jersey small { font-size: 11px; line-height: 1.2; margin-top: 4px; color: var(--text2); overflow-wrap: anywhere; }
 .fr-jersey small a { color: var(--text2); }

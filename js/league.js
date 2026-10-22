@@ -106,6 +106,14 @@
     state.season = E.newSeason(leagueView(state), { year: state.year, userTeam: state.userTeam,
       rules: mod("CBA") ? safe("rules", function () { return W.CBA.rules(state.year); }, null) : null });
     state.season.userTeam = state.userTeam;
+    // keep saved rotations from season to season (players who left are dropped)
+    state.season.lineups = state.season.lineups || {};
+    for (var ab in state.teams) {
+      var tm = state.teams[ab];
+      if (!Array.isArray(tm.rotation) || !tm.rotation.length) continue;
+      var ids = tm.rotation.filter(function (id) { var p = state.players[id]; return p && p.team === ab && !p.retired; });
+      if (ids.length >= 5) state.season.lineups[ab] = { starters: ids.slice(0, 5), minutes: tm.minutes || null };
+    }
     state.phase = "regular"; state.day = 0;
   }
 

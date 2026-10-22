@@ -350,7 +350,7 @@
     }
 
     // maximum salary
-    var prev = lastSalary(p, Y);
+    var prev = opts.rights && opts.rights.prev ? opts.rights.prev : lastSalary(p, Y);
     var max = r.maxSalary(yp, { supermax: !!opts.supermax, prevSalary: prev });
     if (first > max + 1) return { ok: false, reason: "More than the maximum salary for " + yp + " years of service (" + money(max) + ")" };
 
@@ -362,7 +362,6 @@
     var given = Object.prototype.hasOwnProperty.call(opts, "bird") || Object.prototype.hasOwnProperty.call(opts, "rights");
     var bird = opts.bird || (opts.rights && opts.rights.bird) || (given ? null : birdRights(state, abbr, playerId, Y));
     if (opts.rights && ((opts.rights.team && opts.rights.team !== abbr) || opts.rights.renounced)) bird = null;
-    if (opts.rights && opts.rights.prev) prev = opts.rights.prev;
     if (bird && (p.team === abbr || p.team === "FA" || p.lastTeam === abbr || opts.bird)) {
       var lim = bird === "full" ? max
         : bird === "early" ? Math.min(max, Math.max(prev * 1.75, r.cap * 0.09 * 1.05))
