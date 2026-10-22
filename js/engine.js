@@ -40,7 +40,7 @@
     usageK: 0.34,
     foulShot: { close: 0.22, post: 0.165, mid: 0.048, three: 0.014 },
     andOneFactor: 0.62,
-    blockGivenMiss: { close: 0.27, post: 0.185, mid: 0.065, three: 0.031 },
+    blockGivenMiss: { close: 0.256, post: 0.176, mid: 0.062, three: 0.029 },
     astChance: { close: 0.57, post: 0.37, mid: 0.65, three: 0.85 },
     toBase: 0.134,
     stealShare: 0.535,
@@ -370,6 +370,7 @@
     opts = opts || {};
     var n = getNorms(opts);
     var wantPbp = opts.pbp !== false;
+    var wantSubs = !!opts.pbpSubs;   // substitution lines in the play-by-play (off by default to keep saves small)
     var H = buildTeam(homeTeam, 0, rng, opts, n);
     var A = buildTeam(awayTeam, 1, rng, opts, n);
     var teams = [H, A];
@@ -448,7 +449,7 @@
       pick.forEach(function (s) { if (!s.onCourt) { s.onCourt = true; ins.push(s.name); } });
       if (ins.length) {
         t.lastSub = elapsed;
-        if (elapsed > 0 && !forceStarters) log(t, 'substitution: ' + ins.join(', ') + ' in for ' + outs.join(', '));
+        if (wantSubs && elapsed > 0 && !forceStarters) log(t, 'substitution: ' + ins.join(', ') + ' in for ' + outs.join(', '));
       }
       t.lineup = pick.sort(function (a, b) { return a.rank - b.rank; });
     }
@@ -1058,6 +1059,14 @@
     }
   }
 
+  function remainingGames(season, abbr) {
+    var n = 0;
+    for (var i = season.day; i < season.days.length; i++) {
+      season.days[i].games.forEach(function (g) { if (!g.played && (g.home === abbr || g.away === abbr)) n++; });
+    }
+    return n;
+  }
+
   function playGame(season, league, by, g, rng, isPlayoff, dayDate) {
     var res = simGame(teamObj(season, league, by, g.home), teamObj(season, league, by, g.away), rng,
       { injuries: season.injuries, norms: season.norms });
@@ -1073,6 +1082,11 @@
     countDownInjuries(season, g.home, by, fresh);
     countDownInjuries(season, g.away, by, fresh);
     res.injuries.forEach(function (inj) {
+      if (inj.games >= 999) {
+        // out for the season: the rest of the team's schedule plus a full playoff run
+        inj.games = remainingGames(season, inj.team) + 28;
+        inj.seasonEnding = true;
+      }
       var cur = season.injuries[inj.id];
       if (!cur || cur.games < inj.games) season.injuries[inj.id] = { type: inj.type, games: inj.games };
     });

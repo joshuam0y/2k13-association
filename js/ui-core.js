@@ -88,7 +88,7 @@
     const c1 = (t.colors && t.colors[0]) || '#333';
     const c2 = (t.colors && t.colors[1]) || '#999';
     const style = `--c1:${c1};--c2:${c2};--sz:${size || 40}px`;
-    const img = t.logo ? `<img src="${UI.esc(t.logo)}" alt="" loading="lazy" onerror="this.parentNode.classList.add('nologo');this.remove()">` : '';
+    const img = t.logo ? `<img src="${UI.esc(t.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('nologo');this.remove()">` : '';
     return `<span class="logo${t.logo ? '' : ' nologo'}" style="${style}" title="${UI.esc(UI.teamName(abbr))}">${img}<b>${UI.esc(t.abbr)}</b></span>`;
   };
 

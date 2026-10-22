@@ -72,7 +72,7 @@
 .fr-rot, .fr-gl-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); background: var(--bg2); }
 .fr-rot-head, .fr-rot-row { display: grid; grid-template-columns: 22px 38px 74px minmax(0, 1fr) 40px 48px 84px 64px; align-items: center; gap: 0 12px; }
 .fr-rot-head { font-family: var(--display); font-size: 11px; letter-spacing: .16em; color: var(--muted); padding: 0 12px 6px; }
-.fr-rot-head span:nth-child(6), .fr-rot-head span:nth-child(7) { text-align: center; }
+.fr-rot-head span:nth-child(5), .fr-rot-head span:nth-child(6), .fr-rot-head span:nth-child(7) { text-align: center; }
 .fr-rot-row { padding: 6px 12px; border-bottom: 1px solid #1f1f24; background: var(--bg2); transition: background .12s; }
 .fr-rot-row:last-child { border-bottom: 0; }
 .fr-rot-row.starter { background: linear-gradient(90deg, rgba(212, 175, 55, .09), transparent 60%), var(--bg2); }

@@ -86,7 +86,21 @@
     var teams = Object.keys(state.teams).map(function (k) { return state.teams[k]; });
     return { season: state.year, teams: teams, players: players };
   }
+  // real rebrands and logo changes on their real dates
+  var REBRANDS = { NOH: [[2014, "New Orleans", "Pelicans"]], CHA: [[2015, "Charlotte", "Hornets"]] };
+  function applyBrands(state) {
+    for (var abbr in state.teams) {
+      var t = state.teams[abbr];
+      (REBRANDS[abbr] || []).forEach(function (r) {
+        if (state.year >= r[0] && t.name !== r[2]) { t.city = r[1]; t.name = r[2]; news(state, "The " + r[1] + " franchise is now the " + r[1] + " " + r[2], "New name, colors and logo for the " + (state.year - 1) + "-" + String(state.year).slice(2) + " season.", []); }
+      });
+      var list = W.LOGOS && W.LOGOS[abbr], best = null;
+      if (list) list.forEach(function (e) { if (e.verified !== false && e.from <= state.year && (!best || e.from >= best.from)) best = e; });
+      if (best) { t.logo = best.url; t.logoNoRef = !!best.noReferrer; }
+    }
+  }
   function startSeason(state) {
+    applyBrands(state);
     var E = mod("ENGINE");
     if (!E) throw new Error("Game engine not loaded");
     state.season = E.newSeason(leagueView(state), { year: state.year, userTeam: state.userTeam,

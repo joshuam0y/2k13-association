@@ -358,8 +358,11 @@
     var after = pay + first;
 
     // Bird rights (re-signing own free agent)
-    var bird = opts.bird || (opts.rights && opts.rights.bird) || birdRights(state, abbr, playerId, Y);
-    if (opts.rights && opts.rights.team && opts.rights.team !== abbr) bird = null;
+    // When the caller passes rights or bird (free agency does), trust them; otherwise work it out here.
+    var given = Object.prototype.hasOwnProperty.call(opts, "bird") || Object.prototype.hasOwnProperty.call(opts, "rights");
+    var bird = opts.bird || (opts.rights && opts.rights.bird) || (given ? null : birdRights(state, abbr, playerId, Y));
+    if (opts.rights && ((opts.rights.team && opts.rights.team !== abbr) || opts.rights.renounced)) bird = null;
+    if (opts.rights && opts.rights.prev) prev = opts.rights.prev;
     if (bird && (p.team === abbr || p.team === "FA" || p.lastTeam === abbr || opts.bird)) {
       var lim = bird === "full" ? max
         : bird === "early" ? Math.min(max, Math.max(prev * 1.75, r.cap * 0.09 * 1.05))

@@ -191,7 +191,7 @@
   // recordStanding, injuries, playoff series). Used only when the engine
   // does not export its own recordGame.
   // =====================================================================
-  const KEEP_PBP = 50;
+  const KEEP_PBP = 20;
   const DAY_MS = 86400000;
   const round1 = x => Math.round(x * 10) / 10;
   const statKeys = () => (window.ENGINE && window.ENGINE.STAT_KEYS) || ['min', 'pts', 'fgm', 'fga', 'tpm', 'tpa', 'ftm', 'fta', 'oreb', 'dreb', 'ast', 'stl', 'blk', 'tov', 'pf'];
@@ -237,13 +237,41 @@
       if (e.games <= 0) delete season.injuries[p.id];
     });
   }
+  // Same trimming as the engine: compact box rows, full box scores for the last KEEP_FULL games and
+  // every user team game, play-by-play for the last KEEP_PBP games.
+  const KEEP_FULL = 120;
+  function compactRow(r) {
+    const o = { id: r.id, min: r.min, pts: r.pts };
+    statKeys().forEach(k => { if (r[k] && o[k] == null) o[k] = r[k]; });
+    if (r.starter) o.starter = true;
+    return o;
+  }
   function storeResult(season, g, res) {
     season.boxScores = season.boxScores || {};
     season.order = season.order || [];
-    season.boxScores[g.id] = res;
+    const stored = {
+      id: res.id, date: res.date,
+      home: { abbr: res.home.abbr, pts: res.home.pts, box: res.home.box.map(compactRow) },
+      away: { abbr: res.away.abbr, pts: res.away.pts, box: res.away.box.map(compactRow) },
+      quarters: res.quarters, ot: res.ot, pbp: res.pbp
+    };
+    if (res.playoff) stored.playoff = true;
+    if (res.injuries && res.injuries.length) stored.injuries = res.injuries;
+    season.boxScores[g.id] = stored;
     season.order.push(g.id);
-    const old = season.order[season.order.length - 1 - KEEP_PBP];
-    if (old && season.boxScores[old]) delete season.boxScores[old].pbp;
+    const len = season.order.length;
+    const oldP = season.order[len - 1 - KEEP_PBP];
+    if (oldP && season.boxScores[oldP]) delete season.boxScores[oldP].pbp;
+    const oldF = season.order[len - 1 - KEEP_FULL];
+    const r = oldF && season.boxScores[oldF];
+    if (r && r.home && typeof r.home === 'object') {
+      const user = season.userTeam;
+      if (!user || (r.home.abbr !== user && r.away.abbr !== user)) {
+        const slim = { id: r.id, home: r.home.abbr, away: r.away.abbr, hs: r.home.pts, as: r.away.pts, date: r.date };
+        if (r.playoff) slim.playoff = true;
+        season.boxScores[oldF] = slim;
+      }
+    }
   }
 
   // playoff helpers, same rules as the engine
@@ -272,10 +300,11 @@
     let best = null, bestV = -1, id = null;
     s.games.forEach(gid => {
       const r = season.boxScores[gid];
-      if (!r) return;
+      if (!r || typeof r.home !== 'object') return;
       const side = r.home.abbr === s.winner ? r.home : r.away;
       side.box.forEach(row => {
-        const v = row.pts + 1.2 * (row.oreb + row.dreb) + 1.5 * row.ast + 2 * (row.stl + row.blk) - row.tov;
+        const f = k => row[k] || 0;
+        const v = f('pts') + 1.2 * (f('oreb') + f('dreb')) + 1.5 * f('ast') + 2 * (f('stl') + f('blk')) - f('tov');
         best = best || {};
         best[row.id] = (best[row.id] || 0) + v;
       });
@@ -456,7 +485,7 @@
   // =====================================================================
   // Play-by-play parsing for the live box score
   // =====================================================================
-  const LINE = /^(Q\d|OT\d+) (\d+):(\d\d) (?:([A-Z][A-Z0-9]{1,3}) )?(.*) \((\d+)-(\d+)\)$/;
+  const LINE = /^(Q\d|OT\d+) (\d+):(\d\d) (?:([A-Z][A-Z0-9]{1,3}) )?(.*?)(?: \((\d+)-(\d+)\))?$/;
   function periodIndex(p) { return p[0] === 'Q' ? Number(p.slice(1)) - 1 : 3 + Number(p.slice(2)); }
   function elapsedAt(p, m, s) {
     const i = periodIndex(p);
@@ -477,11 +506,13 @@
       return null;
     };
     const byName = (side, name) => names[side].find(n => n.name === name) || null;
+    let la = 0, lh = 0; // the engine only prints the score when it changes
     return function (line) {
       const m = LINE.exec(line);
       if (!m) return { text: line };
+      if (m[6] != null) { la = +m[6]; lh = +m[7]; }
       const ev = { period: m[1], clock: m[2] + ':' + m[3], elapsed: elapsedAt(m[1], +m[2], +m[3]), team: m[4] || null,
-        body: m[5], as: +m[6], hs: +m[7], text: line, stats: [] };
+        body: m[5], as: la, hs: lh, text: line, stats: [] };
       const side = ev.team && sides[ev.team];
       if (!side) return ev;
       ev.side = side;

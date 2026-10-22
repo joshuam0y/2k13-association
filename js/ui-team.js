@@ -153,7 +153,7 @@
         ${fr.logo(abbr, 64)}
         <div class="fr-hero-info"><div class="fr-hero-k">FRONT OFFICE | ${esc(fr.seasonLabel(s.year))}</div>
         <div class="fr-hero-t">${esc(fr.teamName(s, abbr))}</div>
-        <div class="fr-hero-d">${esc(fr.record(s, abbr))}${s.phase ? ' | ' + esc(String(s.phase).replace(/([A-Z])/g, ' $1').toUpperCase()) : ''}</div></div>
+        <div class="fr-hero-d">${esc(fr.record(s, abbr))}${s.phase ? ' | ' + esc(((UI.PHASES && UI.PHASES[s.phase]) || String(s.phase).replace(/([A-Z])/g, ' $1')).toUpperCase()) : ''}</div></div>
       </div>
       ${fr.tabs('manage', TABS, tab)}
       <div id="frBody"></div>`;
@@ -171,7 +171,7 @@
 
     function row(id, i) {
       const p = byId.get(id);
-      const slot = i < 5 ? ['PG', 'SG', 'SF', 'PF', 'C'][i] : String(i + 1);
+      const slot = String(i + 1);
       const mood = typeof p.mood === 'number' ? `<span class="fr-moodchip ${moodClass(p.mood)}" title="Mood ${Math.round(p.mood)}">${Math.round(p.mood)}</span>` : '<span></span>';
       return `<li class="fr-rot-row${i < 5 ? ' starter' : ''}" draggable="true" data-id="${esc(id)}" data-i="${i}">
         <span class="fr-grip" aria-hidden="true">&#8942;&#8942;</span>
@@ -197,7 +197,7 @@
           <button type="button" class="btn btn-small btn-danger" id="frReset">RESET TO AUTO</button></span>
         </div>
         ${Math.abs(total - 240) > 2 ? '<div class="note">A game has 240 player minutes (48 per spot). Use FIT TO 240 to scale the targets.</div>' : ''}
-        <div class="fr-rot-head" aria-hidden="true"><span></span><span>SLOT</span><span class="fr-rot-hs"></span><span>PLAYER</span><span></span><span>OVR</span><span>MIN</span><span></span></div>
+        <div class="fr-rot-head" aria-hidden="true"><span></span><span>#</span><span class="fr-rot-hs"></span><span>PLAYER</span><span>MOOD</span><span>OVR</span><span>MIN</span><span></span></div>
         <ol class="fr-rot" id="frRot">${items || '<li class="fr-rot-div">No players on the roster</li>'}</ol>
         <p class="muted fr-small">The first five are your starters. Two-way and G League players are marked; players assigned to the G League do not appear here.</p>`;
       bind();
@@ -434,7 +434,8 @@
   function gleagueTab(body, s) {
     const G = window.GLEAGUE;
     const all = userRoster(s, { withGleague: true }).sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
-    const up = all.filter(p => !p.gleague), down = all.filter(p => p.gleague);
+    const free = p => (p.yearsPro || 0) < 3 || !!(p.contract && p.contract.twoWay);
+    const up = all.filter(p => !p.gleague).sort((a, b) => (free(b) - free(a)) || (b.ovr || 0) - (a.ovr || 0)), down = all.filter(p => p.gleague);
     const aff = affiliate(s, s.userTeam);
     const can = G && typeof G.assign === 'function' && typeof G.recall === 'function';
     const twoWays = all.filter(p => p.contract && p.contract.twoWay).length;
@@ -456,7 +457,7 @@
       ${fr.ovr(p)}
       ${can ? `<button type="button" class="btn btn-small${act === 'recall' ? ' btn-gold' : ''}" data-${act}="${esc(p.id)}">${act === 'recall' ? 'RECALL' : 'ASSIGN'}</button>` : '<span></span>'}
     </li>`;
-    const eligible = up.filter(p => (p.yearsPro || 0) < 3 || (p.contract && p.contract.twoWay));
+    const eligible = up.filter(free);
     const lname = G && typeof G.leagueName === 'function' ? fr.call('leagueName', () => G.leagueName(s.year), 'G League') : 'G League';
     const tw = G && typeof G.twoWayRules === 'function' ? fr.call('twoWayRules', () => G.twoWayRules(s.year), null) : null;
     body.innerHTML = `${UI.header(String(lname).replace(/^NBA /, '').toUpperCase(), (aff ? 'Affiliate: <b>' + esc(aff) + '</b>. ' : '') + 'Assign players to get them minutes, then recall them.' + (tw ? (tw.allowed ? ' Two-way slots: ' + esc(tw.slots) + ', limit ' + esc(tw.limit) + ' NBA ' + esc(tw.limitType) + '.' : ' Two-way contracts start in 2017-18.') : ''))}
