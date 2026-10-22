@@ -1,0 +1,144 @@
+/* Watch live, commissioner mode and the fantasy draft. Uses the tokens from style.css. */
+
+/* ---------- watch live ---------- */
+.lv-watch { margin-right: 4px; }
+.lv-board {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px;
+  padding: 24px 22px 20px; margin-bottom: 14px;
+  background: linear-gradient(180deg, #17171a, #0d0d0f); border: 1px solid var(--line); border-bottom: 3px solid var(--gold);
+  position: relative; overflow: hidden;
+}
+.lv-board::before { content: ''; position: absolute; inset: 0; background: radial-gradient(600px 160px at 50% 0, rgba(212, 175, 55, .12), transparent 70%); pointer-events: none; }
+.lv-team { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; position: relative; }
+.lv-team b { font-family: var(--display); font-weight: 600; font-size: 20px; text-transform: uppercase; letter-spacing: .04em; margin-top: 8px; line-height: 1.1; }
+.lv-team small { color: var(--muted); font-size: 13px; }
+.lv-mid { text-align: center; position: relative; min-width: 180px; }
+.lv-k { font-family: var(--display); font-size: 12px; letter-spacing: .2em; color: var(--gold); text-transform: uppercase; }
+.lv-at { font-family: var(--display); font-size: 44px; color: var(--muted); line-height: 1.2; }
+.lv-score { font-family: var(--display); font-weight: 700; font-size: 70px; line-height: 1.02; display: flex; gap: 14px; justify-content: center; color: var(--text2); font-variant-numeric: tabular-nums; }
+.lv-score span { min-width: 1.6em; }
+.lv-score span:first-child { text-align: right; }
+.lv-score span:last-child { text-align: left; }
+.lv-score .lead { color: #fff; text-shadow: 0 0 18px rgba(245, 215, 110, .35); }
+.lv-score i { font-style: normal; color: var(--line); }
+.lv-clock { display: inline-flex; gap: 10px; align-items: baseline; margin-top: 4px; padding: 4px 14px; background: #000; border: 1px solid var(--gold-dim); font-family: var(--display); font-variant-numeric: tabular-nums; }
+.lv-clock b { color: var(--gold2); font-weight: 600; letter-spacing: .1em; }
+.lv-clock span { color: #fff; font-size: 20px; font-weight: 600; min-width: 3em; }
+.lv-clock span:empty { display: none; }
+.lv-prog { height: 3px; background: var(--bg4); margin: 10px auto 0; max-width: 220px; }
+.lv-prog i { display: block; height: 100%; width: 0; background: var(--gold); transition: width .2s linear; }
+.lv-pre .lv-mid { min-width: 140px; }
+.lv-pre-actions { text-align: center; margin: 10px 0 24px; }
+.lv-pre-actions p { margin: 6px 0 14px; }
+.row-btns.center { justify-content: center; }
+.lv-err { color: #ffb4b4; margin-top: 14px; }
+.lv-err .btn { margin-left: 6px; }
+
+.lv-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; margin-bottom: 20px; }
+.lv-ck { font-family: var(--display); font-size: 11px; letter-spacing: .22em; color: var(--muted); margin-right: 4px; }
+.lv-speed.on { background: linear-gradient(180deg, var(--gold2), var(--gold)); color: #111; border-color: var(--gold); }
+
+.lv-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+.lv-feed { max-height: 380px; min-height: 200px; }
+.lv-feed li { display: flex; gap: 8px; align-items: center; animation: lvIn .25s ease; }
+.lv-feed li.lv-made { color: #fff; }
+.lv-feed li.lv-made .lv-tx { font-weight: 600; }
+.lv-feed li.lv-sys { color: var(--gold2); font-family: var(--display); letter-spacing: .05em; }
+.lv-feed .logo { flex: none; }
+.lv-ft { flex: none; font-family: var(--display); font-size: 12px; color: var(--muted); min-width: 64px; font-variant-numeric: tabular-nums; }
+.lv-tx { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.lv-sc { flex: none; font-family: var(--display); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lv-dot { width: 18px; flex: none; }
+@keyframes lvIn { from { background: rgba(212, 175, 55, .16); } to { background: transparent; } }
+.lv-last { margin-top: 14px; padding: 12px 14px; background: var(--bg2); border: 1px solid var(--line); border-left: 3px solid var(--gold); font-size: 14px; color: var(--text2); min-height: 46px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.lv-last:empty { display: none; }
+.lv-boxes { margin-top: 10px; }
+.lv-box { margin-top: 22px; }
+.lv-box-h { display: flex; align-items: center; gap: 10px; font-family: var(--display); letter-spacing: .08em; margin-bottom: 8px; }
+.lv-box tr.lv-st td:first-child a { color: var(--gold2); }
+.lv-final { margin: 26px 0 8px; padding: 18px; text-align: center; border: 1px solid var(--line); background: var(--bg2); }
+.lv-final.won { border-color: var(--gold-dim); }
+.lv-final .lv-k { font-size: 16px; margin-bottom: 12px; }
+
+/* ---------- commissioner ---------- */
+.cm-warn { border-color: #5a3a0e; }
+.cm-tabs a { font-family: var(--display); letter-spacing: .12em; }
+.cm-filters { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; align-items: flex-end; }
+.cm-filters .field { flex: 1 1 200px; }
+.cm-list td .btn { padding: 5px 10px; font-size: 11px; }
+.cm-edit { background: var(--bg2); border: 1px solid var(--line); border-top: 3px solid var(--gold); padding: 18px; margin-bottom: 22px; }
+.cm-edit-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.cm-edit-head .hs { width: 96px; height: auto; background: var(--bg3); }
+.cm-edit-head h3 { margin: 0; font-family: var(--display); font-size: 26px; text-transform: uppercase; letter-spacing: .04em; }
+.cm-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+.cm-row .field { flex: 1 1 130px; }
+.cm-attrs { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; margin: 6px 0 16px; }
+.cm-attrs .field input { width: 100%; }
+.cm-h4 { font-family: var(--display); font-size: 13px; letter-spacing: .2em; color: var(--gold); margin: 14px 0 8px; }
+.cm-trade { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+.cm-side { background: var(--bg2); border: 1px solid var(--line); padding: 14px; min-width: 0; }
+.cm-side h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; font-family: var(--display); font-size: 18px; text-transform: uppercase; }
+.cm-assets { max-height: 380px; overflow-y: auto; border: 1px solid var(--line); background: var(--bg); }
+.cm-asset { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-bottom: 1px solid #1f1f24; cursor: pointer; font-size: 14px; }
+.cm-asset:hover { background: #1a1a1e; }
+.cm-asset input { accent-color: var(--gold); width: 16px; height: 16px; flex: none; }
+.cm-asset .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-asset .mt { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.cm-summary { margin: 16px 0; padding: 12px 14px; border: 1px solid var(--line); background: var(--bg2); font-size: 14px; }
+.cm-summary ul { margin: 6px 0 0; padding-left: 18px; }
+.cm-summary .ok { color: var(--gold2); }
+.cm-summary .bad { color: #ffb4b4; }
+.cm-log li { padding: 8px 14px; }
+.cm-log small { color: var(--muted); margin-right: 8px; font-family: var(--display); letter-spacing: .08em; }
+
+/* ---------- fantasy draft ---------- */
+.fd-clock {
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  padding: 18px 20px; margin-bottom: 16px; background: linear-gradient(120deg, #1a1a1d, #0d0d0f 70%);
+  border: 1px solid var(--line); border-left: 4px solid var(--gold);
+}
+.fd-clock.you { border-color: var(--gold-dim); box-shadow: 0 0 0 1px rgba(212, 175, 55, .25) inset; }
+.fd-clock-t { flex: 1; min-width: 200px; }
+.fd-clock-k { font-family: var(--display); font-size: 12px; letter-spacing: .22em; color: var(--gold); }
+.fd-clock-n { font-family: var(--display); font-size: 28px; font-weight: 700; text-transform: uppercase; line-height: 1.1; }
+.fd-clock-d { color: var(--muted); font-size: 14px; }
+.fd-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.fd-prog { height: 4px; background: var(--bg4); margin: -10px 0 18px; }
+.fd-prog i { display: block; height: 100%; background: var(--gold); }
+.fd-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+.fd-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.fd-filters input { flex: 1 1 160px; min-width: 0; background: var(--bg3); border: 1px solid var(--line); color: #fff; padding: 8px 10px; font: inherit; }
+.fd-filters input:focus { border-color: var(--gold); outline: none; }
+.fd-pos { padding: 6px 10px; font-size: 12px; }
+.fd-pos.on { background: var(--gold); color: #111; border-color: var(--gold); }
+.fd-pool td .btn { padding: 5px 10px; font-size: 11px; }
+.fd-pool .hs { width: 34px; height: 25px; object-fit: cover; vertical-align: middle; margin-right: 6px; background: var(--bg3); }
+.fd-side section { margin-bottom: 20px; }
+.fd-mine li, .fd-recent li { display: flex; align-items: center; gap: 8px; }
+.fd-mine .fd-n, .fd-recent .fd-n { font-family: var(--display); color: var(--muted); font-size: 12px; min-width: 42px; }
+.fd-mine .fd-o { margin-left: auto; font-family: var(--display); color: var(--gold2); }
+.fd-counts { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.fd-counts span { font-family: var(--display); font-size: 12px; letter-spacing: .08em; padding: 3px 8px; background: var(--bg3); border: 1px solid var(--line); }
+.fd-done { text-align: center; padding: 22px; border: 1px solid var(--gold-dim); background: var(--bg2); margin-bottom: 20px; }
+.fd-done .fd-clock-n { margin-bottom: 10px; }
+.fd-setup .confirm { position: static; }
+
+@media (max-width: 860px) {
+  .lv-grid, .fd-grid, .cm-trade { grid-template-columns: minmax(0, 1fr); }
+  .lv-score { font-size: 54px; }
+}
+@media (max-width: 560px) {
+  .lv-board { padding: 16px 10px 14px; gap: 6px; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+  .lv-board .logo { --sz: 48px !important; }
+  .lv-team b { font-size: 13px; }
+  .lv-team small { font-size: 11px; }
+  .lv-mid { min-width: 0; }
+  .lv-score { font-size: 40px; gap: 6px; }
+  .lv-clock span { font-size: 16px; }
+  .lv-ft { min-width: 52px; font-size: 11px; }
+  .lv-feed li { font-size: 13px; padding: 6px 10px; }
+  .fd-clock-n { font-size: 22px; }
+  .cm-edit { padding: 12px; }
+  .cm-edit-head .hs { width: 70px; }
+  .cm-edit-head h3 { font-size: 20px; }
+}

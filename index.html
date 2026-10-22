@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>2K13 Association</title>
+  <meta name="description" content="Franchise basketball simulation of the 2012-13 season: real rosters, ratings and a full league sim.">
+  <meta name="theme-color" content="#0b0b0c">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%230b0b0c'/%3E%3Ccircle cx='32' cy='32' r='20' fill='none' stroke='%23d4af37' stroke-width='5'/%3E%3Cpath d='M12 32h40M32 12v40' stroke='%23d4af37' stroke-width='3'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/ui-features.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="wordmark" href="#/home" aria-label="2K13 Association home"><span class="wm-2k">2K13</span><span class="wm-assoc">ASSOCIATION</span></a>
+    <nav class="mainnav" id="mainnav" aria-label="Main">
+      <a href="#/home" data-nav="home">Home</a>
+      <a href="#/season" data-nav="season">Season</a>
+      <a href="#/teams" data-nav="teams">Rosters</a>
+      <a href="#/standings" data-nav="standings">Standings</a>
+      <a href="#/leaders" data-nav="leaders">Leaders</a>
+      <a href="#/playoffs" data-nav="playoffs">Playoffs</a>
+      <a href="#/saves" data-nav="saves">Saves</a>
+    </nav>
+    <div class="userchip" id="userchip"></div>
+  </header>
+
+  <div class="banner" id="banner" hidden></div>
+  <main id="app" class="app" tabindex="-1"><div class="loading">Loading league data...</div></main>
+
+  <div class="sim-overlay" id="simOverlay" hidden>
+    <div class="sim-box"><div class="sim-title">SIMULATING</div><div class="sim-bar"><i id="simBarFill"></i></div><div class="sim-text" id="simText"></div></div>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="ev-modal" id="eventModal" hidden></div>
+
+  <footer class="musicbar" id="musicbar" aria-label="Soundtrack"></footer>
+
+  <!-- Data and engine first, then the optional league modules, then the orchestrator, then the UI.
+       A module file that does not exist yet only causes a 404; every use is guarded. -->
+  <script src="data/league2012.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="data/drafts.js"></script>
+  <script src="data/targets.js"></script>
+  <script src="data/cap-history.js"></script>
+  <script src="data/coaches.js"></script>
+  <script src="data/gleague.js"></script>
+  <script src="data/history.js"></script>
+  <script src="data/personalities.js"></script>
+  <script src="js/cba.js"></script>
+  <script src="js/trade.js"></script>
+  <script src="js/freeagency.js"></script>
+  <script src="js/mood.js"></script>
+  <script src="js/draft.js"></script>
+  <script src="js/progression.js"></script>
+  <script src="js/coaches.js"></script>
+  <script src="js/gleague.js"></script>
+  <script src="js/awards.js"></script>
+  <script src="js/news.js"></script>
+  <script src="js/league.js"></script>
+  <script>
+    // ?stub=1 swaps in a tiny fake league and engine for development.
+    if (/[?&]stub=1\b/.test(location.search)) document.write('<script src="js/dev-stub.js"><\/script>');
+  </script>
+  <script src="js/soundtrack.js"></script>
+  <script src="js/ui-core.js"></script>
+  <script src="js/ui-saves.js"></script>
+  <script src="js/ui-music.js"></script>
+  <script src="js/ui-hub.js"></script>
+  <script src="js/ui-season.js"></script>
+  <script src="js/ui-sim.js"></script>
+  <script src="js/ui.js"></script>
+  <!-- Pages from other modules (UI.pages[name]); they get a route and a nav entry automatically. -->
+  <script src="js/ui-trade.js"></script>
+  <script src="js/ui-fa.js"></script>
+  <script src="js/ui-draft.js"></script>
+  <script src="js/ui-team.js"></script>
+  <script src="js/ui-history.js"></script>
+  <script src="js/ui-live.js"></script>
+  <script src="js/ui-commish.js"></script>
+</body>
+</html>

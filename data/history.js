@@ -1,0 +1,206 @@
+/* 2K13 Association: league history before the 2012-13 season (window.HISTORY_PRIOR).
+   champions: every BAA/NBA champion 1947 to 2012 with the runner-up and the Finals MVP (awarded from 1969).
+   mvp: regular season MVP by season-ending year (awarded from 1956).
+   retiredNumbers: each current franchise's retired numbers as of opening night 2012-13 (October 30, 2012).
+   abbr fields map a franchise to its current team (null for defunct clubs).
+   Sources: Basketball-Reference "NBA & ABA Champions" and "NBA MVP" award pages (basketball-reference.com/playoffs/,
+   basketball-reference.com/awards/mvp.html); Wikipedia "List of NBA champions" and "List of National Basketball
+   Association retired numbers" (dates checked so numbers retired after October 2012, such as Jamaal Wilkes in
+   December 2012 or Shaquille O'Neal with the Lakers in 2013, are left out).
+   Notes: Charlotte's history (including Bobby Phills' No. 13) belonged to the New Orleans Hornets in 2012 and moved to
+   Charlotte in 2014. The Seattle SuperSonics' retired numbers stayed in Seattle, so Oklahoma City has none. */
+(function (root) {
+  function ch(year, champion, abbr, runnerUp, ruAbbr, finalsMvp) {
+    return { year: year, champion: champion, abbr: abbr, runnerUp: runnerUp, runnerUpAbbr: ruAbbr, finalsMvp: finalsMvp || null };
+  }
+  var champions = [
+    ch(1947, 'Philadelphia Warriors', 'GSW', 'Chicago Stags', null),
+    ch(1948, 'Baltimore Bullets', null, 'Philadelphia Warriors', 'GSW'),
+    ch(1949, 'Minneapolis Lakers', 'LAL', 'Washington Capitols', null),
+    ch(1950, 'Minneapolis Lakers', 'LAL', 'Syracuse Nationals', 'PHI'),
+    ch(1951, 'Rochester Royals', 'SAC', 'New York Knicks', 'NYK'),
+    ch(1952, 'Minneapolis Lakers', 'LAL', 'New York Knicks', 'NYK'),
+    ch(1953, 'Minneapolis Lakers', 'LAL', 'New York Knicks', 'NYK'),
+    ch(1954, 'Minneapolis Lakers', 'LAL', 'Syracuse Nationals', 'PHI'),
+    ch(1955, 'Syracuse Nationals', 'PHI', 'Fort Wayne Pistons', 'DET'),
+    ch(1956, 'Philadelphia Warriors', 'GSW', 'Fort Wayne Pistons', 'DET'),
+    ch(1957, 'Boston Celtics', 'BOS', 'St. Louis Hawks', 'ATL'),
+    ch(1958, 'St. Louis Hawks', 'ATL', 'Boston Celtics', 'BOS'),
+    ch(1959, 'Boston Celtics', 'BOS', 'Minneapolis Lakers', 'LAL'),
+    ch(1960, 'Boston Celtics', 'BOS', 'St. Louis Hawks', 'ATL'),
+    ch(1961, 'Boston Celtics', 'BOS', 'St. Louis Hawks', 'ATL'),
+    ch(1962, 'Boston Celtics', 'BOS', 'Los Angeles Lakers', 'LAL'),
+    ch(1963, 'Boston Celtics', 'BOS', 'Los Angeles Lakers', 'LAL'),
+    ch(1964, 'Boston Celtics', 'BOS', 'San Francisco Warriors', 'GSW'),
+    ch(1965, 'Boston Celtics', 'BOS', 'Los Angeles Lakers', 'LAL'),
+    ch(1966, 'Boston Celtics', 'BOS', 'Los Angeles Lakers', 'LAL'),
+    ch(1967, 'Philadelphia 76ers', 'PHI', 'San Francisco Warriors', 'GSW'),
+    ch(1968, 'Boston Celtics', 'BOS', 'Los Angeles Lakers', 'LAL'),
+    ch(1969, 'Boston Celtics', 'BOS', 'Los Angeles Lakers', 'LAL', 'Jerry West'),
+    ch(1970, 'New York Knicks', 'NYK', 'Los Angeles Lakers', 'LAL', 'Willis Reed'),
+    ch(1971, 'Milwaukee Bucks', 'MIL', 'Baltimore Bullets', 'WAS', 'Lew Alcindor'),
+    ch(1972, 'Los Angeles Lakers', 'LAL', 'New York Knicks', 'NYK', 'Wilt Chamberlain'),
+    ch(1973, 'New York Knicks', 'NYK', 'Los Angeles Lakers', 'LAL', 'Willis Reed'),
+    ch(1974, 'Boston Celtics', 'BOS', 'Milwaukee Bucks', 'MIL', 'John Havlicek'),
+    ch(1975, 'Golden State Warriors', 'GSW', 'Washington Bullets', 'WAS', 'Rick Barry'),
+    ch(1976, 'Boston Celtics', 'BOS', 'Phoenix Suns', 'PHX', 'Jo Jo White'),
+    ch(1977, 'Portland Trail Blazers', 'POR', 'Philadelphia 76ers', 'PHI', 'Bill Walton'),
+    ch(1978, 'Washington Bullets', 'WAS', 'Seattle SuperSonics', 'OKC', 'Wes Unseld'),
+    ch(1979, 'Seattle SuperSonics', 'OKC', 'Washington Bullets', 'WAS', 'Dennis Johnson'),
+    ch(1980, 'Los Angeles Lakers', 'LAL', 'Philadelphia 76ers', 'PHI', 'Magic Johnson'),
+    ch(1981, 'Boston Celtics', 'BOS', 'Houston Rockets', 'HOU', 'Cedric Maxwell'),
+    ch(1982, 'Los Angeles Lakers', 'LAL', 'Philadelphia 76ers', 'PHI', 'Magic Johnson'),
+    ch(1983, 'Philadelphia 76ers', 'PHI', 'Los Angeles Lakers', 'LAL', 'Moses Malone'),
+    ch(1984, 'Boston Celtics', 'BOS', 'Los Angeles Lakers', 'LAL', 'Larry Bird'),
+    ch(1985, 'Los Angeles Lakers', 'LAL', 'Boston Celtics', 'BOS', 'Kareem Abdul-Jabbar'),
+    ch(1986, 'Boston Celtics', 'BOS', 'Houston Rockets', 'HOU', 'Larry Bird'),
+    ch(1987, 'Los Angeles Lakers', 'LAL', 'Boston Celtics', 'BOS', 'Magic Johnson'),
+    ch(1988, 'Los Angeles Lakers', 'LAL', 'Detroit Pistons', 'DET', 'James Worthy'),
+    ch(1989, 'Detroit Pistons', 'DET', 'Los Angeles Lakers', 'LAL', 'Joe Dumars'),
+    ch(1990, 'Detroit Pistons', 'DET', 'Portland Trail Blazers', 'POR', 'Isiah Thomas'),
+    ch(1991, 'Chicago Bulls', 'CHI', 'Los Angeles Lakers', 'LAL', 'Michael Jordan'),
+    ch(1992, 'Chicago Bulls', 'CHI', 'Portland Trail Blazers', 'POR', 'Michael Jordan'),
+    ch(1993, 'Chicago Bulls', 'CHI', 'Phoenix Suns', 'PHX', 'Michael Jordan'),
+    ch(1994, 'Houston Rockets', 'HOU', 'New York Knicks', 'NYK', 'Hakeem Olajuwon'),
+    ch(1995, 'Houston Rockets', 'HOU', 'Orlando Magic', 'ORL', 'Hakeem Olajuwon'),
+    ch(1996, 'Chicago Bulls', 'CHI', 'Seattle SuperSonics', 'OKC', 'Michael Jordan'),
+    ch(1997, 'Chicago Bulls', 'CHI', 'Utah Jazz', 'UTA', 'Michael Jordan'),
+    ch(1998, 'Chicago Bulls', 'CHI', 'Utah Jazz', 'UTA', 'Michael Jordan'),
+    ch(1999, 'San Antonio Spurs', 'SAS', 'New York Knicks', 'NYK', 'Tim Duncan'),
+    ch(2000, 'Los Angeles Lakers', 'LAL', 'Indiana Pacers', 'IND', "Shaquille O'Neal"),
+    ch(2001, 'Los Angeles Lakers', 'LAL', 'Philadelphia 76ers', 'PHI', "Shaquille O'Neal"),
+    ch(2002, 'Los Angeles Lakers', 'LAL', 'New Jersey Nets', 'BKN', "Shaquille O'Neal"),
+    ch(2003, 'San Antonio Spurs', 'SAS', 'New Jersey Nets', 'BKN', 'Tim Duncan'),
+    ch(2004, 'Detroit Pistons', 'DET', 'Los Angeles Lakers', 'LAL', 'Chauncey Billups'),
+    ch(2005, 'San Antonio Spurs', 'SAS', 'Detroit Pistons', 'DET', 'Tim Duncan'),
+    ch(2006, 'Miami Heat', 'MIA', 'Dallas Mavericks', 'DAL', 'Dwyane Wade'),
+    ch(2007, 'San Antonio Spurs', 'SAS', 'Cleveland Cavaliers', 'CLE', 'Tony Parker'),
+    ch(2008, 'Boston Celtics', 'BOS', 'Los Angeles Lakers', 'LAL', 'Paul Pierce'),
+    ch(2009, 'Los Angeles Lakers', 'LAL', 'Orlando Magic', 'ORL', 'Kobe Bryant'),
+    ch(2010, 'Los Angeles Lakers', 'LAL', 'Boston Celtics', 'BOS', 'Kobe Bryant'),
+    ch(2011, 'Dallas Mavericks', 'DAL', 'Miami Heat', 'MIA', 'Dirk Nowitzki'),
+    ch(2012, 'Miami Heat', 'MIA', 'Oklahoma City Thunder', 'OKC', 'LeBron James')
+  ];
+
+  function m(name, team, abbr) { return { name: name, team: team, abbr: abbr }; }
+  var mvp = {
+    1956: m('Bob Pettit', 'St. Louis Hawks', 'ATL'),
+    1957: m('Bob Cousy', 'Boston Celtics', 'BOS'),
+    1958: m('Bill Russell', 'Boston Celtics', 'BOS'),
+    1959: m('Bob Pettit', 'St. Louis Hawks', 'ATL'),
+    1960: m('Wilt Chamberlain', 'Philadelphia Warriors', 'GSW'),
+    1961: m('Bill Russell', 'Boston Celtics', 'BOS'),
+    1962: m('Bill Russell', 'Boston Celtics', 'BOS'),
+    1963: m('Bill Russell', 'Boston Celtics', 'BOS'),
+    1964: m('Oscar Robertson', 'Cincinnati Royals', 'SAC'),
+    1965: m('Bill Russell', 'Boston Celtics', 'BOS'),
+    1966: m('Wilt Chamberlain', 'Philadelphia 76ers', 'PHI'),
+    1967: m('Wilt Chamberlain', 'Philadelphia 76ers', 'PHI'),
+    1968: m('Wilt Chamberlain', 'Philadelphia 76ers', 'PHI'),
+    1969: m('Wes Unseld', 'Baltimore Bullets', 'WAS'),
+    1970: m('Willis Reed', 'New York Knicks', 'NYK'),
+    1971: m('Lew Alcindor', 'Milwaukee Bucks', 'MIL'),
+    1972: m('Kareem Abdul-Jabbar', 'Milwaukee Bucks', 'MIL'),
+    1973: m('Dave Cowens', 'Boston Celtics', 'BOS'),
+    1974: m('Kareem Abdul-Jabbar', 'Milwaukee Bucks', 'MIL'),
+    1975: m('Bob McAdoo', 'Buffalo Braves', 'LAC'),
+    1976: m('Kareem Abdul-Jabbar', 'Los Angeles Lakers', 'LAL'),
+    1977: m('Kareem Abdul-Jabbar', 'Los Angeles Lakers', 'LAL'),
+    1978: m('Bill Walton', 'Portland Trail Blazers', 'POR'),
+    1979: m('Moses Malone', 'Houston Rockets', 'HOU'),
+    1980: m('Kareem Abdul-Jabbar', 'Los Angeles Lakers', 'LAL'),
+    1981: m('Julius Erving', 'Philadelphia 76ers', 'PHI'),
+    1982: m('Moses Malone', 'Houston Rockets', 'HOU'),
+    1983: m('Moses Malone', 'Philadelphia 76ers', 'PHI'),
+    1984: m('Larry Bird', 'Boston Celtics', 'BOS'),
+    1985: m('Larry Bird', 'Boston Celtics', 'BOS'),
+    1986: m('Larry Bird', 'Boston Celtics', 'BOS'),
+    1987: m('Magic Johnson', 'Los Angeles Lakers', 'LAL'),
+    1988: m('Michael Jordan', 'Chicago Bulls', 'CHI'),
+    1989: m('Magic Johnson', 'Los Angeles Lakers', 'LAL'),
+    1990: m('Magic Johnson', 'Los Angeles Lakers', 'LAL'),
+    1991: m('Michael Jordan', 'Chicago Bulls', 'CHI'),
+    1992: m('Michael Jordan', 'Chicago Bulls', 'CHI'),
+    1993: m('Charles Barkley', 'Phoenix Suns', 'PHX'),
+    1994: m('Hakeem Olajuwon', 'Houston Rockets', 'HOU'),
+    1995: m('David Robinson', 'San Antonio Spurs', 'SAS'),
+    1996: m('Michael Jordan', 'Chicago Bulls', 'CHI'),
+    1997: m('Karl Malone', 'Utah Jazz', 'UTA'),
+    1998: m('Michael Jordan', 'Chicago Bulls', 'CHI'),
+    1999: m('Karl Malone', 'Utah Jazz', 'UTA'),
+    2000: m("Shaquille O'Neal", 'Los Angeles Lakers', 'LAL'),
+    2001: m('Allen Iverson', 'Philadelphia 76ers', 'PHI'),
+    2002: m('Tim Duncan', 'San Antonio Spurs', 'SAS'),
+    2003: m('Tim Duncan', 'San Antonio Spurs', 'SAS'),
+    2004: m('Kevin Garnett', 'Minnesota Timberwolves', 'MIN'),
+    2005: m('Steve Nash', 'Phoenix Suns', 'PHX'),
+    2006: m('Steve Nash', 'Phoenix Suns', 'PHX'),
+    2007: m('Dirk Nowitzki', 'Dallas Mavericks', 'DAL'),
+    2008: m('Kobe Bryant', 'Los Angeles Lakers', 'LAL'),
+    2009: m('LeBron James', 'Cleveland Cavaliers', 'CLE'),
+    2010: m('LeBron James', 'Cleveland Cavaliers', 'CLE'),
+    2011: m('Derrick Rose', 'Chicago Bulls', 'CHI'),
+    2012: m('LeBron James', 'Miami Heat', 'MIA')
+  };
+
+  // [number, name] pairs; numbers are strings so "00" and banners like "LOSCY" keep their form
+  function R(list) { return list.map(function (x) { return { number: String(x[0]), name: x[1] }; }); }
+  var retiredNumbers = {
+    ATL: R([[9, 'Bob Pettit'], [21, 'Dominique Wilkins'], [23, 'Lou Hudson']]),
+    BOS: R([['00', 'Robert Parish'], [1, 'Walter A. Brown'], [2, 'Red Auerbach'], [3, 'Dennis Johnson'], [6, 'Bill Russell'],
+      [10, 'Jo Jo White'], [14, 'Bob Cousy'], [15, 'Tom Heinsohn'], [16, 'Satch Sanders'], [17, 'John Havlicek'],
+      [18, 'Dave Cowens'], [19, 'Don Nelson'], [21, 'Bill Sharman'], [22, 'Ed Macauley'], [23, 'Frank Ramsey'],
+      [24, 'Sam Jones'], [25, 'K.C. Jones'], [31, 'Cedric Maxwell'], [32, 'Kevin McHale'], [33, 'Larry Bird'],
+      [35, 'Reggie Lewis'], ['LOSCY', 'Jim Loscutoff']]),
+    BKN: R([[3, 'Drazen Petrovic'], [23, 'John Williamson'], [25, 'Bill Melchionni'], [32, 'Julius Erving'], [52, 'Buck Williams']]),
+    CHA: [],
+    CHI: R([[4, 'Jerry Sloan'], [10, 'Bob Love'], [23, 'Michael Jordan'], [33, 'Scottie Pippen']]),
+    CLE: R([[7, 'Bingo Smith'], [22, 'Larry Nance'], [25, 'Mark Price'], [34, 'Austin Carr'], [42, 'Nate Thurmond'], [43, 'Brad Daugherty']]),
+    DAL: R([[15, 'Brad Davis'], [22, 'Rolando Blackman']]),
+    DEN: R([[2, 'Alex English'], [33, 'David Thompson'], [40, 'Byron Beck'], [44, 'Dan Issel'], [432, 'Doug Moe']]),
+    DET: R([[2, 'Chuck Daly'], [4, 'Joe Dumars'], [10, 'Dennis Rodman'], [11, 'Isiah Thomas'], [15, 'Vinnie Johnson'],
+      [16, 'Bob Lanier'], [21, 'Dave Bing'], [40, 'Bill Laimbeer']]),
+    GSW: R([[13, 'Wilt Chamberlain'], [14, 'Tom Meschery'], [16, 'Al Attles'], [17, 'Chris Mullin'], [24, 'Rick Barry'], [42, 'Nate Thurmond']]),
+    HOU: R([[22, 'Clyde Drexler'], [23, 'Calvin Murphy'], [34, 'Hakeem Olajuwon'], [44, 'Elvin Hayes'], [45, 'Rudy Tomjanovich']]),
+    IND: R([[30, 'George McGinnis'], [31, 'Reggie Miller'], [34, 'Mel Daniels'], [35, 'Roger Brown'], [529, 'Bobby Leonard']]),
+    LAC: [],
+    LAL: R([[13, 'Wilt Chamberlain'], [22, 'Elgin Baylor'], [25, 'Gail Goodrich'], [32, 'Magic Johnson'], [33, 'Kareem Abdul-Jabbar'],
+      [42, 'James Worthy'], [44, 'Jerry West']]),
+    MEM: [],
+    MIA: R([[10, 'Tim Hardaway'], [13, 'Dan Marino'], [23, 'Michael Jordan'], [33, 'Alonzo Mourning']]),
+    MIL: R([[1, 'Oscar Robertson'], [2, 'Junior Bridgeman'], [4, 'Sidney Moncrief'], [14, 'Jon McGlocklin'], [16, 'Bob Lanier'],
+      [32, 'Brian Winters'], [33, 'Kareem Abdul-Jabbar']]),
+    MIN: R([[2, 'Malik Sealy']]),
+    NOH: R([[7, 'Pete Maravich'], [13, 'Bobby Phills']]),
+    NYK: R([[10, 'Walt Frazier'], [12, 'Dick Barnett'], [15, 'Earl Monroe'], [15, 'Dick McGuire'], [19, 'Willis Reed'],
+      [22, 'Dave DeBusschere'], [24, 'Bill Bradley'], [33, 'Patrick Ewing'], [613, 'Red Holzman']]),
+    OKC: [],
+    ORL: R([[6, 'The Fans (Sixth Man)']]),
+    PHI: R([[6, 'Julius Erving'], [10, 'Maurice Cheeks'], [13, 'Wilt Chamberlain'], [15, 'Hal Greer'], [24, 'Bobby Jones'],
+      [32, 'Billy Cunningham'], [34, 'Charles Barkley']]),
+    PHX: R([[5, 'Dick Van Arsdale'], [6, 'Walter Davis'], [7, 'Kevin Johnson'], [33, 'Alvan Adams'], [42, 'Connie Hawkins'], [44, 'Paul Westphal']]),
+    POR: R([[1, 'Larry Weinberg'], [13, 'Dave Twardzik'], [14, 'Lionel Hollins'], [15, 'Larry Steele'], [20, 'Maurice Lucas'],
+      [22, 'Clyde Drexler'], [30, 'Bob Gross'], [30, 'Terry Porter'], [32, 'Bill Walton'], [36, 'Lloyd Neal'], [45, 'Geoff Petrie'],
+      [77, 'Jack Ramsay']]),
+    SAC: R([[1, 'Nate Archibald'], [2, 'Mitch Richmond'], [4, 'Chris Webber'], [6, 'The Fans (Sixth Man)'], [11, 'Bob Davies'],
+      [12, 'Maurice Stokes'], [14, 'Oscar Robertson'], [21, 'Vlade Divac'], [27, 'Jack Twyman'], [44, 'Sam Lacey']]),
+    SAS: R([['00', 'Johnny Moore'], [6, 'Avery Johnson'], [12, 'Bruce Bowen'], [13, 'James Silas'], [32, 'Sean Elliott'],
+      [44, 'George Gervin'], [50, 'David Robinson']]),
+    TOR: [],
+    UTA: R([[1, 'Frank Layden'], [4, 'Adrian Dantley'], [7, 'Pete Maravich'], [9, 'Larry H. Miller'], [12, 'John Stockton'],
+      [14, 'Jeff Hornacek'], [32, 'Karl Malone'], [35, 'Darrell Griffith'], [53, 'Mark Eaton']]),
+    WAS: R([[10, 'Earl Monroe'], [11, 'Elvin Hayes'], [25, 'Gus Johnson'], [41, 'Wes Unseld']])
+  };
+
+  // Seattle SuperSonics retired numbers (kept by Seattle, shown on the Thunder's history page only as a note)
+  var sonicsRetired = R([[1, 'Gus Williams'], [10, 'Nate McMillan'], [19, 'Lenny Wilkens'], [24, 'Spencer Haywood'],
+    [32, 'Fred Brown'], [43, 'Jack Sikma']]);
+
+  var titles = {};
+  champions.forEach(function (c) { if (c.abbr) titles[c.abbr] = (titles[c.abbr] || 0) + 1; });
+
+  var HISTORY_PRIOR = { champions: champions, mvp: mvp, retiredNumbers: retiredNumbers, sonicsRetired: sonicsRetired, titles: titles };
+  if (typeof window !== 'undefined') window.HISTORY_PRIOR = HISTORY_PRIOR;
+  else if (root) root.HISTORY_PRIOR = HISTORY_PRIOR;
+  if (typeof module !== 'undefined' && module.exports) module.exports = HISTORY_PRIOR;
+})(typeof self !== 'undefined' ? self : this);
