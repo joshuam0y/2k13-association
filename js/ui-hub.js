@@ -12,39 +12,42 @@
   };
 
   // ---------- Home ----------
+  // One big primary action, a small secondary row, and four tiles. Everything else is in the header.
   P.home = function (app) {
     const latest = UI.saves.latest();
     const engineOk = UI.canPlay();
-    let cont = '';
+    let primary;
     if (latest) {
       const m = latest.meta;
-      cont = `<a class="tile tile-continue" href="#/continue">
+      primary = `<a class="tile tile-main tile-continue" href="#/continue">
         <span class="tile-k">CONTINUE</span>
-        <span class="tile-team">${UI.logo(m.userTeam, 54)}<span><span class="tile-t">${esc(UI.teamName(m.userTeam))}</span>
+        <span class="tile-team">${UI.logo(m.userTeam, 88)}<span><span class="tile-t big">${esc(UI.teamName(m.userTeam))}</span>
         <span class="tile-d">${esc(m.name)} | ${esc(m.record || '0-0')}${m.year ? ' | ' + esc(UI.seasonLabel(m.year)) : ''}${m.date ? ' | ' + esc(UI.dateLabel(m.date)) : ''}</span></span></span>
       </a>`;
+    } else {
+      primary = `<a class="tile tile-main${engineOk ? '' : ' disabled'}" href="${engineOk ? '#/new' : '#/home'}" ${engineOk ? '' : 'aria-disabled="true"'}>
+        <span class="tile-k">${engineOk ? 'NEW LEAGUE' : 'SIM ENGINE NOT BUILT YET'}</span>
+        <span class="tile-t big">PLAY THE ASSOCIATION</span>
+        <span class="tile-d">Choose your team from all 30 franchises and take it from opening night to the Finals.</span>
+      </a>`;
     }
+    const sec = [];
+    if (latest && engineOk) sec.push(['#/new', 'NEW LEAGUE']);
+    sec.push(['#/saves', 'LOAD SAVE']);
+    if (typeof UI.pages.fantasy === 'function' && engineOk) sec.push(['#/fantasy/new', 'FANTASY DRAFT']);
     const tile = (href, k, t, d) => `<a class="tile" href="${href}"><span class="tile-k">${k}</span><span class="tile-t">${t}</span><span class="tile-d">${d}</span></a>`;
     app.innerHTML = `
       <section class="hero">
         <div class="hero-kicker">THE 2012-13 SEASON</div>
         <h1 class="hero-title"><span class="ht-2k">2K13</span> <span class="ht-a">ASSOCIATION</span></h1>
-        <p class="hero-copy">Take over one of 30 franchises with the real launch rosters, 2K13 ratings and contracts, then sim the season one day or one month at a time.</p>
       </section>
-      <div class="menu-grid">
-        <a class="tile tile-main${engineOk ? '' : ' disabled'}" href="${engineOk ? '#/new' : '#/home'}" ${engineOk ? '' : 'aria-disabled="true"'}>
-          <span class="tile-k">${engineOk ? 'NEW LEAGUE' : 'SIM ENGINE NOT BUILT YET'}</span>
-          <span class="tile-t big">PLAY THE ASSOCIATION</span>
-          <span class="tile-d">Choose your team from all 30 franchises and take it from opening night to the Finals.</span>
-        </a>
-        ${cont}
+      <div class="home-primary">${primary}</div>
+      <div class="home-secondary">${sec.map(([h, l]) => `<a class="btn" href="${h}">${l}</a>`).join('')}</div>
+      <div class="home-tiles">
         ${tile('#/teams', '30 TEAMS', 'ROSTERS', 'Every team, every player card')}
         ${tile('#/standings', 'EAST AND WEST', 'STANDINGS', 'Conference tables and the playoff race')}
-        ${tile('#/leaders', 'PER GAME', 'LEAGUE LEADERS', 'Points, rebounds, assists, steals, blocks')}
-        ${tile('#/playoffs', '16 TEAMS', 'PLAYOFFS', 'The bracket to the Larry O\'Brien Trophy')}
+        ${tile('#/classes', '2013 TO 2026', 'DRAFT CLASSES', 'Every real class, pick by pick')}
         ${tile('#/soundtrack', '24 SONGS', 'SOUNDTRACK', 'The official 2K13 tracklist')}
-        ${tile('#/saves', '5 SLOTS', 'SAVES', 'Load, rename, export and import leagues')}
-        ${UI.extraPages().map(x => tile('#/' + x.route, esc(x.kicker || 'FRONT OFFICE'), esc(x.label.toUpperCase()), esc(x.desc || ''))).join('')}
       </div>`;
   };
 
@@ -57,7 +60,8 @@
       return `<button type="button" class="team-tile" data-team="${esc(t.abbr)}" style="--c1:${esc(c1)}">
         ${UI.logo(t.abbr, 64)}
         <span class="tt-city">${esc(t.city)}</span><span class="tt-name">${esc(t.name)}</span>
-        <span class="tt-meta"><b>${UI.teamOvr(t.abbr) || '-'}</b> OVR${star ? ' | ' + esc(star.name) : ''}</span>
+        <span class="tt-meta"><b>${UI.teamOvr(t.abbr) || '-'}</b> TEAM OVR</span>
+        ${star ? `<span class="tt-star">Star: ${esc(star.name)} <b>${esc(star.ovr)}</b></span>` : ''}
       </button>`;
     };
     const groups = confs().map(c => `<h3 class="conf-label">${esc(c.toUpperCase())}ERN CONFERENCE</h3>
@@ -201,9 +205,33 @@
     ['IQ', [['oiq', 'Offensive IQ'], ['diq', 'Defensive IQ']]]
   ];
 
-  function statTable(rows) {
-    return `<div class="tscroll"><table class="stats"><thead><tr><th class="l">SEASON</th><th>G</th><th>MPG</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>FG%</th><th>3P%</th><th>FT%</th></tr></thead>
-      <tbody>${rows.map(([label, s]) => `<tr><td class="l">${esc(label)}</td><td>${esc(s.g)}</td><td>${UI.fmt1(s.mpg)}</td><td><b>${UI.fmt1(s.pts)}</b></td><td>${UI.fmt1(s.reb)}</td><td>${UI.fmt1(s.ast)}</td><td>${UI.fmt1(s.stl)}</td><td>${UI.fmt1(s.blk)}</td><td>${UI.fmtPct(s.fgp)}</td><td>${UI.fmtPct(s.tpp)}</td><td>${UI.fmtPct(s.ftp)}</td></tr>`).join('')}</tbody></table></div>`;
+  // One career table: real seasons before the save (window.CAREER_PRIOR), seasons played in the
+  // save (player.careerStats, totals), the season in progress, then a career average row.
+  function careerHtml(p) {
+    const rows = [];
+    const prior = window.CAREER_PRIOR && Array.isArray(window.CAREER_PRIOR[p.id]) ? window.CAREER_PRIOR[p.id] : [];
+    prior.forEach(c => rows.push({ year: c.year, team: c.team === 'TOT' && Array.isArray(c.teams) && c.teams.length ? 'TOT (' + c.teams.join(', ') + ')' : c.team, s: c }));
+    const seen = new Set(rows.map(r => r.year));
+    (Array.isArray(p.careerStats) ? p.careerStats : []).forEach(c => {
+      const pg = UI.perGame(c);
+      if (!pg) return;
+      rows.push({ year: c.year, team: c.team, s: pg, sim: true });
+      seen.add(c.year);
+    });
+    const s = UI.state.season;
+    if (s && UI.state.game && !seen.has(s.year)) {
+      const pg = UI.perGame(UI.seasonTotals()[p.id]);
+      if (pg) rows.push({ year: s.year, team: p.team, s: pg, sim: true, live: true });
+    }
+    if (!rows.length) return UI.header('CAREER') + '<p class="muted">No NBA games yet.</p>';
+    rows.sort((a, b) => a.year - b.year);
+    const G = rows.reduce((t, r) => t + (Number(r.s.g) || 0), 0);
+    const avg = k => { let w = 0, v = 0; rows.forEach(r => { const x = r.s[k]; if (x == null || isNaN(x) || !r.s.g) return; const n = Number(x) > 1 && /p$/.test(k) ? Number(x) / 100 : Number(x); v += n * r.s.g; w += r.s.g; }); return w ? v / w : null; };
+    const cells = st => `<td>${esc(st.g)}</td><td>${UI.fmt1(st.mpg)}</td><td><b>${UI.fmt1(st.pts)}</b></td><td>${UI.fmt1(st.reb)}</td><td>${UI.fmt1(st.ast)}</td><td>${UI.fmt1(st.stl)}</td><td>${UI.fmt1(st.blk)}</td><td>${UI.fmtPct(st.fgp)}</td><td>${UI.fmtPct(st.tpp)}</td><td>${UI.fmtPct(st.ftp)}</td>`;
+    const total = { g: G, mpg: avg('mpg'), pts: avg('pts'), reb: avg('reb'), ast: avg('ast'), stl: avg('stl'), blk: avg('blk'), fgp: avg('fgp'), tpp: avg('tpp'), ftp: avg('ftp') };
+    return `${UI.header('CAREER', 'Per game, season by season.')}<div class="tscroll"><table class="stats career"><thead><tr><th class="l">SEASON</th><th class="l">TEAM</th><th>G</th><th>MPG</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>FG%</th><th>3P%</th><th>FT%</th></tr></thead>
+      <tbody>${rows.map(r => `<tr class="${r.sim ? 'sim' : ''}"><td class="l">${esc(UI.seasonLabel(r.year))}${r.live ? ' <small class="muted">so far</small>' : ''}</td><td class="l">${esc(r.team || '')}</td>${cells(r.s)}</tr>`).join('')}</tbody>
+      <tfoot><tr><td class="l">CAREER</td><td class="l">${rows.length} season${rows.length > 1 ? 's' : ''}</td>${cells(total)}</tr></tfoot></table></div>`;
   }
 
   P.player = function (app, id) {
@@ -222,20 +250,13 @@
       </div>`;
     }).join('');
 
-    const real = p.stats && p.stats.g ? statTable([[p.team === 'DRAFT' || p.draftYear ? 'Last season (real)' : '2012-13 (real)', p.stats]]) : '<p class="muted">No NBA stats on record.</p>';
-    const career = Array.isArray(p.careerStats) && p.careerStats.length
-      ? UI.header('CAREER IN THIS LEAGUE') + statTable(p.careerStats.map(c => [UI.seasonLabel(c.year) + ' ' + (c.team || ''), UI.perGame(c) || { g: 0 }])) : '';
+    const career = careerHtml(p);
     const awards = Array.isArray(p.awards) && p.awards.length
       ? `${UI.header('AWARDS')}<ul class="awards">${p.awards.map(a => `<li><b>${esc(a.year ? UI.seasonLabel(a.year) : '')}</b> ${esc(a.award || a.name || a)}</li>`).join('')}</ul>` : '';
     let seasonHtml = '';
     if (UI.state.season) {
-      const pg = UI.perGame(UI.seasonTotals()[p.id]);
-      const po = UI.perGame(UI.seasonTotals(true)[p.id]);
       const log = UI.gameLog(p.id).slice(0, 10);
-      const lbl = UI.seasonLabel(UI.state.season.year || UI.year());
-      seasonHtml = `${UI.header('THIS SEASON', esc(UI.state.save ? UI.state.save.name : ''))}
-        ${pg || po ? statTable([].concat(pg ? [[lbl + ' (sim)', pg]] : [], po ? [[lbl + ' playoffs', po]] : [])) : '<p class="muted">He has not played this season.</p>'}
-        ${log.length ? `${UI.header('GAME LOG', 'Last 10 games')}<div class="tscroll"><table class="stats"><thead><tr><th class="l">GAME</th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>FG</th><th>3P</th><th>FT</th><th></th></tr></thead><tbody>${log.map(({ game: g, side, row: r }) => {
+      seasonHtml = `        ${log.length ? `${UI.header('GAME LOG', 'Last 10 games')}<div class="tscroll"><table class="stats"><thead><tr><th class="l">GAME</th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>FG</th><th>3P</th><th>FT</th><th></th></tr></thead><tbody>${log.map(({ game: g, side, row: r }) => {
           const opp = side === 'home' ? g.away : g.home;
           const won = side === 'home' ? g.hs > g.as : g.as > g.hs;
           return `<tr><td class="l">${esc(UI.gameDay(g))} ${side === 'home' ? 'vs' : '@'} ${esc(opp)} <span class="${won ? 'win' : 'loss'}">${won ? 'W' : 'L'}</span></td><td>${Math.round(r.min || 0)}</td><td><b>${r.pts || 0}</b></td><td>${(r.reb != null ? r.reb : (r.oreb || 0) + (r.dreb || 0))}</td><td>${r.ast || 0}</td><td>${r.stl || 0}</td><td>${r.blk || 0}</td><td>${r.fgm || 0}-${r.fga || 0}</td><td>${r.tpm || 0}-${r.tpa || 0}</td><td>${r.ftm || 0}-${r.fta || 0}</td><td><a href="#/game/${encodeURIComponent(g.id)}">BOX</a></td></tr>`;
@@ -272,11 +293,28 @@
       </section>
       ${UI.header('ATTRIBUTES', '2K13 scale, 25 to 99.')}
       <div class="agroups">${groups}</div>
-      ${seasonHtml}
       ${career}
-      ${UI.header('REAL STATS')}
-      ${real}
+      ${seasonHtml}
       ${awards}`;
+  };
+
+  // ---------- Draft classes (hub browser over window.DRAFTS) ----------
+  P.classes = function (app, arg) {
+    const D = window.DRAFTS;
+    if (!D || !Object.keys(D).length) { app.innerHTML = UI.header('DRAFT CLASSES') + UI.empty('DRAFT CLASSES NOT BUILT YET', 'The draft data file <code>data/drafts.js</code> has not loaded yet.'); return; }
+    const years = Object.keys(D).map(Number).sort((a, b) => a - b);
+    const year = years.includes(Number(arg)) ? Number(arg) : years[0];
+    const list = D[year].slice().sort((a, b) => (a.undrafted ? 999 : a.realPick || 998) - (b.undrafted ? 999 : b.realPick || 998) || (b.pot || 0) - (a.pot || 0));
+    const rows = list.map(p => {
+      const live = UI.player(p.id) || p;
+      const stash = p.arrivalYear && p.arrivalYear > year + 1 ? `<span class="badge badge-dim">STASH, ARRIVES ${esc(UI.seasonLabel(p.arrivalYear))}</span>` : '';
+      return `<tr><td>${p.undrafted ? '<span class="muted">UDFA</span>' : esc(p.realPick || '-')}</td>
+        <td class="l"><a class="cl-name" href="#/player/${esc(p.id)}"><span class="cl-hs">${UI.headshot(live)}</span><span>${esc(p.name)} ${stash}</span></a></td>
+        <td>${esc(p.pos)}</td><td>${esc(p.age)}</td><td>${UI.fmtHt(p.ht)}</td><td class="${UI.ovrClass(p.ovr)}"><b>${esc(p.ovr)}</b></td><td class="${UI.ovrClass(p.pot)}"><b>${esc(p.pot)}</b></td></tr>`;
+    }).join('');
+    app.innerHTML = UI.header('DRAFT CLASSES', 'The real classes, with draft-day rating (OVR) and real career peak (POT) on the 2K scale. In a league, each class enters on its draft day.') +
+      `<div class="tabs year-tabs">${years.map(y => `<a href="#/classes/${y}" class="${y === year ? 'on' : ''}">${y}</a>`).join('')}</div>
+      <div class="tscroll"><table class="stats classes"><thead><tr><th>PICK</th><th class="l">PLAYER</th><th>POS</th><th>AGE</th><th>HT</th><th>OVR</th><th>POT</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   };
 
   // ---------- Soundtrack ----------

@@ -36,6 +36,10 @@
     soft: 0.7,                // regression of elite shot-making toward the mean (diminishing returns)
     starDrain: 0.2,           // extra fatigue per unit of usage above average
     rubber: 0.0014,           // leading teams ease off and trailing teams push (per point of lead, capped at 20)
+    stratPace: 0.068,         // first-play length change per unit of pace slider (both teams add up, capped)
+    stratThree: 0.31,         // log change of three-point weight per unit of the three slider (about +-25% of 3PA)
+    stratCrash: 0.035,        // offensive rebound chance per unit of the crash slider
+    stratTrans: 0.03,         // opponent make bonus on the next play after a defensive rebound, per unit of crash
     minorK: 0.3,              // scale of the secondary team rating effects (turnovers, rebounding, blocks)
     usageK: 0.34,
     foulShot: { close: 0.22, post: 0.165, mid: 0.048, three: 0.014 },
@@ -294,8 +298,13 @@
 
   function pickStarters(avail, forced) {
     if (forced && forced.length) {
-      var f = avail.filter(function (s) { return forced.indexOf(s.id) >= 0; });
+      var f = avail.filter(function (s) { return forced.indexOf(s.id) >= 0; }).slice(0, 5);
       if (f.length === 5) return f;
+      if (f.length >= 3) {
+        // some chosen starters are hurt: fill the open spots with the best healthy players
+        avail.forEach(function (s) { if (f.length < 5 && f.indexOf(s) < 0) f.push(s); });
+        return f;
+      }
     }
     var top = avail.slice(0, Math.min(8, avail.length));
     if (top.length <= 5) return top.slice();
@@ -345,13 +354,17 @@
     bench.forEach(function (s, i) { s.target = benchTargets[i] || 0; });
     var mins = team.minutes || null;
     var roster = starters.concat(bench);
+    var listed = 0;
+    if (mins) roster.forEach(function (s) { if (mins[s.id] != null) listed += Math.max(0, +mins[s.id] || 0); });
+    if (listed <= 0) mins = null;
     roster.forEach(function (s) {
-      if (mins && mins[s.id] != null) s.target = +mins[s.id];
+      if (mins && mins[s.id] != null) s.target = clamp(+mins[s.id] || 0, 0, 48);
+      else if (mins && listed >= 200) s.target = 0;      // a full saved rotation: others only play in emergencies
       else if (s.target > 0) s.target += clamp(s.z.stamina * 1.8, -3, 3);
     });
     var tot = 0;
     roster.forEach(function (s) { tot += s.target; });
-    if (tot > 0 && !mins) roster.forEach(function (s) { s.target = Math.min(42, s.target * 240 / tot); });
+    if (tot > 0) roster.forEach(function (s) { s.target = Math.min(mins ? 46 : 42, s.target * 240 / tot); });
     // Injury rolls for this game: about 0.15% to 0.4% per player, by durability and minutes
     roster.forEach(function (s) {
       if (s.target <= 0) return;
@@ -360,7 +373,29 @@
       p *= clamp(s.target / 26, 0.5, 1.4);
       if (rng() < p) s.injuryAt = Math.floor(rng() * REG_SECONDS);
     });
-    return { abbr: team.abbr, side: side, roster: roster, all: all, lineup: [], teamFouls: 0, late2: 0, pts: 0, lastSub: -999 };
+    return { abbr: team.abbr, side: side, roster: roster, all: all, lineup: [], teamFouls: 0, late2: 0, pts: 0, lastSub: -999,
+      strat: readStrategy(team.strategy) };
+  }
+
+  // Team strategy: sliders 0..100 with 50 neutral, turned into -1..1 (0 = neutral)
+  function readStrategy(st) {
+    st = st || {};
+    function d(v) { v = +v; return isNaN(v) ? 0 : clamp((v - 50) / 50, -1, 1); }
+    var def = String(st.defense || 'man').toLowerCase();
+    return { pace: d(st.pace), three: d(st.three), crash: d(st.crash), defense: def === 'zone' || def === 'switch' ? def : 'man' };
+  }
+
+  // Shot type weights and make adjustments for an offense against a defensive scheme
+  function shotPlan(offStrat, defStrat) {
+    var mult = { close: 1, post: 1, mid: 1, three: Math.exp(T.stratThree * offStrat.three) };
+    var make = { close: 0, post: 0, mid: 0, three: 0 };
+    if (defStrat.defense === 'zone') {
+      mult.close *= 0.86; mult.post *= 0.92; mult.mid *= 1.04; mult.three *= 1.17;
+    } else if (defStrat.defense === 'switch') {
+      mult.three *= 0.92; make.three -= 0.010;
+      mult.post *= 1.15; make.post += 0.014; make.close += 0.008;
+    }
+    return { mult: mult, make: make };
   }
 
   function fmtClock(sec) { sec = Math.max(0, Math.ceil(sec)); return Math.floor(sec / 60) + ':' + pad2(sec % 60); }
@@ -380,6 +415,9 @@
     var qStart = [0, 0];
     var injuriesOut = [];
     var homeEdge = opts.neutral ? 0 : T.homeMake;
+    H.plan = shotPlan(H.strat, A.strat);
+    A.plan = shotPlan(A.strat, H.strat);
+    var paceF = 1 - clamp(T.stratPace * (H.strat.pace + A.strat.pace), -0.1, 0.1);
     H.form = (rng() + rng() + rng() - 1.5) * 2 * T.formSd;
     A.form = (rng() + rng() + rng() - 1.5) * 2 * T.formSd;
 
@@ -511,7 +549,7 @@
 
     function rebound(off, def, shotType, blocked) {
       if (rng() < T.teamReb) return { team: rng() < 0.3 ? off : def, player: null };
-      var p = T.orebBase + T.minorK * (0.03 * lineupZ(off, 'oreb') - 0.03 * lineupZ(def, 'dreb'));
+      var p = T.orebBase + T.minorK * (0.03 * lineupZ(off, 'oreb') - 0.03 * lineupZ(def, 'dreb')) + T.stratCrash * off.strat.crash;
       if (shotType === 'three') p -= 0.015;
       if (blocked) p += 0.04;
       p = clamp(p, 0.12, 0.45);
@@ -553,7 +591,7 @@
     }
 
     // One play. Returns { next: team with the ball, dead, second (continuation), putback }
-    function play(off, def, putbackBy) {
+    function play(off, def, putbackBy, trans) {
       var edge = (lineupOvr(off) - lineupOvr(def)) * T.teamEdge + (off === H ? homeEdge : -homeEdge) -
         T.rubber * clamp(off.pts - def.pts, -20, 20);
       if (!putbackBy) {
@@ -599,7 +637,9 @@
       }
       // ---- shot ----
       var shooter = putbackBy || pickBy(off.lineup, function (s) { return s.usage * (0.5 + 0.5 * s.energy); });
-      var type = putbackBy ? 'close' : pickWeighted(SHOT_TYPES, SHOT_TYPES.map(function (t) { return shooter.shares[t]; }), rng);
+      var type = putbackBy ? 'close' : pickWeighted(SHOT_TYPES, SHOT_TYPES.map(function (t) {
+        return shooter.shares[t] * off.plan.mult[t] * (t === 'close' && trans > 0 ? 1 + trans : 1);
+      }), rng);
       var dfd = defenderFor(def, off, shooter);
       var offZ = shooter.makeZ[type] - fz(shooter);
       var defZ;
@@ -613,6 +653,8 @@
       var pMake = T.makeBase[type] + T.makeOff[type] * offZ - T.makeDef[type] * defZ +
         T.makeOvr * ((shooter.ovrSoft - fz(shooter)) - (dfd.ovrSoft - fz(dfd))) + edge + off.form;
       if (putbackBy) pMake += 0.04;
+      pMake += off.plan.make[type];
+      if (trans) pMake += T.stratTrans * trans;   // transition chances after the other team crashed the glass
       if (clock < 2 && rng() < 0.5) pMake *= 0.4; // end of quarter heave
       pMake = clamp(pMake, 0.12, 0.85);
       var is3 = type === 'three';
@@ -664,7 +706,7 @@
       }
       var rb = rebound(off, def, type, blocked);
       if (rb.team === off && rb.player && !rb.player.out && rng() < T.putback) return { next: off, dead: false, second: true, putback: rb.player };
-      return { next: rb.team, dead: false, second: rb.team === off };
+      return { next: rb.team, dead: false, second: rb.team === off, trans: rb.team === def && rb.player ? off.strat.crash : 0 };
     }
 
     // ---- main loop ----
@@ -672,7 +714,7 @@
     var tipWinner = poss;
     log(null, 'Tip-off: ' + A.abbr + ' at ' + H.abbr + ', ' + poss.abbr + ' wins the tip');
     chooseLineup(H, true); chooseLineup(A, true);
-    var second = false, putback = null, dead = true;
+    var second = false, putback = null, dead = true, trans = 0;
     var guard = 0;
     while (guard++ < 3000) {
       if (clock <= 0.01) {
@@ -690,7 +732,7 @@
         else if (q === 4) poss = tipWinner;
         else poss = rng() < 0.5 ? H : A;
         chooseLineup(H, q === 3); chooseLineup(A, q === 3);
-        second = false; putback = null; dead = true;
+        second = false; putback = null; dead = true; trans = 0;
         continue;
       }
       checkInjuries();
@@ -706,15 +748,17 @@
       else if (second) dur = 3 + rng() * 2 * (T.secondMean - 3);
       else {
         var pace = 1 - ((lineupZ(poss, 'speed') + lineupZ(def, 'speed')) / 2) * 0.03;
-        dur = 4 + (rng() + rng()) * (T.playMean * pace - 4);
+        dur = 4 + (rng() + rng()) * (T.playMean * pace * paceF - 4);
+        if (trans > 0) dur *= 1 - 0.15 * trans;
       }
       dur = Math.min(dur, 24);
       if (dur >= clock) dur = clock;
       runClock(dur);
-      var res = play(poss, def, putback);
+      var res = play(poss, def, putback, trans);
       poss = res.next;
       second = !!res.second;
       putback = res.putback || null;
+      trans = res.trans || 0;
       dead = !!res.dead;
     }
 
@@ -978,7 +1022,8 @@
       abbr: abbr,
       players: by[abbr] || [],
       starters: (lineups && lineups.starters) || (lt && lt.starters) || null,
-      minutes: (lineups && lineups.minutes) || null
+      minutes: (lineups && lineups.minutes) || null,
+      strategy: (lt && lt.strategy) || (season.strategies && season.strategies[abbr]) || null
     };
   }
 

@@ -575,6 +575,22 @@ table.stats, table.stand { width: 100%; border-collapse: collapse; font-size: 14
 .ev-side-h { display: flex; align-items: center; gap: 8px; font-family: var(--display); letter-spacing: .1em; font-size: 13px; color: var(--gold); margin-bottom: 8px; }
 .ev-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; padding: 14px 18px; border-top: 1px solid var(--line); }
 
+
+/* ---------- home: one primary action, a secondary row, four tiles ---------- */
+.home-primary .tile-main { min-height: 230px; grid-column: auto; grid-row: auto; }
+.home-primary .tile-continue .tile-t.big { font-size: clamp(30px, 4vw, 52px); }
+.home-secondary { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 26px; }
+.home-secondary .btn { flex: 0 1 auto; min-width: 150px; }
+.home-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.tt-star { font-size: 12px; color: var(--text2); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-star b { color: var(--gold2); font-family: var(--display); }
+.sim-btns > .lv-watch { grid-column: 1 / -1; }
+.year-tabs a { padding: 7px 11px; }
+.classes .cl-name { display: inline-flex; align-items: center; gap: 10px; }
+.cl-hs { width: 52px; flex: none; background: linear-gradient(180deg, #2a2a30, #121214); }
+.classes td { vertical-align: middle; }
+.stats.career tr.sim td:first-child { box-shadow: inset 3px 0 0 var(--gold-dim); }
+
 /* ---------- responsive ---------- */
 @media (max-width: 1100px) {
   .prow { grid-template-columns: 84px minmax(0, 1fr) 110px 70px; grid-template-areas: 'hs main money ovr' 'hs season season ovr'; }
@@ -595,7 +611,9 @@ table.stats, table.stand { width: 100%; border-collapse: collapse; font-size: 14
   .mainnav .nav-extra { display: block; }
   .navmore { display: none; }
   .userchip a { padding: 4px 10px 4px 4px; }
-  .menu-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .menu-grid, .home-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .home-primary .tile-main { min-height: 180px; }
+  .home-secondary .btn { flex: 1 1 140px; min-width: 0; }
   .tile { min-height: 120px; padding: 16px; }
   .tile-t { font-size: 22px; }
   .tile-main { min-height: 230px; padding: 22px; }

@@ -88,7 +88,7 @@
     const c1 = (t.colors && t.colors[0]) || '#333';
     const c2 = (t.colors && t.colors[1]) || '#999';
     const style = `--c1:${c1};--c2:${c2};--sz:${size || 40}px`;
-    const img = t.logo ? `<img src="${UI.esc(t.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('nologo');this.remove()">` : '';
+    const img = t.logo ? `<img src="${UI.esc(t.logo)}" alt="" loading="lazy"${t.logoNoRef || /wikia|nocookie/.test(t.logo) ? ' referrerpolicy="no-referrer"' : ''} onerror="this.parentNode.classList.add('nologo');this.remove()">` : '';
     return `<span class="logo${t.logo ? '' : ' nologo'}" style="${style}" title="${UI.esc(UI.teamName(abbr))}">${img}<b>${UI.esc(t.abbr)}</b></span>`;
   };
 
@@ -120,7 +120,12 @@
     const g = UI.state.game;
     if (g && g.players) return g.players[id] || null;
     const L = UI.state.league;
-    return (L && L.players.find(p => p.id === id)) || null;
+    const base = L && L.players.find(p => p.id === id);
+    if (base) return base;
+    // Draft prospects before a league exists.
+    const D = window.DRAFTS;
+    if (D) for (const y of Object.keys(D)) { const p = D[y].find(x => x.id === id); if (p) return Object.assign({ team: 'DRAFT' }, p); }
+    return null;
   };
   UI.allPlayers = function () {
     const g = UI.state.game;

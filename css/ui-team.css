@@ -148,6 +148,7 @@ i.m-great { background: var(--gold2); } i.m-good { background: #8fcf6a; } i.m-ok
 
 /* payroll */
 .fr-cap { border: 1px solid var(--line); background: var(--bg2); padding: 44px 20px 14px; margin-bottom: 18px; }
+.fr-cap-status { padding-top: 26px; }
 .fr-cap-track { position: relative; height: 18px; background: #26262c; border-radius: 2px; }
 .fr-cap-track > i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, var(--gold-dim), var(--gold)); border-radius: 2px; }
 .fr-cap-track > i.mid { background: linear-gradient(90deg, var(--gold), var(--gold2)); }
@@ -156,7 +157,9 @@ i.m-great { background: var(--gold2); } i.m-good { background: #8fcf6a; } i.m-ok
 .fr-cap-mark em, .fr-cap-mark small { position: absolute; left: 0; transform: translateX(-50%); white-space: nowrap; font-style: normal; font-family: var(--display); letter-spacing: .1em; }
 .fr-cap-mark em { top: 0; font-size: 11px; color: var(--gold2); }
 .fr-cap-mark small { top: 14px; font-size: 10px; color: var(--muted); }
-.fr-cap-mark:nth-of-type(2n) em { top: -2px; }
+.fr-cap-mark.below { top: -4px; bottom: -34px; }
+.fr-cap-mark.below em { top: auto; bottom: 0; }
+.fr-cap-mark.below small { top: auto; bottom: 14px; }
 .fr-cap-status { margin: 14px 0 0; font-size: 14px; color: var(--text2); }
 .fr-paytable td small { color: var(--muted); }
 .fr-money b { font-size: 26px; }
@@ -337,7 +340,10 @@ i.m-great { background: var(--gold2); } i.m-good { background: #8fcf6a; } i.m-ok
   .fr-leads { grid-template-columns: minmax(0, 1fr); }
   .fr-hof { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .fr-hof-n { font-size: 16px; }
-  .fr-cap { padding: 44px 14px 12px; }
+  .fr-cap { padding: 28px 14px 12px; }
+  .fr-cap-mark { top: -20px; }
   .fr-cap-mark small { display: none; }
+  .fr-cap-mark.below { bottom: -22px; }
+  .fr-cap-status { padding-top: 14px; }
   .fr-jersey { width: 72px; }
 }

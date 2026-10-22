@@ -22,7 +22,7 @@
   const CORE = ['home', 'new', 'continue', 'teams', 'team', 'player', 'season', 'game', 'standings', 'leaders', 'playoffs', 'saves', 'soundtrack'];
   const KNOWN = [
     ['myteam', 'Team'], ['manage', 'Team'], ['gm', 'Team'], ['trade', 'Trades'], ['trades', 'Trades'],
-    ['fa', 'Free Agency'], ['freeagency', 'Free Agency'], ['draft', 'Draft'], ['history', 'History'],
+    ['fa', 'Free Agency'], ['freeagency', 'Free Agency'], ['draft', 'Draft'], ['classes', 'Draft Classes'], ['history', 'History'],
     ['news', 'News'], ['live', 'Watch Live'], ['commish', 'Commissioner'], ['commissioner', 'Commissioner']
   ];
   UI.extraPages = function () {

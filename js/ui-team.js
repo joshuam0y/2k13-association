@@ -578,7 +578,7 @@
       if (minP && total < minP) status += ` Below the salary floor (${fr.money(minP)}).`;
       capHtml = `<div class="fr-cap">
         <div class="fr-cap-track"><i class="${rules.tax && total > rules.tax ? 'over' : total > rules.cap ? 'mid' : ''}" style="width:${pct(total)}%"></i>
-          ${marks.map(m => `<span class="fr-cap-mark" style="left:${pct(m[1])}%"><em>${m[0]}</em><small>${fr.money(m[1])}</small></span>`).join('')}</div>
+          ${marks.map((m, i) => `<span class="fr-cap-mark${i % 2 ? ' below' : ''}" style="left:${pct(m[1])}%"><em>${m[0]}</em><small>${fr.money(m[1])}</small></span>`).join('')}</div>
         <p class="fr-cap-status">${status}</p></div>`;
     } else {
       capHtml = fr.building('Cap, tax and apron lines', 'The CBA module (<code>js/cba.js</code>) has not loaded, so the salary cap, luxury tax and apron for this season are not known yet. The payroll below is added up from the contracts.');
