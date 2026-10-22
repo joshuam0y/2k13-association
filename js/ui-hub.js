@@ -1,4 +1,5 @@
-// Hub pages: home, new league team picker, rosters, team roster, player card, soundtrack.
+// Hub pages: main menu, new league team picker, rosters, team roster, player card, league menu,
+// draft classes and soundtrack. Also the shared menu tiles and icons (UI.icon, UI.tile).
 (function () {
   'use strict';
   const UI = window.UI;
@@ -11,71 +12,84 @@
     return seen.sort((a, b) => (a === 'East' ? -1 : b === 'East' ? 1 : a.localeCompare(b)));
   };
 
-  // ---------- Home ----------
-  // One big primary action, a small secondary row, and four tiles. Everything else is in the header.
+  // ---------- icons and tiles ----------
+  // Simple line icons (24 by 24, drawn in currentColor) for the menu tiles.
+  const ICONS = {
+    ball: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18zM3 12h18M12 3v18M5.6 5.6c2.6 2.6 2.6 10.2 0 12.8M18.4 5.6c-2.6 2.6-2.6 10.2 0 12.8',
+    play: 'M7 4l13 8-13 8z',
+    roster: 'M8 3L3 6l2 5 2-1v11h10V10l2 1 2-5-5-3c0 2-2 3-4 3s-4-1-4-3z',
+    rotation: 'M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3M18 3v4h-4M6 21v-4h4',
+    trade: 'M4 8h15l-4-4M20 16H5l4 4',
+    fa: 'M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5',
+    standings: 'M9 6h11M9 12h11M9 18h11M4 6h1.5M4 12h1.5M4 18h1.5',
+    stats: 'M5 20V11M11 20V5M17 20v-6M3 20h18',
+    draft: 'M2 9l10-5 10 5-10 5zM6 11v5c3 2 9 2 12 0v-5M22 9v6',
+    league: 'M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 14v4M8 21h8M9 18h6',
+    load: 'M3 6h6l2 2h10v11H3z',
+    music: 'M9 18V5l11-2v13M9 18a3 3 0 1 1-6 0a3 3 0 0 1 6 0zM20 16a3 3 0 1 1-6 0a3 3 0 0 1 6 0z',
+    news: 'M4 5h13v14H6a2 2 0 0 1-2-2zM17 9h3v8a2 2 0 0 1-2 2M7 9h7M7 13h7M7 16h4',
+    awards: 'M12 14a5 5 0 1 0 0-10a5 5 0 0 0 0 10zM8.5 13L7 21l5-3 5 3-1.5-8',
+    history: 'M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18zM12 7v5l3 3',
+    classes: 'M9 11a4 4 0 1 0 0-8a4 4 0 0 0 0 8zM2 21c0-4 3-7 7-7s7 3 7 7M16 3.5a4 4 0 0 1 0 7.5M22 21c0-3-2-5.5-4.5-6.5',
+    playoffs: 'M3 5h5v4H3zM3 15h5v4H3zM8 7h3v10H8M11 12h4M15 10h6v4h-6z',
+    moves: 'M4 7h16M4 12h11M4 17h7',
+    live: 'M3 6h18v12H3zM8 21h8M10 9.5l5 2.5-5 2.5z',
+    teams: 'M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z'
+  };
+  UI.icon = (name, cls) => `<svg class="ic ${cls || ''}" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[name] || ICONS.ball}"/></svg>`;
+  // A big menu tile: an icon and one label. opts: { sub, cls, disabled, attrs }
+  UI.tile = function (href, icon, label, opts) {
+    const o = opts || {};
+    const dis = o.disabled;
+    return `<a class="mtile${o.cls ? ' ' + o.cls : ''}${dis ? ' disabled' : ''}" href="${dis ? '#/home' : esc(href)}"${dis ? ' aria-disabled="true" tabindex="-1"' : ''}${o.attrs || ''}>
+      ${icon ? `<span class="mt-ic">${UI.icon(icon)}</span>` : ''}<span class="mt-l">${esc(label)}</span>${o.sub ? `<span class="mt-s">${o.sub}</span>` : ''}</a>`;
+  };
+
+  // ---------- Main menu ----------
+  // Four choices only: play a new Association, continue the last one, load a save, soundtrack.
   P.home = function (app) {
     const latest = UI.saves.latest();
     const engineOk = UI.canPlay();
-    let primary;
-    if (latest) {
-      const m = latest.meta;
-      primary = `<a class="tile tile-main tile-continue" href="#/continue">
-        <span class="tile-k">CONTINUE</span>
-        <span class="tile-team">${UI.logo(m.userTeam, 88)}<span><span class="tile-t big">${esc(UI.teamName(m.userTeam))}</span>
-        <span class="tile-d">${esc(m.name)} | ${esc(m.record || '0-0')}${m.year ? ' | ' + esc(UI.seasonLabel(m.year)) : ''}${m.date ? ' | ' + esc(UI.dateLabel(m.date)) : ''}</span></span></span>
-      </a>`;
-    } else {
-      primary = `<a class="tile tile-main${engineOk ? '' : ' disabled'}" href="${engineOk ? '#/new' : '#/home'}" ${engineOk ? '' : 'aria-disabled="true"'}>
-        <span class="tile-k">${engineOk ? 'NEW LEAGUE' : 'SIM ENGINE NOT BUILT YET'}</span>
-        <span class="tile-t big">PLAY THE ASSOCIATION</span>
-        <span class="tile-d">Choose your team from all 30 franchises and take it from opening night to the Finals.</span>
-      </a>`;
-    }
-    const sec = [];
-    if (latest && engineOk) sec.push(['#/new', 'NEW LEAGUE']);
-    sec.push(['#/saves', 'LOAD SAVE']);
-    if (typeof UI.pages.fantasy === 'function' && engineOk) sec.push(['#/fantasy/new', 'FANTASY DRAFT']);
-    const tile = (href, k, t, d) => `<a class="tile" href="${href}"><span class="tile-k">${k}</span><span class="tile-t">${t}</span><span class="tile-d">${d}</span></a>`;
+    const m = latest && latest.meta;
+    const cont = m
+      ? UI.tile('#/continue', null, 'CONTINUE', { cls: 'mt-continue', sub: `<span class="mt-team">${UI.logo(m.userTeam, 44)}<span><b>${esc(UI.teamName(m.userTeam))}</b><small>${esc(m.record || '0-0')}${m.year ? ' | ' + esc(UI.seasonLabel(m.year)) : ''}</small></span></span>`, disabled: !engineOk })
+      : UI.tile('#/continue', 'play', 'CONTINUE', { cls: 'mt-continue', sub: 'No saved league yet', disabled: true });
     app.innerHTML = `
-      <section class="hero">
-        <div class="hero-kicker">THE 2012-13 SEASON</div>
-        <h1 class="hero-title"><span class="ht-2k">2K13</span> <span class="ht-a">ASSOCIATION</span></h1>
-      </section>
-      <div class="home-primary">${primary}</div>
-      <div class="home-secondary">${sec.map(([h, l]) => `<a class="btn" href="${h}">${l}</a>`).join('')}</div>
-      <div class="home-tiles">
-        ${tile('#/teams', '30 TEAMS', 'ROSTERS', 'Every team, every player card')}
-        ${tile('#/standings', 'EAST AND WEST', 'STANDINGS', 'Conference tables and the playoff race')}
-        ${tile('#/classes', '2013 TO 2026', 'DRAFT CLASSES', 'Every real class, pick by pick')}
-        ${tile('#/soundtrack', '24 SONGS', 'SOUNDTRACK', 'The official 2K13 tracklist')}
-      </div>`;
+      <section class="mm">
+        <div class="mm-brand"><span class="mm-2k">2K13</span><span class="mm-a">ASSOCIATION</span></div>
+        <div class="mm-k">THE 2012-13 NBA SEASON</div>
+        <div class="mm-grid">
+          ${UI.tile('#/new', 'ball', 'PLAY THE ASSOCIATION', { cls: 'mt-hero', disabled: !engineOk, sub: engineOk ? 'NEW LEAGUE' : 'SIM ENGINE NOT LOADED' })}
+          ${cont}
+          ${UI.tile('#/saves', 'load', 'LOAD')}
+          ${UI.tile('#/soundtrack', 'music', 'SOUNDTRACK')}
+        </div>
+      </section>`;
   };
 
   // ---------- New league: pick a team ----------
   P.new = function (app) {
     if (!UI.canPlay()) { app.innerHTML = UI.notBuilt('engine'); return; }
     const teamTile = t => {
-      const star = UI.roster(t.abbr)[0];
       const c1 = (t.colors && t.colors[0]) || '#333';
       return `<button type="button" class="team-tile" data-team="${esc(t.abbr)}" style="--c1:${esc(c1)}">
         ${UI.logo(t.abbr, 64)}
         <span class="tt-city">${esc(t.city)}</span><span class="tt-name">${esc(t.name)}</span>
-        <span class="tt-meta"><b>${UI.teamOvr(t.abbr) || '-'}</b> TEAM OVR</span>
-        ${star ? `<span class="tt-star">Star: ${esc(star.name)} <b>${esc(star.ovr)}</b></span>` : ''}
+        <span class="tt-ovr" title="Team overall rating"><small>TEAM OVR</small><b>${UI.teamOvr(t.abbr) || '-'}</b></span>
       </button>`;
     };
-    const groups = confs().map(c => `<h3 class="conf-label">${esc(c.toUpperCase())}ERN CONFERENCE</h3>
+    const groups = confs().map(c => `<h3 class="conf-label">${esc(c.toUpperCase())}</h3>
       <div class="team-grid">${UI.teams().filter(t => t.conf === c).sort((a, b) => a.city.localeCompare(b.city)).map(teamTile).join('')}</div>`).join('');
     const slots = UI.saves.list();
     const first = UI.saves.firstEmpty() || 1;
-    app.innerHTML = `${UI.header('SELECT YOUR TEAM', 'Pick the franchise you will run. Rosters are as of opening night 2012.')}
+    app.innerHTML = `${UI.header('SELECT YOUR TEAM', 'TEAM OVR is the rating of the whole team, from its top eight players.')}
       ${groups}
       <div class="confirm" id="confirm" hidden>
         <div class="confirm-inner">
           <div class="confirm-team" id="confirmTeam"></div>
           <label class="field"><span>SAVE NAME</span><input id="saveName" maxlength="40"></label>
           <label class="field"><span>SAVE SLOT</span><select id="saveSlot">${slots.map(s => `<option value="${s.slot}" ${s.slot === first ? 'selected' : ''}>Slot ${s.slot}: ${s.meta ? esc(s.meta.name) + ' (overwrite)' : 'Empty'}</option>`).join('')}</select></label>
-          <div class="confirm-actions"><button type="button" class="btn btn-gold" id="startBtn">START ASSOCIATION</button><button type="button" class="btn" id="cancelBtn">CANCEL</button></div>
+          <div class="confirm-actions"><button type="button" class="btn btn-gold" id="startBtn">START</button><button type="button" class="btn" id="cancelBtn">CANCEL</button></div>
         </div>
       </div>`;
     let picked = null;
@@ -83,7 +97,7 @@
     app.querySelectorAll('.team-tile').forEach(b => b.addEventListener('click', () => {
       picked = b.getAttribute('data-team');
       app.querySelectorAll('.team-tile').forEach(x => x.classList.toggle('picked', x === b));
-      UI.$('#confirmTeam').innerHTML = `${UI.logo(picked, 56)}<div><div class="ct-k">YOU ARE THE GM OF THE</div><div class="ct-t">${esc(UI.teamName(picked))}</div></div>`;
+      UI.$('#confirmTeam').innerHTML = `${UI.logo(picked, 56)}<div><div class="ct-k">TEAM OVR ${UI.teamOvr(picked) || '-'}</div><div class="ct-t">${esc(UI.teamName(picked))}</div></div>`;
       UI.$('#saveName').value = UI.team(picked).name + ' Association';
       confirm.hidden = false;
     }));
@@ -102,7 +116,7 @@
         console.warn(e);
         UI.toast('Could not start the league: ' + e.message, 'error');
         btn.disabled = false;
-        btn.textContent = 'START ASSOCIATION';
+        btn.textContent = 'START';
       }
     });
   };
@@ -110,15 +124,18 @@
   // ---------- Rosters: all teams ----------
   P.teams = function (app) {
     const user = UI.userTeam();
+    const hasSeason = !!UI.state.season;
     const card = t => `<a class="team-card${t.abbr === user ? ' mine' : ''}" href="#/team/${esc(t.abbr)}" style="--c1:${esc(t.colors[0])}">
         ${UI.logo(t.abbr, 48)}
-        <span class="tc-name"><span class="tc-city">${esc(t.city)}</span><span class="tc-team">${esc(t.name)}</span></span>
-        <span class="tc-ovr"><b>${UI.teamOvr(t.abbr) || '-'}</b><small>${UI.state.season ? esc(UI.record(t.abbr)) : 'OVR'}</small></span>
+        <span class="tc-name"><span class="tc-city">${esc(t.city)}${hasSeason ? ' | ' + esc(UI.record(t.abbr)) : ''}</span><span class="tc-team">${esc(t.name)}</span></span>
+        <span class="tc-ovr"><b>${UI.teamOvr(t.abbr) || '-'}</b><small>TEAM OVR</small></span>
       </a>`;
     const fa = UI.roster('FA');
-    app.innerHTML = UI.header('ROSTERS', 'Team overall is a weighted average of the top eight players.') +
-      confs().map(c => `<h3 class="conf-label">${esc(c.toUpperCase())}ERN CONFERENCE</h3><div class="team-cards">${UI.teams().filter(t => t.conf === c).sort((a, b) => a.city.localeCompare(b.city)).map(card).join('')}</div>`).join('') +
-      (fa.length ? `<h3 class="conf-label">UNSIGNED</h3><div class="team-cards"><a class="team-card" href="#/team/FA" style="--c1:#55555c">${UI.logo('FA', 48)}<span class="tc-name"><span class="tc-city">Free</span><span class="tc-team">Agents</span></span><span class="tc-ovr"><b>${fa.length}</b><small>PLAYERS</small></span></a></div>` : '');
+    const mine = user ? UI.teams().find(t => t.abbr === user) : null;
+    app.innerHTML = UI.header('ROSTERS') +
+      (mine ? `<h3 class="conf-label">YOUR TEAM</h3><div class="team-cards">${card(mine)}${fa.length ? `<a class="team-card" href="#/team/FA" style="--c1:#55555c">${UI.logo('FA', 48)}<span class="tc-name"><span class="tc-city">Unsigned</span><span class="tc-team">Free Agents</span></span><span class="tc-ovr"><b>${fa.length}</b><small>PLAYERS</small></span></a>` : ''}</div>` : '') +
+      confs().map(c => `<h3 class="conf-label">${esc(c.toUpperCase())}</h3><div class="team-cards">${UI.teams().filter(t => t.conf === c).sort((a, b) => a.city.localeCompare(b.city)).map(card).join('')}</div>`).join('') +
+      (!mine && fa.length ? `<h3 class="conf-label">UNSIGNED</h3><div class="team-cards"><a class="team-card" href="#/team/FA" style="--c1:#55555c">${UI.logo('FA', 48)}<span class="tc-name"><span class="tc-city">Unsigned</span><span class="tc-team">Free Agents</span></span><span class="tc-ovr"><b>${fa.length}</b><small>PLAYERS</small></span></a></div>` : '');
   };
 
   // ---------- Team roster ----------
@@ -127,24 +144,27 @@
     const known = abbr === 'FA' || UI.teams().some(x => x.abbr === abbr);
     if (!known) { app.innerHTML = UI.empty('TEAM NOT FOUND', 'There is no team with the code ' + esc(abbr) + '.', '<a class="btn" href="#/teams">ALL ROSTERS</a>'); return; }
     const roster = UI.roster(abbr);
-    const payroll = roster.reduce((s, p) => s + (Number(UI.salaryOf(p)) || 0), 0);
     const tot = UI.seasonTotals();
     const hasSeason = !!UI.state.season;
     const c1 = (t.colors && t.colors[0]) || '#333', c2 = (t.colors && t.colors[1]) || c1;
     const rec = hasSeason && abbr !== 'FA' ? UI.record(abbr) : null;
     const rank = rec ? (UI.confTable(t.conf).find(r => r.abbr === abbr) || {}).rank : null;
+    const isUser = abbr === UI.userTeam();
 
     const rows = roster.map(p => {
       const pg = hasSeason ? UI.perGame(tot[p.id]) : null;
-      return `<a class="prow" href="#/player/${esc(p.id)}">
-        <span class="prow-hs">${UI.headshot(p)}</span>
-        <span class="prow-main"><span class="prow-name">${esc(p.name)} ${UI.injuryBadge(p)}</span>
-          <span class="prow-meta"><b>${esc(p.pos)}</b><span>Age ${esc(p.age)}</span><span>${UI.fmtHt(p.ht)}</span><span>${esc(p.wt || '-')} lbs</span></span></span>
-        <span class="prow-money"><span>${UI.fmtMoney(UI.salaryOf(p))}</span><small>${UI.contractEndOf(p) ? 'thru ' + UI.fmtSeasonEnd(UI.contractEndOf(p)) : 'Unsigned'}</small></span>
-        ${hasSeason ? `<span class="prow-season">${pg ? `<b>${UI.fmt1(pg.pts)}</b> PTS <b>${UI.fmt1(pg.reb)}</b> REB <b>${UI.fmt1(pg.ast)}</b> AST` : '<small>No games yet</small>'}</span>` : ''}
-        <span class="prow-ovr ${UI.ovrClass(p.ovr)}">${esc(p.ovr)}</span>
-      </a>`;
+      const end = UI.contractEndOf(p);
+      return `<tr>
+        <td class="l"><a class="rt-name" href="#/player/${esc(p.id)}"><span class="rt-hs">${UI.headshot(p)}</span><span>${esc(p.name)} ${UI.injuryBadge(p)}</span></a></td>
+        <td>${esc(p.pos)}</td><td>${esc(p.age)}</td><td class="hide-sm">${UI.fmtHt(p.ht)}</td>
+        <td class="rt-ovr ${UI.ovrClass(p.ovr)}">${esc(p.ovr)}</td>
+        ${hasSeason ? `<td class="hide-sm">${pg ? pg.g : 0}</td><td>${pg ? UI.fmt1(pg.pts) : '-'}</td><td class="hide-sm">${pg ? UI.fmt1(pg.reb) : '-'}</td><td class="hide-sm">${pg ? UI.fmt1(pg.ast) : '-'}</td>` : ''}
+        <td class="hide-sm">${UI.fmtMoney(UI.salaryOf(p))}</td><td class="hide-sm">${end ? UI.fmtSeasonEnd(end) : '-'}</td>
+      </tr>`;
     }).join('');
+    const table = rows ? `<div class="tscroll"><table class="stats roster-t"><thead><tr><th class="l">PLAYER</th><th>POS</th><th>AGE</th><th class="hide-sm">HT</th><th>OVR</th>
+        ${hasSeason ? '<th class="hide-sm">G</th><th>PTS</th><th class="hide-sm">REB</th><th class="hide-sm">AST</th>' : ''}<th class="hide-sm">SALARY</th><th class="hide-sm">THRU</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>` : '<p class="muted">No players.</p>';
 
     let sched = '';
     if (hasSeason && abbr !== 'FA') {
@@ -152,27 +172,28 @@
       const played = games.filter(g => g.played).slice(-5).reverse();
       const next = games.filter(g => !g.played).slice(0, 5);
       sched = `<div class="two-col">
-        <section>${UI.header('LAST GAMES')}${played.length ? UI.gameList(played, abbr) : '<p class="muted">No games played yet.</p>'}</section>
-        <section>${UI.header('UPCOMING')}${next.length ? UI.gameList(next, abbr) : '<p class="muted">No games left.</p>'}</section>
+        <section>${UI.header('LAST 5')}${played.length ? UI.gameList(played, abbr) : '<p class="muted">No games played yet.</p>'}</section>
+        <section>${UI.header('NEXT 5')}${next.length ? UI.gameList(next, abbr) : '<p class="muted">No games left.</p>'}</section>
       </div>`;
     }
+    const links = isUser ? `<div class="row-btns">${UI.pages.manage ? '<a class="btn" href="#/manage">ROTATION</a>' : ''}${UI.pages.trade ? '<a class="btn" href="#/trade">TRADES</a>' : ''}${UI.pages.fa ? '<a class="btn" href="#/fa">FREE AGENCY</a>' : ''}</div>` : '';
 
     app.innerHTML = `
       <section class="team-hero" style="--c1:${esc(c1)};--c2:${esc(c2)}">
-        ${UI.logo(abbr, 120)}
+        ${UI.logo(abbr, 110)}
         <div class="th-info">
-          <div class="th-kicker">${esc(t.conf ? t.conf.toUpperCase() + 'ERN CONFERENCE' : 'UNSIGNED PLAYERS')}${t.div ? ' | ' + esc(t.div.toUpperCase()) : ''}</div>
+          <div class="th-kicker">${esc(t.conf ? t.conf.toUpperCase() : 'UNSIGNED PLAYERS')}${t.div ? ' | ' + esc(t.div.toUpperCase()) : ''}</div>
           <h1 class="th-name"><span>${esc(t.city)}</span> ${esc(t.name)}</h1>
           <div class="th-stats">
             ${rec ? `<div><b>${esc(rec)}</b><small>RECORD${rank ? ' | #' + rank + ' ' + esc(t.conf.toUpperCase()) : ''}</small></div>` : ''}
             ${abbr !== 'FA' ? `<div><b>${UI.teamOvr(abbr) || '-'}</b><small>TEAM OVR</small></div>` : ''}
             <div><b>${roster.length}</b><small>PLAYERS</small></div>
-            ${abbr !== 'FA' ? `<div><b>${UI.fmtMoney(payroll)}</b><small>PAYROLL</small></div>` : ''}
           </div>
         </div>
       </section>
-      ${UI.header('ROSTER', 'Sorted by overall rating.')}
-      <div class="roster">${rows || '<p class="muted">No players.</p>'}</div>
+      ${links}
+      ${UI.header('ROSTER')}
+      ${table}
       ${sched}`;
   };
 
@@ -183,12 +204,12 @@
       if (!g.played) {
         const vs = focus ? (g.home === focus ? 'vs ' + g.away : '@ ' + g.home) : g.away + ' @ ' + g.home;
         const opp = focus ? (g.home === focus ? g.away : g.home) : null;
-        return `<li><span class="gl-day">${dayLbl}</span>${opp ? UI.logo(opp, 24) : ''}<span class="gl-vs">${esc(vs)}</span><span class="gl-res muted">Upcoming</span></li>`;
+        return `<li><span class="gl-day">${dayLbl}</span>${opp ? UI.logo(opp, 26) : ''}<span class="gl-vs">${esc(vs)}</span></li>`;
       }
       const won = focus ? ((g.home === focus) === (g.hs > g.as)) : null;
       const label = focus
-        ? `<span class="gl-wl ${won ? 'w' : 'l'}">${won ? 'W' : 'L'}</span>${UI.logo(g.home === focus ? g.away : g.home, 24)}<span class="gl-vs">${esc(g.home === focus ? 'vs ' + g.away : '@ ' + g.home)}</span>`
-        : `${UI.logo(g.away, 24)}<span class="gl-vs">${esc(g.away)} ${g.as} <span class="muted">@</span> ${esc(g.home)} ${g.hs}</span>`;
+        ? `<span class="gl-wl ${won ? 'w' : 'l'}">${won ? 'W' : 'L'}</span>${UI.logo(g.home === focus ? g.away : g.home, 26)}<span class="gl-vs">${esc(g.home === focus ? 'vs ' + g.away : '@ ' + g.home)}</span>`
+        : `${UI.logo(g.away, 26)}<span class="gl-vs">${esc(g.away)} ${g.as} <span class="muted">@</span> ${esc(g.home)} ${g.hs}</span>`;
       const score = focus ? `${g.home === focus ? g.hs : g.as}-${g.home === focus ? g.as : g.hs}` : '';
       return `<li><span class="gl-day">${dayLbl}</span>${label}<span class="gl-res">${score}</span><a class="gl-box" href="#/game/${encodeURIComponent(g.id)}">BOX</a></li>`;
     }).join('')}</ul>`;
@@ -298,32 +319,48 @@
       ${awards}`;
   };
 
+  // ---------- League menu ----------
+  P.league = function (app) {
+    const has = n => typeof UI.pages[n] === 'function';
+    const tiles = [
+      has('news') && UI.tile('#/news', 'news', 'NEWS'),
+      has('news') && UI.tile('#/news/transactions', 'moves', 'TRANSACTIONS'),
+      has('awards') && UI.tile('#/awards', 'awards', 'AWARDS'),
+      has('history') && UI.tile('#/history', 'history', 'HISTORY'),
+      UI.tile('#/playoffs', 'playoffs', 'PLAYOFFS'),
+      has('draft') && UI.tile('#/draft', 'draft', 'DRAFT'),
+      UI.tile('#/classes', 'classes', 'DRAFT CLASSES'),
+      UI.tile('#/teams', 'teams', 'ALL TEAMS')
+    ].filter(Boolean);
+    app.innerHTML = UI.header('LEAGUE') + `<div class="tile-grid">${tiles.join('')}</div>`;
+  };
+
   // ---------- Draft classes (hub browser over window.DRAFTS) ----------
   P.classes = function (app, arg) {
     const D = window.DRAFTS;
-    if (!D || !Object.keys(D).length) { app.innerHTML = UI.header('DRAFT CLASSES') + UI.empty('DRAFT CLASSES NOT BUILT YET', 'The draft data file <code>data/drafts.js</code> has not loaded yet.'); return; }
+    if (!D || !Object.keys(D).length) { app.innerHTML = UI.header('DRAFT CLASSES') + UI.empty('DRAFT CLASSES NOT LOADED', 'The draft data file <code>data/drafts.js</code> has not loaded.'); return; }
     const years = Object.keys(D).map(Number).sort((a, b) => a - b);
     const year = years.includes(Number(arg)) ? Number(arg) : years[0];
-    const list = D[year].slice().sort((a, b) => (a.undrafted ? 999 : a.realPick || 998) - (b.undrafted ? 999 : b.realPick || 998) || (b.pot || 0) - (a.pot || 0));
+    const list = D[year].slice().sort((a, b) => (a.undrafted ? 999 : a.realPick || 998) - (b.undrafted ? 999 : b.realPick || 998) || (b.ovr || 0) - (a.ovr || 0));
     const rows = list.map(p => {
       const live = UI.player(p.id) || p;
-      const stash = p.arrivalYear && p.arrivalYear > year + 1 ? `<span class="badge badge-dim">STASH, ARRIVES ${esc(UI.seasonLabel(p.arrivalYear))}</span>` : '';
+      const stash = p.arrivalYear && p.arrivalYear > year + 1 ? `<span class="badge badge-dim">OVERSEAS</span>` : '';
       return `<tr><td>${p.undrafted ? '<span class="muted">UDFA</span>' : esc(p.realPick || '-')}</td>
         <td class="l"><a class="cl-name" href="#/player/${esc(p.id)}"><span class="cl-hs">${UI.headshot(live)}</span><span>${esc(p.name)} ${stash}</span></a></td>
-        <td>${esc(p.pos)}</td><td>${esc(p.age)}</td><td>${UI.fmtHt(p.ht)}</td><td class="${UI.ovrClass(p.ovr)}"><b>${esc(p.ovr)}</b></td><td class="${UI.ovrClass(p.pot)}"><b>${esc(p.pot)}</b></td></tr>`;
+        <td>${esc(p.pos)}</td><td>${esc(p.age)}</td><td class="hide-sm">${UI.fmtHt(p.ht)}</td><td class="${UI.ovrClass(p.ovr)}"><b>${esc(p.ovr)}</b></td></tr>`;
     }).join('');
-    app.innerHTML = UI.header('DRAFT CLASSES', 'The real classes, with draft-day rating (OVR) and real career peak (POT) on the 2K scale. In a league, each class enters on its draft day.') +
+    app.innerHTML = UI.header('DRAFT CLASSES', 'Draft-day ratings. Each class enters the league on its draft day.') +
       `<div class="tabs year-tabs">${years.map(y => `<a href="#/classes/${y}" class="${y === year ? 'on' : ''}">${y}</a>`).join('')}</div>
-      <div class="tscroll"><table class="stats classes"><thead><tr><th>PICK</th><th class="l">PLAYER</th><th>POS</th><th>AGE</th><th>HT</th><th>OVR</th><th>POT</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      <div class="tscroll"><table class="stats classes"><thead><tr><th>PICK</th><th class="l">PLAYER</th><th>POS</th><th>AGE</th><th class="hide-sm">HT</th><th>OVR</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   };
 
   // ---------- Soundtrack ----------
   P.soundtrack = function (app) {
     const list = Array.isArray(window.SOUNDTRACK) ? window.SOUNDTRACK : [];
     const ids = UI.music && UI.music.hasIds();
-    app.innerHTML = `${UI.header('SOUNDTRACK', 'The official NBA 2K13 soundtrack, in order. It plays in the bar at the bottom of every page.')}
-      ${ids ? '' : '<div class="note">Video IDs are being added, so these songs cannot play yet.</div>'}
-      <ol class="tracklist">${list.map((s, i) => `<li><span class="tl-n">${String(i + 1).padStart(2, '0')}</span><span class="tl-t"><b>${esc(s.title)}</b><small>${esc(s.artist)}</small></span>${s.yt ? `<button type="button" class="btn btn-small" data-play="${i}">PLAY</button>` : '<span class="tl-na">Coming soon</span>'}</li>`).join('')}</ol>`;
+    app.innerHTML = `${UI.header('SOUNDTRACK', 'The official NBA 2K13 soundtrack.')}
+      ${ids ? '' : '<div class="note">These songs cannot play yet.</div>'}
+      <ol class="tracklist">${list.map((s, i) => `<li><span class="tl-n">${String(i + 1).padStart(2, '0')}</span><span class="tl-t"><b>${esc(s.title)}</b><small>${esc(s.artist)}</small></span>${s.yt ? `<button type="button" class="btn btn-small" data-play="${i}">PLAY</button>` : '<span class="tl-na">Soon</span>'}</li>`).join('')}</ol>`;
     app.querySelectorAll('[data-play]').forEach(b => b.addEventListener('click', () => UI.music.playTrack(Number(b.getAttribute('data-play')))));
   };
 })();

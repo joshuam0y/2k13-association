@@ -76,15 +76,26 @@
     const d = st.draft;
     return d && Number(d.year) === year && d.lottery && Array.isArray(d.lottery.teams) ? d.lottery.teams : null;
   }
+  // Protection and swap text for a traded pick (DRAFT.protectionText), shown under the team.
+  function protNote(st, year, s) {
+    const r = s.raw || {}, out = [];
+    const T = F.fn('DRAFT', 'protectionText');
+    const txt = r.protection && T ? F.try('DRAFT.protectionText', () => T.protectionText(r.protection, year), '') : '';
+    const short = String(txt || '').split('. ')[0];
+    if (r.protectedFor) out.push(`<small class="ft-prot" title="${esc(txt)}">Protected, stays home. Owed to ${esc(r.protectedFor)}${short ? ': ' + esc(short) : ''}</small>`);
+    else if (txt) out.push(`<small class="ft-prot" title="${esc(txt)}">${esc(short)}</small>`);
+    if (r.swapped) out.push(`<small class="ft-prot">Pick swap exercised by ${esc(r.swapped)}</small>`);
+    return out.join(' ');
+  }
   function lotteryNote(st, year, s) {
     const lot = lotteryOf(st, year);
-    if (s.round !== 1 || !lot) return s.raw.protectedFor ? `<small>Protected from ${esc(s.raw.protectedFor)}</small>` : '';
+    if (s.round !== 1 || !lot) return protNote(st, year, s);
     const t = lot.find(x => Number(x.pick) === s.overall);
-    if (!t) return '';
+    if (!t) return protNote(st, year, s);
     const mv = Number(t.moved) || 0;
     return [mv > 0 ? `<span class="ft-up">UP ${mv}</span>` : mv < 0 ? `<span class="ft-down">DOWN ${-mv}</span>` : '',
       `<small>#${esc(t.seed)} seed${t.chance != null ? ', ' + esc(t.chance) + '%' : ''}</small>`,
-      s.raw.protectedFor ? `<small>Protected from ${esc(s.raw.protectedFor)}</small>` : ''].filter(Boolean).join(' ');
+      protNote(st, year, s)].filter(Boolean).join(' ');
   }
 
   // A stash: drafted players carry stashedUntil; prospects whose first NBA season (arrivalYear,
@@ -93,6 +104,16 @@
     if (p.stashedUntil) return Number(p.stashedUntil) > st.year ? Number(p.stashedUntil) : null;
     const a = Number(p.arrivalYear) || null;
     return p.team === 'DRAFT' && a && a > year + 1 ? a : null;
+  }
+
+  // The user's own scouting view of a prospect (DRAFT.view). Potential is never shown.
+  function scoutOvr(st, p) {
+    const V = F.fn('DRAFT', 'view');
+    if (V && p && p.team === 'DRAFT') {
+      const v = F.try('DRAFT.view', () => V.view(st, st.userTeam, p.id), null);
+      if (v && v.ovr != null) return Number(v.ovr);
+    }
+    return Number(p && p.ovr) || 0;
   }
 
   // ---------- render ----------
@@ -114,14 +135,16 @@
     if (view.pos !== 'ALL') pool = pool.filter(p => String(p.pos || '').toUpperCase().split(/[-/ ]/).indexOf(view.pos) >= 0);
     const key = view.sort;
     const POSORD = { PG: 1, SG: 2, SF: 3, PF: 4, C: 5 };
+    const so = new Map(pool.map(p => [p.id, scoutOvr(st, p)]));
+    const val = (p, k) => (k === 'ovr' ? so.get(p.id) : Number(p[k]) || 0);
     pool.sort((a, b) => {
       let x, y;
-      if (key === 'pos') { x = POSORD[String(a.pos).split(/[-/]/)[0]] || 9; y = POSORD[String(b.pos).split(/[-/]/)[0]] || 9; return (x - y) * -view.dir || (b.ovr || 0) - (a.ovr || 0); }
+      if (key === 'pos') { x = POSORD[String(a.pos).split(/[-/]/)[0]] || 9; y = POSORD[String(b.pos).split(/[-/]/)[0]] || 9; return (x - y) * -view.dir || so.get(b.id) - so.get(a.id); }
       if (key === 'name') return String(a.name).localeCompare(String(b.name)) * -view.dir;
-      x = Number(a[key]) || 0; y = Number(b[key]) || 0;
-      return (x - y) * view.dir || (b.pot || 0) - (a.pot || 0);
+      x = val(a, key); y = val(b, key);
+      return (x - y) * view.dir || so.get(b.id) - so.get(a.id) || String(a.name).localeCompare(String(b.name));
     });
-    // view.dir: -1 sorts high to low (ovr, pot), age defaults low to high
+    // view.dir: -1 sorts high to low (ovr), age defaults low to high
     const head = (k, label, cls) => `<th class="${cls || ''}"><button type="button" class="ft-sorth${view.sort === k ? ' on' : ''}" data-act="sort" data-k="${k}">${label}${view.sort === k ? (view.dir < 0 ? ' &#9660;' : ' &#9650;') : ''}</button></th>`;
     const rows = pool.map((p, i) => {
       const arr = arrival(st, p, year);
@@ -129,7 +152,7 @@
         <td>${i + 1}</td>
         <td class="l"><span class="ft-cell-p"><span class="ft-hs ft-hs-sm">${UI.headshot(p)}</span><span><b>${esc(p.name)}</b>${arr ? `<small class="ft-stash">Playing overseas until ${arr}</small>` : p.college || p.school ? `<small>${esc(p.college || p.school)}</small>` : ''}</span></span></td>
         <td>${esc(p.pos || '-')}</td><td>${esc(p.age || '-')}</td><td class="hide-sm">${UI.fmtHt(p.ht)}</td>
-        <td><b class="${UI.ovrClass(p.ovr || 0)}">${p.ovr || '-'}</b></td><td><b class="${UI.ovrClass(p.pot || 0)}">${p.pot || '-'}</b></td>
+        <td><b class="${UI.ovrClass(so.get(p.id))}">${so.get(p.id) || '-'}</b></td>
         <td>${onClock && canPick ? `<button type="button" class="btn btn-small btn-gold" data-act="pick" data-id="${esc(p.id)}">DRAFT</button>` : ''}</td>
       </tr>`;
     }).join('');
@@ -146,7 +169,7 @@
           return `<li class="${s.team === user ? 'mine' : ''}${cur ? ' cur' : ''}${p ? ' done' : ''}">
             <span class="ft-ord-n">${s.overall}</span>${UI.logo(s.team, 26)}
             <span class="ft-ord-t"><b>${esc(s.team)}</b>${s.original && s.original !== s.team ? `<small>via ${esc(s.original)}</small>` : ''} ${lotteryNote(st, year, s)}</span>
-            <span class="ft-ord-p">${p ? `<a href="#/player/${esc(p.id)}">${esc(p.name)}</a><small>${esc(p.pos || '')} | ${p.ovr || '-'}/${p.pot || '-'}${arrival(st, p, year) ? ' | Overseas until ' + arrival(st, p, year) : ''}</small>` : cur ? '<em>ON THE CLOCK</em>' : ''}</span>
+            <span class="ft-ord-p">${p ? `<a href="#/player/${esc(p.id)}">${esc(p.name)}</a><small>${esc(p.pos || '')} | ${p.ovr || '-'} OVR${arrival(st, p, year) ? ' | Overseas until ' + arrival(st, p, year) : ''}</small>` : cur ? '<em>ON THE CLOCK</em>' : ''}</span>
           </li>`;
         }).join('')}</ol></div>`;
       }).join('');
@@ -155,17 +178,19 @@
 
     const stash = F.teamPlayers(st, user).filter(p => p.stashedUntil && p.stashedUntil > year);
     const stashHtml = stash.length ? `${UI.header('YOUR DRAFT RIGHTS', 'Players you hold who are still overseas. Their contracts start when they arrive.')}
-      <div class="ft-falist">${stash.map(p => `<a class="ft-item ft-static" href="#/player/${esc(p.id)}">${F.mini(p, { meta: `${esc(p.pos || '')} | ${esc(p.age || '-')} YRS | <span class="ft-stash">Playing overseas until ${p.stashedUntil}</span>`, pot: true })}</a>`).join('')}</div>` : '';
+      <div class="ft-falist">${stash.map(p => `<a class="ft-item ft-static" href="#/player/${esc(p.id)}">${F.mini(p, { meta: `${esc(p.pos || '')} | ${esc(p.age || '-')} YRS | <span class="ft-stash">Playing overseas until ${p.stashedUntil}</span>`, pot: false })}</a>`).join('')}</div>` : '';
 
     let status, actions = '';
     if (phase === 'draftLottery') status = 'The lottery has not been drawn yet. The order below is before the lottery.';
-    else if (live && !next) status = 'All picks are in. The draft is complete: advance to re-signing from the season page.';
-    else if (onClock) status = `You are on the clock with pick #${next.overall}.`;
+    else if (live && !next) status = 'All picks are in. The draft is complete: move on to re-signing.';
+    else if (onClock) status = `You are on the clock with pick #${next.overall}${next.original && next.original !== user ? ' (from ' + esc(next.original) + ')' : ''}. Pick a player from the class, or let the AI pick for you.`;
     else if (live && myNext) status = `Pick #${next.overall} belongs to ${esc(UI.teamName(next.team))}. Your next pick is #${myNext.overall}.`;
     else if (live) status = 'You have no picks left in this draft.';
     else if (done) status = 'The ' + year + ' draft is over. Here is how it went.';
     else status = 'The ' + year + ' draft is held after the ' + esc(UI.fmtSeasonEnd(year)) + ' season. Scout the class now.';
     if (live && next && !onClock && canAi) actions = `<button type="button" class="btn btn-gold" data-act="sim">${myNext ? 'SIM TO MY PICK' : 'SIM REST OF DRAFT'}</button>`;
+    if (live && onClock && canAi) actions = `<button type="button" class="btn" data-act="autopick">AUTO PICK</button>`;
+    if (live && !next && UI.sim) actions = `<button type="button" class="btn btn-gold" data-act="finish">NEXT: RE-SIGNING</button>`;
     if (live && next && !onClock && !canAi) actions = '<span class="muted">AI picks are still being built.</span>';
 
     const myPicks = slots ? slots.filter(s => s.team === user) : [];
@@ -177,7 +202,7 @@
         <section class="ft-class">
           ${UI.header('THE CLASS', pool.length + ' prospects' + (view.pos !== 'ALL' ? ' at ' + view.pos : '') + ' available')}
           <nav class="tabs">${['ALL', 'PG', 'SG', 'SF', 'PF', 'C'].map(x => `<a href="#/draft" data-act="pos" data-pos="${x}" class="${view.pos === x ? 'on' : ''}">${x}</a>`).join('')}</nav>
-          ${pool.length ? `<div class="tscroll"><table class="stats ft-classt"><thead><tr><th>#</th>${head('name', 'PLAYER', 'l')}${head('pos', 'POS')}${head('age', 'AGE')}<th class="hide-sm">HT</th>${head('ovr', 'OVR')}${head('pot', 'POT')}<th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+          ${pool.length ? `<div class="tscroll"><table class="stats ft-classt"><thead><tr><th>#</th>${head('name', 'PLAYER', 'l')}${head('pos', 'POS')}${head('age', 'AGE')}<th class="hide-sm">HT</th>${head('ovr', 'OVR')}<th></th></tr></thead><tbody>${rows}</tbody></table></div>`
             : `<p class="muted">${done ? 'Every prospect from this class has been drafted or signed.' : 'No prospects found for this draft year.'}</p>`}
         </section>
         <section class="ft-ordersec">${UI.header('DRAFT ORDER', phase === 'draftLottery' ? 'Before the lottery' : slots ? 'After the lottery' : '')}${orderHtml}</section>
@@ -206,6 +231,19 @@
           UI.toast('You drafted ' + (p ? p.name : id) + '. Saved.');
         } catch (e) { console.warn('DRAFT.pick', e); UI.toast('The pick failed: ' + (e && e.message ? e.message : e), 'error'); }
         render(app, st);
+      } else if (act === 'autopick') {
+        const A = F.fn('DRAFT', 'aiPick');
+        if (!A || !next) return;
+        try {
+          const r = A.aiPick(st, user, next.raw);
+          if (r && r.ok === false) throw new Error(r.reason || 'no pick made');
+          const p = r && r.id ? st.players[r.id] : null;
+          last = 'With pick #' + next.overall + ', the AI took ' + (p ? p.name : 'a player') + ' for the ' + UI.teamName(user) + '.';
+          await F.save();
+        } catch (e) { console.warn('DRAFT.aiPick', e); UI.toast('The auto pick failed: ' + (e && e.message ? e.message : e), 'error'); }
+        render(app, st);
+      } else if (act === 'finish') {
+        UI.sim('nextPhase');
       } else if (act === 'sim') {
         const A = F.fn('DRAFT', 'aiPick');
         if (!A) return;

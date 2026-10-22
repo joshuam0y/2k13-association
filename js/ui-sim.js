@@ -22,11 +22,80 @@
 
   const pause = ms => new Promise(res => setTimeout(res, ms || 0));
 
+  // ---------- 2K style confirmation ----------
+  // UI.confirm({ title, text, yes, no }) -> Promise<boolean>. Uses the decisions modal box.
+  UI.confirm = function (o) {
+    o = o || {};
+    const modal = document.getElementById('eventModal');
+    return new Promise(resolve => {
+      modal.innerHTML = `<div class="ev-box ev-confirm" role="alertdialog" aria-modal="true" aria-labelledby="cfTitle" aria-describedby="cfText">
+        <div class="ev-head"><span id="cfTitle">${esc(o.title || 'ARE YOU SURE?')}</span><small></small></div>
+        <div class="ev-body"><p class="ev-text" id="cfText">${esc(o.text || '')}</p>${o.html || ''}</div>
+        <div class="ev-actions"><button type="button" class="btn" data-cf="no">${esc(o.no || 'NO')}</button><button type="button" class="btn btn-gold" data-cf="yes">${esc(o.yes || 'YES')}</button></div>
+      </div>`;
+      modal.hidden = false;
+      const done = v => { modal.hidden = true; modal.onclick = null; document.removeEventListener('keydown', key, true); resolve(v); };
+      const key = e => { if (e.key === 'Escape') { e.stopPropagation(); done(false); } };
+      document.addEventListener('keydown', key, true);
+      modal.onclick = ev => {
+        if (ev.target === modal) { done(false); return; }
+        const b = ev.target.closest('[data-cf]');
+        if (b) done(b.getAttribute('data-cf') === 'yes');
+      };
+      const y = modal.querySelector('[data-cf="yes"]');
+      if (y) y.focus();
+    });
+  };
+
+  // Before simming past a step where the user has choices to make, ask first.
+  // Returns { go: bool, opts } (opts.auto lets the AI act for the user).
+  async function confirmPhase(g) {
+    const L = UI.state.L;
+    if (g.phase === 'draft') {
+      const left = L && L.userPicksLeft ? L.userPicksLeft(g) : [];
+      if (!left.length) return { go: true, opts: {} };
+      const ok = await UI.confirm({
+        title: 'SIM PAST THE DRAFT?',
+        text: 'Are you sure you want to simulate past the draft? The AI will pick for you.',
+        html: `<p class="ev-text"><small>Your picks still to make: ${left.map(x => '#' + esc(x.overall)).join(', ')}</small></p>`,
+        yes: 'YES, SIM THE DRAFT', no: 'NO, I WILL PICK'
+      });
+      // No: the AI makes the picks before yours, then the draft room opens on your pick
+      return { go: true, opts: ok ? { auto: true } : {} };
+    }
+    if (g.phase === 'resign') {
+      let players = [];
+      try {
+        const r = window.FA && typeof window.FA.resignWindow === 'function' ? window.FA.resignWindow(g) : null;
+        players = r && Array.isArray(r.players) ? r.players : [];
+      } catch (e) { console.warn('resignWindow', e); }
+      if (!players.length) return { go: true, opts: {} };
+      const ok = await UI.confirm({
+        title: 'SIM PAST RE-SIGNING?',
+        text: 'Are you sure you want to simulate past re-signing? The AI will re-sign the players worth keeping.',
+        html: `<p class="ev-text"><small>Still unsigned: ${players.slice(0, 8).map(x => esc(x.name)).join(', ')}${players.length > 8 ? ' and ' + (players.length - 8) + ' more' : ''}</small></p>`,
+        yes: 'YES, SIM RE-SIGNING', no: 'NO, GO BACK'
+      });
+      if (!ok && UI.pages.fa && location.hash !== '#/fa') location.hash = '#/fa';
+      return { go: ok, opts: { auto: true } };
+    }
+    return { go: true, opts: {} };
+  }
+
   // how: { days: n } | "tradeDeadline" | "allStar" | "endRegular" | "endPlayoffs" | "nextPhase"
   UI.sim = async function (how) {
     const st = UI.state, L = st.L, g = st.game;
     if (UI.simming || !g || !L) return;
     if (UI.pendingEvents()) { UI.showEvents(); return; }
+    let phaseOpts = {};
+    if (how === 'nextPhase' || UI.inOffseason()) {
+      UI.simming = true;   // no second sim while the question is open
+      let c;
+      try { c = await confirmPhase(g); } finally { UI.simming = false; }
+      if (!c.go) return;
+      phaseOpts = c.opts;
+    }
+    const phaseBefore = g.phase;
     UI.simming = true;
     const overlay = document.getElementById('simOverlay');
     const fill = document.getElementById('simBarFill');
@@ -46,7 +115,7 @@
         title.textContent = 'OFFSEASON';
         text.textContent = (UI.PHASES[g.phase] || g.phase) + '...';
         await pause(40);
-        result = L.advance(g, 'nextPhase');
+        result = L.advance(g, 'nextPhase', phaseOpts);
         UI.bump();
       } else if (how === 'tradeDeadline' || how === 'allStar') {
         say();
@@ -83,7 +152,15 @@
     UI.simming = false;
     UI.updateChrome();
     const seasonJustEnded = !seasonEndedBefore && UI.inOffseason();
-    if (seasonJustEnded && how === 'endPlayoffs' && location.hash !== '#/playoffs') location.hash = '#/playoffs';
+    // Where the offseason takes the user next: the draft room after the lottery and on each of his
+    // picks, the progression report once progression has run (before the new season starts).
+    let go = null;
+    if (result && result.stopped === 'userPick') { go = '#/draft'; UI.toast('You are on the clock with pick #' + result.pick + '.'); }
+    else if (phaseBefore === 'draftLottery' && g.phase === 'draft' && UI.pages.draft) go = '#/draft';
+    else if (phaseBefore === 'freeAgency' && g.phase === 'training' && UI.pages.progress && g.progressReport) go = '#/progress';
+    else if (phaseBefore === 'training' && g.phase === 'regular') go = '#/season';
+    if (go && location.hash !== go) location.hash = go;
+    else if (seasonJustEnded && how === 'endPlayoffs' && location.hash !== '#/playoffs') location.hash = '#/playoffs';
     else UI.route();
     if (UI.pendingEvents()) UI.showEvents();
     return result;

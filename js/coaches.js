@@ -5,8 +5,7 @@
 (function (root) {
   'use strict';
 
-  var MAX_EFFECT = 0.03;   // a coach moves things by 3 percent at most
-  var NEUTRAL = 70;        // a rating of 70 is a neutral coach
+  var MAX_EFFECT = 0;      // coaches are cosmetic: no gameplay effect
 
   function data() {
     if (typeof window !== 'undefined' && window.COACHES) return window.COACHES;
@@ -34,7 +33,9 @@
     c.available = src.available || 1900;
     c.seasons = [];                    // [{ year, team, w, l }]
     c.firedYears = [];
-    c.ovr = ovr(c);
+    // No stored overall: it is shown through COACH.ovr(c) only, so no other module can turn it into
+    // a gameplay effect (mood and free agency read coach.ovr when it exists).
+    delete c.ovr;
     return c;
   }
 
@@ -47,6 +48,7 @@
       d.start.forEach(function (c) { state.coaches[c.id] = makeCoach(c, 'employed'); });
       d.pool.forEach(function (c) { state.coaches[c.id] = makeCoach(c, 'free'); });
     }
+    Object.keys(state.coaches).forEach(function (k) { if (state.coaches[k]) delete state.coaches[k].ovr; }); // older saves
     var teams = state.teams || {};
     Object.keys(teams).forEach(function (abbr) {
       var t = teams[abbr];
@@ -82,22 +84,10 @@
     return found;
   }
 
-  function scale(r) { return clamp((r - NEUTRAL) / (99 - NEUTRAL), -1, 1) * MAX_EFFECT; }
-
-  // Small modifiers for the engine and progression: { offense, defense, development, morale }, each within +-3 percent.
-  function effect(state, abbr) {
-    var c = of(state, abbr);
-    if (!c) return { offense: 0, defense: 0, development: 0, morale: 0 };
-    var t = state.teams && state.teams[abbr];
-    var budget = t && t.budget && typeof t.budget.coaching === 'number' ? t.budget.coaching : 50;
-    var b = clamp((budget - 50) / 50, -1, 1) * 0.005;   // the coaching budget adds half a percent at most
-    function f(v, extra) { return round3(clamp(scale(v) + (extra || 0), -MAX_EFFECT, MAX_EFFECT)); }
-    return {
-      offense: f(c.offense),
-      defense: f(c.defense),
-      development: f(c.development, b),
-      morale: f(c.motivation)
-    };
+  // Coaches are cosmetic: names, records and hiring for display only. They have no effect on games,
+  // development or morale, and neither does the team budget. effect() stays for callers and is always neutral.
+  function effect() {
+    return { offense: 0, defense: 0, development: 0, morale: 0 };
   }
 
   // Free coaches who can be hired this year, best first.

@@ -96,10 +96,10 @@ function buildState(year) {
     const e = COACH.effect(state, a);
     ['offense', 'defense', 'development', 'morale'].forEach(k => { maxAbs = Math.max(maxAbs, Math.abs(e[k])); });
   });
-  ok(maxAbs <= 0.03 + 1e-9, 'coach effects stay within 3 percent, max ' + maxAbs);
-  ok(maxAbs > 0, 'coach effects are not all zero');
-  const pop = COACH.effect(state, 'SAS'), dun = COACH.effect(state, 'CHA');
-  ok(pop.defense > dun.defense && pop.development > dun.development, 'Popovich helps more than Dunlap');
+  ok(maxAbs === 0, 'coaches are cosmetic: every effect is zero, max ' + maxAbs);
+  state.teams.SAS.budget = { coaching: 100, scouting: 100 };
+  const pop = COACH.effect(state, 'SAS');
+  ok(pop.development === 0 && pop.defense === 0, 'a big coaching budget changes nothing either');
   ok(COACH.available(state, 2013).every(c => c.available <= 2013), 'no future coaches available in 2013');
   ok(!COACH.available(state, 2013).some(c => c.name === 'Brad Stevens'), 'Stevens not available in 2013');
   ok(COACH.hire(state, 'CHA', 'stevebr99').ok === false, 'cannot hire Stevens in 2013');

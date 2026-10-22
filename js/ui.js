@@ -18,23 +18,24 @@
       '<div class="row-btns"><a class="btn" href="#/teams">ROSTERS</a><a class="btn" href="?stub=1#/home">OPEN WITH TEST DATA</a></div>');
   };
 
-  // ---------- pages added by other modules ----------
-  const CORE = ['home', 'new', 'continue', 'teams', 'team', 'player', 'season', 'game', 'standings', 'leaders', 'playoffs', 'saves', 'soundtrack'];
-  const KNOWN = [
-    ['myteam', 'Team'], ['manage', 'Team'], ['gm', 'Team'], ['trade', 'Trades'], ['trades', 'Trades'],
-    ['fa', 'Free Agency'], ['freeagency', 'Free Agency'], ['draft', 'Draft'], ['classes', 'Draft Classes'], ['history', 'History'],
-    ['news', 'News'], ['live', 'Watch Live'], ['commish', 'Commissioner'], ['commissioner', 'Commissioner']
+  // ---------- navigation ----------
+  // The top bar (index.html) holds six links: Home, Season, Rosters, Free Agency, Standings, Stats.
+  // Everything else sits under More. League pages (news, awards, history, draft classes) are reached
+  // from the League menu (#/league), so they stay out of More.
+  const CORE = ['home', 'new', 'continue', 'teams', 'team', 'player', 'season', 'game', 'standings', 'leaders', 'stats', 'league', 'playoffs', 'saves', 'soundtrack'];
+  const MORE = [
+    ['trade', 'Trades'], ['manage', 'Rotation'], ['draft', 'Draft'], ['league', 'League'], ['playoffs', 'Playoffs'],
+    ['live', 'Watch Live'], ['saves', 'Saves'], ['fantasy', 'Fantasy Draft'], ['commish', 'Commissioner'], ['soundtrack', 'Soundtrack']
   ];
+  // Aliases and pages reached another way; never listed on their own.
+  const SKIP = ['trades', 'myteam', 'gm', 'fa', 'freeagency', 'commissioner', 'news', 'awards', 'history', 'classes'];
   UI.extraPages = function () {
     const pages = UI.pages || {};
-    const out = [];
-    const seen = new Set();
-    KNOWN.forEach(([route, label]) => {
-      if (typeof pages[route] === 'function' && !seen.has(label)) { seen.add(label); out.push({ route, label: pages[route].navLabel || label, desc: pages[route].navDesc || '' }); }
-    });
+    const out = MORE.filter(([route]) => typeof pages[route] === 'function').map(([route, label]) => ({ route, label, desc: pages[route].navDesc || '' }));
     Object.keys(pages).forEach(route => {
-      if (CORE.includes(route) || out.some(x => x.route === route) || KNOWN.some(k => k[0] === route) || typeof pages[route] !== 'function' || pages[route].hidden) return;
-      out.push({ route, label: pages[route].navLabel || route.replace(/^./, c => c.toUpperCase()), desc: pages[route].navDesc || '' });
+      const fn = pages[route];
+      if (typeof fn !== 'function' || fn.hidden || CORE.includes(route) || SKIP.includes(route) || out.some(x => x.route === route)) return;
+      out.push({ route, label: fn.navLabel || route.replace(/^./, c => c.toUpperCase()), desc: fn.navDesc || '' });
     });
     return out;
   };
@@ -43,15 +44,6 @@
     nav.querySelectorAll('.nav-extra, .navmore').forEach(x => x.remove());
     const extra = UI.extraPages();
     if (!extra.length) return;
-    // Phones: extra links inline in the scrolling nav. Laptops: a "More" dropdown.
-    extra.forEach(x => {
-      const a = document.createElement('a');
-      a.href = '#/' + x.route;
-      a.className = 'nav-extra';
-      a.setAttribute('data-nav', x.route);
-      a.textContent = x.label;
-      nav.appendChild(a);
-    });
     const more = document.createElement('details');
     more.className = 'navmore';
     more.innerHTML = `<summary>More</summary><div class="navmore-list">${extra.map(x => `<a href="#/${esc(x.route)}" data-nav="${esc(x.route)}">${esc(x.label)}</a>`).join('')}</div>`;
@@ -80,7 +72,7 @@
     b.textContent = msgs.join(' ');
   }
 
-  const NAV = { new: 'home', continue: 'home', team: 'teams', player: 'teams', game: 'season', soundtrack: 'home' };
+  const NAV = { new: 'home', continue: 'home', team: 'teams', player: 'teams', game: 'season', leaders: 'stats', freeagency: 'fa', trades: 'trade', news: 'league', awards: 'league', history: 'league', classes: 'league', myteam: 'manage', gm: 'manage', commissioner: 'commish' };
 
   UI.route = function () {
     const app = document.getElementById('app');
@@ -92,6 +84,13 @@
     UI.$$('#mainnav a').forEach(a => a.classList.toggle('on', a.getAttribute('data-nav') === navKey));
     const more = UI.$('#mainnav .navmore');
     if (more) more.classList.toggle('on', !!more.querySelector(`a[data-nav="${navKey}"]`));
+    // Phones: keep the current tab visible in the scrolling nav.
+    const nav = UI.$('#mainnav');
+    const cur = UI.$('#mainnav > a.on') || (more && more.classList.contains('on') ? more : null);
+    if (nav && cur && nav.scrollWidth > nav.clientWidth + 2) {
+      const n = nav.getBoundingClientRect(), c = cur.getBoundingClientRect();
+      if (c.left < n.left || c.right > n.right) nav.scrollLeft += c.left - n.left - 12;
+    }
 
     if (!UI.state.league && page !== 'soundtrack') { app.innerHTML = UI.notBuilt('data'); return; }
     if (page === 'continue') { continueLatest(); return; }

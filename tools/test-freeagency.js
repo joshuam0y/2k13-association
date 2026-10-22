@@ -152,6 +152,7 @@ function runOffseason(state, rng, label) {
     var p = state.players[s.id];
     var eff = p.ovr + Math.max(0, p.pot - p.ovr) * (p.age <= 25 ? 0.1 : 0);
     if (eff < 86 || p.age >= 33 || s.via === 'qo') return;
+    if (s.day > 2 && !s.resign) return;   // stars left unsigned after the first days lower their price
     var maxS = s.max, first = s.salaries[0].amount;
     starRows.push(p.name + ' ' + m(first) + ' first year, max ' + m(maxS));
     check(first >= maxS * 0.9, label + ': star ' + p.name + ' near max (' + m(first) + ' vs ' + m(maxS) + ')');
@@ -292,6 +293,90 @@ function printSignings(state, label) {
   Object.keys(state.players).forEach(function (id) { var p = state.players[id]; if (p.retired && state.teams[p.team]) ok = false; });
   check(ok, 'no retired player on a roster');
   console.log('\n  Two offseasons simulated in ' + (Date.now() - t0) + ' ms');
+})();
+
+// ---------------------------------------------------------------------------
+// 4. Auto re-sign, offer zones, stashed picks and unsigned stars
+// ---------------------------------------------------------------------------
+function clone(x) { return JSON.parse(JSON.stringify(x)); }
+(function () {
+  var state = buildState('OKC');
+  var rng = rngFrom(99);
+  fakeSeason(state, rng);
+  FA.startOffseason(state);
+  // Offer zone: the real price sits inside the band, and the verdict matches what FA.offer does
+  var zoneOk = 0, zoneBad = [];
+  ['hardeja01', 'ibakase01'].forEach(function (id) {
+    if (state.players[id].team !== 'FA') return;
+    var z = FA.offerZone(state, 'OKC', id, null, null);
+    check(z && z.low <= z.high && z.low >= z.min && z.high <= z.max, 'zone for ' + state.players[id].name + ' is a band inside min..max (' + m(z.low) + ' to ' + m(z.high) + ')');
+    check(FA.verdict(z, z.high).level === 'accept' && FA.verdict(z, z.low - 20000).level === 'decline', 'verdict reads accept at the top of the band and decline below it');
+    var hi = clone(state), lo = clone(state);
+    var yes = FA.offer(hi, 'OKC', id, { salaries: FA.makeFirst(2014, z.high, z.years, 0) });
+    var no = FA.offer(lo, 'OKC', id, { salaries: FA.makeFirst(2014, Math.max(z.min, z.low - 20000), z.years, 0) });
+    if (yes.accepted && !no.accepted) zoneOk++; else zoneBad.push(state.players[id].name + ': ' + yes.message + ' / ' + no.message);
+  });
+  check(zoneOk >= 1 && !zoneBad.length, 'an offer at the top of the band is accepted, below the band rejected ' + zoneBad.join('; '));
+  // Cap summary and market labels
+  var cs = FA.capSummary(state, 'OKC');
+  check(cs.cap === 58679000 && cs.exceptions.length === 5 && cs.exceptions.some(function (e) { return e.key === 'mle'; }), 'cap summary lists cap, tax and the exceptions');
+  var mk = FA.market(state, 'BOS');
+  var labels = {}; mk.players.forEach(function (x) { labels[x.label] = (labels[x.label] || 0) + 1; });
+  console.log('  BOS market labels: ' + JSON.stringify(labels) + ', cap room ' + m(FA.capSummary(state, 'BOS').room));
+  check(mk.players.length > 50 && mk.players.every(function (x) { return x.label && x.ask > 0; }), 'market labels every free agent (' + mk.players.length + ')');
+  check(mk.players.some(function (x) { return x.afford === 'min'; }) && mk.players.some(function (x) { return !x.affordable; }), 'market has minimum-only and unaffordable players');
+  // Auto re-sign for the user's team keeps the young core and respects the roster
+  var res = FA.autoResign(state, 'OKC');
+  var kept = res.filter(function (x) { return x.action === 'resigned'; }).map(function (x) { return x.name; });
+  console.log('\n  OKC auto re-sign: ' + res.map(function (x) { return x.name + ' ' + x.action + (x.total ? ' ' + m(x.total) : '') + (x.reason ? ' (' + x.reason + ')' : ''); }).join('; '));
+  check(state.players.hardeja01.team === 'OKC', 'autoResign keeps James Harden');
+  check(FA.rosterCount(state, 'OKC') <= 15, 'autoResign respects the roster limit');
+  check(Array.isArray(res) && res.every(function (x) { return x.action && x.id; }), 'autoResign returns what it did for each player');
+  check(!FA.autoResign(state, 'OKC').some(function (x) { return x.action === 'resigned'; }), 'running autoResign twice signs nobody new');
+  state.fa.userReviewed = true;
+  check(FA.autoResign(state, 'OKC').length === 0, 'autoResign leaves the user team alone after he reviewed it');
+})();
+
+(function () {
+  // Stashed draft picks are never released and never count against the roster
+  var state = buildState('OKC');
+  var rng = rngFrom(5);
+  fakeSeason(state, rng);
+  var stash = [];
+  ['BOS', 'MIA', 'SAS'].forEach(function (abbr, k) {
+    for (var i = 0; i < 3; i++) {
+      var id = 'stash' + abbr + i;
+      state.players[id] = { id: id, name: 'Stash ' + abbr + i, team: abbr, pos: 'SF', age: 20, ovr: 45, pot: 60, contract: null, yearsPro: 0, yearsWithTeam: 0,
+        personality: { loyalty: 50, winning: 50, money: 50, market: 50, ego: 50 }, mood: 60, stashedUntil: 2017, injury: { type: 'Playing overseas', games: 999 }, draft: { year: 2013, round: 2, pick: 50 + k } };
+      stash.push(id);
+    }
+  });
+  var before = FA.rosterCount(state, 'BOS');
+  FA.startOffseason(state);
+  FA.finish(state, rng);
+  check(stash.every(function (id) { return state.players[id].team !== 'FA' && state.players[id].stashedUntil === 2017; }), 'stashed draft picks are never waived in free agency');
+  check(!FA.release(state, 'BOS', 'stashBOS0').ok, 'a stashed pick cannot be released');
+  var cnt = 0; Object.keys(state.players).forEach(function (id) { var p = state.players[id]; if (p.team === 'BOS' && !p.retired && !(p.contract && p.contract.twoWay) && p.stashedUntil == null) cnt++; });
+  check(FA.rosterCount(state, 'BOS') === cnt && cnt <= 15, 'stashed players do not count against the roster (' + cnt + ' standard, 3 stashed)');
+  void before;
+})();
+
+(function () {
+  // A star with no team rights (LeBron renounced) is signed in the first days, and nobody 80+ is left unsigned
+  var state = buildState('OKC');
+  var rng = rngFrom(31);
+  fakeSeason(state, rng);
+  FA.startOffseason(state);
+  ['jamesle01', 'paulch01', 'howardw01'].forEach(function (id) { if (state.fa.rights[id]) FA.renounce(state, state.fa.rights[id].team, id); });
+  var day = null;
+  for (var d = 0; d < 30 && state.fa.stage !== 'done'; d++) {
+    FA.simDay(state, rng);
+    if (day == null && state.players.jamesle01.team !== 'FA') day = state.fa.day;
+  }
+  var lbj = state.players.jamesle01;
+  check(lbj.team !== 'FA' && day != null && day <= 8, 'LeBron, a free agent with no Bird rights, signs by day 8 (day ' + day + ', ' + lbj.team + ')');
+  var left = FA.freeAgents(state).filter(function (p) { return p.ovr >= 80; });
+  check(!left.length, 'no player 80+ unsigned after free agency ' + left.map(function (p) { return p.name; }).join(', '));
 })();
 
 console.log('\n' + passes + ' passed, ' + fails + ' failed');

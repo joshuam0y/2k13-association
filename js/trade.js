@@ -1,5 +1,5 @@
 /* Trades and the AI GM: player and pick values, AI trade evaluation, the trade finder,
-   AI offers to the user, AI to AI trades and trade execution.
+   the trading block (shop), AI offers to the user, AI to AI trades and trade execution.
    Plain classic script on window.TRADE (module.exports for Node). Uses window.CBA when it is loaded,
    otherwise a simple 2012 CBA check (125% + $100,000 salary matching for teams over the cap). */
 (function (root) {
@@ -333,10 +333,10 @@
     var d = pick.year - ctx.draftYear;
     if (d < 0) return 0;
     var n = projections(ctx).n, sl = slotOf(ctx, pick.original, pick.round, d);
-    var prot = pick.protection, top = 0;
-    if (prot && prot.top && (prot.until == null || pick.year <= prot.until)) top = prot.top;
+    var prot = pick.protection, top = protTop(prot, pick.year);
     var fallback = 0;
-    if (top && depth < 3) {
+    var gone = prot && prot.extinguish && (prot.until == null || pick.year >= +prot.until);   // not conveyed: the pick is gone
+    if (top && depth < 3 && !gone) {
       var next = { year: pick.year + 1, round: pick.round, original: pick.original,
         protection: prot.until != null && pick.year + 1 <= prot.until ? prot : null };
       fallback = 0.85 * rawPick(ctx, next, depth + 1);
@@ -345,7 +345,8 @@
     for (var s = 1; s <= n; s++) {
       var z = (s - sl.mu) / sl.sd, w = Math.exp(-0.5 * z * z);
       tw += w;
-      ev += w * (s > top ? pickCurve(pick.round, s) : fallback);
+      var at = pick.round === 2 && top > 30 ? s + n : s;   // second round protections count the overall pick
+      ev += w * (!top || at > top ? pickCurve(pick.round, s) : fallback);
     }
     return (tw ? ev / tw : 0) * Math.pow(0.92, d);
   }
@@ -834,6 +835,66 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Public: shop (the trading block). Every AI team says what it would give for the
+  // user's block players. Each offer is legal and accepted by evaluate. Best for the user first.
+  // ---------------------------------------------------------------------------
+  function shop(state, userAbbr, playerIds, opts) {
+    opts = opts || {};
+    userAbbr = userAbbr || state.userTeam;
+    if (!state.teams[userAbbr] || !windowOpen(state)) return [];
+    var ids = [];
+    (playerIds || []).forEach(function (id) {
+      var p = state.players[id];
+      if (p && p.team === userAbbr && !p.retired && ids.indexOf(id) < 0) ids.push(id);
+    });
+    if (!ids.length) return [];
+    ensureDirections(state);
+    var ctx = makeCtx(state), rule = difficulty(state);
+    var sets = ids.map(function (id) { return [id]; });
+    if (ids.length > 1 && ids.length <= 3) sets.push(ids.slice());
+    var noFiller = {}; noFiller[userAbbr] = 1;
+    var found = [];
+    Object.keys(state.teams).forEach(function (T) {
+      if (T === userAbbr || (opts.teams && opts.teams.indexOf(T) < 0)) return;
+      sets.forEach(function (set) {
+        var want = 0;
+        set.forEach(function (id) { want += parts(ctx, id, T).total; });
+        if (want <= 0.3) return;     // this team has no use for them
+        var res = buildPackages(ctx, T, userAbbr, set, {
+          limit: 1, maxAssets: 3, maxTries: 30, gRule: rule, rRule: { base: 0, pct: 0 }, noFiller: noFiller,
+          rOk: function (e) { return e.inValue > 0.2 || e.gain > 0; },
+          gOk: function (e) { return e.margin >= 0; },
+          score: function (eR) { return eR.gain; }
+        });
+        res.forEach(function (r) {
+          var tr = { teams: [userAbbr, T], give: {} };
+          tr.give[userAbbr] = r.trade.give[userAbbr];
+          tr.give[T] = r.trade.give[T];
+          var ev = evaluate(state, tr, { ctx: ctx });
+          if (!ev.accepts) return;
+          var C = cba();
+          if (C && typeof C.validateTrade === "function") {
+            var cv = null;
+            try { cv = C.validateTrade(state, tr); } catch (e) { cv = { ok: false }; }
+            if (!cv || !cv.ok) return;
+          }
+          found.push({ from: T, trade: tr, accepts: true, value: round2(r.eR.gain), margin: ev.margin,
+            text: describe(state, tr), message: "The " + shortName(state, T) + " would do this deal." });
+        });
+      });
+    });
+    found.sort(function (a, b) { return b.value - a.value; });
+    // keep the best offer per team for each block set, then the overall best
+    var seen = {}, out = [];
+    found.forEach(function (o) {
+      var key = o.from + "|" + o.trade.give[userAbbr].players.slice().sort().join(",");
+      if (seen[key]) return;
+      seen[key] = 1; out.push(o);
+    });
+    return out.slice(0, opts.limit || 15);
+  }
+
+  // ---------------------------------------------------------------------------
   // AI to AI trades and AI offers
   // ---------------------------------------------------------------------------
   function weighted(list, wfn, rng) {
@@ -889,9 +950,19 @@
         score: function (eR, eG) { return Math.min(eR.margin, eG.margin); },
         jitter: function () { return rng() * 0.5; }
       });
-      if (pk.length) return pk[0].trade;
+      for (var q = 0; q < pk.length; q++) if (keepsFullRoster(ctx, pk[q].trade)) return pk[q].trade;
     }
     return null;
+  }
+  // AI to AI deals never leave a team short of a full 13 man roster, even in the offseason
+  function keepsFullRoster(ctx, trade) {
+    var st = ctx.state;
+    return trade.teams.every(function (a) {
+      var f = flows(st, trade, a), before = ctx.counts[a], after = before;
+      f.outP.forEach(function (id) { if (countsOnRoster(st, st.players[id])) after--; });
+      f.inP.forEach(function (id) { if (countsOnRoster(st, st.players[id])) after++; });
+      return after >= ROSTER_MIN || after >= before;
+    });
   }
 
   function aiTrades(state, rng, opts) {
@@ -960,11 +1031,35 @@
   // ---------------------------------------------------------------------------
   // Execute
   // ---------------------------------------------------------------------------
-  function pickLabel(state, k) {
-    var s = k.year + " " + (k.round === 1 ? "1st" : "2nd") + " round pick (" + k.original;
-    if (k.protection && k.protection.top) s += ", top " + k.protection.top + " protected" + (k.protection.until ? " through " + k.protection.until : "");
-    return s + ")";
+  // "2013 1st (DAL, top 20 protected)", "2015 2nd (BOS)"
+  // the protection for a pick in its own year: byYear when the data has it, else top
+  function protTop(prot, year) {
+    if (!prot || typeof prot !== "object") return 0;
+    if (prot.until != null && year != null && year > +prot.until) return 0;
+    if (prot.byYear && year != null && prot.byYear[year] != null) return +prot.byYear[year];
+    return prot.top != null ? +prot.top : 0;
   }
+  function protectionText(prot, pick) {
+    if (!prot) return "";
+    if (typeof prot === "string") return prot;
+    if (prot.text) return String(prot.text);
+    var year = pick && pick.year, round = pick && pick.round || 1;
+    var top = protTop(prot, year);
+    if (!top) return prot.top == null ? "protected" : "";
+    var t;
+    if (round === 2 && top > 30) t = top >= 60 ? "fully protected" : "protected 31-" + top;
+    else if (top >= 30) t = "fully protected";
+    else t = "top " + top + (prot.range && prot.range.length === 2 ? " and " + prot.range[0] + "-" + prot.range[1] : "") + " protected";
+    if (prot.until != null && (year == null || +prot.until > year)) t += " through " + prot.until;
+    return t;
+  }
+  function pickText(k) {
+    if (!k) return "";
+    var r = parsePickRef(k), rd = r.round === 1 ? "1st" : r.round === 2 ? "2nd" : r.round + "th";
+    var pr = protectionText(r.protection, r);
+    return r.year + " " + rd + " (" + r.original + (pr ? ", " + pr : "") + ")";
+  }
+  function pickLabel(state, k) { return pickText(k); }
   function listText(arr) {
     if (!arr.length) return "nothing";
     if (arr.length === 1) return arr[0];
@@ -980,6 +1075,34 @@
       parts2.push(a + " sends " + listText(items) + to);
     });
     return parts2.join("; ") + ".";
+  }
+
+  // saved rotations: an incoming player takes the slot (and minutes) of the player he replaces
+  function fixRotations(state, teams, moves) {
+    teams.forEach(function (t) {
+      var tm = state.teams[t];
+      if (!tm || !isArr(tm.rotation)) return;
+      var outIds = {}, inc = [];
+      moves.forEach(function (mv) {
+        if (mv.kind !== "p") return;
+        if (mv.from === t) outIds[mv.id] = 1;
+        if (mv.to === t) inc.push(mv.id);
+      });
+      inc.sort(function (a, b) { return (state.players[b].ovr || 0) - (state.players[a].ovr || 0); });
+      var mins = tm.minutes && typeof tm.minutes === "object" ? tm.minutes : null, rot = [];
+      tm.rotation.forEach(function (id) {
+        if (!outIds[id]) { rot.push(id); return; }
+        var nid = inc.shift();
+        if (nid) { rot.push(nid); if (mins) mins[nid] = mins[id] != null ? mins[id] : 0; }
+        if (mins) delete mins[id];
+      });
+      inc.forEach(function (id) { rot.push(id); if (mins && mins[id] == null) mins[id] = 0; });
+      tm.rotation = rot.filter(function (id) { return state.players[id] && state.players[id].team === t; });
+      if (isArr(tm.inactive)) tm.inactive = tm.inactive.filter(function (id) { return !outIds[id]; });
+      if (state.season && state.season.lineups && state.season.lineups[t]) {
+        state.season.lineups[t] = { starters: tm.rotation.slice(0, 5), minutes: mins };
+      }
+    });
   }
 
   function execute(state, trade, opts) {
@@ -1007,13 +1130,6 @@
         p.team = mv.to; p.yearsWithTeam = 0; p.gleague = false;
         p.lastTrade = { year: state.year, day: state.day || 0, phase: state.phase };
         ids.push(mv.id);
-        [mv.from, mv.to].forEach(function (t) {
-          var tm = state.teams[t];
-          if (tm && isArr(tm.rotation)) {
-            tm.rotation = tm.rotation.filter(function (x) { return x !== mv.id; });
-            if (t === mv.to) tm.rotation.push(mv.id);
-          }
-        });
       } else {
         var from = state.teams[mv.from], to = state.teams[mv.to];
         var idx = from.picks.indexOf(mv.pick);
@@ -1021,6 +1137,7 @@
         (to.picks = to.picks || []).push(mv.pick);
       }
     });
+    fixRotations(state, trade.teams, moves);
     var day = state.day || 0;
     state.transactions = state.transactions || [];
     state.transactions.push({ year: state.year, day: day, type: "trade", text: text, ids: ids, teams: trade.teams.slice() });
@@ -1039,7 +1156,8 @@
     aiOffers: aiOffers, aiTrades: aiTrades, execute: execute,
     // extras
     validate: function (state, trade) { return validate(state, trade); },
-    describe: describe, updateDirections: updateDirections, windowOpen: windowOpen, pickId: pickId
+    describe: describe, updateDirections: updateDirections, windowOpen: windowOpen, pickId: pickId,
+    shop: shop, pickText: pickText, protectionText: protectionText
   };
   W.TRADE = API;
   if (typeof module !== "undefined" && module.exports) module.exports = API;

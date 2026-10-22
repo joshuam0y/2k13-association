@@ -270,6 +270,51 @@ if (fair) {
 }
 
 // ---------------------------------------------------------------------------
+console.log("\nTrading block (shop)");
+var sb = buildState("BOS");
+sb.season.day = 20; sb.day = 20;
+TRADE.updateDirections(sb);
+var kg = sb.players.garneke01;
+ok(kg && kg.team === "BOS", "Kevin Garnett starts on BOS");
+var t0 = Date.now();
+var shopped = TRADE.shop(sb, "BOS", ["garneke01"]);
+var shopMs = Date.now() - t0;
+console.log("  " + shopped.length + " offers for Garnett in " + shopMs + " ms");
+shopped.slice(0, 5).forEach(function (o) { console.log("    [" + o.from + ", value " + o.value + "] " + o.text); });
+ok(shopped.length >= 3, "several teams make offers for Garnett (" + shopped.length + ")");
+ok(shopped.every(function (o) { return TRADE.evaluate(sb, o.trade).accepts; }), "every block offer is accepted by evaluate");
+ok(!usingCBA || shopped.every(function (o) { return window.CBA.validateTrade(sb, o.trade).ok; }), "every block offer passes CBA.validateTrade");
+ok(shopped.every(function (o) { return TRADE.validate(sb, o.trade).ok; }), "every block offer passes the trade rules (rosters, Stepien)");
+ok(shopped.every(function (o) { var g = o.trade.give.BOS; return g.players.length === 1 && g.players[0] === "garneke01" && !g.picks.length; }), "BOS only gives the player on the block");
+ok(shopped.every(function (o) { var g = o.trade.give[o.from]; return g.players.length + g.picks.length >= 1; }), "every offer gives something back");
+ok(shopped.every(function (o, i) { return i === 0 || shopped[i - 1].value >= o.value; }), "offers come best first");
+ok(new Set(shopped.map(function (o) { return o.from; })).size === shopped.length, "one offer per team for a single player");
+ok(shopMs < 8000, "shop runs in under 8 seconds (" + shopMs + " ms)");
+var two = TRADE.shop(sb, "BOS", ["garneke01", "piercpa01"]);
+ok(two.every(function (o) { return o.trade.give.BOS.players.every(function (id) { return id === "garneke01" || id === "piercpa01"; }); }), "two players on the block: offers only take block players (" + two.length + ")");
+ok(TRADE.shop(sb, "BOS", ["duranke01"]).length === 0, "a player not on the user's team gets no offers");
+// accepting an offer: the player moves and a saved rotation keeps its shape
+if (shopped.length) {
+  var sx = clone(sb), o1 = shopped[0];
+  var bos = playersOf(sx, "BOS").sort(function (a, b) { return b.ovr - a.ovr; }).map(function (p) { return p.id; });
+  var kgSlot = bos.indexOf("garneke01");
+  sx.teams.BOS.rotation = bos.slice(); sx.teams.BOS.minutes = {}; bos.forEach(function (id, i) { sx.teams.BOS.minutes[id] = i < 5 ? 32 : i < 10 ? 16 : 0; });
+  sx.season.lineups = { BOS: { starters: bos.slice(0, 5), minutes: sx.teams.BOS.minutes } };
+  var ex1 = TRADE.execute(sx, o1.trade);
+  ok(ex1.ok && sx.players.garneke01.team === o1.from, "accepting the best offer sends Garnett to " + o1.from);
+  var incoming = o1.trade.give[o1.from].players;
+  if (incoming.length) {
+    var best = incoming.slice().sort(function (a, b) { return sx.players[b].ovr - sx.players[a].ovr; })[0];
+    ok(sx.teams.BOS.rotation[kgSlot] === best && sx.teams.BOS.minutes[best] === (kgSlot < 5 ? 32 : 16), "the best incoming player takes Garnett's rotation slot and minutes");
+    ok(sx.season.lineups.BOS.starters.indexOf("garneke01") < 0 && sx.teams.BOS.rotation.indexOf("garneke01") < 0, "Garnett leaves the BOS rotation and lineup");
+  }
+}
+// pick text
+ok(TRADE.pickText({ year: 2013, round: 1, original: "DAL", protection: { top: 20 } }) === "2013 1st (DAL, top 20 protected)", "pick text: " + TRADE.pickText({ year: 2013, round: 1, original: "DAL", protection: { top: 20 } }));
+ok(TRADE.pickText({ year: 2015, round: 2, original: "BOS", protection: null }) === "2015 2nd (BOS)", "pick text unprotected: " + TRADE.pickText({ year: 2015, round: 2, original: "BOS" }));
+ok(/top 10 protected through 2016/.test(TRADE.pickText({ year: 2014, round: 1, original: "TOR", protection: { top: 10, until: 2016 } })), "pick text with an end year");
+
+// ---------------------------------------------------------------------------
 console.log("\nSimulated season (aiTrades daily, aiOffers like js/league.js)");
 function simSeason(seed, verbose) {
   var s = buildState("OKC"), rng = mulberry32(seed);

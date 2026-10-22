@@ -1,4 +1,4 @@
-// Season pages: season hub with sim controls, box score, standings, leaders, playoffs, saves.
+// Season pages: the Association hub with sim controls, box score, standings, stats, playoffs, saves.
 (function () {
   'use strict';
   const UI = window.UI;
@@ -9,36 +9,54 @@
     if (!UI.canPlay()) { app.innerHTML = UI.notBuilt('engine'); return true; }
     if (!UI.state.game) {
       app.innerHTML = UI.empty('NO LEAGUE LOADED', 'Start a new Association or load one of your saves.',
-        '<div class="row-btns"><a class="btn btn-gold" href="#/new">PLAY THE ASSOCIATION</a><a class="btn" href="#/saves">SAVES</a></div>');
+        '<div class="row-btns"><a class="btn btn-gold" href="#/new">PLAY THE ASSOCIATION</a><a class="btn" href="#/saves">LOAD</a></div>');
       return true;
     }
     return false;
   };
-  // Link to a page another module registered, if it exists.
-  const pageLink = (names, label) => {
-    const n = [].concat(names).find(x => UI.pages[x]);
-    return n ? `<a class="btn" href="#/${n}">${esc(label)}</a>` : '';
-  };
-
-  // ---------- Season hub ----------
-  function offseasonHtml(g) {
+  // ---------- Association hub ----------
+  // Built like the 2K13 Association hub: a team header, one big PLAY tile with the sim controls,
+  // and eight menu tiles. Everything else is one click further in.
+  function playOffseason(g) {
     const phases = UI.OFFSEASON();
     const idx = phases.indexOf(g.phase);
+    const nextName = idx >= 0 && idx < phases.length - 1 ? UI.PHASES[phases[idx + 1]] : 'Opening Night';
     const last = g.history && Array.isArray(g.history.seasons) ? g.history.seasons[g.history.seasons.length - 1] : null;
-    const nextName = idx >= 0 && idx < phases.length - 1 ? UI.PHASES[phases[idx + 1]] : 'Opening Night ' + UI.seasonLabel(g.year + 1);
-    const champ = last && last.champion;
-    const extra = {
-      draftLottery: pageLink('draft', 'DRAFT ORDER'), draft: pageLink('draft', 'DRAFT ROOM'),
-      resign: pageLink(['fa', 'freeagency'], 'RE-SIGN PLAYERS'), freeAgency: pageLink(['fa', 'freeagency'], 'FREE AGENTS'),
-      training: pageLink(['myteam', 'manage', 'gm'], 'YOUR TEAM')
-    }[g.phase] || '';
-    return `<section class="offseason">
-        <div class="os-k">${esc(g.year)} OFFSEASON</div>
-        <div class="os-phase">${esc((UI.PHASES[g.phase] || g.phase).toUpperCase())}</div>
-        <ol class="os-steps">${phases.map((p, i) => `<li class="${i < idx ? 'done' : i === idx ? 'on' : ''}">${esc(UI.PHASES[p] || p)}</li>`).join('')}</ol>
-        <div class="row-btns center"><button type="button" class="btn btn-gold" id="nextPhase">NEXT PHASE: ${esc(nextName.toUpperCase())}</button>${extra}</div>
-      </section>
-      ${champ ? `<section class="champ" style="--c1:${esc(UI.teamColor(champ))}">${UI.logo(champ, 80)}<div><div class="ch-k">${esc(last.year)} NBA CHAMPIONS</div><div class="ch-t">${esc(UI.teamName(champ))}</div><a class="more" href="#/playoffs">SEE THE BRACKET</a></div></section>` : ''}`;
+    const champ = last && UI.abbrOf(last.champion);
+    const link = {
+      draftLottery: ['draft', 'DRAFT ORDER'], draft: ['draft', 'DRAFT ROOM'],
+      resign: ['fa', 'RE-SIGN PLAYERS'], freeAgency: ['fa', 'FREE AGENCY'], training: ['manage', 'ROTATION']
+    }[g.phase];
+    return `<div class="mt-l">${esc((UI.PHASES[g.phase] || g.phase).toUpperCase())}</div>
+      <ol class="os-dots" aria-label="Offseason steps">${phases.map((p, i) => `<li class="${i < idx ? 'done' : i === idx ? 'on' : ''}" title="${esc(UI.PHASES[p] || p)}"><span>${esc(UI.PHASES[p] || p)}</span></li>`).join('')}</ol>
+      ${champ ? `<div class="play-note">${UI.logo(champ, 28)} <span>${esc(last.year)} CHAMPIONS: ${esc(UI.teamName(champ).toUpperCase())}</span></div>` : ''}
+      <div class="play-btns">
+        <button type="button" class="btn btn-gold btn-big" id="nextPhase">NEXT: ${esc(nextName.toUpperCase())}</button>
+        ${link && UI.pages[link[0]] ? `<a class="btn btn-big" href="#/${link[0]}">${link[1]}</a>` : ''}
+      </div>`;
+  }
+
+  function playSeason(g, next, user) {
+    const sp = g.season.phase;
+    const reg = sp === 'regular';
+    const btn = (how, label, cls, dis) => `<button type="button" class="btn sim-btn ${cls || ''}" data-how="${esc(JSON.stringify(how))}"${dis ? ' disabled' : ''}>${label}</button>`;
+    let match;
+    if (next) {
+      const home = next.home === user;
+      const opp = home ? next.away : next.home;
+      match = `<a class="play-next" href="#/team/${esc(opp)}">${UI.logo(opp, 56)}<span><small>${next.playoff ? 'PLAYOFFS GAME ' + esc(next.gameNum || '') : 'NEXT GAME'} | ${esc(UI.gameDay(next).toUpperCase())}</small><b>${home ? 'VS' : '@'} ${esc(UI.teamName(opp).toUpperCase())}</b><small>${esc(UI.record(opp))}</small></span></a>`;
+    } else {
+      match = `<div class="play-next"><span><small>${sp === 'playoffs' ? 'PLAYOFFS' : 'REGULAR SEASON'}</small><b>${sp === 'playoffs' ? 'NO GAME SCHEDULED' : 'COMPLETE'}</b></span></div>`;
+    }
+    return `<div class="mt-l">PLAY</div>
+      ${match}
+      <div class="sim-btns">
+        ${btn({ days: 1 }, 'SIM DAY', 'btn-gold')}${btn({ days: 7 }, 'SIM WEEK')}${btn({ days: 30 }, 'SIM MONTH')}
+        ${next && UI.pages.live ? `<a class="btn sim-btn lv-watch" href="#/live/next">WATCH LIVE</a>` : ''}
+      </div>
+      <details class="sim-more"><summary>SIM TO...</summary><div class="sim-more-list">
+        ${btn('tradeDeadline', 'TRADE DEADLINE', '', !reg)}${btn('allStar', 'ALL-STAR BREAK', '', !reg)}${btn('endRegular', 'END OF REGULAR SEASON', '', !reg)}${btn('endPlayoffs', 'END OF PLAYOFFS')}
+      </div></details>`;
   }
 
   P.season = function (app) {
@@ -47,80 +65,67 @@
     const user = g.userTeam;
     const t = UI.team(user);
     const s = g.season;
-    const games = UI.games();
-    const mine = games.filter(x => x.home === user || x.away === user);
+    const mine = UI.games().filter(x => x.home === user || x.away === user);
     const next = mine.find(x => !x.played);
+    const last = mine.filter(x => x.played).slice(-1)[0];
     const off = UI.inOffseason();
-    const sp = s.phase;
     const row = UI.standings()[user] || { w: 0, l: 0, streakText: '-' };
     const confRow = UI.confTable(t.conf).find(r => r.abbr === user) || {};
     const date = UI.currentDate();
     const pending = UI.pendingEvents();
+    const phaseName = (off ? UI.PHASES[g.phase] : UI.PHASES[s.phase] || s.phase) || '';
 
-    let nextHtml;
-    if (off) {
-      nextHtml = `<div class="next-game"><div class="ng-k">${esc(UI.seasonLabel(g.year))} FINAL RECORD</div><div class="ng-done">${row.w}-${row.l}</div><div class="ng-opp">${esc(UI.PHASES[g.phase] || g.phase)}</div></div>`;
-    } else if (next) {
-      const opp = next.home === user ? next.away : next.home;
-      nextHtml = `<div class="next-game">
-        <div class="ng-k">${next.playoff ? 'PLAYOFFS | GAME ' + esc(next.gameNum || '') : 'NEXT GAME'} | ${esc(UI.gameDay(next).toUpperCase())}</div>
-        <div class="ng-match">
-          <a class="ng-team" href="#/team/${esc(next.away)}">${UI.logo(next.away, 64)}<b>${esc(next.away)}</b><small>${esc(UI.record(next.away))}</small></a>
-          <span class="ng-at">@</span>
-          <a class="ng-team" href="#/team/${esc(next.home)}">${UI.logo(next.home, 64)}<b>${esc(next.home)}</b><small>${esc(UI.record(next.home))}</small></a>
-        </div>
-        <div class="ng-opp">vs the ${esc(UI.teamName(opp))}</div>
-      </div>`;
-    } else {
-      nextHtml = `<div class="next-game"><div class="ng-k">${sp === 'playoffs' ? 'PLAYOFFS' : 'REGULAR SEASON'}</div><div class="ng-done">${sp === 'playoffs' ? 'NO GAME SCHEDULED' : 'COMPLETE'}</div>
-        <div class="ng-opp">${sp === 'playoffs' ? 'Your season may be over. Sim on to see who wins it all.' : ''}</div></div>`;
+    let lastHtml = '';
+    if (last) {
+      const home = last.home === user;
+      const won = home ? last.hs > last.as : last.as > last.hs;
+      const opp = home ? last.away : last.home;
+      lastHtml = `<a class="hh-last" href="#/game/${encodeURIComponent(last.id)}"><small>LAST GAME</small><b class="${won ? 'win' : 'loss'}">${won ? 'W' : 'L'} ${home ? last.hs : last.as}-${home ? last.as : last.hs}</b><span>${home ? 'vs' : '@'} ${esc(opp)}</span></a>`;
     }
 
-    const btn = (how, label, dis, cls) => `<button type="button" class="btn sim-btn ${cls || ''}" data-how="${esc(JSON.stringify(how))}" ${dis ? 'disabled' : ''}>${label}</button>`;
-    const reg = sp === 'regular';
-    const sims = off ? '' : `<div class="sim-btns">
-      ${btn({ days: 1 }, 'SIM 1 DAY')}${btn({ days: 7 }, 'SIM 7 DAYS')}${btn({ days: 30 }, 'SIM 30 DAYS')}
-      ${btn('tradeDeadline', 'TO TRADE DEADLINE', !reg, 'sim-sm')}${btn('allStar', 'TO ALL-STAR BREAK', !reg, 'sim-sm')}
-      ${btn('endRegular', 'TO END OF REGULAR SEASON', !reg, 'sim-long')}${btn('endPlayoffs', 'TO PLAYOFFS END', false, 'sim-long')}
-    </div>`;
-
-    const played = games.filter(x => x.played);
-    const lastDay = played.length ? played[played.length - 1].day : null;
-    const latest = lastDay != null ? played.filter(x => x.day === lastDay) : [];
-    const myPlayed = mine.filter(x => x.played).slice(-8).reverse();
-    const upcoming = off ? [] : mine.filter(x => !x.played).slice(0, 5);
-    const confRows = UI.confTable(t.conf).slice(0, 10);
-    const mini = `<table class="stand mini"><thead><tr><th>#</th><th class="l">TEAM</th><th>W</th><th>L</th><th>GB</th></tr></thead><tbody>
-      ${confRows.map(r => `<tr class="${r.abbr === user ? 'mine' : ''}${r.rank === 8 ? ' cut' : ''}"><td>${r.rank}</td><td class="l"><a href="#/team/${esc(r.abbr)}">${UI.logo(r.abbr, 20)} ${esc(r.abbr)}</a></td><td>${r.w}</td><td>${r.l}</td><td>${r.gb}</td></tr>`).join('')}
-    </tbody></table><a class="more" href="#/standings">FULL STANDINGS</a>`;
-    const news = Array.isArray(g.news) ? g.news.slice(0, 6) : [];
+    // The tile that matters most in this phase gets the gold edge.
+    const hot = { draftLottery: 'draft', draft: 'draft', resign: 'fa', freeAgency: 'fa', training: 'manage' }[g.phase] || '';
+    const tile = (key, href, icon, label) => UI.tile(href, icon, label, hot === key ? { cls: 'mt-hot', sub: 'NOW' } : null);
+    const news = Array.isArray(g.news) ? g.news.filter(n => n && n.headline).slice(0, 3) : [];
 
     app.innerHTML = `
-      ${pending ? `<div class="pending"><span><b>${pending}</b> decision${pending > 1 ? 's' : ''} waiting. The sim stays paused until you answer.</span><button type="button" class="btn btn-gold btn-small" id="openEvents">DECIDE NOW</button></div>` : ''}
-      <section class="season-top" style="--c1:${esc(t.colors[0])};--c2:${esc(t.colors[1] || t.colors[0])}">
-        <div class="st-team">
-          ${UI.logo(user, 84)}
-          <div>
-            <div class="st-k">${esc(UI.state.save ? UI.state.save.name : '')} | ${esc(UI.seasonLabel(g.year))} | ${esc((off ? UI.PHASES[g.phase] : UI.PHASES[sp] || sp).toUpperCase())}</div>
-            <h1 class="st-name">${esc(UI.teamName(user))}</h1>
-            <div class="st-rec"><b>${row.w}-${row.l}</b><span>${confRow.rank ? '#' + confRow.rank + ' IN THE ' + esc(t.conf.toUpperCase()) : ''}</span><span>STREAK ${esc(row.streakText)}</span></div>
-            <div class="st-date">${date ? esc(UI.dateLabel(date)) : ''}</div>
+      <section class="hub-head" style="--c1:${esc(t.colors[0])};--c2:${esc(t.colors[1] || t.colors[0])}">
+        ${UI.logo(user, 96)}
+        <div class="hh-info">
+          <div class="hh-k">${esc(UI.seasonLabel(g.year))} | ${esc(phaseName.toUpperCase())}${date && !off ? ' | ' + esc(UI.dateLabel(date).toUpperCase()) : ''}</div>
+          <h1 class="hh-name">${esc(UI.teamName(user))}</h1>
+          <div class="hh-stats">
+            <div><b>${row.w}-${row.l}</b><small>RECORD</small></div>
+            ${confRow.rank ? `<div><b>#${confRow.rank}</b><small>${esc(t.conf.toUpperCase())}</small></div>` : ''}
+            <div><b>${esc(row.streakText)}</b><small>STREAK</small></div>
+            <div><b>${UI.teamOvr(user) || '-'}</b><small>TEAM OVR</small></div>
           </div>
         </div>
-        ${nextHtml}
+        ${lastHtml}
       </section>
-      ${off ? offseasonHtml(g) : UI.header('SIMULATE', 'Every sim autosaves to slot ' + UI.state.slot + '. The sim stops when a decision needs you.') + sims}
-      <div class="three-col">
-        <section>${UI.header('LATEST RESULTS', latest.length ? esc(UI.gameDay(latest[0])) : '')}${latest.length ? UI.gameList(latest) : '<p class="muted">No games played yet. Sim a day to tip off.</p>'}</section>
-        <section>${UI.header('YOUR GAMES')}${myPlayed.length ? UI.gameList(myPlayed, user) : ''}${upcoming.length ? UI.gameList(upcoming, user) : ''}${!myPlayed.length && !upcoming.length ? '<p class="muted">No games.</p>' : ''}</section>
-        <section>${UI.header(t.conf.toUpperCase() + 'ERN CONFERENCE')}${mini}</section>
+      ${pending ? `<div class="pending"><span><b>${pending}</b> decision${pending > 1 ? 's' : ''} waiting</span><button type="button" class="btn btn-gold btn-small" id="openEvents">DECIDE NOW</button></div>` : ''}
+      <div class="hub-grid">
+        <div class="mtile mt-play">${off ? playOffseason(g) : playSeason(g, next, user)}</div>
+        ${tile('roster', '#/team/' + encodeURIComponent(user), 'roster', 'ROSTER')}
+        ${tile('manage', '#/manage', 'rotation', 'ROTATION')}
+        ${tile('trade', '#/trade', 'trade', 'TRADES')}
+        ${tile('fa', '#/fa', 'fa', 'FREE AGENCY')}
+        ${tile('standings', '#/standings', 'standings', 'STANDINGS')}
+        ${tile('stats', '#/stats', 'stats', 'STATS')}
+        ${tile('draft', '#/draft', 'draft', 'DRAFT')}
+        ${tile('league', '#/league', 'league', 'LEAGUE')}
       </div>
-      ${news.length ? `${UI.header('LEAGUE NEWS')}<ul class="news">${news.map(n => `<li><span class="nw-d">${esc(UI.seasonLabel(n.year))}</span><div><b>${esc(n.headline)}</b>${n.body ? `<p>${esc(n.body)}</p>` : ''}</div></li>`).join('')}</ul>${pageLink('news', 'ALL NEWS')}` : ''}`;
-    app.querySelectorAll('.sim-btn').forEach(b => b.addEventListener('click', () => UI.sim(JSON.parse(b.getAttribute('data-how')))));
+      ${news.length ? `<a class="ticker" href="#/${UI.pages.news ? 'news' : 'league'}"><b>NEWS</b><span>${news.map(n => esc(n.headline)).join('<i>|</i>')}</span></a>` : ''}`;
+    app.querySelectorAll('.sim-btn[data-how]').forEach(b => b.addEventListener('click', () => UI.sim(JSON.parse(b.getAttribute('data-how')))));
     const np = UI.$('#nextPhase');
     if (np) np.addEventListener('click', () => UI.sim('nextPhase'));
     const oe = UI.$('#openEvents');
     if (oe) oe.addEventListener('click', () => UI.showEvents());
+    const more = UI.$('.sim-more', app);
+    if (more) document.addEventListener('click', function close(e) {
+      if (!document.body.contains(more)) { document.removeEventListener('click', close); return; }
+      if (!more.contains(e.target)) more.open = false;
+    });
   };
 
   // ---------- Box score ----------
@@ -191,41 +196,54 @@
     confList.sort((a, b) => (a === 'East' ? -1 : b === 'East' ? 1 : 0));
     const tables = confList.map(c => {
       const rows = UI.confTable(c);
-      return `<section class="stand-wrap">${UI.header(c.toUpperCase() + 'ERN CONFERENCE')}
+      return `<section class="stand-wrap">${UI.header(c.toUpperCase())}
         <div class="tscroll"><table class="stand"><thead><tr><th>#</th><th class="l">TEAM</th><th>W</th><th>L</th><th>PCT</th><th>GB</th><th class="hide-sm">HOME</th><th class="hide-sm">AWAY</th><th class="hide-sm">L10</th><th>STRK</th></tr></thead>
         <tbody>${rows.map(r => `<tr class="${r.abbr === user ? 'mine' : ''}${r.rank === 8 ? ' cut' : ''}">
-          <td>${r.rank}</td><td class="l"><a href="#/team/${esc(r.abbr)}">${UI.logo(r.abbr, 24)}<span class="full">${esc(UI.teamName(r.abbr))}</span><span class="short">${esc(r.abbr)}</span></a></td>
-          <td>${r.w}</td><td>${r.l}</td><td>${UI.fmtWinPct(r.w, r.l)}</td><td>${r.gb}</td>
+          <td>${r.rank}</td><td class="l"><a href="#/team/${esc(r.abbr)}">${UI.logo(r.abbr, 28)}<span class="full">${esc(UI.teamName(r.abbr))}</span><span class="short">${esc(r.abbr)}</span></a></td>
+          <td><b>${r.w}</b></td><td>${r.l}</td><td>${UI.fmtWinPct(r.w, r.l)}</td><td>${r.gb}</td>
           <td class="hide-sm">${r.hw}-${r.hl}</td><td class="hide-sm">${r.aw}-${r.al}</td><td class="hide-sm">${r.l10}</td><td>${esc(r.streakText)}</td></tr>`).join('')}</tbody></table></div></section>`;
     }).join('');
-    const sub = UI.state.game ? UI.seasonLabel(UI.year()) + '. Top eight in each conference make the playoffs; division winners are seeded no lower than fourth.'
-      : 'No league loaded, so every team is 0-0. Start the Association to play the season.';
-    app.innerHTML = UI.header('STANDINGS', esc(sub)) + `<div class="two-col">${tables}</div>`;
+    const sub = UI.state.game ? esc(UI.seasonLabel(UI.year())) + '. The top 8 in each conference make the playoffs.' : 'No league loaded, so every team is 0-0.';
+    app.innerHTML = UI.header('STANDINGS', sub) + `<div class="two-col tight">${tables}</div>`;
   };
 
-  // ---------- League leaders ----------
+  // ---------- Stats: league leaders and the full player table ----------
+  // Only stats played in this save. Nothing from outside the league is shown here.
   const CATS = [['pts', 'POINTS'], ['reb', 'REBOUNDS'], ['ast', 'ASSISTS'], ['stl', 'STEALS'], ['blk', 'BLOCKS']];
   const MIN_G = 20;
-  P.leaders = function (app, arg) {
-    const hasSeason = !!UI.state.season;
-    const mode = arg === 'real' || !hasSeason ? 'real' : arg === 'playoffs' ? 'playoffs' : 'season';
-    const minG = mode === 'playoffs' ? 1 : MIN_G;
-    let pool;
-    if (mode === 'real') {
-      const base = (UI.state.league && UI.state.league.players) || [];
-      pool = base.filter(p => p.stats && Number(p.stats.g) >= MIN_G).map(p => ({ p: UI.player(p.id) || p, s: p.stats }));
-    } else {
-      const tot = UI.seasonTotals(mode === 'playoffs');
-      pool = Object.keys(tot).map(id => ({ p: UI.player(id), s: UI.perGame(tot[id]) })).filter(x => x.p && x.s && x.s.g >= minG);
+  const COLS = [['g', 'G'], ['mpg', 'MIN'], ['pts', 'PTS'], ['reb', 'REB'], ['ast', 'AST'], ['stl', 'STL'], ['blk', 'BLK'], ['fgp', 'FG%'], ['tpp', '3P%'], ['ftp', 'FT%']];
+  const statView = { sort: 'pts', dir: -1, team: '', shown: 60 };
+
+  P.stats = function (app, arg) {
+    const parts = String(arg || '').split('/');
+    const view = parts[0] === 'players' ? 'players' : 'leaders';
+    const po = parts.includes('playoffs');
+    const hasSeason = !!(UI.state.game && UI.state.season);
+    if (!hasSeason) {
+      app.innerHTML = UI.header('STATS') + UI.empty('NO SEASON YET', 'Stats come from the games played in your league. Start or load an Association first.',
+        `<div class="row-btns">${UI.canPlay() ? '<a class="btn btn-gold" href="#/new">PLAY THE ASSOCIATION</a>' : ''}<a class="btn" href="#/saves">LOAD</a></div>`);
+      return;
     }
-    const hasPo = hasSeason && Object.keys(UI.seasonTotals(true)).length > 0;
-    const tabs = `<div class="tabs">${hasSeason ? `<a href="#/leaders" class="${mode === 'season' ? 'on' : ''}">${esc(UI.seasonLabel(UI.year()))} SEASON</a>` : ''}${hasPo ? `<a href="#/leaders/playoffs" class="${mode === 'playoffs' ? 'on' : ''}">PLAYOFFS</a>` : ''}<a href="#/leaders/real" class="${mode === 'real' ? 'on' : ''}">REAL 2012-13</a></div>`;
-    let body;
+    const tot = UI.seasonTotals(po);
+    const hasPo = Object.keys(UI.seasonTotals(true)).length > 0;
+    const pool = Object.keys(tot).map(id => ({ p: UI.player(id), s: UI.perGame(tot[id]) })).filter(x => x.p && x.s && x.s.g > 0);
+    const base = view === 'players' ? '#/stats/players' : '#/stats';
+    const tabs = `<div class="tabs">
+        <a href="#/stats${po ? '/playoffs' : ''}" class="${view === 'leaders' ? 'on' : ''}">LEADERS</a>
+        <a href="#/stats/players${po ? '/playoffs' : ''}" class="${view === 'players' ? 'on' : ''}">ALL PLAYERS</a>
+        ${hasPo ? `<span class="tabs-gap"></span><a href="${base}" class="${po ? '' : 'on'}">SEASON</a><a href="${base}/playoffs" class="${po ? 'on' : ''}">PLAYOFFS</a>` : ''}
+      </div>`;
+    const title = UI.seasonLabel(UI.year()) + (po ? ' PLAYOFFS' : ' SEASON');
     if (!pool.length) {
-      body = UI.empty('NO QUALIFIERS YET', mode === 'season' ? 'Leaders need at least ' + MIN_G + ' games played. Keep simming.' : 'No players qualify yet.');
-    } else {
-      body = `<div class="leader-grid">${CATS.map(([k, label]) => {
-        const top = pool.filter(x => x.s[k] != null).sort((a, b) => b.s[k] - a.s[k]).slice(0, 10);
+      app.innerHTML = UI.header('STATS', esc(title)) + tabs + UI.empty('NO GAMES PLAYED YET', 'Sim a few days and the numbers will show up here.', '<div class="row-btns"><a class="btn btn-gold" href="#/season">BACK TO THE HUB</a></div>');
+      return;
+    }
+    if (view === 'leaders') {
+      const maxG = pool.reduce((m, x) => Math.max(m, x.s.g), 0);
+      const minG = po ? 1 : Math.min(MIN_G, Math.max(1, Math.ceil(maxG * 0.6)));
+      const q = pool.filter(x => x.s.g >= minG);
+      const body = `<div class="leader-grid">${CATS.map(([k, label]) => {
+        const top = q.filter(x => x.s[k] != null).sort((a, b) => b.s[k] - a.s[k]).slice(0, 10);
         if (!top.length) return '';
         const lead = top[0];
         return `<section class="leader-card">
@@ -234,9 +252,46 @@
           <ol class="lc-list">${top.slice(1).map((x, i) => `<li><span class="lc-n">${i + 2}</span><a href="#/player/${esc(x.p.id)}">${esc(x.p.name)}</a><span class="lc-t">${esc(x.p.team)}</span><b>${UI.fmt1(x.s[k])}</b></li>`).join('')}</ol>
         </section>`;
       }).join('')}</div>`;
+      app.innerHTML = UI.header('STATS', esc(title) + '. Per game, at least ' + minG + ' game' + (minG > 1 ? 's' : '') + '.') + tabs + body;
+      return;
     }
-    app.innerHTML = UI.header('LEAGUE LEADERS', 'Per game, minimum ' + minG + ' game' + (minG > 1 ? 's' : '') + ' played.') + tabs + body;
+    // full table
+    const user = UI.userTeam();
+    const draw = () => {
+      const k = statView.sort;
+      let list = pool.filter(x => !statView.team || x.p.team === statView.team);
+      list.sort((a, b) => {
+        if (k === 'name') return statView.dir * -1 * String(a.p.name).localeCompare(String(b.p.name));
+        const av = a.s[k] == null ? -1 : a.s[k], bv = b.s[k] == null ? -1 : b.s[k];
+        return (bv - av) * (statView.dir === -1 ? 1 : -1) || b.s.pts - a.s.pts;
+      });
+      const shown = list.slice(0, statView.shown);
+      const fmt = (key, v) => (key === 'g' ? v : /p$/.test(key) ? UI.fmtPct(v) : UI.fmt1(v));
+      const teams = UI.teams().slice().sort((a, b) => a.city.localeCompare(b.city));
+      app.innerHTML = UI.header('STATS', esc(title) + '. Per game. Tap a column to sort.') + tabs +
+        `<div class="stat-filters"><label class="field"><span>TEAM</span><select id="stTeam">
+          <option value="">All teams</option>${user ? `<option value="${esc(user)}" ${statView.team === user ? 'selected' : ''}>My team (${esc(user)})</option>` : ''}
+          ${teams.map(t => `<option value="${esc(t.abbr)}" ${statView.team === t.abbr && t.abbr !== user ? 'selected' : ''}>${esc(t.city + ' ' + t.name)}</option>`).join('')}
+        </select></label><span class="muted">${list.length} players</span></div>
+        <div class="tscroll"><table class="stats stat-table"><thead><tr><th>#</th><th class="l sortable${k === 'name' ? ' on' : ''}" data-sort="name">PLAYER</th><th class="l hide-sm">TEAM</th>
+          ${COLS.map(([c, l]) => `<th class="sortable${k === c ? ' on' : ''}" data-sort="${c}">${l}</th>`).join('')}</tr></thead>
+        <tbody>${shown.map((x, i) => `<tr class="${x.p.team === user ? 'mine' : ''}"><td class="muted">${i + 1}</td>
+          <td class="l"><a href="#/player/${esc(x.p.id)}">${esc(x.p.name)}</a> <small class="muted">${esc(x.p.pos)}</small></td><td class="l hide-sm">${UI.logo(x.p.team, 22)} ${esc(x.p.team)}</td>
+          ${COLS.map(([c]) => `<td class="${k === c ? 'on' : ''}">${c === 'pts' ? '<b>' + fmt(c, x.s[c]) + '</b>' : fmt(c, x.s[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+        ${list.length > shown.length ? `<div class="row-btns center"><button type="button" class="btn" id="stMore">SHOW MORE</button></div>` : ''}`;
+      UI.$('#stTeam').addEventListener('change', e => { statView.team = e.target.value; statView.shown = 60; draw(); });
+      app.querySelectorAll('th[data-sort]').forEach(th => th.addEventListener('click', () => {
+        const c = th.getAttribute('data-sort');
+        if (statView.sort === c) statView.dir = -statView.dir; else { statView.sort = c; statView.dir = -1; }
+        draw();
+      }));
+      const more = UI.$('#stMore');
+      if (more) more.addEventListener('click', () => { statView.shown += 100; const y = window.scrollY; draw(); window.scrollTo(0, y); });
+    };
+    draw();
   };
+  // The old leaders route opens the same page.
+  P.leaders = function (app, arg) { P.stats(app, arg === 'playoffs' ? 'leaders/playoffs' : ''); };
 
   // ---------- Playoffs ----------
   const ROUND_NAMES = ['FIRST ROUND', 'CONFERENCE SEMIFINALS', 'CONFERENCE FINALS', 'NBA FINALS'];
@@ -326,18 +381,20 @@
         <div class="slot-body">${UI.logo(meta.userTeam, 48)}<div>
           <div class="slot-name" data-name>${esc(meta.name)}</div>
           <div class="slot-meta">${esc(UI.teamName(meta.userTeam))} | ${esc(meta.record || '0-0')}${where ? ' | ' + esc(where) : ''}</div>
-          <div class="slot-meta muted">Saved ${esc(when)}</div>
+          <div class="slot-meta muted">${esc(when)}</div>
         </div></div>
         <div class="slot-actions">
           ${slot === active ? `<a class="btn btn-small btn-gold" href="#/season">PLAY</a>` : `<button type="button" class="btn btn-small btn-gold" data-act="load" data-slot="${slot}" ${UI.canPlay() ? '' : 'disabled'}>LOAD</button>`}
-          <button type="button" class="btn btn-small" data-act="rename" data-slot="${slot}">RENAME</button>
-          <button type="button" class="btn btn-small" data-act="export" data-slot="${slot}">EXPORT</button>
-          <button type="button" class="btn btn-small" data-act="import" data-slot="${slot}">IMPORT</button>
-          <button type="button" class="btn btn-small btn-danger" data-act="delete" data-slot="${slot}">DELETE</button>
+          <details class="slot-more"><summary class="btn btn-small">MORE</summary><div class="slot-more-list">
+            <button type="button" class="btn btn-small" data-act="rename" data-slot="${slot}">RENAME</button>
+            <button type="button" class="btn btn-small" data-act="export" data-slot="${slot}">EXPORT</button>
+            <button type="button" class="btn btn-small" data-act="import" data-slot="${slot}">IMPORT</button>
+            <button type="button" class="btn btn-small btn-danger" data-act="delete" data-slot="${slot}">DELETE</button>
+          </div></details>
         </div>
       </div>`;
     };
-    app.innerHTML = UI.header('SAVES', 'Leagues are stored in this browser (IndexedDB) and autosave after every sim. Export a file to keep a copy or move it to another device.') +
+    app.innerHTML = UI.header('LOAD', 'Your leagues save in this browser after every sim. Use Export to keep a copy.') +
       `<div class="slots">${list.map(card).join('')}</div><input type="file" id="importFile" accept=".json,application/json" hidden>`;
 
     const fileInput = UI.$('#importFile');

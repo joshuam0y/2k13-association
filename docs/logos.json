@@ -3,529 +3,627 @@
     {
       "from": 2008,
       "name": "Atlanta Hawks",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/4/4c/Atlanta_Hawks_2007.svg/revision/latest/scale-to-width-down/250?cb=20150610214712",
+      "url": "assets/logos/ATL-2008.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/4/4c/Atlanta_Hawks_2007.svg/revision/latest/scale-to-width-down/250?cb=20150610214712"
     },
     {
       "from": 2016,
       "name": "Atlanta Hawks",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/7/74/Atlanta_Hawks_2015.svg/revision/latest/scale-to-width-down/250?cb=20181127060141",
+      "url": "assets/logos/ATL-2016.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/7/74/Atlanta_Hawks_2015.svg/revision/latest/scale-to-width-down/250?cb=20181127060141"
     },
     {
       "from": 2021,
       "name": "Atlanta Hawks",
-      "url": "https://cdn.nba.com/logos/nba/1610612737/global/L/logo.svg",
+      "url": "assets/logos/ATL-2021.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612737/global/L/logo.svg"
     }
   ],
   "BOS": [
     {
       "from": 1997,
       "name": "Boston Celtics",
-      "url": "https://cdn.nba.com/logos/nba/1610612738/global/L/logo.svg",
+      "url": "assets/logos/BOS-1997.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612738/global/L/logo.svg"
     }
   ],
   "BKN": [
     {
       "from": 2013,
       "name": "Brooklyn Nets",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/f/f3/Brooklyn_Nets.svg/revision/latest/scale-to-width-down/250?cb=20181124223048",
+      "url": "assets/logos/BKN-2013.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/f/f3/Brooklyn_Nets.svg/revision/latest/scale-to-width-down/250?cb=20181124223048"
     },
     {
       "from": 2025,
       "name": "Brooklyn Nets",
-      "url": "https://cdn.nba.com/logos/nba/1610612751/global/L/logo.svg",
+      "url": "assets/logos/BKN-2025.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612751/global/L/logo.svg"
     }
   ],
   "CHA": [
     {
       "from": 2013,
       "name": "Charlotte Bobcats",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/b/b2/Charlotte_Bobcats_%282012%29.svg/revision/latest/scale-to-width-down/250?cb=20251102050323",
+      "url": "assets/logos/CHA-2013.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/b/b2/Charlotte_Bobcats_%282012%29.svg/revision/latest/scale-to-width-down/250?cb=20251102050323"
     },
     {
       "from": 2015,
       "name": "Charlotte Hornets",
-      "url": "https://cdn.nba.com/logos/nba/1610612766/global/L/logo.svg",
+      "url": "assets/logos/CHA-2015.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612766/global/L/logo.svg"
     }
   ],
   "CHI": [
     {
       "from": 1967,
       "name": "Chicago Bulls",
-      "url": "https://cdn.nba.com/logos/nba/1610612741/global/L/logo.svg",
+      "url": "assets/logos/CHI-1967.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612741/global/L/logo.svg"
     }
   ],
   "CLE": [
     {
       "from": 2011,
       "name": "Cleveland Cavaliers",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/f/f7/Cleveland_Cavaliers_2010.svg/revision/latest/scale-to-width-down/250?cb=20210706005216",
+      "url": "assets/logos/CLE-2011.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/f/f7/Cleveland_Cavaliers_2010.svg/revision/latest/scale-to-width-down/250?cb=20210706005216"
     },
     {
       "from": 2018,
       "name": "Cleveland Cavaliers",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/9/9f/Cleveland_Cavaliers_2017_Global.svg/revision/latest/scale-to-width-down/250?cb=20190705213955",
+      "url": "assets/logos/CLE-2018.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/9/9f/Cleveland_Cavaliers_2017_Global.svg/revision/latest/scale-to-width-down/250?cb=20190705213955"
     },
     {
       "from": 2023,
       "name": "Cleveland Cavaliers",
-      "url": "https://cdn.nba.com/logos/nba/1610612739/global/L/logo.svg",
+      "url": "assets/logos/CLE-2023.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612739/global/L/logo.svg"
     }
   ],
   "DAL": [
     {
       "from": 2002,
       "name": "Dallas Mavericks",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/5/5c/Dallas_Mavericks_2001.svg/revision/latest/scale-to-width-down/250?cb=20181220142724",
+      "url": "assets/logos/DAL-2002.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/5/5c/Dallas_Mavericks_2001.svg/revision/latest/scale-to-width-down/250?cb=20181220142724"
     },
     {
       "from": 2018,
       "name": "Dallas Mavericks",
-      "url": "https://cdn.nba.com/logos/nba/1610612742/global/L/logo.svg",
+      "url": "assets/logos/DAL-2018.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612742/global/L/logo.svg"
     }
   ],
   "DEN": [
     {
       "from": 2009,
       "name": "Denver Nuggets",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/7/76/Denver_Nuggets.svg/revision/latest/scale-to-width-down/250?cb=20210706022324",
+      "url": "assets/logos/DEN-2009.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/7/76/Denver_Nuggets.svg/revision/latest/scale-to-width-down/250?cb=20210706022324"
     },
     {
       "from": 2019,
       "name": "Denver Nuggets",
-      "url": "https://cdn.nba.com/logos/nba/1610612743/global/L/logo.svg",
+      "url": "assets/logos/DEN-2019.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612743/global/L/logo.svg"
     }
   ],
   "DET": [
     {
       "from": 2006,
       "name": "Detroit Pistons",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/1/1e/Detroit_Pistons_logo.svg/revision/latest/scale-to-width-down/250?cb=20130906205343",
+      "url": "assets/logos/DET-2006.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/1/1e/Detroit_Pistons_logo.svg/revision/latest/scale-to-width-down/250?cb=20130906205343"
     },
     {
       "from": 2018,
       "name": "Detroit Pistons",
-      "url": "https://cdn.nba.com/logos/nba/1610612765/global/L/logo.svg",
+      "url": "assets/logos/DET-2018.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612765/global/L/logo.svg"
     }
   ],
   "GSW": [
     {
       "from": 2011,
       "name": "Golden State Warriors",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/6/65/Golden_State_Warriors_2010.svg/revision/latest/scale-to-width-down/250?cb=20210707214305",
+      "url": "assets/logos/GSW-2011.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/6/65/Golden_State_Warriors_2010.svg/revision/latest/scale-to-width-down/250?cb=20210707214305"
     },
     {
       "from": 2020,
       "name": "Golden State Warriors",
-      "url": "https://cdn.nba.com/logos/nba/1610612744/global/L/logo.svg",
+      "url": "assets/logos/GSW-2020.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612744/global/L/logo.svg"
     }
   ],
   "HOU": [
     {
       "from": 2004,
       "name": "Houston Rockets",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/d/d2/Houston_Rockets_2003.svg/revision/latest/scale-to-width-down/250?cb=20210709185533",
+      "url": "assets/logos/HOU-2004.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/d/d2/Houston_Rockets_2003.svg/revision/latest/scale-to-width-down/250?cb=20210709185533"
     },
     {
       "from": 2020,
       "name": "Houston Rockets",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/9/9a/Houston_Rockets_2019.svg/revision/latest/scale-to-width-down/250?cb=20190705212835",
+      "url": "assets/logos/HOU-2020.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/9/9a/Houston_Rockets_2019.svg/revision/latest/scale-to-width-down/250?cb=20190705212835"
     },
     {
       "from": 2027,
       "name": "Houston Rockets",
-      "url": "https://cdn.nba.com/logos/nba/1610612745/global/L/logo.svg",
+      "url": "assets/logos/HOU-2027.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612745/global/L/logo.svg"
     }
   ],
   "IND": [
     {
       "from": 2006,
       "name": "Indiana Pacers",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/9/97/Indiana_Pacers_logo.svg/revision/latest/scale-to-width-down/250?cb=20210706163901",
+      "url": "assets/logos/IND-2006.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/9/97/Indiana_Pacers_logo.svg/revision/latest/scale-to-width-down/250?cb=20210706163901"
     },
     {
       "from": 2018,
       "name": "Indiana Pacers",
-      "url": "https://cdn.nba.com/logos/nba/1610612754/global/L/logo.svg",
+      "url": "assets/logos/IND-2018.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612754/global/L/logo.svg"
     }
   ],
   "LAC": [
     {
       "from": 2011,
       "name": "Los Angeles Clippers",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d4/Los_Angeles_Clippers_Logo%2C_2011-2015.png/250px-Los_Angeles_Clippers_Logo%2C_2011-2015.png",
+      "url": "assets/logos/LAC-2011.png",
       "verified": true,
-      "source": "wikimedia"
+      "source": "wikimedia",
+      "noReferrer": false,
+      "original": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d4/Los_Angeles_Clippers_Logo%2C_2011-2015.png/250px-Los_Angeles_Clippers_Logo%2C_2011-2015.png"
     },
     {
       "from": 2016,
       "name": "Los Angeles Clippers",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fc/Los_Angeles_Clippers_Logo%2C_2015-2024.png/250px-Los_Angeles_Clippers_Logo%2C_2015-2024.png",
+      "url": "assets/logos/LAC-2016.png",
       "verified": true,
-      "source": "wikimedia"
+      "source": "wikimedia",
+      "noReferrer": false,
+      "original": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fc/Los_Angeles_Clippers_Logo%2C_2015-2024.png/250px-Los_Angeles_Clippers_Logo%2C_2015-2024.png"
     },
     {
       "from": 2025,
       "name": "Los Angeles Clippers",
-      "url": "https://cdn.nba.com/logos/nba/1610612746/global/L/logo.svg",
+      "url": "assets/logos/LAC-2025.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612746/global/L/logo.svg"
     }
   ],
   "LAL": [
     {
       "from": 2002,
       "name": "Los Angeles Lakers",
-      "url": "https://cdn.nba.com/logos/nba/1610612747/global/L/logo.svg",
+      "url": "assets/logos/LAL-2002.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612747/global/L/logo.svg"
     }
   ],
   "MEM": [
     {
       "from": 2005,
       "name": "Memphis Grizzlies",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/f/f1/Memphis_Grizzlies.svg/revision/latest/scale-to-width-down/250?cb=20130622201341",
+      "url": "assets/logos/MEM-2005.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/f/f1/Memphis_Grizzlies.svg/revision/latest/scale-to-width-down/250?cb=20130622201341"
     },
     {
       "from": 2019,
       "name": "Memphis Grizzlies",
-      "url": "https://cdn.nba.com/logos/nba/1610612763/global/L/logo.svg",
+      "url": "assets/logos/MEM-2019.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612763/global/L/logo.svg"
     }
   ],
   "MIA": [
     {
       "from": 2000,
       "name": "Miami Heat",
-      "url": "https://cdn.nba.com/logos/nba/1610612748/global/L/logo.svg",
+      "url": "assets/logos/MIA-2000.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612748/global/L/logo.svg"
     }
   ],
   "MIL": [
     {
       "from": 2007,
       "name": "Milwaukee Bucks",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/4/4a/Milwaukee_Bucks_logo.svg/revision/latest/scale-to-width-down/250?cb=20240217030243",
+      "url": "assets/logos/MIL-2007.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/4/4a/Milwaukee_Bucks_logo.svg/revision/latest/scale-to-width-down/250?cb=20240217030243"
     },
     {
       "from": 2016,
       "name": "Milwaukee Bucks",
-      "url": "https://cdn.nba.com/logos/nba/1610612749/global/L/logo.svg",
+      "url": "assets/logos/MIL-2016.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612749/global/L/logo.svg"
     }
   ],
   "MIN": [
     {
       "from": 2009,
       "name": "Minnesota Timberwolves",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/c/c2/Minnesota_Timberwolves_logo.svg/revision/latest/scale-to-width-down/250?cb=20131013221616",
+      "url": "assets/logos/MIN-2009.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/c/c2/Minnesota_Timberwolves_logo.svg/revision/latest/scale-to-width-down/250?cb=20131013221616"
     },
     {
       "from": 2018,
       "name": "Minnesota Timberwolves",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/d/d1/Minnesota_Timberwolves_2017.svg/revision/latest/scale-to-width-down/250?cb=20181220143103",
+      "url": "assets/logos/MIN-2018.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/d/d1/Minnesota_Timberwolves_2017.svg/revision/latest/scale-to-width-down/250?cb=20181220143103"
     },
     {
       "from": 2027,
       "name": "Minnesota Timberwolves",
-      "url": "https://cdn.nba.com/logos/nba/1610612750/global/L/logo.svg",
+      "url": "assets/logos/MIN-2027.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612750/global/L/logo.svg"
     }
   ],
   "NOH": [
     {
       "from": 2009,
       "name": "New Orleans Hornets",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/d/dc/New_Orleans_Hornets_logo_%282008-2013%29.svg/revision/latest/scale-to-width-down/250?cb=20140619143516",
+      "url": "assets/logos/NOH-2009.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/d/dc/New_Orleans_Hornets_logo_%282008-2013%29.svg/revision/latest/scale-to-width-down/250?cb=20140619143516"
     },
     {
       "from": 2014,
       "name": "New Orleans Pelicans",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/9/9e/New_Orleans_Pelicans.svg/revision/latest/scale-to-width-down/250?cb=20181220143139",
+      "url": "assets/logos/NOH-2014.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/9/9e/New_Orleans_Pelicans.svg/revision/latest/scale-to-width-down/250?cb=20181220143139"
     },
     {
       "from": 2024,
       "name": "New Orleans Pelicans",
-      "url": "https://cdn.nba.com/logos/nba/1610612740/global/L/logo.svg",
+      "url": "assets/logos/NOH-2024.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612740/global/L/logo.svg"
     }
   ],
   "NYK": [
     {
       "from": 2012,
       "name": "New York Knicks",
-      "url": "https://cdn.nba.com/logos/nba/1610612752/global/L/logo.svg",
+      "url": "assets/logos/NYK-2012.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612752/global/L/logo.svg"
     }
   ],
   "OKC": [
     {
       "from": 2009,
       "name": "Oklahoma City Thunder",
-      "url": "https://cdn.nba.com/logos/nba/1610612760/global/L/logo.svg",
+      "url": "assets/logos/OKC-2009.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612760/global/L/logo.svg"
     }
   ],
   "ORL": [
     {
       "from": 2011,
       "name": "Orlando Magic",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/7/7e/Orlando_Magic_2010.svg/revision/latest/scale-to-width-down/250?cb=20210708162957",
+      "url": "assets/logos/ORL-2011.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/7/7e/Orlando_Magic_2010.svg/revision/latest/scale-to-width-down/250?cb=20210708162957"
     },
     {
       "from": 2026,
       "name": "Orlando Magic",
-      "url": "https://cdn.nba.com/logos/nba/1610612753/global/L/logo.svg",
+      "url": "assets/logos/ORL-2026.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612753/global/L/logo.svg"
     }
   ],
   "PHI": [
     {
       "from": 2010,
       "name": "Philadelphia 76ers",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/Philadelphia_76ers_Logo.svg/250px-Philadelphia_76ers_Logo.svg.png",
+      "url": "assets/logos/PHI-2010.png",
       "verified": true,
-      "source": "wikimedia"
+      "source": "wikimedia",
+      "noReferrer": false,
+      "original": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/Philadelphia_76ers_Logo.svg/250px-Philadelphia_76ers_Logo.svg.png"
     },
     {
       "from": 2016,
       "name": "Philadelphia 76ers",
-      "url": "https://cdn.nba.com/logos/nba/1610612755/global/L/logo.svg",
+      "url": "assets/logos/PHI-2016.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612755/global/L/logo.svg"
     }
   ],
   "PHX": [
     {
       "from": 2001,
       "name": "Phoenix Suns",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/c/ca/Phoenix_Suns.svg/revision/latest/scale-to-width-down/250?cb=20210708023412",
+      "url": "assets/logos/PHX-2001.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/c/ca/Phoenix_Suns.svg/revision/latest/scale-to-width-down/250?cb=20210708023412"
     },
     {
       "from": 2014,
       "name": "Phoenix Suns",
-      "url": "https://cdn.nba.com/logos/nba/1610612756/global/L/logo.svg",
+      "url": "assets/logos/PHX-2014.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612756/global/L/logo.svg"
     }
   ],
   "POR": [
     {
       "from": 2005,
       "name": "Portland Trail Blazers",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/2/21/Portland_Trail_Blazers_logo.svg/revision/latest/scale-to-width-down/250?cb=20210707134259",
+      "url": "assets/logos/POR-2005.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/2/21/Portland_Trail_Blazers_logo.svg/revision/latest/scale-to-width-down/250?cb=20210707134259"
     },
     {
       "from": 2018,
       "name": "Portland Trail Blazers",
-      "url": "https://cdn.nba.com/logos/nba/1610612757/global/L/logo.svg",
+      "url": "assets/logos/POR-2018.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612757/global/L/logo.svg"
     }
   ],
   "SAC": [
     {
       "from": 1995,
       "name": "Sacramento Kings",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/3/33/Sacramento_Kings_1994.svg/revision/latest/scale-to-width-down/250?cb=20210706161706",
+      "url": "assets/logos/SAC-1995.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/3/33/Sacramento_Kings_1994.svg/revision/latest/scale-to-width-down/250?cb=20210706161706"
     },
     {
       "from": 2017,
       "name": "Sacramento Kings",
-      "url": "https://cdn.nba.com/logos/nba/1610612758/global/L/logo.svg",
+      "url": "assets/logos/SAC-2017.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612758/global/L/logo.svg"
     }
   ],
   "SAS": [
     {
       "from": 2003,
       "name": "San Antonio Spurs",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/8/8a/SpursLogo2002.svg/revision/latest/scale-to-width-down/250?cb=20210708171517",
+      "url": "assets/logos/SAS-2003.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/8/8a/SpursLogo2002.svg/revision/latest/scale-to-width-down/250?cb=20210708171517"
     },
     {
       "from": 2018,
       "name": "San Antonio Spurs",
-      "url": "https://cdn.nba.com/logos/nba/1610612759/global/L/logo.svg",
+      "url": "assets/logos/SAS-2018.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612759/global/L/logo.svg"
     }
   ],
   "TOR": [
     {
       "from": 2009,
       "name": "Toronto Raptors",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/3/36/Toronto_Raptors_logo.svg/revision/latest/scale-to-width-down/250?cb=20131202201220",
+      "url": "assets/logos/TOR-2009.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/3/36/Toronto_Raptors_logo.svg/revision/latest/scale-to-width-down/250?cb=20131202201220"
     },
     {
       "from": 2016,
       "name": "Toronto Raptors",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/e/eb/Toronto_Raptors_2015.svg/revision/latest/scale-to-width-down/250?cb=20180613164513",
+      "url": "assets/logos/TOR-2016.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/e/eb/Toronto_Raptors_2015.svg/revision/latest/scale-to-width-down/250?cb=20180613164513"
     },
     {
       "from": 2021,
       "name": "Toronto Raptors",
-      "url": "https://cdn.nba.com/logos/nba/1610612761/global/L/logo.svg",
+      "url": "assets/logos/TOR-2021.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612761/global/L/logo.svg"
     }
   ],
   "UTA": [
     {
       "from": 2011,
       "name": "Utah Jazz",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/5/5e/Utah_Jazz_logo.svg/revision/latest/scale-to-width-down/250?cb=20210706151644",
+      "url": "assets/logos/UTA-2011.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/5/5e/Utah_Jazz_logo.svg/revision/latest/scale-to-width-down/250?cb=20210706151644"
     },
     {
       "from": 2017,
       "name": "Utah Jazz",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Utah_Jazz_Logo%2C_2016-2022.png/250px-Utah_Jazz_Logo%2C_2016-2022.png",
+      "url": "assets/logos/UTA-2017.png",
       "verified": true,
-      "source": "wikimedia"
+      "source": "wikimedia",
+      "noReferrer": false,
+      "original": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Utah_Jazz_Logo%2C_2016-2022.png/250px-Utah_Jazz_Logo%2C_2016-2022.png"
     },
     {
       "from": 2023,
       "name": "Utah Jazz",
-      "url": "https://static.wikia.nocookie.net/logopedia/images/4/43/Utah_Jazz_%E2%80%93_2022_Alternate.svg/revision/latest/scale-to-width-down/250?cb=20240427055826",
+      "url": "assets/logos/UTA-2023.png",
       "verified": true,
       "source": "logopedia",
-      "noReferrer": true
+      "noReferrer": false,
+      "original": "https://static.wikia.nocookie.net/logopedia/images/4/43/Utah_Jazz_%E2%80%93_2022_Alternate.svg/revision/latest/scale-to-width-down/250?cb=20240427055826"
     },
     {
       "from": 2026,
       "name": "Utah Jazz",
-      "url": "https://cdn.nba.com/logos/nba/1610612762/global/L/logo.svg",
+      "url": "assets/logos/UTA-2026.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612762/global/L/logo.svg"
     }
   ],
   "WAS": [
     {
       "from": 2012,
       "name": "Washington Wizards",
-      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/16/Washington_Wizards_logo_%282011-2015%29.svg/250px-Washington_Wizards_logo_%282011-2015%29.svg.png",
+      "url": "assets/logos/WAS-2012.png",
       "verified": true,
-      "source": "wikimedia"
+      "source": "wikimedia",
+      "noReferrer": false,
+      "original": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/16/Washington_Wizards_logo_%282011-2015%29.svg/250px-Washington_Wizards_logo_%282011-2015%29.svg.png"
     },
     {
       "from": 2016,
       "name": "Washington Wizards",
-      "url": "https://cdn.nba.com/logos/nba/1610612764/global/L/logo.svg",
+      "url": "assets/logos/WAS-2016.svg",
       "verified": true,
-      "source": "nba-cdn"
+      "source": "nba-cdn",
+      "noReferrer": false,
+      "original": "https://cdn.nba.com/logos/nba/1610612764/global/L/logo.svg"
     }
   ]
 }

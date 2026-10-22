@@ -151,15 +151,7 @@
         box.insertBefore(a, box.firstChild);
       }
     }
-    if (page === 'home') {
-      const grid = app.querySelector('.menu-grid');
-      if (grid && !grid.querySelector('a[href^="#/fantasy"]')) {
-        grid.insertAdjacentHTML('beforeend', `<a class="tile" href="#/fantasy/new"><span class="tile-k">30 TEAMS, 15 ROUNDS</span><span class="tile-t">FANTASY DRAFT</span><span class="tile-d">Every 2012-13 player back in the pool, drafted snake style</span></a>`);
-      }
-      if (grid && !grid.querySelector('a[href^="#/commish"]')) {
-        grid.insertAdjacentHTML('beforeend', `<a class="tile" href="#/commish"><span class="tile-k">GOD MODE</span><span class="tile-t">COMMISSIONER</span><span class="tile-d">Edit players and contracts, force trades, change the rules</span></a>`);
-      }
-    }
+    // The home menu stays short on purpose; fantasy draft and commissioner live under More.
   }
   const origRoute = UI.route;
   UI.route = function () {

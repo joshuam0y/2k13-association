@@ -19,6 +19,7 @@
   var PHYSICAL = { speed: 1, vert: 1, stamina: 1, durability: 1, strength: 0.5 };
   var CRAFT = { three: 1, mid: 1, ft: 1, pass: 1, oiq: 1, diq: 1, post: 0.5 };
 
+  var FORM_MAX = 2;      // in-season streaks move a player at most 2 points either way
   var OVR_MIN = 35, OVR_MAX = 99, ATTR_MIN = 25, ATTR_MAX = 99;
 
   // ---------------------------------------------------------------------------
@@ -181,23 +182,27 @@
     }
     return clamp(p, 0, 1);
   }
-  // seasonDone = the season just finished (season-ending year)
+  // seasonDone = the season just finished (season-ending year).
+  // Real retirements happen in the real summer: TARGETS retire is the first season he did not play,
+  // so retire - 1 is his last real season. Nobody keeps playing past it unless the sim has made him
+  // clearly better than he really was, and even then only for a season or two.
   function historyRetireChance(info, seasonDone, p) {
-    // TARGETS retire = first season not played, so r is his last real season
     var r = info.retire != null ? info.retire - 1 : null;
     if (r == null) {
       if (info.last != null && seasonDone >= info.last) return null; // past the data: use the age model
       return 0;
     }
     var d = seasonDone - r, ch;
+    var real = targetFor(info, Math.min(seasonDone, r));   // how good he really was at that point
+    var better = real != null ? p.ovr - real : 0;           // positive: the sim made him better
     if (d < -1) ch = 0;
-    else if (d === -1) ch = (p.age || 0) >= 33 ? 0.1 : 0.03;
-    else if (d === 0) ch = 0.8;
+    else if (d === -1) ch = (p.age || 0) >= 34 ? 0.08 : 0.02;
+    else if (d === 0) ch = 0.96;
     else ch = 1;
-    if (p.ovr >= 85) ch *= 0.05; else if (p.ovr >= 80) ch *= 0.15;
+    if (d >= 0 && better >= 6) ch = d === 0 ? 0.45 : d === 1 ? 0.75 : 1;
+    if (d < 0 && better > 2) ch *= 0.5;
     // The sim made him much worse than he really was: he leaves earlier
-    var t = targetFor(info, seasonDone);
-    if (t != null && p.ovr < t - 8 && (p.age || 0) >= 30) ch = Math.max(ch, 0.25);
+    if (real != null && better < -8 && (p.age || 0) >= 30) ch = Math.max(ch, 0.25);
     return clamp(ch, 0, 1);
   }
   function retire(state, p, year) {
@@ -270,10 +275,16 @@
     state.prog.lastOffseason = next;
     out.retired = retirements(state, rng, { seasonDone: done, force: opts.force });
     var players = state.players || {};
+    // Before and after numbers for the progression page: { id: [old, new, age] } (no potential)
+    var report = { year: next, players: {}, rookies: [] };
     Object.keys(players).forEach(function (id) {
       var p = players[id];
       if (!p || p.retired || p.team === 'RET') return;
-      if (draftedThisSummer(p, done)) return;
+      if (draftedThisSummer(p, done)) {
+        if (isNbaTeam(state, p.team)) report.rookies.push(id);
+        return;
+      }
+      var shown = p.ovr;
       // Remove any in-season streak before developing
       if (p.form) { setOvr(p, p.ovr - p.form, { keepPot: true }); }
       p.form = 0;
@@ -285,8 +296,9 @@
       if (tgt != null) {
         var prevT = targetFor(info, done);
         var prevDev = prevT != null ? before - prevT : 0;
-        var dev = 0.45 * prevDev + gauss(rng) * 1.4;
-        var cap = 4 + 0.5 * Math.max(0, Math.abs(prevDev) - 4);
+        // History players stay close to their real arc: a little carry-over from last year plus small noise
+        var dev = 0.3 * prevDev + gauss(rng) * 0.8;
+        var cap = 2.5 + 0.3 * Math.max(0, Math.abs(prevDev) - 4);
         dev = clamp(dev, -cap, cap);
         newOvr = tgt + dev;
       } else {
@@ -296,9 +308,12 @@
       adjustPot(p, p.age, rng, !!info);
       p.formBase = p.ovr;
       if (p.ovr !== before) out.changes.push({ id: id, from: before, to: p.ovr });
+      if (p.team !== 'DRAFT') report.players[id] = [shown, p.ovr, p.age];
       // Stashed players keep their overseas status until they arrive
       if (p.stashedUntil && p.stashedUntil > next) p.injury = { type: 'Playing overseas', games: 999 };
     });
+    state.progressReport = report;
+    out.report = report;
     return out;
   }
 
@@ -315,9 +330,9 @@
       if (p.stashedUntil && p.stashedUntil > state.year) return; // overseas
       var form = p.form || 0;
       if (rng() < 0.5) return;
-      var step = rng() < 0.7 ? 1 : 2;
+      var step = rng() < 0.8 ? 1 : 2;
       var up = rng() < clamp(0.5 - 0.15 * form, 0.1, 0.9);
-      var nf = clamp(form + (up ? step : -step), -3, 3);
+      var nf = clamp(form + (up ? step : -step), -FORM_MAX, FORM_MAX);
       if (nf === form) return;
       var before = p.ovr;
       setOvr(p, p.ovr + (nf - form), { keepPot: true });

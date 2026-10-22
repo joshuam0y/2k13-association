@@ -315,10 +315,10 @@
       (done ? '' : UI.header('BEST AVAILABLE', f.pool.length + ' players left') +
         '<div class="fd-filters">' + [''].concat(POS).map(function (p) { return '<button type="button" class="btn fd-pos' + (view.pos === p ? ' on' : '') + '" data-pos="' + p + '">' + (p || 'ALL') + '</button>'; }).join('') +
         '<input id="fdQ" placeholder="Search players" value="' + esc(view.q) + '"></div>' +
-        '<div class="tscroll"><table class="stats fd-pool"><thead><tr><th class="l">PLAYER</th><th>POS</th><th>AGE</th><th>OVR</th><th>POT</th><th>SALARY</th><th></th></tr></thead><tbody>' +
+        '<div class="tscroll"><table class="stats fd-pool"><thead><tr><th class="l">PLAYER</th><th>POS</th><th>AGE</th><th>OVR</th><th>SALARY</th><th></th></tr></thead><tbody>' +
         shown.map(function (p) {
           return '<tr><td class="l">' + UI.headshot(p) + '<a href="#/player/' + esc(p.id) + '">' + esc(p.name) + '</a>' + (p.injury && p.injury.games > 0 ? ' ' + UI.injuryBadge(p) : '') + '</td><td>' + esc(p.pos) + '</td><td>' + (p.age || '-') +
-            '</td><td><b class="' + UI.ovrClass(p.ovr) + '">' + p.ovr + '</b></td><td>' + (p.pot || '-') + '</td><td>' + money(salaryOf(state, p)) + '</td>' +
+            '</td><td><b class="' + UI.ovrClass(p.ovr) + '">' + p.ovr + '</b></td><td>' + money(salaryOf(state, p)) + '</td>' +
             '<td>' + (youUp ? '<button type="button" class="btn btn-small btn-gold" data-draft="' + esc(p.id) + '">DRAFT</button>' : '') + '</td></tr>';
         }).join('') + '</tbody></table></div>' + (avail.length > shown.length ? '<p class="muted">Top ' + shown.length + ' of ' + avail.length + ' shown.</p>' : '')) +
       (done ? UI.header('YOUR ROSTER') + rosterTable(state, mine) : '') +
@@ -382,9 +382,9 @@
   }
 
   function rosterTable(state, list) {
-    return '<div class="tscroll"><table class="stats"><thead><tr><th class="l">PLAYER</th><th>POS</th><th>AGE</th><th>OVR</th><th>POT</th><th>SALARY</th></tr></thead><tbody>' +
+    return '<div class="tscroll"><table class="stats"><thead><tr><th class="l">PLAYER</th><th>POS</th><th>AGE</th><th>OVR</th><th>SALARY</th></tr></thead><tbody>' +
       list.slice().sort(function (a, b) { return b.ovr - a.ovr; }).map(function (p) {
-        return '<tr><td class="l"><a href="#/player/' + esc(p.id) + '">' + esc(p.name) + '</a></td><td>' + esc(p.pos) + '</td><td>' + (p.age || '-') + '</td><td><b>' + p.ovr + '</b></td><td>' + (p.pot || '-') + '</td><td>' + money(salaryOf(state, p)) + '</td></tr>';
+        return '<tr><td class="l"><a href="#/player/' + esc(p.id) + '">' + esc(p.name) + '</a></td><td>' + esc(p.pos) + '</td><td>' + (p.age || '-') + '</td><td><b>' + p.ovr + '</b></td><td>' + money(salaryOf(state, p)) + '</td></tr>';
       }).join('') + '</tbody></table></div>';
   }
 })(typeof window !== 'undefined' ? window : globalThis);

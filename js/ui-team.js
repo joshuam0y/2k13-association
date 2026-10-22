@@ -1,5 +1,5 @@
 // Front office pages: team management (#/manage) with rotation, strategy, coaching staff,
-// G League, finances, payroll and player mood. Shared franchise helpers live on UI.fr
+// G League, payroll and player mood. Shared franchise helpers live on UI.fr
 // so js/ui-history.js (news, awards, history) can use them.
 (function () {
   'use strict';
@@ -113,34 +113,98 @@
       && !(p.stashedUntil && p.stashedUntil > s.year) && (opts && opts.withGleague ? true : !p.gleague))
       .map(p => { const inj = injuryOf(s, p); return inj && inj !== p.injury ? Object.assign({}, p, { injury: inj }) : p; });
   }
+  // the same minute targets the game engine uses
   const STARTER_MIN = [36, 34, 32, 30, 30];
-  const BENCH_MIN = [22, 18, 16, 12, 10];
-  const defaultMinutes = i => (i < 5 ? STARTER_MIN[i] : BENCH_MIN[i - 5] || 0);
+  const BENCH_MIN5 = [22, 18, 16, 12, 10];
+  const BENCH_MIN4 = [24, 22, 18, 14];
+  const SLOTS = ['PG', 'SG', 'SF', 'PF', 'C'];
+  const POS_RANK = { PG: 1, G: 1.5, SG: 2, GF: 2.5, SF: 3, F: 3.5, PF: 4, FC: 4.5, C: 5 };
+  const primaryPos = pos => String(pos || 'SF').toUpperCase().split(/[-\/ ,]/)[0];
+  const posRank = pos => (POS_RANK[primaryPos(pos)] == null ? 3 : POS_RANK[primaryPos(pos)]);
+  const posGroup = pos => { const p = primaryPos(pos); return p === 'PG' || p === 'SG' || p === 'G' ? 'G' : p === 'PF' || p === 'C' || p === 'FC' ? 'B' : 'W'; };
+  const benchMinutes = (i, bench) => {
+    const five = bench.length >= 5 && (bench[4].ovr || 0) >= (bench[0].ovr || 0) - 12;
+    return (five ? BENCH_MIN5 : BENCH_MIN4)[i] || 0;
+  };
+  // put five starters in PG, SG, SF, PF, C order
+  const slotOrder = list => list.slice().sort((a, b) => posRank(a.pos) - posRank(b.pos) || (b.ovr || 0) - (a.ovr || 0));
 
-  function orderedRotation(s, team) {
+  // The lineup the engine picks on its own: the best five of the top eight healthy players,
+  // with at least one guard and one big, then the bench by overall. Injured players sit.
+  function autoLineup(s) {
     const roster = userRoster(s);
-    const byId = new Map(roster.map(p => [p.id, p]));
-    const saved = Array.isArray(team.rotation) ? team.rotation.filter(id => byId.has(id)) : [];
-    const rest = roster.filter(p => !saved.includes(p.id)).sort((a, b) => (b.ovr || 0) - (a.ovr || 0)).map(p => p.id);
-    return { ids: saved.concat(rest), byId };
+    const healthy = roster.filter(p => !injuryOf(s, p)).sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+    const hurt = roster.filter(p => injuryOf(s, p)).sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+    const top = healthy.slice(0, Math.min(8, healthy.length));
+    let best = top.slice(0, 5), bestScore = -1e9;
+    if (top.length > 5) {
+      const k = top.length;
+      for (let a = 0; a < k; a++) for (let b = a + 1; b < k; b++) for (let c = b + 1; c < k; c++)
+        for (let d = c + 1; d < k; d++) for (let e = d + 1; e < k; e++) {
+          const set = [top[a], top[b], top[c], top[d], top[e]];
+          let g = 0, bg = 0, score = 0;
+          set.forEach(p => { score += p.ovr || 0; const gr = posGroup(p.pos); if (gr === 'G') g++; if (gr === 'B') bg++; });
+          if (g === 0) score -= 14;
+          if (bg === 0) score -= 14;
+          if (g > 2) score -= 4 * (g - 2);
+          if (bg > 2) score -= 4 * (bg - 2);
+          if (score > bestScore) { bestScore = score; best = set; }
+        }
+    }
+    const starters = slotOrder(best);
+    const bench = healthy.filter(p => best.indexOf(p) < 0);
+    const minutes = {};
+    best.slice().sort((a, b) => (b.ovr || 0) - (a.ovr || 0)).forEach((p, i) => { minutes[p.id] = STARTER_MIN[i]; });
+    bench.forEach((p, i) => { minutes[p.id] = benchMinutes(i, bench); });
+    hurt.forEach(p => { minutes[p.id] = 0; });
+    return { active: starters.concat(bench).map(p => p.id), inactive: hurt.map(p => p.id), minutes };
   }
 
-  function applyRotation(s, ids, minutes) {
+  // The rotation as the page shows it: { active: [ids: 5 starters then bench], inactive: [ids], minutes, auto }
+  function currentRotation(s, team) {
+    const roster = userRoster(s);
+    const byId = new Map(roster.map(p => [p.id, p]));
+    if (!Array.isArray(team.rotation) || !team.rotation.length) return Object.assign(autoLineup(s), { auto: true, byId });
+    const inactive = (Array.isArray(team.inactive) ? team.inactive : []).filter(id => byId.has(id));
+    const active = team.rotation.filter(id => byId.has(id) && inactive.indexOf(id) < 0);
+    // players who joined since the rotation was saved go to the end of the bench
+    roster.filter(p => active.indexOf(p.id) < 0 && inactive.indexOf(p.id) < 0)
+      .sort((a, b) => (b.ovr || 0) - (a.ovr || 0)).forEach(p => active.push(p.id));
+    const minutes = {};
+    active.concat(inactive).forEach((id, i) => {
+      const m = team.minutes && team.minutes[id];
+      minutes[id] = inactive.indexOf(id) >= 0 ? 0 : m != null ? Math.max(0, Math.min(48, +m || 0)) : (i < 5 ? STARTER_MIN[i] : 0);
+    });
+    return { active, inactive, minutes, auto: false, byId };
+  }
+  fr.rotation = (s) => s && s.teams[s.userTeam] ? currentRotation(s, s.teams[s.userTeam]) : null;
+
+  // Save a manual rotation, or null to go back to auto. The engine reads
+  // state.season.lineups[abbr] = { starters, minutes } for every game.
+  function applyRotation(s, rot) {
     const team = s.teams[s.userTeam];
-    team.rotation = ids ? ids.slice() : null;
-    team.minutes = minutes ? Object.assign({}, minutes) : null;
-    // the engine reads season.lineups[abbr] = { starters, minutes } for each game
+    if (rot) {
+      const minutes = {};
+      rot.active.forEach(id => { minutes[id] = Math.max(0, Math.min(48, Math.round(+rot.minutes[id] || 0))); });
+      rot.inactive.forEach(id => { minutes[id] = 0; });
+      team.rotation = rot.active.slice();
+      team.inactive = rot.inactive.slice();
+      team.minutes = minutes;
+    } else {
+      team.rotation = null; team.minutes = null; team.inactive = null;
+    }
     if (s.season && typeof s.season === 'object') {
       s.season.lineups = s.season.lineups || {};
-      if (ids) s.season.lineups[s.userTeam] = { starters: ids.slice(0, 5), minutes: team.minutes };
+      if (rot) s.season.lineups[s.userTeam] = { starters: team.rotation.slice(0, 5), minutes: Object.assign({}, team.minutes) };
       else delete s.season.lineups[s.userTeam];
     }
     fr.persist();
   }
+  fr.applyRotation = applyRotation;
 
   // ---------- page ----------
   const TABS = [['', 'ROTATION'], ['strategy', 'STRATEGY'], ['staff', 'COACHING'], ['mood', 'LOCKER ROOM'],
-    ['gleague', 'G LEAGUE'], ['finances', 'FINANCES'], ['payroll', 'PAYROLL']];
+    ['gleague', 'G LEAGUE'], ['payroll', 'PAYROLL']];
 
   P.manage = function (app, arg) {
     const s = fr.state();
@@ -158,100 +222,174 @@
       ${fr.tabs('manage', TABS, tab)}
       <div id="frBody"></div>`;
     const body = UI.$('#frBody', app);
-    const draw = { '': rotationTab, strategy: strategyTab, staff: staffTab, mood: moodTab, gleague: gleagueTab, finances: financesTab, payroll: payrollTab }[tab];
+    const draw = { '': rotationTab, strategy: strategyTab, staff: staffTab, mood: moodTab, gleague: gleagueTab, payroll: payrollTab }[tab];
     draw(body, s, team);
   };
 
-  // ---------- rotation ----------
+  // ---------- rotation (2K13 style: five slots, bench, inactive) ----------
   function rotationTab(body, s, team) {
-    let { ids, byId } = orderedRotation(s, team);
-    let minutes = {};
-    ids.forEach((id, i) => { minutes[id] = team.minutes && team.minutes[id] != null ? +team.minutes[id] : defaultMinutes(i); });
-    const custom = !!team.rotation;
+    let rot = currentRotation(s, team);
+    let picked = null;          // { list: 'active'|'inactive', i } waiting for a second click
 
-    function row(id, i) {
-      const p = byId.get(id);
-      const slot = String(i + 1);
-      const mood = typeof p.mood === 'number' ? `<span class="fr-moodchip ${moodClass(p.mood)}" title="Mood ${Math.round(p.mood)}">${Math.round(p.mood)}</span>` : '<span></span>';
-      return `<li class="fr-rot-row${i < 5 ? ' starter' : ''}" draggable="true" data-id="${esc(id)}" data-i="${i}">
-        <span class="fr-grip" aria-hidden="true">&#8942;&#8942;</span>
-        <span class="fr-slot">${slot}</span>
-        <span class="fr-rot-hs">${fr.head(p)}</span>
-        <span class="fr-rot-main"><span class="fr-rot-name">${fr.plink(p)}</span>
-          <span class="fr-rot-meta">${esc(p.pos || '')} | ${esc(p.age || '-')} yrs ${fr.badges(p)}</span></span>
-        ${mood}
+    const where = id => rot.active.indexOf(id) >= 0 ? { list: 'active', i: rot.active.indexOf(id) } : { list: 'inactive', i: rot.inactive.indexOf(id) };
+    const idAt = loc => (loc.list === 'active' ? rot.active : rot.inactive)[loc.i];
+
+    function row(id, list, i) {
+      const p = rot.byId.get(id);
+      if (!p) return '';
+      const starter = list === 'active' && i < 5;
+      const label = list === 'inactive' ? 'INA' : starter ? SLOTS[i] : (i + 1) + 'TH';
+      const off = starter && primaryPos(p.pos) !== SLOTS[i];
+      const inj = injuryOf(s, p);
+      const sel = picked && picked.list === list && picked.i === i;
+      const min = Math.round(rot.minutes[id] || 0);
+      const minCell = list === 'inactive' ? '<span class="frr-dnp">INACTIVE</span>'
+        : `<span class="frr-min"><button type="button" class="frr-step" data-step="-2" data-id="${esc(id)}" aria-label="Fewer minutes for ${esc(p.name)}">&minus;</button>
+            <input type="number" inputmode="numeric" min="0" max="48" step="1" value="${min}" data-min="${esc(id)}" aria-label="Minutes for ${esc(p.name)}">
+            <button type="button" class="frr-step" data-step="2" data-id="${esc(id)}" aria-label="More minutes for ${esc(p.name)}">+</button></span>`;
+      return `<li class="frr-row${starter ? ' starter' : ''}${list === 'inactive' ? ' ina' : ''}${sel ? ' sel' : ''}${inj ? ' hurt' : ''}" draggable="true" data-list="${list}" data-i="${i}" data-id="${esc(id)}" tabindex="0" aria-label="${esc(label + ' ' + p.name)}">
+        <span class="frr-slot">${label}</span>
+        <span class="frr-hs">${fr.head(p)}</span>
+        <span class="frr-main"><span class="frr-name">${esc(p.name)}</span>
+          <span class="frr-meta">${esc(p.age || '-')} yrs ${fr.badges(p)}${inj && starter && !rot.auto ? ' <span class="loss">Hurt: the best healthy player starts</span>' : ''}</span></span>
+        <span class="frr-pos${off ? ' off' : ''}" title="${off ? 'Playing out of position' : 'Position'}">${esc(p.pos || '-')}</span>
         ${fr.ovr(p)}
-        <label class="fr-min"><span>MIN</span><input type="number" inputmode="numeric" min="0" max="48" step="1" value="${Math.round(minutes[id] || 0)}" data-min="${esc(id)}" aria-label="Minutes for ${esc(p.name)}"></label>
-        <span class="fr-move"><button type="button" class="fr-mv" data-up="${i}" aria-label="Move ${esc(p.name)} up" ${i === 0 ? 'disabled' : ''}>&#9650;</button><button type="button" class="fr-mv" data-down="${i}" aria-label="Move ${esc(p.name)} down" ${i === ids.length - 1 ? 'disabled' : ''}>&#9660;</button></span>
+        ${minCell}
       </li>`;
     }
+    function dropRow(list, label) {
+      return `<li class="frr-row frr-drop" data-drop="${list}">${label}</li>`;
+    }
     function render() {
-      const total = ids.reduce((a, id) => a + (Number(minutes[id]) || 0), 0);
-      const items = ids.map((id, i) => (i === 5 ? '<li class="fr-rot-div">BENCH</li>' : '') + row(id, i)).join('');
-      body.innerHTML = `${UI.header('ROTATION', 'Drag players, or use the arrows, to set the starting five and the bench order. Minutes are per game targets.')}
-        <div class="fr-rot-bar">
-          <div class="fr-mintotal ${Math.abs(total - 240) <= 2 ? 'ok' : 'off'}"><b>${total}</b> / 240 MIN</div>
-          <span class="fr-rot-state">${team.rotation ? 'Custom rotation saved' : 'Automatic rotation (best players start)'}</span>
-          <span class="fr-rot-btns"><button type="button" class="btn btn-small" id="frAutoMin">AUTO MINUTES</button>
-          <button type="button" class="btn btn-small" id="frBalance">FIT TO 240</button>
-          <button type="button" class="btn btn-small btn-danger" id="frReset">RESET TO AUTO</button></span>
+      const total = rot.active.reduce((a, id) => a + (Number(rot.minutes[id]) || 0), 0);
+      const starters = rot.active.slice(0, 5), bench = rot.active.slice(5);
+      const hint = picked ? `<b>${esc(rot.byId.get(idAt(picked)).name)}</b> picked. Click another player to swap them, or click him again to cancel.`
+        : 'Click two players to swap them, or drag one onto another.';
+      body.innerHTML = `
+        <div class="frr-top">
+          <div class="frr-toggle" role="radiogroup" aria-label="Rotation mode">
+            <button type="button" role="radio" aria-checked="${rot.auto}" class="${rot.auto ? 'on' : ''}" data-mode="auto"><b>AUTO</b><small>Best lineup every game</small></button>
+            <button type="button" role="radio" aria-checked="${!rot.auto}" class="${!rot.auto ? 'on' : ''}" data-mode="manual"><b>MANUAL</b><small>You set it</small></button>
+          </div>
+          <div class="frr-state">${rot.auto
+            ? '<b>AUTO ROTATION IS ON.</b> Your coach starts the best healthy five and sets the minutes before every game. This is what he would play right now. Change anything and you switch to manual.'
+            : '<b>MANUAL ROTATION.</b> Your starters and minutes are used every game. Hurt starters are replaced by the best healthy player.'}</div>
         </div>
-        ${Math.abs(total - 240) > 2 ? '<div class="note">A game has 240 player minutes (48 per spot). Use FIT TO 240 to scale the targets.</div>' : ''}
-        <div class="fr-rot-head" aria-hidden="true"><span></span><span>#</span><span class="fr-rot-hs"></span><span>PLAYER</span><span>MOOD</span><span>OVR</span><span>MIN</span><span></span></div>
-        <ol class="fr-rot" id="frRot">${items || '<li class="fr-rot-div">No players on the roster</li>'}</ol>
-        <p class="muted fr-small">The first five are your starters. Two-way and G League players are marked; players assigned to the G League do not appear here.</p>`;
+        <div class="frr-bar">
+          <div class="fr-mintotal ${Math.abs(total - 240) <= 2 ? 'ok' : 'off'}"><b>${total}</b> / 240 MIN</div>
+          <span class="frr-hint">${hint}</span>
+          ${rot.auto ? '' : `<span class="fr-rot-btns"><button type="button" class="btn btn-small" id="frAutoMin">DEFAULT MINUTES</button>
+            <button type="button" class="btn btn-small" id="frBalance">FIT TO 240</button></span>`}
+        </div>
+        ${!rot.auto && Math.abs(total - 240) > 2 ? '<div class="note">A game has 240 player minutes (5 spots x 48). The engine scales your targets to fit, or use FIT TO 240.</div>' : ''}
+        <div class="frr-head" aria-hidden="true"><span>SLOT</span><span></span><span>PLAYER</span><span>POS</span><span>OVR</span><span>MIN</span></div>
+        <div class="frr-sec">STARTERS</div>
+        <ol class="frr-list">${starters.map((id, i) => row(id, 'active', i)).join('')}</ol>
+        <div class="frr-sec">BENCH</div>
+        <ol class="frr-list">${bench.map((id, i) => row(id, 'active', i + 5)).join('')}${dropRow('bench', picked ? 'Click here to move him to the end of the bench' : 'End of the bench')}</ol>
+        <div class="frr-sec">INACTIVE</div>
+        <ol class="frr-list">${rot.inactive.map((id, i) => row(id, 'inactive', i)).join('')}${dropRow('inactive', picked ? 'Click here to make him inactive' : (rot.inactive.length ? 'Drop a player here to make him inactive' : 'Nobody inactive. Drop a player here to sit him.'))}</ol>
+        <p class="muted fr-small">Inactive players do not play. Players assigned to the G League are not listed here.</p>`;
       bind();
     }
-    function save() { applyRotation(s, ids, minutes); }
-    function move(from, to) {
-      if (to < 0 || to >= ids.length || from === to) return;
-      const [x] = ids.splice(from, 1);
-      ids.splice(to, 0, x);
-      save(); render();
-      const el = UI.$(`.fr-rot-row[data-i="${to}"] .fr-mv`, body);
-      if (el) el.focus();
+    // any change in auto mode turns manual on, starting from the auto lineup
+    function commit(msg) {
+      const wasAuto = rot.auto;
+      rot.auto = false;
+      applyRotation(s, rot);
+      render();
+      if (wasAuto && UI.toast) UI.toast('Manual rotation on. ' + (msg || ''));
+    }
+    function swap(a, b) {
+      if (a.list === b.list && a.i === b.i) return;
+      const A = a.list === 'active' ? rot.active : rot.inactive, B = b.list === 'active' ? rot.active : rot.inactive;
+      const ida = A[a.i], idb = B[b.i];
+      A[a.i] = idb; B[b.i] = ida;
+      // minutes stay with the slot
+      const ma = rot.minutes[ida] || 0, mb = rot.minutes[idb] || 0;
+      rot.minutes[ida] = b.list === 'inactive' ? 0 : mb;
+      rot.minutes[idb] = a.list === 'inactive' ? 0 : ma;
+      commit();
+    }
+    function moveTo(loc, list) {
+      const id = idAt(loc);
+      if (list === 'inactive' && loc.list === 'active' && rot.active.length <= 5) { UI.toast && UI.toast('You need five players who can play.', 'error'); return; }
+      (loc.list === 'active' ? rot.active : rot.inactive).splice(loc.i, 1);
+      if (list === 'inactive') { rot.inactive.push(id); rot.minutes[id] = 0; }
+      else { rot.active.push(id); }
+      commit();
+    }
+    function clickRow(loc) {
+      if (!picked) { picked = loc; render(); return; }
+      const a = picked; picked = null;
+      if (a.list === loc.list && a.i === loc.i) { render(); return; }
+      swap(a, loc);
+    }
+    function setMin(id, v) {
+      rot.minutes[id] = Math.max(0, Math.min(48, Math.round(Number(v) || 0)));
+      commit();
     }
     function bind() {
-      UI.$$('[data-up]', body).forEach(b => b.addEventListener('click', () => { const i = +b.getAttribute('data-up'); move(i, i - 1); }));
-      UI.$$('[data-down]', body).forEach(b => b.addEventListener('click', () => { const i = +b.getAttribute('data-down'); move(i, i + 1); }));
-      UI.$$('[data-min]', body).forEach(inp => inp.addEventListener('change', () => {
-        const v = Math.max(0, Math.min(48, Math.round(Number(inp.value) || 0)));
-        minutes[inp.getAttribute('data-min')] = v;
-        save(); render();
+      UI.$$('[data-mode]', body).forEach(b => b.addEventListener('click', () => {
+        const mode = b.getAttribute('data-mode');
+        picked = null;
+        if (mode === 'auto' && !rot.auto) { applyRotation(s, null); rot = currentRotation(s, team); render(); UI.toast && UI.toast('Auto rotation on: the best lineup plays every game.'); }
+        else if (mode === 'manual' && rot.auto) commit('Your current lineup is saved.');
       }));
-      UI.$('#frAutoMin', body).addEventListener('click', () => { ids.forEach((id, i) => { minutes[id] = defaultMinutes(i); }); save(); render(); UI.toast && UI.toast('Minutes reset to the default targets.'); });
-      UI.$('#frBalance', body).addEventListener('click', () => {
-        const tot = ids.reduce((a, id) => a + (Number(minutes[id]) || 0), 0);
-        if (!tot) return;
-        ids.forEach(id => { minutes[id] = Math.min(48, Math.round((minutes[id] || 0) * 240 / tot)); });
-        let diff = 240 - ids.reduce((a, id) => a + minutes[id], 0);
-        for (let i = 0; diff !== 0 && i < ids.length * 2; i++) {
-          const id = ids[i % ids.length];
-          if (diff > 0 && minutes[id] > 0 && minutes[id] < 48) { minutes[id]++; diff--; } else if (diff < 0 && minutes[id] > 0) { minutes[id]--; diff++; }
-        }
-        save(); render();
-      });
-      UI.$('#frReset', body).addEventListener('click', () => {
-        applyRotation(s, null, null);
-        const o = orderedRotation(s, team); ids = o.ids; byId = o.byId;
-        minutes = {}; ids.forEach((id, i) => { minutes[id] = defaultMinutes(i); });
-        render(); UI.toast && UI.toast('Back to the automatic rotation.');
-      });
-      // drag and drop
-      let dragFrom = null;
-      UI.$$('.fr-rot-row', body).forEach(li => {
+      UI.$$('.frr-row[data-id]', body).forEach(li => {
+        const loc = () => ({ list: li.getAttribute('data-list'), i: +li.getAttribute('data-i') });
+        li.addEventListener('click', e => { if (e.target.closest('input,button,a')) return; clickRow(loc()); });
+        li.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === li) { e.preventDefault(); clickRow(loc()); } });
         li.addEventListener('dragstart', e => {
-          if (e.target && e.target.closest && e.target.closest('input,button,a')) { e.preventDefault(); return; }
-          dragFrom = +li.getAttribute('data-i'); li.classList.add('dragging');
+          if (e.target && e.target.closest && e.target.closest('input,button')) { e.preventDefault(); return; }
+          picked = null; dragFrom = loc(); li.classList.add('dragging');
           try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', li.getAttribute('data-id')); } catch (x) { /* ignore */ }
         });
-        li.addEventListener('dragend', () => { li.classList.remove('dragging'); UI.$$('.fr-rot-row.over', body).forEach(x => x.classList.remove('over')); });
-        li.addEventListener('dragover', e => { if (dragFrom == null) return; e.preventDefault(); li.classList.add('over'); });
+        li.addEventListener('dragend', () => { li.classList.remove('dragging'); UI.$$('.frr-row.over', body).forEach(x => x.classList.remove('over')); });
+      });
+      UI.$$('.frr-row', body).forEach(li => {
+        li.addEventListener('dragover', e => { if (!dragFrom) return; e.preventDefault(); li.classList.add('over'); });
         li.addEventListener('dragleave', () => li.classList.remove('over'));
-        li.addEventListener('drop', e => { e.preventDefault(); const to = +li.getAttribute('data-i'); const f = dragFrom; dragFrom = null; if (f != null) move(f, to); });
+        li.addEventListener('drop', e => {
+          e.preventDefault();
+          const f = dragFrom; dragFrom = null;
+          if (!f) return;
+          const drop = li.getAttribute('data-drop');
+          if (drop) moveTo(f, drop === 'inactive' ? 'inactive' : 'active');
+          else swap(f, { list: li.getAttribute('data-list'), i: +li.getAttribute('data-i') });
+        });
+      });
+      UI.$$('.frr-drop', body).forEach(li => li.addEventListener('click', () => {
+        if (!picked) return;
+        const a = picked; picked = null;
+        moveTo(a, li.getAttribute('data-drop') === 'inactive' ? 'inactive' : 'active');
+      }));
+      UI.$$('[data-min]', body).forEach(inp => inp.addEventListener('change', () => setMin(inp.getAttribute('data-min'), inp.value)));
+      UI.$$('[data-step]', body).forEach(b => b.addEventListener('click', () => {
+        const id = b.getAttribute('data-id');
+        setMin(id, (rot.minutes[id] || 0) + Number(b.getAttribute('data-step')));
+      }));
+      const am = UI.$('#frAutoMin', body);
+      if (am) am.addEventListener('click', () => {
+        const bench = rot.active.slice(5).map(id => rot.byId.get(id));
+        rot.active.forEach((id, i) => { rot.minutes[id] = i < 5 ? STARTER_MIN[i] : benchMinutes(i - 5, bench); });
+        commit(); UI.toast && UI.toast('Minutes set to the default targets.');
+      });
+      const bal = UI.$('#frBalance', body);
+      if (bal) bal.addEventListener('click', () => {
+        const ids = rot.active;
+        const tot = ids.reduce((a, id) => a + (Number(rot.minutes[id]) || 0), 0);
+        if (!tot) return;
+        ids.forEach(id => { rot.minutes[id] = Math.min(48, Math.round((rot.minutes[id] || 0) * 240 / tot)); });
+        let diff = 240 - ids.reduce((a, id) => a + rot.minutes[id], 0);
+        for (let i = 0; diff !== 0 && i < ids.length * 4; i++) {
+          const id = ids[i % ids.length];
+          if (diff > 0 && rot.minutes[id] > 0 && rot.minutes[id] < 48) { rot.minutes[id]++; diff--; } else if (diff < 0 && rot.minutes[id] > 0) { rot.minutes[id]--; diff++; }
+        }
+        commit();
       });
     }
-    if (!custom && !ids.length) { render(); return; }
+    let dragFrom = null;
     render();
   }
 
@@ -294,19 +432,13 @@
     });
   }
 
-  // ---------- coaching staff ----------
+  // ---------- coaching staff (names only) ----------
   function coachFromData(id, abbr) {
     const D = window.COACHES;
     if (!D) return null;
     const all = [].concat(D.start || [], D.pool || []);
     const cid = id || (D.startByTeam && D.startByTeam[abbr]);
     return all.find(c => c.id === cid) || null;
-  }
-  const coachOvr = c => (window.COACH && typeof window.COACH.ovr === 'function' ? window.COACH.ovr(c)
-    : Math.round(0.3 * c.offense + 0.3 * c.defense + 0.2 * c.development + 0.2 * c.motivation));
-  function rbar(label, v) {
-    const n = Number(v) || 0;
-    return `<div class="fr-rbar"><span>${label}</span><i><em style="width:${Math.max(0, Math.min(100, n))}%"></em></i><b>${n || '-'}</b></div>`;
   }
   function coachCard(s, c, abbr) {
     const age = c.born ? s.year - c.born : null;
@@ -316,39 +448,31 @@
       if (r && (r.w || r.l)) rec = `${r.w}-${r.l} in this league`;
     }
     const since = c.hiredYear || c.since;
-    return `<div class="fr-coach">
-      <div class="fr-coach-id"><div class="fr-coach-ovr"><b>${coachOvr(c)}</b><span>OVR</span></div>
-        <div><div class="fr-coach-k">HEAD COACH${abbr ? ' | ' + esc(abbr) : ''}</div><div class="fr-coach-n">${esc(c.name)}</div>
+    return `<div class="fr-coach frr-coach">
+      <div class="fr-coach-id"><div>
+        <div class="fr-coach-k">HEAD COACH${abbr ? ' | ' + esc(abbr) : ''}</div><div class="fr-coach-n">${esc(c.name)}</div>
         <div class="fr-coach-d">${age ? esc(age) + ' years old' : ''}${since ? ' | since ' + esc(fr.seasonLabel(since)) : ''}${c.titles ? ' | ' + esc(c.titles) + ' title' + (c.titles > 1 ? 's' : '') : ''}${rec ? ' | ' + esc(rec) : ''}</div></div></div>
-      <div class="fr-coach-r">${rbar('OFFENSE', c.offense)}${rbar('DEFENSE', c.defense)}${rbar('DEVELOPMENT', c.development)}${rbar('MOTIVATION', c.motivation)}</div>
     </div>`;
   }
   function staffTab(body, s, team) {
     const C = window.COACH;
     if (!C) {
       const c = coachFromData(team.coach, s.userTeam);
-      body.innerHTML = UI.header('COACHING STAFF', 'Your head coach and his ratings.') +
-        (c ? coachCard(s, c, s.userTeam) : '') +
-        fr.building('Hiring and firing coaches', 'The coaching module (<code>js/coaches.js</code>) has not loaded, so the coaching market is not open yet.' + (c ? ' The ratings above come from the coach data file.' : ''));
+      body.innerHTML = UI.header('COACHING STAFF', 'Your head coach.') + (c ? coachCard(s, c, s.userTeam) : '<p class="muted">No coach on record.</p>');
       return;
     }
     if (!s.coaches && typeof C.init === 'function') { fr.call('coach init', () => C.init(s)); fr.persist(); }
     const cur = fr.call('coach of', () => C.of(s, s.userTeam), null);
     const pool = fr.call('available coaches', () => C.available(s, s.year), []) || [];
-    const eff = cur && typeof C.effect === 'function' ? fr.call('coach effect', () => C.effect(s, s.userTeam), null) : null;
-    const pct = v => (v > 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
-    const effHtml = eff ? `<div class="fr-effects">${['offense', 'defense', 'development', 'morale'].map(k =>
-      `<span><small>${k.toUpperCase()}</small><b class="${eff[k] > 0 ? 'win' : eff[k] < 0 ? 'loss' : ''}">${pct(eff[k] || 0)}</b></span>`).join('')}</div>` : '';
     const rows = pool.slice(0, 25).map(c => `<tr>
-      <td class="l"><b>${esc(c.name)}</b>${c.fictional ? ' <small>new</small>' : ''}</td>
-      <td>${coachOvr(c)}</td><td>${esc(c.offense)}</td><td>${esc(c.defense)}</td><td class="hide-sm">${esc(c.development)}</td><td class="hide-sm">${esc(c.motivation)}</td>
-      <td class="hide-sm">${c.born ? esc(s.year - c.born) : '-'}</td>
+      <td class="l"><b>${esc(c.name)}</b></td>
+      <td>${c.born ? esc(s.year - c.born) : '-'}</td>
       <td><button type="button" class="btn btn-small btn-gold" data-hire="${esc(c.id)}">HIRE</button></td></tr>`).join('');
-    body.innerHTML = `${UI.header('COACHING STAFF', 'Coaches change player development, game decisions and morale a little: at most 3 percent either way.')}
-      ${cur ? coachCard(s, cur, s.userTeam) + effHtml + `<div class="row-btns"><button type="button" class="btn btn-small btn-danger" id="frFire">FIRE ${esc(cur.name.toUpperCase())}</button></div>`
+    body.innerHTML = `${UI.header('COACHING STAFF', 'Your head coach. You can fire him and hire someone from the market.')}
+      ${cur ? coachCard(s, cur, s.userTeam) + `<div class="row-btns"><button type="button" class="btn btn-small btn-danger" id="frFire">FIRE ${esc(cur.name.toUpperCase())}</button></div>`
         : '<div class="note">You have no head coach. Hire one from the list below before the next game.</div>'}
-      ${UI.header('AVAILABLE COACHES', pool.length ? pool.length + ' coaches on the market in ' + esc(fr.seasonLabel(s.year)) + ', best first.' : 'Nobody is on the market right now.')}
-      ${rows ? `<div class="tscroll"><table class="stats"><thead><tr><th class="l">COACH</th><th>OVR</th><th>OFF</th><th>DEF</th><th class="hide-sm">DEV</th><th class="hide-sm">MOT</th><th class="hide-sm">AGE</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : ''}`;
+      ${UI.header('AVAILABLE COACHES', pool.length ? pool.length + ' coaches on the market in ' + esc(fr.seasonLabel(s.year)) + '.' : 'Nobody is on the market right now.')}
+      ${rows ? `<div class="tscroll"><table class="stats fr-short"><thead><tr><th class="l">COACH</th><th>AGE</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : ''}`;
     const fire = UI.$('#frFire', body);
     if (fire) fire.addEventListener('click', () => {
       if (!window.confirm('Fire ' + cur.name + '? He will join the coaching market.')) return;
@@ -379,7 +503,7 @@
     }
     const ctx = typeof M.buildCtx === 'function' ? fr.call('mood ctx', () => M.buildCtx(s), undefined) : undefined;
     const team = s.teams[s.userTeam];
-    const { ids, byId } = orderedRotation(s, team);
+    const rotNow = currentRotation(s, team), ids = rotNow.active.concat(rotNow.inactive), byId = rotNow.byId;
     const gl = userRoster(s, { withGleague: true }).filter(p => p.gleague);
     const list = ids.map(id => byId.get(id)).concat(gl).map(p => ({ p, m: fr.call('mood of', () => M.of(s, p.id, ctx), null) || { score: p.mood || 50, reasons: [] } }));
     const avg = list.length ? Math.round(list.reduce((a, x) => a + (Number(x.m.score) || 0), 0) / list.length) : 0;
@@ -481,53 +605,6 @@
     UI.$$('[data-recall]', body).forEach(b => b.addEventListener('click', () => act('recall', b.getAttribute('data-recall'))));
   }
 
-  // ---------- finances ----------
-  function financesTab(body, s, team) {
-    const f = team.finances = Object.assign({ revenue: 0, expenses: 0, ticketPrice: 50 }, team.finances || {});
-    const b = team.budget = Object.assign({ coaching: 50, facilities: 50, health: 50, scouting: 50 }, team.budget || {});
-    const rev = Number(f.revenue) || 0, exp = Number(f.expenses) || 0;
-    const profit = rev - exp;
-    const BUD = [['coaching', 'COACHING', 'Better assistants: a little more player development.'],
-      ['facilities', 'FACILITIES', 'Arena and practice facility: attendance and free agent appeal over time.'],
-      ['health', 'HEALTH', 'Training staff: fewer injuries and quicker recoveries.'],
-      ['scouting', 'SCOUTING', 'Sharper draft prospect ratings before the draft.']];
-    const lvl = v => (v >= 80 ? 'TOP OF THE LEAGUE' : v >= 60 ? 'ABOVE AVERAGE' : v >= 40 ? 'AVERAGE' : v >= 20 ? 'BELOW AVERAGE' : 'BARE BONES');
-    const pay = payrollTotal(s, s.userTeam, s.year);
-    const lines = [
-      ['Ticket sales and gate', f.ticketRevenue], ['Merchandise', f.merch], ['TV and media', f.tv || f.media], ['Sponsorship', f.sponsors],
-      ['Player salaries', f.salaries], ['Budget items', f.budgetExpenses], ['Luxury tax', f.tax]
-    ].filter(x => x[1]);
-    body.innerHTML = `${UI.header('FINANCES', 'Set ticket prices and department budgets. The owner watches the bottom line.')}
-      <div class="fr-stats3 fr-money">
-        <div><small>REVENUE</small><b>${rev ? fr.money(rev) : '$0'}</b></div>
-        <div><small>EXPENSES</small><b>${exp ? fr.money(exp) : '$0'}</b></div>
-        <div><small>PROFIT</small><b class="${profit > 0 ? 'win' : profit < 0 ? 'loss' : ''}">${profit < 0 ? '-' : ''}${profit ? fr.money(Math.abs(profit)) : '$0'}</b></div>
-      </div>
-      ${!rev && !exp ? '<p class="muted fr-small">Revenue and expenses add up as home games are played. This season has nothing on the books yet.</p>' : ''}
-      ${lines.length ? `<div class="tscroll"><table class="stats"><tbody>${lines.map(x => `<tr><td class="l">${esc(x[0])}</td><td>${fr.money(x[1])}</td></tr>`).join('')}</tbody></table></div>` : ''}
-      <div class="fr-panel">
-        <div class="fr-slider"><div class="fr-slider-top"><span class="fr-slider-l">TICKET PRICE</span><b id="frv-ticket">$${esc(f.ticketPrice)}</b></div>
-          <input type="range" min="10" max="250" step="1" value="${Number(f.ticketPrice) || 50}" id="frTicket" aria-label="Ticket price">
-          <div class="fr-slider-ends"><span>$10, packed house</span><span>$250, premium</span></div>
-          <p class="muted fr-small">Average ticket price. Higher prices bring more per seat but fewer fans, and fans care more when the team is losing.</p></div>
-      </div>
-      ${UI.header('BUDGET', 'Each department from 0 to 100. 50 is the league average.')}
-      <div class="fr-panel fr-grid2">${BUD.map(([k, t, h]) => `<div class="fr-slider">
-        <div class="fr-slider-top"><span class="fr-slider-l">${t}</span><b id="frv-b-${k}">${esc(b[k])}</b></div>
-        <input type="range" min="0" max="100" step="1" value="${Number(b[k]) || 0}" data-bud="${k}" aria-label="${t} budget">
-        <div class="fr-slider-ends"><span id="frl-b-${k}">${lvl(b[k])}</span><span></span></div>
-        <p class="muted fr-small">${h}</p></div>`).join('')}</div>
-      <p class="muted fr-small">Payroll this season: <b>${fr.money(pay)}</b>. See the PAYROLL tab for the cap and tax lines.</p>`;
-    UI.$('#frTicket', body).addEventListener('input', e => { f.ticketPrice = Number(e.target.value); UI.$('#frv-ticket', body).textContent = '$' + f.ticketPrice; fr.persist(); });
-    UI.$$('[data-bud]', body).forEach(r => r.addEventListener('input', () => {
-      const k = r.getAttribute('data-bud');
-      b[k] = Number(r.value);
-      UI.$('#frv-b-' + k, body).textContent = r.value;
-      UI.$('#frl-b-' + k, body).textContent = lvl(b[k]);
-      fr.persist();
-    }));
-  }
-
   // ---------- payroll ----------
   function payrollTotal(s, abbr, year) {
     const C = window.CBA;
@@ -595,5 +672,5 @@
   }
 
   P.manage.navLabel = 'Team';
-  P.manage.navDesc = 'Rotation, strategy, coaches, G League, finances and payroll';
+  P.manage.navDesc = 'Rotation, strategy, coaches, G League and payroll';
 })();

@@ -957,6 +957,40 @@
     return best.days;
   }
 
+  // The real schedule for a season from data/schedules.js (window.SCHEDULES_GET(year) returns
+  // [[date, home, away(, "cancelled")], ...] or null). Cancelled games are skipped. Returns null
+  // (generate one instead) when there is no real schedule or a team in the league is missing from it.
+  function realSchedule(year, teams) {
+    var G = (root && root.SCHEDULES_GET) || (typeof window !== 'undefined' && window.SCHEDULES_GET) || null;
+    if (typeof G !== 'function') return null;
+    var list = null;
+    try { list = G(year); } catch (e) { list = null; }
+    if (!list || !list.length) return null;
+    var known = {}, seen = {};
+    teams.forEach(function (t) { known[t.abbr] = true; });
+    var days = [], byDate = {};
+    for (var i = 0; i < list.length; i++) {
+      var g = list[i];
+      if (!g || g[3] === 'cancelled') continue;
+      if (!known[g[1]] || !known[g[2]]) return null;
+      seen[g[1]] = seen[g[2]] = true;
+      var day = byDate[g[0]];
+      if (!day) { day = byDate[g[0]] = { date: g[0], games: [] }; days.push(day); }
+      day.games.push({ home: g[1], away: g[2] });
+    }
+    for (var a in known) if (!seen[a]) return null;
+    days.sort(function (x, y) { return x.date < y.date ? -1 : x.date > y.date ? 1 : 0; });
+    var id = 0;
+    days.forEach(function (d) {
+      d.games.forEach(function (gm) {
+        id++;
+        gm.id = 'g' + (id < 10 ? '000' : id < 100 ? '00' : id < 1000 ? '0' : '') + id;
+        gm.played = false; gm.hs = null; gm.as = null;
+      });
+    });
+    return days;
+  }
+
   // ---------------------------------------------------------------------------
   // Season
   // ---------------------------------------------------------------------------
@@ -973,7 +1007,10 @@
     var start = opts.startDate || (year - 1) + '-10-30';
     var end = opts.endDate || year + '-04-17';
     var teams = league.teams.map(function (t) { return { abbr: t.abbr, conf: t.conf || 'East', div: t.div || t.conf || 'East' }; });
-    var days = buildSchedule(teams, rng, start, end);
+    // real dates and games when data/schedules.js has the season (opts.realSchedule === false to generate)
+    var days = opts.realSchedule === false || opts.startDate || opts.endDate ? null : realSchedule(year, teams);
+    var realSched = !!days;
+    if (!days) days = buildSchedule(teams, rng, start, end);
     var standings = {};
     teams.forEach(function (t) { standings[t.abbr] = newStanding(); });
     var injuries = {};
@@ -998,6 +1035,7 @@
       userTeam: opts.userTeam || null,
       order: [],
       norms: norms,
+      realSchedule: realSched,
       version: 1
     };
   }
@@ -1221,7 +1259,8 @@
     var divs = {};
     season.teams.forEach(function (t) { if (t.conf === conf) (divs[t.div] = divs[t.div] || []).push(t.abbr); });
     var winners = Object.keys(divs).map(function (d) { return rankTeams(season, divs[d])[0]; });
-    if (winners.length !== 3) return ranked.slice(0, 8);
+    // from 2015-16 on, seeds go by record only (win pct, so uneven game counts like 2019-20 work)
+    if (winners.length !== 3 || (season.year || 2013) >= 2016) return ranked.slice(0, 8);
     var bestOther = ranked.filter(function (a) { return winners.indexOf(a) < 0; })[0];
     var top4 = rankTeams(season, winners.concat(bestOther ? [bestOther] : []));
     var rest = ranked.filter(function (a) { return top4.indexOf(a) < 0; });
@@ -1398,6 +1437,7 @@
   var ENGINE = {
     version: 1,
     newSeason: newSeason,
+    realSchedule: realSchedule,
     simDays: simDays,
     simGame: simGame,
     playoffs: playoffs,

@@ -129,6 +129,8 @@
 
   Saves.activate = function (slot, game, info) {
     if (!Array.isArray(game.events)) game.events = [];
+    // Bring older saves up to date (local logos, deduped news, new fields)
+    if (window.LEAGUE && typeof LEAGUE.migrate === 'function') { try { LEAGUE.migrate(game); } catch (e) { console.warn('migrate failed', e); } }
     UI.state.slot = slot;
     UI.state.game = game;
     UI.state.save = {

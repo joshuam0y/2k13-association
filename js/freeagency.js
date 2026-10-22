@@ -21,7 +21,7 @@
   function MOOD() { return G.MOOD || tryReq('./mood.js'); }
   function CBAX() { return G.CBA || null; }
 
-  var FA_DAYS = 30, MAX_ROSTER = 15, MIN_ROSTER = 13;
+  var FA_DAYS = 30, MAX_ROSTER = 15, MIN_ROSTER = 13, OFFSEASON_MAX = 20;
   var NBA_PHASES_OFF = { draftLottery: 1, draft: 1, resign: 1, freeAgency: 1 };
 
   // ---------------------------------------------------------------------------
@@ -124,11 +124,14 @@
     return Math.max(Math.round(r.cap * pct / 100), Math.round(prevSalary(p, year) * 1.05));
   }
 
+  // Draft-and-stash players (rights held, playing overseas) never count against the roster and are never waived.
+  function isStashed(p) { return !!(p && p.stashedUntil != null && p.stashedUntil !== false); }
+
   function standardOn(state, abbr) {
     var out = [];
     Object.keys(state.players).forEach(function (id) {
       var p = state.players[id];
-      if (p.team === abbr && !p.retired && !(p.contract && p.contract.twoWay) && !(p.stashedUntil && p.stashedUntil > contractYear(state))) out.push(p);
+      if (p.team === abbr && !p.retired && !(p.contract && p.contract.twoWay) && !isStashed(p)) out.push(p);
     });
     return out;
   }
@@ -159,6 +162,12 @@
     year = year || contractYear(state);
     return payrollRaw(state, abbr, year) + pendingFor(state, abbr).amount;
   }
+  // The user may carry up to 20 players in the offseason (as in the real CBA); the roster must be down to 15
+  // when free agency ends (the lowest players are waived then). AI teams plan to 15 all summer.
+  function rosterLimit(state, abbr) {
+    var off = NBA_PHASES_OFF[state.phase] || state.phase === 'training';
+    return abbr === state.userTeam && off && !(state.fa && state.fa.stage === 'done') ? OFFSEASON_MAX : MAX_ROSTER;
+  }
   function rosterCount(state, abbr) { return standardOn(state, abbr).length + pendingFor(state, abbr).count; }
   function twoWayCount(state, abbr) {
     var n = 0;
@@ -179,10 +188,10 @@
   function refreshTeam(state, ctx, abbr) {
     var Y = contractYear(state);
     var all = [];
-    Object.keys(state.players).forEach(function (id) { var p = state.players[id]; if (p.team === abbr && !p.retired) all.push(p); });
+    Object.keys(state.players).forEach(function (id) { var p = state.players[id]; if (p.team === abbr && !p.retired && !isStashed(p)) all.push(p); });
     all.sort(function (x, y) { return y.ovr - x.ovr; });
     ctx.rosters[abbr] = all;
-    var std = all.filter(function (p) { return !(p.contract && p.contract.twoWay) && !(p.stashedUntil && p.stashedUntil > Y); });
+    var std = all.filter(function (p) { return !(p.contract && p.contract.twoWay); });
     var top = std.slice(0, 8), s = 0;
     top.forEach(function (p) { s += p.ovr; });
     ctx.strength[abbr] = top.length ? s / Math.max(8, top.length) : 60;
@@ -262,7 +271,9 @@
     var fa = state.fa;
     if (p.team !== 'FA') return 1;
     var d = !fa ? 40 : fa.stage === 'resign' ? 0 : fa.stage === 'done' ? 40 : fa.day;
-    if (isStar(p)) return Math.max(0.85, 1 - 0.004 * Math.max(0, d - 5));
+    // A star who is still unsigned after the first days lowers his price quickly: he wants to play
+    // somewhere good this season, not sit out. By about day 8 he takes what a contender can pay.
+    if (isStar(p) || p.ovr >= 84) return d <= 2 ? 1 : Math.max(0.2, 1 - 0.12 * (d - 2));
     return Math.max(0.5, 1 - 0.018 * Math.max(0, d - 2));
   }
 
@@ -352,7 +363,8 @@
       return { ok: true, via: 'twoWay' };
     }
     var cnt = opts.count != null ? opts.count : rosterCount(state, abbr);
-    if (!opts.ignoreRoster && cnt >= MAX_ROSTER) return { ok: false, reason: 'Roster is full (' + MAX_ROSTER + ' players)' };
+    var lim = rosterLimit(state, abbr);
+    if (!opts.ignoreRoster && cnt >= lim) return { ok: false, reason: 'Roster is full (' + lim + ' players)' };
     var pay = opts.pay != null ? opts.pay : payroll(state, abbr, Y);
     var max = maxSalary(state, p, Y);
     if (first > max) return { ok: false, reason: 'More than the maximum salary (' + money(max) + ')' };
@@ -543,7 +555,12 @@
           (ex ? summary.exercised : summary.declined).push(id);
           rec.decision = ex ? 'exercised' : 'declined';
           log(state, 'option', p.team + (ex ? ' exercises ' : ' declines ') + 'its ' + Y + ' team option on ' + p.name, [id]);
-          if (p.team === state.userTeam) state.events.push({ type: 'contractDecision', kind: 'teamOption', playerId: id, team: p.team, year: Y, amount: rec.amount, defaultDecision: rec.decision, text: 'Team option on ' + p.name + ' for ' + money(rec.amount) + ': ' + rec.decision + ' by default. Use FA.decideOption to change it before free agency.' });
+          if (p.team === state.userTeam) {
+            var exOpts = [{ value: 'exercise', label: 'Exercise: keep him' }, { value: 'decline', label: 'Decline: he becomes a free agent' }];
+            state.events.push({ type: 'contractDecision', kind: 'teamOption', playerId: id, team: p.team, year: Y, amount: rec.amount, defaultDecision: rec.decision,
+              options: ex ? exOpts : exOpts.reverse(),
+              text: 'You hold a team option on ' + p.name + ': ' + money(rec.amount) + ' for ' + (Y - 1) + '-' + String(Y).slice(2) + '. Your front office recommends you ' + (ex ? 'exercise it and keep him.' : 'decline it and let him become a free agent.') });
+          }
         } else {
           var outOpt = decidePlayerOption(state, p, o, Y);
           cut = outOpt;
@@ -578,7 +595,12 @@
       rights.qo = qo;
       rights.rfa = shouldExtendQO(state, p, qo, Y);
       if (rights.rfa) summary.rfa.push(id);
-      if (p.team === state.userTeam) state.events.push({ type: 'contractDecision', kind: 'qualifyingOffer', playerId: id, team: p.team, amount: qo, defaultDecision: rights.rfa ? 'extended' : 'withheld', text: 'Qualifying offer of ' + money(qo) + ' to ' + p.name + ': ' + (rights.rfa ? 'extended' : 'not extended') + ' by default. Use FA.setQualifyingOffer to change it before free agency.' });
+      if (p.team === state.userTeam) {
+        var qoOpts = [{ value: 'extend', label: 'Extend the qualifying offer' }, { value: 'withdraw', label: 'Withdraw: he is unrestricted' }];
+        state.events.push({ type: 'contractDecision', kind: 'qualifyingOffer', playerId: id, team: p.team, amount: qo, defaultDecision: rights.rfa ? 'extended' : 'withheld',
+          options: rights.rfa ? qoOpts : qoOpts.reverse(),
+          text: p.name + '\'s contract is up. A qualifying offer of ' + money(qo) + ' makes him a restricted free agent: you can match any offer sheet he signs. Your front office recommends you ' + (rights.rfa ? 'extend it.' : 'let him go unrestricted.') });
+      }
     }
     fa.rights[id] = rights;
     p.lastTeam = p.team;
@@ -637,6 +659,20 @@
     return { ok: true, message: state.players[id].name + (extend ? ' is a restricted free agent (qualifying offer ' + money(r.qo) + ')' : ' is an unrestricted free agent') };
   }
 
+  // Applies the user's answer to a contract decision popup (team option, qualifying offer, offer sheet).
+  function applyDecision(state, e, answer) {
+    if (!e || e.type !== 'contractDecision' || !e.playerId) return { ok: false, message: 'Not a contract decision' };
+    var a = String(answer == null ? '' : answer).toLowerCase();
+    if (e.kind === 'teamOption') {
+      if (a === 'exercise' || a === 'decline') return decideOption(state, e.playerId, a === 'exercise');
+    } else if (e.kind === 'qualifyingOffer') {
+      if (a === 'extend' || a === 'withdraw') return setQualifyingOffer(state, e.playerId, a === 'extend');
+    } else if (e.kind === 'offerSheet') {
+      if (a === 'match' || a === 'letgo' || a === 'decline') return matchOfferSheet(state, e.playerId, a === 'match');
+    }
+    return { ok: true, message: 'Kept the default' };
+  }
+
   function renounce(state, abbr, id) {
     var r = state.fa && state.fa.rights[id];
     if (!r || r.team !== abbr) return { ok: false, message: 'No rights to renounce' };
@@ -644,12 +680,17 @@
     return { ok: true, message: abbr + ' renounces its rights to ' + state.players[id].name };
   }
 
-  function resignWindow(state) {
+  // The user's expiring players. Once the user has finished re-signing (state.fa.userReviewed, set by the
+  // free agency page) the list is empty unless opts.all, so "sim past re-signing" has nothing to ask about.
+  function resignWindow(state, opts) {
+    opts = opts || {};
     if (!state.fa || state.fa.year <= state.year) startOffseason(state);
-    var fa = state.fa, ctx = buildCtx(state), abbr = state.userTeam, out = [];
+    var fa = state.fa, abbr = state.userTeam, out = [];
+    if (fa.userReviewed && !opts.all) return { year: fa.year, stage: fa.stage, team: abbr, players: out, reviewed: true };
+    var ctx = buildCtx(state);
     Object.keys(fa.rights).forEach(function (id) {
       var r = fa.rights[id], p = state.players[id];
-      if (r.team !== abbr || p.team !== 'FA') return;
+      if (r.team !== abbr || p.team !== 'FA' || r.renounced) return;
       var d = demand(state, id, abbr, ctx), mood = typeof p.mood === 'number' ? p.mood : 55;
       var willing = !(mood < 25 && pers(p).loyalty < 60);
       out.push({ id: id, name: p.name, ovr: p.ovr, age: p.age, pos: p.pos, mood: mood, bird: r.bird, rfa: r.rfa, qo: r.qo,
@@ -705,7 +746,8 @@
     log(state, 'sign', p.name + ' signs an offer sheet with ' + abbr + ' (' + salaries.length + ' years, ' + money(salaries.reduce(function (a, s) { return a + s.amount; }, 0)) + '); ' + r.team + ' has 3 days to match', [p.id]);
     if (r.team === state.userTeam) {
       state.events.push({ type: 'contractDecision', kind: 'offerSheet', playerId: p.id, team: r.team, from: abbr, salaries: salaries, expiresDay: sheet.expires,
-        text: p.name + ' signed an offer sheet with ' + abbr + ' for ' + money(salaries[0].amount) + ' a year. Match it with FA.matchOfferSheet within 3 days.' });
+        options: [{ value: 'match', label: 'Match: keep him' }, { value: 'letgo', label: 'Let him go' }],
+        text: p.name + ' signed an offer sheet with ' + abbr + ': ' + salaries.length + (salaries.length === 1 ? ' year' : ' years') + ' at ' + money(salaries[0].amount) + ' a year. Match it to keep him, or let him go. You have 3 days.' });
     }
     if (ctx) refreshTeam(state, ctx, abbr);
     return sheet;
@@ -734,7 +776,7 @@
     if (fa) fa.offerSheets.forEach(function (s) { if (s.id === id) sheet = s; });
     if (!sheet) return { ok: false, message: 'No pending offer sheet' };
     if (sheet.rightsTeam !== state.userTeam) return { ok: false, message: 'Not your restricted free agent' };
-    if (match && rosterCount(state, sheet.rightsTeam) >= MAX_ROSTER) return { ok: false, message: 'Roster is full: release a player before matching' };
+    if (match && rosterCount(state, sheet.rightsTeam) >= rosterLimit(state, sheet.rightsTeam)) return { ok: false, message: 'Roster is full: release a player before matching' };
     var rec = resolveSheet(state, sheet, !!match, null);
     return { ok: true, message: match ? 'Matched: ' + state.players[id].name + ' stays' : state.players[id].name + ' joins ' + sheet.from, signing: rec };
   }
@@ -773,6 +815,17 @@
     return lines;
   }
 
+  // The yearly average a player needs from a team for an n-year deal (with an optional option year).
+  function requiredFor(p, d, n, opt) {
+    var required = d.required != null ? d.required : d.amount, notes = [];
+    if (n < d.minYears) { required *= 1 + 0.08 * (d.minYears - n); notes.push('he wants ' + d.years + ' years, not ' + n); }
+    if (n > d.maxYears && p.age < 31) { required *= 1 + 0.04 * (n - d.maxYears); notes.push('he does not want to be locked in for ' + n + ' years'); }
+    if (opt && opt.type === 'player') required *= 0.95;
+    if (opt && opt.type === 'eto') required *= 0.97;
+    if (opt && opt.type === 'team') { required *= 1.05; notes.push('he does not like the team option'); }
+    return { required: Math.max(d.min, required), notes: notes };
+  }
+
   function offer(state, abbr, id, terms) {
     terms = terms || {};
     var p = state.players[id];
@@ -809,14 +862,8 @@
       sign(state, abbr, p, salaries, 'twoWay', {}, null);
       return { accepted: true, message: name + ' signs a two-way contract with ' + abbr + '.', via: 'twoWay' };
     }
-    var required = d.required, notes = [];
-    if (n < d.minYears) { required *= 1 + 0.08 * (d.minYears - n); notes.push('he wants ' + d.years + ' years, not ' + n); }
-    if (n > d.maxYears && p.age < 31) { required *= 1 + 0.04 * (n - d.maxYears); notes.push('he does not want to be locked in for ' + n + ' years'); }
     var opt = terms.option || null;
-    if (opt && opt.type === 'player') required *= 0.95;
-    if (opt && opt.type === 'eto') required *= 0.97;
-    if (opt && opt.type === 'team') { required *= 1.05; notes.push('he does not like the team option'); }
-    required = Math.max(d.min, required);
+    var rq = requiredFor(p, d, n, opt), required = rq.required, notes = rq.notes;
     var accepted = avg >= required * 0.995;
     var why = reasonText(p, d.parts || {}, abbr);
     var msg;
@@ -920,23 +967,12 @@
     return M ? M.rng(seed) : Math.random;
   }
 
+  // AI teams make the same re-signing choices as FA.autoResign, with some players testing the market.
   function aiResign(state, ctx, rng) {
-    var fa = state.fa, out = [];
-    var ids = Object.keys(fa.rights).filter(function (id) { var r = fa.rights[id]; return r.team !== state.userTeam && state.players[id].team === 'FA'; });
-    ids.sort(function (a, b) { return state.players[b].ovr - state.players[a].ovr; });
-    ids.forEach(function (id) {
-      var p = state.players[id], r = fa.rights[id], t = pers(p);
-      var mood = typeof p.mood === 'number' ? p.mood : 55;
-      if (mood < 25 && t.loyalty < 60) return;                                   // wants out
-      if (p.ovr < 70 && !(p.age <= 24 && (p.pot || 0) >= 75)) return;            // replaceable: the team waits
-      var test = clamp(0.15 + 0.35 * t.money / 100 - 0.35 * t.loyalty / 100 + (mood < 45 ? 0.2 : 0), 0.03, 0.6);
-      if (r.rfa) test = Math.max(test, 0.4);                                     // let the market set the price
-      if (rng() < test) return;                                                  // tests the market
-      var d = demand(state, id, null, ctx);
-      var bid = aiBid(state, ctx, r.team, p, d);
-      if (!bid || bid.via !== 'bird' && bid.via !== 'min' && bid.via !== 'space') return;
-      if (bid.avg < bid.required) return;
-      out.push(sign(state, r.team, p, bid.salaries, bid.via, {}, ctx));
+    var out = [];
+    Object.keys(state.teams).forEach(function (abbr) {
+      if (abbr === state.userTeam) return;
+      autoResign(state, abbr, { ctx: ctx, rng: rng, ai: true }).forEach(function (x) { if (x.signing) out.push(x.signing); });
     });
     return out;
   }
@@ -948,6 +984,13 @@
     var re = aiResign(state, ctx, rng);
     fa.stage = 'open';
     return re;
+  }
+
+  // Opens the market (AI teams re-sign first) without playing a free agency day. Safe to call twice.
+  function openMarket(state, rng) {
+    if (!state.fa || state.fa.year <= state.year) startOffseason(state);
+    if (state.fa.stage !== 'resign') return [];
+    return openFreeAgency(state, rng || seededRng(state));
   }
 
   function signingsPerDay(day) { return day >= 20 ? 3 : 2; }
@@ -1044,7 +1087,7 @@
     var Y = contractYear(state);
     Object.keys(state.teams).forEach(function (abbr) {
       while (ctx.count[abbr] > MAX_ROSTER) {
-        var std = (ctx.rosters[abbr] || []).filter(function (p) { return !(p.contract && p.contract.twoWay); });
+        var std = (ctx.rosters[abbr] || []).filter(function (p) { return !(p.contract && p.contract.twoWay) && !isStashed(p); });
         // Release the player with the least guaranteed money left, worst overall first.
         std.sort(function (a, b) {
           var ga = a.contract ? a.contract.salaries.reduce(function (s, x) { return s + (x.year >= Y ? x.amount : 0); }, 0) : 0;
@@ -1102,6 +1145,7 @@
       rec.qualifyingOffer = true;
       out.signings.push(rec);
     });
+    lastCall(state, ctx, rng, out, 80);
     fillRosters(state, ctx, rng, out, true);
     trimRosters(state, ctx, out);
     signTwoWays(state, ctx, rng, out);
@@ -1122,6 +1166,7 @@
     var ctx = buildCtx(state);
     processOfferSheets(state, ctx, rng, out, false);
     aiSignings(state, ctx, rng, out);
+    if (fa.day >= 8) lastCall(state, ctx, rng, out, 85);
     if (fa.day >= 20) fillRosters(state, ctx, rng, out, false);
     if (fa.day >= fa.length) finish(state, ctx, rng, out);
     return out;
@@ -1135,9 +1180,312 @@
     return all;
   }
 
+  // ---------------------------------------------------------------------------
+  // Cap room, exceptions and what a team can offer (used by the free agency page)
+  // ---------------------------------------------------------------------------
+  function usedFor(state, abbr, Y) {
+    return state.fa && state.fa.year === Y ? used(state, abbr) : {};
+  }
+  function yearsLimit(r, key, dflt) { return r.maxYears && r.maxYears[key] ? r.maxYears[key] : dflt; }
+
+  // Every route a team has to sign this player right now, with the biggest first-year salary each allows.
+  function routesFor(state, abbr, id, pay) {
+    var p = state.players[id], Y = contractYear(state), r = rules(Y);
+    if (!p) return [];
+    if (pay == null) pay = payroll(state, abbr, Y);
+    var u = usedFor(state, abbr, Y), maxS = maxSalary(state, p, Y), min = r.minSalary(p.yearsPro || 0), out = [];
+    var rights = state.fa && state.fa.rights[id];
+    if (rights && rights.team === abbr && !rights.renounced) out.push({ via: 'bird', max: Math.min(maxS, Math.round(birdLimit(state, p, rights, Y))), years: rights.bird === 'full' ? 5 : 4 });
+    if (pay < r.cap) out.push({ via: 'space', max: Math.min(maxS, r.cap - pay), years: yearsLimit(r, 'other', 4) });
+    if (!u.space && !u.mle) {
+      if (pay + Math.min(r.mle, maxS) <= r.apron) out.push({ via: 'mle', max: Math.min(maxS, r.mle), years: yearsLimit(r, 'mle', 4) });
+      else out.push({ via: 'mle', max: Math.min(maxS, r.taxMle), years: yearsLimit(r, 'taxMle', 3), tax: true });
+    }
+    if (pay < r.cap && !u.room) out.push({ via: 'room', max: Math.min(maxS, r.roomException), years: yearsLimit(r, 'room', 2) });
+    if (!u.space && !u.bae && pay + r.bae <= r.apron) out.push({ via: 'bae', max: Math.min(maxS, r.bae), years: yearsLimit(r, 'bae', 2) });
+    out.push({ via: 'min', max: min, years: 2 });
+    return out;
+  }
+
+  var ROUTE_LABEL = { bird: 'Bird rights', space: 'Cap room', mle: 'MLE', room: 'Room exception', bae: 'Bi-annual exception', min: 'Minimum', twoWay: 'Two-way', qo: 'Qualifying offer' };
+
+  // The best route for a yearly salary over n years, or null.
+  function routeForAmount(routes, amount, n) {
+    for (var i = 0; i < routes.length; i++) if (amount <= routes[i].max + 1 && n <= routes[i].years) return routes[i];
+    return null;
+  }
+
+  function capSummary(state, abbr) {
+    var Y = contractYear(state), r = rules(Y), pay = payroll(state, abbr, Y), u = usedFor(state, abbr, Y);
+    var count = rosterCount(state, abbr), under = pay < r.cap;
+    var fullMle = pay + r.mle <= r.apron;
+    var ex = [
+      { key: 'space', label: 'Cap room', amount: Math.max(0, r.cap - pay), available: under,
+        note: under ? 'Sign anyone up to this first-year salary' : 'Over the cap' },
+      { key: 'mle', label: fullMle ? 'Mid-level exception' : 'Taxpayer mid-level', amount: fullMle ? r.mle : r.taxMle, available: !u.space && !u.mle,
+        note: u.mle ? 'Used this offseason' : u.space ? 'Gone: you used cap room' : 'Up to ' + (fullMle ? yearsLimit(r, 'mle', 4) : yearsLimit(r, 'taxMle', 3)) + ' years' },
+      { key: 'room', label: 'Room exception', amount: r.roomException, available: under && !u.room,
+        note: u.room ? 'Used this offseason' : under ? 'For teams under the cap, up to ' + yearsLimit(r, 'room', 2) + ' years' : 'Only for teams under the cap' },
+      { key: 'bae', label: 'Bi-annual exception', amount: r.bae, available: !u.space && !u.bae && pay + r.bae <= r.apron,
+        note: u.bae ? 'Used this offseason' : u.space ? 'Gone: you used cap room' : pay + r.bae > r.apron ? 'Not above the apron' : 'Up to 2 years' },
+      { key: 'min', label: 'Minimum contracts', amount: r.minSalary(0), available: true, note: 'Always open, up to 2 years' }
+    ];
+    return { year: Y, payroll: pay, cap: r.cap, tax: r.tax, apron: r.apron, room: Math.max(0, r.cap - pay), overCap: !under,
+      taxRoom: r.tax - pay, overTax: pay > r.tax, roster: count, maxRoster: MAX_ROSTER, minRoster: MIN_ROSTER, signLimit: rosterLimit(state, abbr),
+      openSpots: Math.max(0, MAX_ROSTER - count), twoWay: twoWayCount(state, abbr), twoWaySlots: r.twoWay ? r.twoWaySlots : 0,
+      minSalary: r.minSalary(0), maxMinSalary: r.minSalary(10), exceptions: ex };
+  }
+
+  // Seeded noise so the estimate stays put while the user moves the sliders.
+  function zoneNoise(id, abbr, Y) {
+    var M = MOOD();
+    if (!M) return 0.5;
+    return M.rng(M.hash(String(id) + '|' + abbr + '|' + Y))();
+  }
+
+  function stageLocked(state, abbr, id) {
+    var fa = state.fa, rights = fa && fa.rights[id];
+    if (state.phase === 'playoffs' || state.phase === 'draftLottery' || state.phase === 'draft') return 'Free agency opens after the draft';
+    if (fa && fa.stage === 'resign' && !(rights && rights.team === abbr)) return 'The market opens when free agency starts' + (rights && rights.team ? ': only ' + rights.team + ' can talk to him now' : '');
+    if (fa && fa.offerSheets.some(function (s) { return s.id === id; })) return 'He has signed an offer sheet';
+    return null;
+  }
+
+  // The zone a player would accept from a team, as an estimate: the real price sits somewhere in
+  // [low, high], never exactly at a known point. Own players are easier to read than strangers.
+  function offerZone(state, abbr, id, years, opt, ctx) {
+    var p = state.players[id];
+    if (!p || p.team !== 'FA') return null;
+    var Y = contractYear(state);
+    ctx = ctx || buildCtx(state);
+    var d = demand(state, id, abbr, ctx);
+    var rights = state.fa && state.fa.rights[id], own = !!(rights && rights.team === abbr && !rights.renounced);
+    var n = years || d.years;
+    var rq = requiredFor(p, d, n, opt || null);
+    var max = maxSalary(state, p, Y), min = d.min;
+    var u = own ? 0.04 : 0.07;
+    var off = (zoneNoise(id, abbr, Y) * 2 - 1) * u * 0.6;
+    var center = rq.required * (1 + off);
+    var low = Math.floor(center * (1 - u) / 10000) * 10000, high = Math.ceil(center * (1 + u) / 10000) * 10000;
+    var atMin = rq.required <= min * 1.001;
+    if (atMin) { low = min; center = min; high = min; }
+    low = clamp(low, min, max); high = clamp(high, min, max); center = clamp(Math.round(center / 10000) * 10000, min, max);
+    var mood = typeof p.mood === 'number' ? p.mood : 55;
+    var unwilling = own && state.fa && state.fa.stage === 'resign' && mood < 25 && pers(p).loyalty < 60;
+    var routes = routesFor(state, abbr, id, ctx.pay[abbr]);
+    var best = 0, bestN = 0;
+    routes.forEach(function (rt) { if (n <= rt.years) best = Math.max(best, rt.max); bestN = Math.max(bestN, rt.max); });
+    return { id: id, abbr: abbr, year: Y, years: n, wantYears: d.years, minYears: d.minYears, maxYears: d.maxYears,
+      yearsCap: own && rights.bird === 'full' ? 5 : 4, ask: d.amount, star: !!d.max,
+      low: low, center: center, high: high, atMin: atMin, min: min, max: max, impossible: rq.required > max + 1,
+      notes: rq.notes, own: own, bird: own ? rights.bird : null, rfa: !!(rights && rights.rfa), unwilling: unwilling,
+      locked: stageLocked(state, abbr, id), routes: routes, limit: best, limitAnyYears: bestN, roster: ctx.count[abbr], rosterLimit: rosterLimit(state, abbr), rosterFull: ctx.count[abbr] >= rosterLimit(state, abbr) };
+  }
+
+  // Live feedback for a yearly salary against a zone.
+  function verdict(zone, amount) {
+    if (!zone) return { level: 'none', text: 'He is not available' };
+    if (zone.locked) return { level: 'locked', text: zone.locked };
+    if (zone.unwilling) return { level: 'decline', text: 'He is unhappy and wants to test free agency' };
+    if (zone.impossible) return { level: 'decline', text: 'He will decline: ' + (zone.notes[0] || 'no salary at this length is enough') };
+    var v;
+    if (zone.atMin && amount >= zone.min - 1) v = { level: 'accept', text: 'He will take the minimum' };
+    else if (amount >= zone.high) v = { level: 'accept', text: 'He will likely accept' };
+    else if (amount >= zone.center) v = { level: 'likely', text: 'Good chance he accepts' };
+    else if (amount >= zone.low) v = { level: 'close', text: 'Close, he wants more' };
+    else v = { level: 'decline', text: 'He will decline' };
+    if (zone.notes.length && v.level !== 'decline') v.text += ' (' + zone.notes[0] + ')';
+    if (zone.rfa && !zone.own && v.level !== 'decline') v.text += '. Restricted: his team can match';
+    return v;
+  }
+
+  // Every free agent with his ask from this team, the estimated price and how the team could pay it.
+  function market(state, abbr) {
+    var ctx = buildCtx(state), Y = contractYear(state), pay = ctx.pay[abbr], count = ctx.count[abbr], limit = rosterLimit(state, abbr), out = [];
+    var pending = {};
+    if (state.fa) state.fa.offerSheets.forEach(function (s) { pending[s.id] = s.from; });
+    freeAgents(state).forEach(function (p) {
+      var d = demand(state, p.id, abbr, ctx);
+      var rights = state.fa && state.fa.rights[p.id], own = !!(rights && rights.team === abbr && !rights.renounced);
+      var rq = requiredFor(p, d, d.years, null), u = own ? 0.04 : 0.07;
+      var est = clamp(Math.round(rq.required * (1 + (zoneNoise(p.id, abbr, Y) * 2 - 1) * u * 0.6) / 10000) * 10000, d.min, maxSalary(state, p, Y));
+      if (rq.required <= d.min * 1.001) est = d.min;
+      var routes = routesFor(state, abbr, p.id, pay);
+      var minRt = routes[routes.length - 1];
+      var rt = est <= minRt.max + 1 ? minRt : routeForAmount(routes, est, Math.min(d.years, 4)) || routeForAmount(routes, est, 1);
+      var locked = stageLocked(state, abbr, p.id);
+      var key = !rt ? 'none' : rt.via === 'room' || rt.via === 'bae' ? 'exception' : rt.via;
+      if (rt && count >= limit) key = 'roster';
+      var label = { bird: 'BIRD RIGHTS', space: 'CAP ROOM', mle: 'MLE ONLY', exception: 'EXCEPTION ONLY', min: 'MINIMUM DEAL', none: 'NOT AFFORDABLE', roster: 'ROSTER FULL' }[key];
+      out.push({ id: p.id, ask: d.amount, years: d.years, estimate: est, via: rt ? rt.via : null, afford: key, label: label,
+        affordable: !!rt && key !== 'roster', own: own, rights: rights && rights.team && !rights.renounced ? rights.team : null,
+        rfa: !!(rights && rights.rfa), locked: locked, offerSheet: pending[p.id] || null });
+    });
+    return { year: Y, payroll: pay, roster: count, players: out };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Re-signing choices for a whole team
+  // ---------------------------------------------------------------------------
+  // Re-signs the expiring players worth keeping at a fair price: stars and good rotation players stay,
+  // the luxury tax and the 15-man roster are respected, and clearly bad contracts walk.
+  // Returns [{ id, name, ovr, age, action: 'resigned'|'letGo'|'refused'|'testing'|'blocked', reason, salaries, total, signing }].
+  // For the user's team it does nothing once the user has finished re-signing by hand (state.fa.userReviewed),
+  // unless opts.force. opts.rng lets AI players test the market now and then.
+  function autoResign(state, abbr, opts) {
+    opts = opts || {};
+    if (!isTeam(state, abbr)) return [];
+    if (!state.fa || state.fa.year <= state.year) startOffseason(state);
+    var fa = state.fa;
+    if (!fa || fa.stage === 'done') return [];
+    if (abbr === state.userTeam && fa.userReviewed && !opts.force) return [];
+    var ctx = opts.ctx || buildCtx(state), rng = opts.rng || null, Y = contractYear(state), r = rules(Y);
+    var ai = abbr !== state.userTeam;
+    var pending = {};
+    fa.offerSheets.forEach(function (s) { pending[s.id] = 1; });
+    var ids = Object.keys(fa.rights).filter(function (id) {
+      var rt = fa.rights[id], p = state.players[id];
+      return rt.team === abbr && !rt.renounced && !rt.letGo && p && p.team === 'FA' && !p.retired && !pending[id];
+    });
+    ids.sort(function (a, b) { return effOvr(state.players[b]) - effOvr(state.players[a]); });
+    var dir = direction(state, abbr, ctx), wp = winPct(state, abbr, ctx), out = [];
+    ids.forEach(function (id) {
+      var p = state.players[id], rt = fa.rights[id], t = pers(p);
+      var mood = typeof p.mood === 'number' ? p.mood : 55;
+      var star = isStar(p) || p.ovr >= 85;
+      var rec = { id: id, name: p.name, ovr: p.ovr, age: p.age, action: 'letGo', reason: '' };
+      out.push(rec);
+      if (mood < 25 && t.loyalty < 60) { rec.action = 'refused'; rec.reason = 'Unhappy, wants to test free agency'; return; }
+      if (rng) {
+        var test = star ? 0.03 + (mood < 45 ? 0.2 : 0) + (wp < 0.4 ? 0.1 : 0) + t.money / 100 * 0.08 - t.loyalty / 100 * 0.05
+          : 0.15 + 0.35 * t.money / 100 - 0.35 * t.loyalty / 100 + (mood < 45 ? 0.2 : 0);
+        test = clamp(test, star ? 0.02 : 0.03, star ? 0.35 : 0.6);
+        if (rt.rfa && !star) test = Math.max(test, 0.4);   // let the market set the price
+        if (rng() < test) { rec.action = 'testing'; rec.reason = 'Testing the market'; return; }
+      }
+      var d = demand(state, id, abbr, ctx);
+      var cap = rt.bird === 'full' ? 5 : 4;
+      var n = clamp(d.years, 1, cap);
+      if (p.age >= 31) n = clamp(Math.min(n, p.age >= 34 ? 1 : 2), d.minYears, cap);
+      var req = requiredFor(p, d, n, null).required;
+      var maxS = maxSalary(state, p, Y);
+      var value = marketValue(state, p, Y);
+      if (p.age <= 24) value *= 1.15;
+      if (dir === 'contend' && p.age >= 28) value *= 1.1;
+      if (dir === 'rebuild' && p.age >= 30) value *= 0.8;
+      // The user's team pays the least he accepts; AI teams pay the going rate, like on the open market.
+      var amount = ai ? Math.max(req, Math.min(d.amount, Math.max(value, star ? d.amount : 0))) : req;
+      amount = Math.min(maxS, Math.ceil(amount * 1.001 / 10000) * 10000);
+      if (amount < d.min) amount = d.min;
+      var pay = ctx.pay[abbr], after = pay + amount, count = ctx.count[abbr];
+      var roster = (ctx.rosters[abbr] || []).filter(function (x) { return !(x.contract && x.contract.twoWay); });
+      var rank = 0;
+      roster.forEach(function (x) { if (x.ovr > p.ovr) rank++; });
+      var young = p.age <= 24 && effOvr(p) >= 76;
+      var keep = false;
+      if (req > maxS + 1) rec.reason = 'Wants more than the max';
+      else if (star && !(p.age >= 34 && p.ovr < 85)) {
+        keep = after <= r.tax + r.cap * 0.45;
+        if (!keep) rec.reason = 'Too far over the luxury tax';
+      } else if (p.ovr >= 80) {
+        keep = amount <= value * 1.3 && (after <= r.tax + r.cap * 0.12 || (dir === 'contend' && after <= r.tax + r.cap * 0.25));
+        if (!keep) rec.reason = amount > value * 1.3 ? 'Asking far more than he is worth' : 'Would push the payroll too far over the tax';
+      } else if (p.ovr >= 75 || rank < 8 || young) {
+        keep = amount <= value * 1.15 && (after <= r.tax || (dir === 'contend' && p.ovr >= 77 && after <= r.tax + r.cap * 0.08));
+        if (!keep) rec.reason = amount > value * 1.15 ? 'Asking more than he is worth' : 'Would go over the luxury tax';
+      } else {
+        keep = count < MIN_ROSTER && p.ovr >= 65 && amount <= Math.max(d.min * 1.25, value * 1.05) && after <= r.tax;
+        if (!keep) rec.reason = 'Bench player: easy to replace';
+      }
+      if (!keep) return;
+      if (count >= MAX_ROSTER) {
+        var cut = ai ? worstCheap(state, ctx, abbr, Y) : null;
+        if (!cut || !(star || p.ovr >= cut.ovr + 6)) { rec.action = 'blocked'; rec.reason = 'Roster is full'; return; }
+        release(state, abbr, cut.id);
+        refreshTeam(state, ctx, abbr);
+        rec.released = cut.id;
+      }
+      var sal = makeFirst(Y, amount, n, 0);
+      var chk = canSign(state, abbr, id, sal, { pay: ctx.pay[abbr], count: ctx.count[abbr] });
+      if (!chk.ok) { rec.action = 'blocked'; rec.reason = chk.reason || 'Not allowed under the cap rules'; return; }
+      rec.signing = sign(state, abbr, p, sal, chk.via, {}, ctx);
+      rec.action = 'resigned';
+      rec.reason = star ? 'Franchise player' : p.ovr >= 80 ? 'Core player' : young ? 'Young player on the rise' : 'Rotation player at a fair price';
+      rec.salaries = sal;
+      rec.total = amount * n;
+    });
+    return out;
+  }
+
+  // The user lets one of his free agents go: rights renounced, he joins the open market.
+  function letGo(state, abbr, id) {
+    var r = state.fa && state.fa.rights[id], p = state.players[id];
+    if (!r || r.team !== abbr || !p) return { ok: false, message: 'No rights to give up' };
+    r.letGo = true; r.renounced = true; r.rfa = false;
+    clearEvent(state, 'qualifyingOffer', id);
+    log(state, 'release', abbr + ' lets ' + p.name + ' go: he is an unrestricted free agent', [id]);
+    return { ok: true, message: p.name + ' will hit the open market' };
+  }
+
+  // The cheapest player to waive to make room: lowest overall with little guaranteed money, never a stashed pick.
+  function worstCheap(state, ctx, abbr, Y) {
+    var r = rules(Y), best = null, bestScore = 0;
+    (ctx.rosters[abbr] || []).forEach(function (x) {
+      if ((x.contract && x.contract.twoWay) || isStashed(x)) return;
+      var g = x.contract ? x.contract.salaries.reduce(function (s, c) { return s + (c.year >= Y ? c.amount : 0); }, 0) : 0;
+      if (g > r.minSalary(10) * 2.2) return;
+      var sc = x.ovr + g / 5e5;
+      if (!best || sc < bestScore) { best = x; bestScore = sc; }
+    });
+    return best;
+  }
+
+  // Good players still unsigned: each goes to the team that can offer him the best mix of money and winning,
+  // even if that is only an exception or the minimum. Nobody this good sits out a season.
+  function lastCall(state, ctx, rng, out, minOvr) {
+    var fa = state.fa, Y = contractYear(state);
+    var pending = {};
+    fa.offerSheets.forEach(function (s) { pending[s.id] = 1; });
+    var pool = freeAgents(state).filter(function (p) { return !pending[p.id] && p.ovr >= minOvr && !p.generated; });
+    pool.sort(function (a, b) { return b.ovr - a.ovr; });
+    var teams = Object.keys(state.teams).filter(function (a) { return a !== state.userTeam; });
+    pool.forEach(function (p) {
+      if (p.team !== 'FA') return;
+      var rights = fa.rights[p.id];
+      if (rights && rights.rfa && fa.stage !== 'done' && fa.day < fa.length) return;   // restricted: his team still holds the qualifying offer
+      var d = demand(state, p.id, null, ctx), best = null;
+      teams.forEach(function (abbr) {
+        var cut = null;
+        if (ctx.count[abbr] >= MAX_ROSTER) {
+          cut = worstCheap(state, ctx, abbr, Y);
+          if (!cut || cut.ovr > p.ovr - 6) return;
+        }
+        var routes = routesFor(state, abbr, p.id, ctx.pay[abbr]), top = null;
+        routes.forEach(function (rt) { if (!top || rt.max > top.max) top = rt; });
+        if (!top) return;
+        var amount = top.via === 'min' ? d.min : Math.max(d.min, Math.min(top.max, d.amount));
+        var after = ctx.pay[abbr] + amount, rr = rules(Y);
+        if (after > rr.tax + rr.cap * 0.2 && top.via !== 'min') return;
+        var util = amount / Math.max(d.amount, 1) + teamBonus(state, abbr, p, ctx).bonus + winPct(state, abbr, ctx) * 0.4 + (rng() - 0.5) * 0.05;
+        if (!best || util > best.util) best = { abbr: abbr, rt: top, amount: amount, util: util, cut: cut };
+      });
+      if (!best) return;
+      var n = Math.max(1, Math.min(best.rt.years, d.years, best.rt.via === 'min' ? 2 : 5));
+      if (best.rt.via !== 'bird') n = Math.min(n, 4);
+      if (best.cut) { release(state, best.abbr, best.cut.id); out.released.push(best.cut.id); refreshTeam(state, ctx, best.abbr); }
+      var sal = makeFirst(Y, best.amount, n, 0);
+      var chk = canSign(state, best.abbr, p.id, sal, { pay: ctx.pay[best.abbr], count: ctx.count[best.abbr] });
+      if (!chk.ok) { sal = [{ year: Y, amount: d.min }]; chk = canSign(state, best.abbr, p.id, sal, { pay: ctx.pay[best.abbr], count: ctx.count[best.abbr] }); }
+      if (!chk.ok) return;
+      if (rights && rights.rfa && rights.team !== best.abbr) { rights.rfa = false; }
+      out.signings.push(sign(state, best.abbr, p, sal, chk.via, {}, ctx));
+    });
+  }
+
   function release(state, abbr, id) {
     var p = state.players[id];
     if (!p || p.team !== abbr) return { ok: false, message: 'Not on ' + abbr };
+    if (isStashed(p)) return { ok: false, message: p.name + ' is playing overseas: his draft rights are kept, not waived' };
     var Y = contractYear(state), dead = 0, t = state.teams[abbr];
     t.deadMoney = t.deadMoney || [];
     if (p.contract && !p.contract.twoWay) {
@@ -1153,11 +1501,13 @@
   }
 
   var FA = {
-    FA_DAYS: FA_DAYS, MAX_ROSTER: MAX_ROSTER, MIN_ROSTER: MIN_ROSTER,
+    FA_DAYS: FA_DAYS, MAX_ROSTER: MAX_ROSTER, MIN_ROSTER: MIN_ROSTER, OFFSEASON_MAX: OFFSEASON_MAX, rosterLimit: rosterLimit,
     rules: rules, contractYear: contractYear, payroll: payroll, rosterCount: rosterCount, twoWayCount: twoWayCount,
     minSalary: minSalary, maxSalary: maxSalary, prevSalary: prevSalary, makeFirst: makeFirst, marketValue: marketValue, demand: demand, teamBonus: teamBonus,
     canSign: canSign, birdLimit: birdLimit, makeSalaries: makeSalaries, makeRookieContract: makeRookieContract,
-    contractsFromSalary: contractsFromSalary, salaryFor: salaryFor,
+    contractsFromSalary: contractsFromSalary, salaryFor: salaryFor, isStashed: isStashed,
+    capSummary: capSummary, routesFor: routesFor, offerZone: offerZone, verdict: verdict, market: market,
+    autoResign: autoResign, letGo: letGo, openMarket: openMarket, applyDecision: applyDecision, ROUTE_LABEL: ROUTE_LABEL,
     startOffseason: startOffseason, resignWindow: resignWindow, decideOption: decideOption,
     setQualifyingOffer: setQualifyingOffer, renounce: renounce, matchOfferSheet: matchOfferSheet,
     offer: offer, simDay: simDay, finish: finishFreeAgency, release: release, freeAgents: freeAgents

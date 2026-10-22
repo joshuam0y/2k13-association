@@ -82,9 +82,9 @@
         .filter(p => p && !p.retired && (listOpts.team ? p.team === listOpts.team : p.team !== 'DRAFT') && (!q || String(p.name).toLowerCase().indexOf(q) >= 0))
         .sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
       const shown = rows.slice(0, 60);
-      UI.$('#cmList').innerHTML = rows.length ? `<div class="tscroll"><table class="stats cm-list"><thead><tr><th class="l">PLAYER</th><th class="l">TEAM</th><th>POS</th><th>AGE</th><th>OVR</th><th>POT</th><th>SALARY</th><th>THRU</th><th></th></tr></thead><tbody>
+      UI.$('#cmList').innerHTML = rows.length ? `<div class="tscroll"><table class="stats cm-list"><thead><tr><th class="l">PLAYER</th><th class="l">TEAM</th><th>POS</th><th>AGE</th><th>OVR</th><th>SALARY</th><th>THRU</th><th></th></tr></thead><tbody>
         ${shown.map(p => `<tr><td class="l"><a href="#/commish/player/${esc(p.id)}">${esc(p.name)}</a></td><td class="l">${esc(p.team)}</td><td>${esc(p.pos)}</td><td>${p.age || '-'}</td>
-          <td><b class="${UI.ovrClass ? UI.ovrClass(p.ovr) : ''}">${p.ovr || '-'}</b></td><td>${p.pot || '-'}</td><td>${x$(salaryNow(state, p))}</td><td>${contractEnd(p) || '-'}</td>
+          <td><b class="${UI.ovrClass ? UI.ovrClass(p.ovr) : ''}">${p.ovr || '-'}</b></td><td>${x$(salaryNow(state, p))}</td><td>${contractEnd(p) || '-'}</td>
           <td><a class="btn btn-small" href="#/commish/player/${esc(p.id)}">EDIT</a></td></tr>`).join('')}
         </tbody></table></div>${rows.length > shown.length ? `<p class="muted">Showing the top ${shown.length} of ${rows.length}. Search to narrow it down.</p>` : ''}`
         : '<p class="muted">No players match.</p>';
@@ -108,7 +108,6 @@
       <div class="cm-edit-head">${UI.headshot(p)}<div><div class="lv-k">${esc(teamLabel(state, p.team))} | ${esc(p.pos)}</div><h3>${esc(p.name)}</h3></div></div>
       <div class="cm-row">
         <label class="field"><span>OVERALL</span><input type="number" id="ceOvr" min="25" max="99" value="${p.ovr || 0}"></label>
-        <label class="field"><span>POTENTIAL</span><input type="number" id="cePot" min="25" max="99" value="${p.pot || 0}"></label>
         <label class="field"><span>AGE</span><input type="number" id="ceAge" min="17" max="45" value="${p.age || 0}"></label>
         <label class="field"><span>POSITION</span><select id="cePos">${POS.map(x => `<option ${String(p.pos).split(/[-\/]/)[0] === x ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
         <label class="field"><span>TEAM</span><select id="ceTeam">${abbrs.map(a => `<option value="${a}" ${p.team === a ? 'selected' : ''}>${esc(a)} ${esc(teamLabel(state, a))}</option>`).join('')}
@@ -142,7 +141,6 @@
       if (dOvr && UI.$('#ceScale').checked) Object.keys(attrs).forEach(k => { attrs[k] = clamp(Math.round(attrs[k] + dOvr), 25, 99); });
       p.attrs = attrs;
       set('overall', p.ovr, newOvr, v => { p.ovr = v; });
-      const pot = num('#cePot'); set('potential', p.pot, pot != null ? clamp(Math.round(pot), 25, 99) : null, v => { p.pot = v; });
       const age = num('#ceAge'); set('age', p.age, age != null ? clamp(Math.round(age), 17, 45) : null, v => { p.age = v; });
       const pos = UI.$('#cePos').value;
       if (String(p.pos).split(/[-\/]/)[0] !== pos) { changes.push('position ' + p.pos + ' to ' + pos); p.pos = pos; }

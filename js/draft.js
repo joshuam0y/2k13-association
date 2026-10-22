@@ -185,11 +185,35 @@
     });
     return found;
   }
+  // Protection for one draft: { top, until, byYear: { year: topN }, range: [lo, hi], extinguish, then }.
+  // top (or byYear[year]) protects picks 1..N; range protects lo..hi as well (second round: overall picks
+  // when N is above 30). Nothing is protected after "until".
+  function topFor(prot, year) {
+    if (!prot) return null;
+    if (prot.byYear && prot.byYear[year] != null) return +prot.byYear[year];
+    return prot.top != null ? +prot.top : null;
+  }
   function protectedNow(prot, year, overall, inRound, round) {
-    if (!prot || prot.top == null) return false;
+    if (!prot) return false;
     if (prot.until != null && year > +prot.until) return false;
-    var n = round === 1 ? overall : (+prot.top > 30 ? overall : inRound);
-    return n <= +prot.top;
+    var top = topFor(prot, year), rg = Array.isArray(prot.range) && prot.range.length === 2 ? prot.range : null;
+    if (top == null && !rg) return false;
+    var big = (top != null && top > 30) || (rg && +rg[1] > 30);
+    var n = round === 1 ? overall : (big ? overall : inRound);
+    if (top != null && n <= top) return true;
+    return !!(rg && n >= +rg[0] && n <= +rg[1]);
+  }
+  // Plain text for a protection, for the draft order and trade screens.
+  function protectionText(prot, year) {
+    if (!prot) return '';
+    var top = topFor(prot, year), rg = Array.isArray(prot.range) ? prot.range : null, parts = [];
+    if (prot.until != null && year != null && year > +prot.until) return prot.extinguish ? 'Protection ended' : 'Unprotected';
+    if (top != null) parts.push(top === 1 ? 'Top 1 protected' : 'Top ' + top + ' protected');
+    if (rg) parts.push((parts.length ? 'and ' : 'Protected ') + rg[0] + '-' + rg[1]);
+    var txt = parts.join(' ');
+    if (prot.until != null && (year == null || +prot.until > year)) txt += ' (through ' + prot.until + ')';
+    if (prot.then) txt += '. ' + String(prot.then).replace(/^./, function (c) { return c.toUpperCase(); });
+    return txt;
   }
 
   // The full order for a year's draft: lottery result (or projection by record), then the rest
@@ -210,26 +234,88 @@
         var slot = { year: year, overall: overall, round: round, pickInRound: i + 1, original: orig, team: orig, via: null, protectedFor: null, player: null };
         var f = findPick(state, year, round, orig);
         if (f && f.holder !== orig) {
+          slot.protection = f.entry.protection || null;
           if (protectedNow(f.entry.protection, year, overall, i + 1, round)) slot.protectedFor = f.holder;
           else { slot.team = f.holder; slot.via = orig; }
         }
         slots.push(slot);
       });
     });
+    applySwaps(state, year, slots);
     return slots;
   }
 
-  // Protected picks that did not convey roll to next year (unprotected once past "until").
+  // Pick swaps: a pick entry with swap: "ATL" lets ATL trade its least favorable pick of that round
+  // for this one when this one is better (the owner of the swap right gets the better pick).
+  function applySwaps(state, year, slots) {
+    teamList(state).forEach(function (a) {
+      (teams(state)[a].picks || []).forEach(function (pk) {
+        if (!pk.swap || +pk.year !== year || !isTeam(state, pk.swap)) return;
+        var sw = pk.swap, round = +pk.round;
+        var target = null, mine = null;
+        slots.forEach(function (sl) {
+          if (sl.round !== round) return;
+          if (sl.original === pk.original && !target) target = sl;
+          if (sl.team === sw && (!mine || sl.overall > mine.overall)) mine = sl;
+        });
+        if (!target || !mine || target === mine || target.team === sw || target.overall >= mine.overall) return;
+        var other = target.team;
+        target.team = sw; target.via = target.original !== sw ? target.original : null; target.swapped = sw;
+        mine.team = other; mine.via = mine.original !== other ? mine.original : null; mine.swapped = sw;
+      });
+    });
+  }
+
+  // Protected picks that did not convey stay with the original team and roll to next year, still
+  // protected through "until". After the last protected year the pick conveys unprotected, unless
+  // protection.then says it turns into second-round picks.
+  function removeOwn(state, year, round, original) {
+    var t = teams(state)[original];
+    if (!t || !t.picks) return;
+    t.picks = t.picks.filter(function (pk) { return !(+pk.year === year && +pk.round === round && pk.original === original); });
+  }
+  // Second-round picks named in an extinguished pick's "then" text ("becomes PHI 2015 and 2016 2nd round picks").
+  function thenSeconds(then, fromYear) {
+    var t = String(then || '');
+    if (!/2nd|second/i.test(t)) return [];
+    var cut = Math.max(t.toLowerCase().lastIndexOf('becomes'), t.toLowerCase().lastIndexOf('else'));
+    var part = cut >= 0 ? t.slice(cut) : t, years = [];
+    (part.match(/\b20\d\d\b/g) || []).forEach(function (y) { y = +y; if (y >= fromYear && years.indexOf(y) < 0) years.push(y); });
+    return years.length ? years : [fromYear + 1];
+  }
+  function giveSecond(state, slots, holderAbbr, original, y) {
+    var holder = teams(state)[holderAbbr], own = findPick(state, y, 2, original);
+    if (own && own.holder !== original) return false; // already owed elsewhere
+    if (own) {
+      teams(state)[original].picks = teams(state)[original].picks.filter(function (x) { return x !== own.entry; });
+      own.entry.protection = null;
+      holder.picks.push(own.entry);
+    } else holder.picks.push({ year: y, round: 2, original: original, protection: null });
+    slots.forEach(function (sl) { if (sl.year === y && sl.round === 2 && sl.original === original && sl.team === original) { sl.team = holderAbbr; sl.via = original; } });
+    return true;
+  }
   function applyRollovers(state, slots) {
     slots.forEach(function (s) {
       if (!s.protectedFor) return;
       var f = findPick(state, s.year, s.round, s.original);
       if (!f || f.holder !== s.protectedFor) return;
-      var pk = f.entry, prot = pk.protection;
+      var pk = f.entry, prot = pk.protection || {};
+      var last = prot.until == null || s.year >= +prot.until;
+      if (last && prot.extinguish) {
+        // The pick is gone: it stays with the original team, and the holder gets what "then" names
+        var holder = teams(state)[f.holder];
+        holder.picks = holder.picks.filter(function (x) { return x !== pk; });
+        var given = s.round === 1 ? thenSeconds(prot.then, s.year).filter(function (y) { return giveSecond(state, slots, f.holder, s.original, y); }) : [];
+        addTx(state, s.year, 'draft', 'The ' + s.original + ' pick owed to ' + s.protectedFor + ' was protected (' + s.overall +
+          ') and is extinguished' + (given.length ? '; ' + s.protectedFor + ' gets ' + s.original + ' second-round picks (' + given.join(', ') + ') instead.' : '.'), []);
+        return;
+      }
       pk.year = s.year + 1;
-      if (!prot || prot.until == null || pk.year > +prot.until) pk.protection = null;
+      if (prot.until == null || pk.year > +prot.until) pk.protection = null;
+      // The original team no longer owns its own pick that year: it now belongs to the holder
+      removeOwn(state, pk.year, s.round, s.original);
       addTx(state, s.year, 'draft', 'The ' + s.original + ' pick owed to ' + s.protectedFor + ' was protected (' + s.overall +
-        ') and rolls over to ' + pk.year + (pk.protection ? ' (top ' + pk.protection.top + ' protected)' : ' unprotected') + '.', []);
+        ') and rolls over to ' + pk.year + (pk.protection ? ' (' + protectionText(pk.protection, pk.year).split('.')[0].toLowerCase() + ')' : ' unprotected') + '.', []);
     });
   }
 
@@ -421,7 +507,17 @@
     if (state.draftClasses[year]) return state.draftClasses[year].slice();
     var rng = seeded(state, 'prospects' + year);
     var D = root && root.DRAFTS, real = year < FICTIONAL_FROM && D && D[year] && D[year].length ? D[year] : null;
-    var list = real ? real.map(function (x) { return normalizeProspect(x, year, rng); }) : generateClass(state, year, rng).map(function (x) { return normalizeProspect(x, year, rng); });
+    var list;
+    if (real) list = real.map(function (x) { return normalizeProspect(x, year, rng); });
+    else {
+      // fictional classes from js/draft-gen.js (window.DRAFTGEN), with the built-in generator as the fallback
+      var G = (root && root.DRAFTGEN) || null;
+      if (!G && typeof require === 'function') { try { G = require('./draft-gen.js'); } catch (e) { G = null; } }
+      var gen = null;
+      if (G && typeof G.generate === 'function') { try { gen = G.generate(year, rng, { used: state }); } catch (e) { gen = null; } }
+      if (!gen || !gen.length) gen = generateClass(state, year, rng);
+      list = gen.map(function (x) { return normalizeProspect(x, year, rng); });
+    }
     var ids = [];
     list.forEach(function (p) {
       var ex = state.players[p.id];
@@ -443,26 +539,15 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Scouting view: exact for the user, noisy for AI teams (scouting budget reduces the noise)
+  // Scouting view: exact for the user, a fixed amount of noise for AI teams (no budget effect)
   // ---------------------------------------------------------------------------
-  function scoutLevel(state, abbr) {
-    var t = teams(state)[abbr];
-    var v = t && t.budget && t.budget.scouting;
-    if (v == null || isNaN(+v)) return 0.5;
-    v = +v;
-    if (v <= 1) return clamp(v, 0, 1);
-    if (v <= 100) return clamp(v / 100, 0, 1);
-    var tot = 0, n = 0;
-    teamList(state).forEach(function (a) { var b = teams(state)[a].budget; if (b && +b.scouting > 0) { tot += +b.scouting; n++; } });
-    return n ? clamp(0.5 * v / (tot / n), 0, 1) : 0.5;
-  }
+  var AI_SCOUT_SD = 2.6;
   function view(state, abbr, id) {
     var p = state.players[id];
     if (!p) return null;
     if (abbr === state.userTeam) return { ovr: p.ovr, pot: p.pot };
-    var sd = 4 - 2.8 * scoutLevel(state, abbr);
     var r = mulberry32(hashStr(abbr + ':' + id + ':' + (state.rngSeed || 0)));
-    return { ovr: Math.round(p.ovr + gauss(r) * sd * 0.5), pot: Math.round(p.pot + gauss(r) * sd) };
+    return { ovr: Math.round(p.ovr + gauss(r) * AI_SCOUT_SD * 0.5), pot: Math.round(p.pot + gauss(r) * AI_SCOUT_SD) };
   }
 
   // ---------------------------------------------------------------------------
@@ -642,7 +727,16 @@
   function signOne(state, p, signYear) {
     var start = signYear + 1, salaries;
     var c = { salaries: [], option: null, rookie: true, twoWay: false, signedYear: signYear };
-    if (p.draft && p.draft.round === 1) {
+    var C = root && root.CBA, cc = null;
+    if (p.draft && p.draft.round === 1 && C && typeof C.rookieContract === 'function') {
+      // First-round picks sign at 120% of the rookie scale, like almost every real first-rounder
+      try { cc = C.rookieContract(p.draft.pick, start, 1.2); } catch (e) { cc = null; }
+      if (!cc || !cc.salaries || !cc.salaries.length || cc.salaries.some(function (x) { return !(x.amount > 0); })) cc = null;
+    }
+    if (cc) {
+      c = cc; c.rookie = true; c.twoWay = false;
+      salaries = cc.salaries;
+    } else if (p.draft && p.draft.round === 1) {
       salaries = rookieSalaries(p.draft.pick, start);
       c.option = { year: start + salaries.length - 1, type: 'team' };
     } else {
@@ -713,6 +807,8 @@
     loadClass: loadClass,
     generateClass: generateClass,
     view: view,
+    protectedNow: protectedNow,
+    protectionText: protectionText,
     ensurePicks: ensurePicks,
     rosterCount: rosterCount,
     isStashed: isStashed,

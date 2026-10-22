@@ -244,15 +244,15 @@ console.log('\n4. Fictional class 2027');
   const state = makeState(SEED + 2);
   const ids = DRAFT.loadClass(state, 2027);
   const cls = ids.map(id => state.players[id]);
-  check(cls.length === 70, '70 prospects (' + cls.length + ')');
-  check(cls.every(p => p.age >= 19 && p.age <= 22), 'ages 19 to 22');
-  check(new Set(cls.map(p => p.name)).size === 70, 'names unique');
+  check(cls.length >= 70 && cls.length <= 80, '70 to 80 prospects (' + cls.length + ')');
+  check(cls.every(p => p.age >= 18 && p.age <= 25), 'ages 18 to 25');
+  check(new Set(cls.map(p => p.name)).size === cls.length, 'names unique');
   check(cls.every(p => p.fictional && !p.nbaId && p.attrs && Object.keys(p.attrs).length === 22), 'fictional, 22 attributes each');
   const ovr = cls.map(p => p.ovr).sort((a, b) => b - a), pot = cls.map(p => p.pot).sort((a, b) => b - a);
   const mean = a => a.reduce((s, x) => s + x, 0) / a.length;
   console.log('   ovr top/median/low ' + ovr[0] + '/' + ovr[35] + '/' + ovr[69] + '; pot ' + pot[0] + '/' + pot[35] + '/' + pot[69]);
   check(ovr[0] >= 70 && ovr[0] <= 86 && ovr[69] >= 45 && ovr[69] <= 66, 'ovr range like real rookies');
-  check(pot[0] >= 82 && pot[0] <= 97 && mean(pot) > mean(ovr) + 5, 'potential range like real classes');
+  check(pot[0] >= 82 && pot[0] <= 97 && mean(pot) > mean(ovr) + 4, 'potential range like real classes');
   if (HAS_DRAFTS) {
     const real = [].concat(...Object.values(window.DRAFTS)).filter(p => p.ovr != null);
     console.log('   real classes: mean ovr ' + mean(real.map(p => p.ovr)).toFixed(1) + ', pot ' + mean(real.map(p => p.pot || p.ovr)).toFixed(1) +

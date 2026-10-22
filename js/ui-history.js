@@ -454,7 +454,7 @@
 
   function hofTab(s) {
     const list = Object.keys(s.players || {}).map(id => s.players[id]).filter(p => p && p.hof)
-      .sort((a, b) => (b.hofYear || b.hofInducted || 0) - (a.hofYear || a.hofInducted || 0) || (b.pot || 0) - (a.pot || 0));
+      .sort((a, b) => (b.hofYear || b.hofInducted || 0) - (a.hofYear || a.hofInducted || 0) || (b.ovr || 0) - (a.ovr || 0));
     if (!list.length) return UI.empty('THE HALL IS EMPTY', 'Players are voted into the Hall of Fame a few years after they retire. Legends of this Association will be enshrined here.', '');
     return `<div class="fr-hof">${list.map(p => {
       const cs = Array.isArray(p.careerStats) ? p.careerStats : [];
