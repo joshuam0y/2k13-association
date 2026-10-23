@@ -1305,6 +1305,12 @@
       }
       for (var k = 0; k < s.picks.length; k++) if (!findPick(state, a, s.picks[k])) return { ok: false, reason: a + " no longer owns that pick." };
     }
+    // never let the user's team give players or picks away for nothing (salary dumps need opts.allowDump)
+    if (state.userTeam && trade.teams.indexOf(state.userTeam) >= 0 && !opts.allowDump) {
+      var us = sideOf(trade, state.userTeam), back = 0;
+      trade.teams.forEach(function (a) { if (a !== state.userTeam) { var o = sideOf(trade, a); back += o.players.length + o.picks.length; } });
+      if ((us.players.length || us.picks.length) && !back) return { ok: false, reason: "You would get nothing back in this trade." };
+    }
     var text = describe(state, trade), ids = [], moves = [];
     trade.teams.forEach(function (a) {
       var s = sideOf(trade, a);

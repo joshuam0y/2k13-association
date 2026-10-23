@@ -379,6 +379,18 @@
     const E = F.fn('TRADE', 'evaluate');
     const ev = E ? F.try('TRADE.evaluate', () => E.evaluate(st, tr), null) : null;
     if (ev && !ev.accepts) return ev.message || 'They said no.';
+    {
+      const u = st.userTeam, pt = otherOf(tr, u);
+      const sideList = a => [].concat((tr.give[a].players || []).map(id => st.players[id] ? st.players[id].name + ' (' + st.players[id].ovr + ')' : null),
+        (tr.give[a].picks || []).map(pk => (pk && pk.year ? F.pickLabel(pk, a) : 'a draft pick') + ' pick')).filter(Boolean);
+      const give = sideList(u), get = sideList(pt);
+      if (give.length && !get.length) return 'You would get nothing back. Add a player or pick from the ' + UI.team(pt).name + ' side.';
+      if (typeof UI.choose === 'function') {
+        const c = await UI.choose({ title: 'CONFIRM TRADE', text: 'You give: ' + (give.join(', ') || 'nothing') + '. You get: ' + (get.join(', ') || 'nothing') + '.',
+          buttons: [{ value: 'yes', label: 'Make the trade', gold: true }, { value: 'no', label: 'Cancel' }] });
+        if (!c || c.value !== 'yes') return 'Trade cancelled.';
+      }
+    }
     const r = F.try('TRADE.execute', () => window.TRADE.execute(st, tr), { ok: false, reason: 'The trade module failed.' });
     if (r && r.ok === false) return r.reason || 'The trade could not be completed.';
     const user = st.userTeam, partner = otherOf(tr, user);
@@ -474,7 +486,10 @@
     if (E && dealSize(tr) && !closed) ans = F.try('TRADE.evaluate', () => E.evaluate(st, tr), null);
     const who = UI.team(partner).name.toUpperCase();
     let verdict;
+    const youGet = tr.give[partner] ? (tr.give[partner].players || []).length + (tr.give[partner].picks || []).length : 0;
+    const youGive = tr.give[user] ? (tr.give[user].players || []).length + (tr.give[user].picks || []).length : 0;
     if (!dealSize(tr)) verdict = `<div class="ftx-verdict"><div class="ft-k">${esc(who)}</div><p>Pick players or picks on both sides. Their answer shows up here as you go.</p></div>`;
+    else if (youGive && !youGet) verdict = `<div class="ftx-verdict bad"><div class="ft-k">YOU GET NOTHING BACK</div><p>Add at least one player or pick from the ${esc(UI.team(partner).name)} side. Trades that give players away for nothing are blocked.</p></div>`;
     else if (closed) verdict = `<div class="ftx-verdict bad"><div class="ft-k">TRADES CLOSED</div><p>${esc(closed)}</p></div>`;
     else if (!ans) verdict = `<div class="ftx-verdict"><div class="ft-k">${esc(who)}</div><p>The trade AI has not loaded.</p></div>`;
     else verdict = `<div class="ftx-verdict ${ans.accepts ? 'ok' : 'bad'}"><div class="ftx-yes">${ans.accepts ? 'YES' : 'NO'}</div>
