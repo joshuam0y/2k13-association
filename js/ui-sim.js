@@ -293,6 +293,8 @@
     // picks, the progression report once progression has run (before the new season starts).
     let go = null;
     if (result && result.stopped === 'userPick') { go = '#/draft'; UI.toast('You are on the clock with pick #' + result.pick + '.'); }
+    // this summer's retirements were just decided (the lottery step): the retirements screen (js/ui-retire.js), once a summer
+    else if (UI.retireDue && UI.retireDue()) go = '#/retirements';
     else if (phaseBefore === 'draftLottery' && g.phase === 'draft' && UI.pages.draft) go = '#/draft';
     else if (phaseBefore === 'freeAgency' && g.phase === 'training' && UI.pages.progress && g.progressReport) go = '#/progress';
     else if (phaseBefore === 'training' && g.phase === 'regular') go = '#/season';

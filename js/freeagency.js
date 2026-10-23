@@ -482,11 +482,14 @@
   // ---------------------------------------------------------------------------
   function log(state, type, text, ids) {
     state.transactions = state.transactions || [];
-    state.transactions.push({ year: state.year, day: state.fa ? state.fa.day : (state.day || 0), type: type, text: text, ids: ids || [] });
+    // offseason: the season the new contracts start, so each summer's moves can be told apart
+    state.transactions.push({ year: state.year, day: state.fa ? state.fa.day : (state.day || 0), type: type, text: text, ids: ids || [], offseason: state.fa ? state.fa.year : null });
   }
   function news(state, headline, body, ids) {
     state.news = state.news || [];
-    state.news.push({ year: state.year, day: state.fa ? state.fa.day : (state.day || 0), headline: headline, body: body || '', ids: ids || [] });
+    // newest first, like the league's own feed (js/league.js), so this summer's headlines lead
+    state.news.unshift({ year: state.year, day: state.fa ? state.fa.day : (state.day || 0), headline: headline, body: body || '', ids: ids || [], offseason: state.fa ? state.fa.year : null });
+    if (state.news.length > 300) state.news.length = 300;
   }
 
   function qoAmount(state, p, c, Y) {
@@ -531,6 +534,9 @@
     state.events = state.events || [];
     state.transactions = state.transactions || [];
     state.news = state.news || [];
+    // nothing from last summer carries over: its unanswered popups, summaries and the user's log
+    state.events = state.events.filter(function (e) { return !(e && (e.type === 'roster' || e.type === 'simSummary' || e.type === 'contractDecision') && !(e.faYear === Y)); });
+    state.simLog = (state.simLog || []).filter(function (x) { return x.faYear === Y; });
     var fa = state.fa = { year: Y, day: 0, length: opts.days || FA_DAYS, stage: 'resign', rights: {}, offerSheets: [], signings: [], decisions: [], used: {}, released: [], retired: [] };
     var summary = { year: Y, expiring: [], optedOut: [], optedIn: [], declined: [], exercised: [], rfa: [] };
     fa.summary = summary;
@@ -557,7 +563,7 @@
           log(state, 'option', p.team + (ex ? ' exercises ' : ' declines ') + 'its ' + Y + ' team option on ' + p.name, [id]);
           if (p.team === state.userTeam) {
             var exOpts = [{ value: 'exercise', label: 'Exercise: keep him' }, { value: 'decline', label: 'Decline: he becomes a free agent' }];
-            state.events.push({ type: 'contractDecision', kind: 'teamOption', playerId: id, team: p.team, year: Y, amount: rec.amount, defaultDecision: rec.decision,
+            state.events.push({ type: 'contractDecision', kind: 'teamOption', faYear: Y, playerId: id, team: p.team, year: Y, amount: rec.amount, defaultDecision: rec.decision,
               options: ex ? exOpts : exOpts.reverse(),
               text: 'You hold a team option on ' + p.name + ': ' + money(rec.amount) + ' for ' + (Y - 1) + '-' + String(Y).slice(2) + '. Your front office recommends you ' + (ex ? 'exercise it and keep him.' : 'decline it and let him become a free agent.') });
           }
@@ -597,7 +603,7 @@
       if (rights.rfa) summary.rfa.push(id);
       if (p.team === state.userTeam) {
         var qoOpts = [{ value: 'extend', label: 'Extend the qualifying offer' }, { value: 'withdraw', label: 'Withdraw: he is unrestricted' }];
-        state.events.push({ type: 'contractDecision', kind: 'qualifyingOffer', playerId: id, team: p.team, amount: qo, defaultDecision: rights.rfa ? 'extended' : 'withheld',
+        state.events.push({ type: 'contractDecision', kind: 'qualifyingOffer', faYear: Y, playerId: id, team: p.team, amount: qo, defaultDecision: rights.rfa ? 'extended' : 'withheld',
           options: rights.rfa ? qoOpts : qoOpts.reverse(),
           text: p.name + '\'s contract is up. A qualifying offer of ' + money(qo) + ' makes him a restricted free agent: you can match any offer sheet he signs. Your front office recommends you ' + (rights.rfa ? 'extend it.' : 'let him go unrestricted.') });
       }
@@ -702,6 +708,72 @@
     return { year: fa.year, stage: fa.stage, team: abbr, players: out };
   }
 
+  // The re-sign screen in one call: the user's expiring players with what each wants, how he feels
+  // about staying, last season's line, whether the front office recommends keeping him (autoResign's
+  // own logic, run on a copy), the Bird rights in plain words, and the cap picture either way.
+  function resignBoard(state, abbr) {
+    abbr = abbr || state.userTeam;
+    if (!state.fa || state.fa.year <= state.year) startOffseason(state);
+    var fa = state.fa, Y = fa.year, r = rules(Y), ctx = buildCtx(state), rows = [];
+    // what autoResign would do (no log, on a copy, so nothing changes here)
+    var rec = {};
+    try {
+      var copy = lightCopy(state);
+      if (copy.fa) copy.fa.userReviewed = false;
+      autoResign(copy, abbr, { force: true }).forEach(function (x) { rec[x.id] = x; });
+    } catch (e) { rec = {}; }
+    var pay = payroll(state, abbr, Y);
+    Object.keys(fa.rights).forEach(function (id) {
+      var rt = fa.rights[id], p = state.players[id];
+      if (!p || rt.team !== abbr || p.team !== 'FA' || rt.renounced || p.retired) return;
+      var d = demand(state, id, abbr, ctx), mood = typeof p.mood === 'number' ? p.mood : 55;
+      var willing = !(mood < 25 && pers(p).loyalty < 60);
+      var tb = teamBonus(state, abbr, p, ctx);
+      var interest = !willing ? 'Testing the market' : d.max ? 'Wants a max' : mood >= 60 || tb.bonus > 0.03 ? 'Wants to stay' : mood < 40 ? 'Unhappy here' : 'Open to returning';
+      var ps = state.season && state.season.playerStats && state.season.playerStats[id];
+      var line = ps && ps.g ? { g: ps.g, pts: ps.pts / ps.g, reb: ((ps.oreb || 0) + (ps.dreb || 0)) / ps.g, ast: ps.ast / ps.g, min: ps.min / ps.g } : null;
+      var lim = birdLimit(state, p, rt, Y);
+      var birdText = rt.bird === 'full' ? 'Bird rights: you can go over the cap to keep him'
+        : rt.bird === 'early' ? 'Early Bird rights: you can go over the cap up to ' + money(lim) + ' a year'
+          : 'Non-Bird rights: you can go over the cap up to ' + money(lim) + ' a year';
+      var x = rec[id] || null, last = p.lastContract && p.lastContract.salaries && p.lastContract.salaries.length ? p.lastContract.salaries[p.lastContract.salaries.length - 1].amount : 0;
+      rows.push({ id: id, name: p.name, pos: p.pos, age: p.age, ovr: p.ovr, mood: mood, willing: willing, interest: interest, line: line,
+        ask: d.amount, required: d.required, years: d.years, minYears: d.minYears, maxYears: d.maxYears, star: !!d.max, last: last,
+        bird: rt.bird, birdLimit: lim, birdText: birdText, rfa: !!rt.rfa, qo: rt.qo || 0,
+        recommended: !!(x && x.action === 'resigned'), recSalaries: x && x.salaries ? x.salaries : null, recReason: x ? x.reason : '' });
+    });
+    rows.sort(function (a, b) { return b.ovr - a.ovr; });
+    var keep = rows.filter(function (x) { return x.recommended && x.recSalaries; }).reduce(function (a, x) { return a + x.recSalaries[0].amount; }, 0);
+    // this summer's option decisions for the team (team options it holds, player options his players hold)
+    var options = (fa.decisions || []).filter(function (d) { return d.team === abbr; }).map(function (d) {
+      var q = state.players[d.id];
+      return { id: d.id, name: q ? q.name : d.id, type: d.type, decision: d.decision, amount: d.amount, year: d.year, canChange: d.type === 'team' && fa.stage === 'resign' };
+    });
+    return { year: Y, stage: fa.stage, team: abbr, players: rows, options: options,
+      cap: { payroll: pay, cap: r.cap, tax: r.tax, roomIfAllGo: Math.max(0, r.cap - pay), payrollIfRecommended: pay + keep, roomIfRecommended: Math.max(0, r.cap - pay - keep), recommendedCost: keep } };
+  }
+
+  // One click: re-sign him at what he asks from this team, for the length he wants (shortened to what a
+  // route allows). -> FA.offer's answer.
+  function resignAtAsking(state, abbr, id) {
+    var p = state.players[id];
+    if (!p) return { accepted: false, message: 'Unknown player' };
+    var ctx = buildCtx(state), d = demand(state, id, abbr, ctx), Y = contractYear(state);
+    var routes = routesFor(state, abbr, id, ctx.pay[abbr]), maxS = maxSalary(state, p, Y);
+    var tries = [d.years];
+    for (var k = d.minYears; k <= d.maxYears; k++) if (tries.indexOf(k) < 0) tries.push(k);
+    var last = null;
+    for (var i = 0; i < tries.length; i++) {
+      var n = tries[i], q = requiredFor(p, d, n, null).required;
+      var amt = q <= d.min * 1.001 ? d.min : Math.min(maxS, Math.max(Math.ceil(q * 1.005 / 10000) * 10000, Math.min(d.amount, maxS)));
+      if (!routeForAmount(routes, amt, n)) { last = { accepted: false, message: 'His price (' + money(amt) + ' a year for ' + yrsText(n) + ') is more than your cap room, Bird rights and exceptions allow.' }; continue; }
+      var res = offer(state, abbr, id, { salaries: makeFirst(Y, amt, n, 0) });
+      if (res.accepted) return res;
+      last = res;
+    }
+    return last || { accepted: false, message: 'No deal fits.' };
+  }
+
   // ---------------------------------------------------------------------------
   // Signing
   // ---------------------------------------------------------------------------
@@ -745,7 +817,7 @@
     fa.offerSheets.push(sheet);
     log(state, 'sign', p.name + ' signs an offer sheet with ' + abbr + ' (' + salaries.length + ' years, ' + money(salaries.reduce(function (a, s) { return a + s.amount; }, 0)) + '); ' + r.team + ' has 3 days to match', [p.id]);
     if (r.team === state.userTeam && !isAuto(state)) {
-      state.events.push({ type: 'contractDecision', kind: 'offerSheet', stopSim: true, playerId: p.id, team: r.team, from: abbr, salaries: salaries, expiresDay: sheet.expires,
+      state.events.push({ type: 'contractDecision', kind: 'offerSheet', faYear: fa.year, stopSim: true, playerId: p.id, team: r.team, from: abbr, salaries: salaries, expiresDay: sheet.expires,
         options: [{ value: 'match', label: 'Match: keep him' }, { value: 'letgo', label: 'Let him go' }],
         text: p.name + ' signed an offer sheet with ' + abbr + ': ' + salaries.length + (salaries.length === 1 ? ' year' : ' years') + ' at ' + money(salaries[0].amount) + ' a year. Match it to keep him, or let him go. You have 3 days.' });
     }
@@ -1558,16 +1630,17 @@
   function nextUid(state) { state.eventSeq = (state.eventSeq || 0) + 1; return 'ev' + state.eventSeq; }
   function userLog(state, text, ids) {
     state.simLog = state.simLog || [];
-    state.simLog.push({ text: text, ids: ids || [] });
+    state.simLog.push({ text: text, ids: ids || [], faYear: state.fa ? state.fa.year : null });
   }
   // One "While you simmed" popup with everything done for the user since the last one, or null.
   function flushSummary(state) {
-    var log = state.simLog;
-    if (!log || !log.length) return null;
+    var Yf = state.fa ? state.fa.year : null;
+    var log = (state.simLog || []).filter(function (x) { return x.faYear == null || x.faYear === Yf; });   // never last summer's
     state.simLog = [];
+    if (!log.length) return null;
     var ids = [];
     log.forEach(function (x) { (x.ids || []).forEach(function (id) { if (ids.indexOf(id) < 0) ids.push(id); }); });
-    var e = { type: 'simSummary', uid: nextUid(state), items: log.map(function (x) { return x.text; }), moved: ids,
+    var e = { type: 'simSummary', uid: nextUid(state), faYear: Yf, items: log.map(function (x) { return x.text; }), moved: ids,
       text: 'While you simmed:', options: [{ value: 'ok', label: 'OK' }] };
     state.events = state.events || [];
     state.events.push(e);
@@ -1747,13 +1820,17 @@
 
   // Can the team sign these suggested players together, in this order? Dry run on a light copy of the league
   // (cap room and each exception get used up as it goes). -> { fits: [ids], misses: [ids], total, payroll, cap, tax }
-  function checkGroup(state, abbr, ids, suggestions, limit) {
+  function lightCopy(state) {
     var copy = {};
     Object.keys(state).forEach(function (k) { copy[k] = state[k]; });
     copy.players = JSON.parse(JSON.stringify(state.players));
     copy.teams = JSON.parse(JSON.stringify(state.teams));
     copy.fa = state.fa ? JSON.parse(JSON.stringify(state.fa)) : null;
-    copy.transactions = []; copy.news = []; copy.events = [];
+    copy.transactions = []; copy.news = []; copy.events = []; copy.simLog = [];
+    return copy;
+  }
+  function checkGroup(state, abbr, ids, suggestions, limit) {
+    var copy = lightCopy(state);
     var out = { fits: [], misses: [], total: 0 }, Y = contractYear(state), r = rules(Y);
     (ids || []).forEach(function (id) {
       if (limit != null && out.fits.length >= limit) return;
@@ -1821,7 +1898,7 @@
         text: 'You have ' + cnt + ' players. The limit is ' + MAX_ROSTER + '. Waive ' + need + '?' };
       e.options = [{ value: { waive: e.preselect }, label: need === 1 ? 'Waive him' : 'Waive them' }, choose, ai];
     }
-    e.uid = nextUid(state); e.stopSim = true; e.team = abbr;
+    e.uid = nextUid(state); e.stopSim = true; e.team = abbr; e.faYear = state.fa ? state.fa.year : null;
     state.events = state.events || [];
     state.events.push(e);
     state.fa.ask = { uid: e.uid, kind: e.kind };
@@ -1877,7 +1954,7 @@
       var o = userPrice(state, abbr, pool[i], ctx);
       if (!o) continue;
       o.fit = f.label; o.fitKey = f.key; o.fitPos = f.pos;
-      var e = { type: 'roster', kind: 'pitch', uid: nextUid(state), stopSim: true, team: abbr, playerId: o.id, offer: o, day: fa.day,
+      var e = { type: 'roster', kind: 'pitch', uid: nextUid(state), faYear: fa.year, stopSim: true, team: abbr, playerId: o.id, offer: o, day: fa.day,
         text: o.name + ' wants ' + money(o.amount) + ' a year for ' + yrsText(o.years) + '. Make an offer?',
         options: [{ value: { sign: o.id }, label: 'Sign him' }, { value: 'negotiate', label: 'Negotiate myself' }, { value: 'pass', label: 'No thanks' }] };
       fa.pitches.push(o.id);
@@ -1975,7 +2052,7 @@
     setQualifyingOffer: setQualifyingOffer, renounce: renounce, matchOfferSheet: matchOfferSheet,
     offer: offer, simDay: simDay, finish: finishFreeAgency, release: release, freeAgents: freeAgents,
     setSimMode: setSimMode, isAuto: isAuto, flushSummary: flushSummary, userLog: userLog, resolveRosterEvent: resolveRosterEvent,
-    preseasonCheck: preseasonCheck, checkGroup: checkGroup, teamNeeds: teamNeeds, fitFor: fitFor, positionsOf: positionsOf, rosterSuggestions: rosterSuggestions, waiveCandidates: waiveCandidates, userCount: userCount
+    preseasonCheck: preseasonCheck, checkGroup: checkGroup, resignBoard: resignBoard, resignAtAsking: resignAtAsking, teamNeeds: teamNeeds, fitFor: fitFor, positionsOf: positionsOf, rosterSuggestions: rosterSuggestions, waiveCandidates: waiveCandidates, userCount: userCount
   };
 
   if (typeof window !== 'undefined') window.FA = FA;

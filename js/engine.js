@@ -1036,6 +1036,8 @@
       order: [],
       norms: norms,
       realSchedule: realSched,
+      // Play-In Tournament (2020-21 on): CBA.rules(year).playIn when the league passes rules, opts.playIn overrides
+      playIn: opts.playIn != null ? !!opts.playIn : opts.rules && typeof opts.rules.playIn === 'boolean' ? opts.rules.playIn : year >= 2021,
       version: 1
     };
   }
@@ -1124,6 +1126,7 @@
       quarters: res.quarters, ot: res.ot, pbp: res.pbp
     };
     if (res.playoff) stored.playoff = true;
+    if (res.playIn) stored.playIn = true;
     if (res.injuries && res.injuries.length) stored.injuries = res.injuries;
     season.boxScores[g.id] = stored;
     season.order.push(g.id);
@@ -1137,6 +1140,7 @@
       if (!user || (r.home.abbr !== user && r.away.abbr !== user)) {
         var slim = { id: r.id, home: r.home.abbr, away: r.away.abbr, hs: r.home.pts, as: r.away.pts, date: r.date };
         if (r.playoff) slim.playoff = true;
+        if (r.playIn) slim.playIn = true;
         season.boxScores[oldF] = slim;
       }
     }
@@ -1153,14 +1157,24 @@
   function playGame(season, league, by, g, rng, isPlayoff, dayDate) {
     var res = simGame(teamObj(season, league, by, g.home), teamObj(season, league, by, g.away), rng,
       { injuries: season.injuries, norms: season.norms });
+    return recordResult(season, by, g, res, isPlayoff, dayDate);
+  }
+
+  // Records a simulated game into the season: stats, standings, injuries, box score, bracket.
+  // Play-In games count as neither regular season nor playoffs: their lines go to season.playInStats.
+  function recordResult(season, by, g, res, isPlayoff, dayDate) {
     res.id = g.id; res.date = dayDate;
-    if (isPlayoff) res.playoff = true;
+    var isPI = !!g.playIn;
+    if (isPlayoff || isPI) res.playoff = true;
+    if (isPI) res.playIn = true;
+    if (!res.winner) res.winner = res.home.pts > res.away.pts ? res.home.abbr : res.away.abbr;
     g.played = true; g.hs = res.home.pts; g.as = res.away.pts;
-    var statMap = isPlayoff ? season.playoffStats : season.playerStats;
+    var statMap = isPI ? (season.playInStats = season.playInStats || {}) : isPlayoff ? season.playoffStats : season.playerStats;
     res.home.box.forEach(function (r) { addLine(statMap, r); });
     res.away.box.forEach(function (r) { addLine(statMap, r); });
-    if (!isPlayoff) recordStanding(season, g.home, g.away, res.home.pts, res.away.pts);
+    if (!isPlayoff && !isPI) recordStanding(season, g.home, g.away, res.home.pts, res.away.pts);
     var fresh = {};
+    res.injuries = res.injuries || [];
     res.injuries.forEach(function (inj) { fresh[inj.id] = 1; });
     countDownInjuries(season, g.home, by, fresh);
     countDownInjuries(season, g.away, by, fresh);
@@ -1174,7 +1188,19 @@
       if (!cur || cur.games < inj.games) season.injuries[inj.id] = { type: inj.type, games: inj.games };
     });
     storeResult(season, g, res);
+    if (isPI) applyPlayInResult(season, g, res);
+    else if (isPlayoff || g.series) applyPlayoffResult(season, g, res);
     return res;
+  }
+
+  // For games simulated outside simDays (the live game page): records them the same way.
+  function recordGame(season, g, res, league, opts) {
+    opts = opts || {};
+    league = league || globalLeague();
+    var by = rosters(league || { teams: [], players: [] });
+    var date = opts.date;
+    if (!date) season.days.forEach(function (d) { if (d.games.indexOf(g) >= 0) date = d.date; });
+    return recordResult(season, by, g, res, !!opts.playoff || !!g.series, date);
   }
 
   function countDownFreeAgents(season, by) {
@@ -1214,7 +1240,6 @@
         var res = playGame(season, league, by, g, rng, isPO, day.date);
         out.gamesPlayed.push(res);
         res.injuries.forEach(function (x) { out.injuries.push(x); });
-        if (isPO) applyPlayoffResult(season, g, res);
       });
       season.day++;
       out.daysPlayed++;
@@ -1252,7 +1277,8 @@
     });
   }
 
-  function conferenceSeeds(season, conf) {
+  function conferenceSeeds(season, conf, n) {
+    n = n || 8;
     var list = season.teams.filter(function (t) { return t.conf === conf; }).map(function (t) { return t.abbr; });
     var ranked = rankTeams(season, list);
     // 2012-13 rule: division winners are guaranteed a top-4 seed
@@ -1260,11 +1286,11 @@
     season.teams.forEach(function (t) { if (t.conf === conf) (divs[t.div] = divs[t.div] || []).push(t.abbr); });
     var winners = Object.keys(divs).map(function (d) { return rankTeams(season, divs[d])[0]; });
     // from 2015-16 on, seeds go by record only (win pct, so uneven game counts like 2019-20 work)
-    if (winners.length !== 3 || (season.year || 2013) >= 2016) return ranked.slice(0, 8);
+    if (winners.length !== 3 || (season.year || 2013) >= 2016) return ranked.slice(0, n);
     var bestOther = ranked.filter(function (a) { return winners.indexOf(a) < 0; })[0];
     var top4 = rankTeams(season, winners.concat(bestOther ? [bestOther] : []));
     var rest = ranked.filter(function (a) { return top4.indexOf(a) < 0; });
-    return top4.concat(rest).slice(0, 8);
+    return top4.concat(rest).slice(0, n);
   }
 
   function makeSeries(season, id, conf, round, a, aSeed, b, bSeed, startDay) {
@@ -1277,8 +1303,8 @@
     };
   }
 
-  function buildBracket(season) {
-    var seeds = { East: conferenceSeeds(season, 'East'), West: conferenceSeeds(season, 'West') };
+  function buildBracket(season, seeds, startDate) {
+    seeds = seeds || { East: conferenceSeeds(season, 'East'), West: conferenceSeeds(season, 'West') };
     var pairs = [[1, 8], [4, 5], [3, 6], [2, 7]];
     var round1 = [];
     ['East', 'West'].forEach(function (c, ci) {
@@ -1290,21 +1316,172 @@
         round1.push(s);
       });
     });
-    var lastDate = season.days.length ? season.days[season.days.length - 1].date : (season.year + '-04-17');
     return {
       seeds: seeds,
       rounds: [round1],
       round: 1,
       champion: null,
       finalsMvp: null,
-      startDate: addDays(lastDate, 3),
+      startDate: startDate || addDays(lastRegularDate(season), 3),
       cal: 0
+    };
+  }
+
+  function lastRegularDate(season) {
+    for (var i = season.days.length - 1; i >= 0; i--) if (!season.days[i].playoff) return season.days[i].date;
+    return (season.year || 2013) + '-04-17';
+  }
+
+  // ---------------------------------------------------------------------------
+  // Play-In Tournament
+  // ---------------------------------------------------------------------------
+  // From 2020-21 on, per conference: 7 v 8 (winner is the 7 seed), 9 v 10 (loser out), then the
+  // loser of 7 v 8 hosts the winner of 9 v 10 for the 8 seed. The higher seed hosts every game.
+  // 2019-20 bubble: when the 9th place team was within 4 games of the 8th, the 8th had to win once
+  // and the 9th twice (only the West had one: Portland over Memphis).
+  // season.playoffs.playIn = { West: { '7v8': game, '9v10': game, final: game }, East: {...} } (bubble:
+  // { game1, game2 }), game = { hi, lo, hiSeed, loSeed, gameId, hs, as, winner, date }, hs = hi (home) score.
+  function playInOn(season) {
+    return season.playIn != null ? !!season.playIn : (season.year || 2013) >= 2021;
+  }
+  function piGame(hi, lo, hiSeed, loSeed, date) {
+    return { hi: hi || null, lo: lo || null, hiSeed: hiSeed, loSeed: loSeed, gameId: null, hs: null, as: null, winner: null, date: date };
+  }
+  function gamesBehind(season, a, b) {
+    var A = season.standings[a], B = season.standings[b];
+    return ((A.w - B.w) + (B.l - A.l)) / 2;
+  }
+
+  // Builds the postseason at the end of the regular season: the Play-In when it applies, else the bracket.
+  function startPostseason(season) {
+    var confs = ['East', 'West'];
+    var last = lastRegularDate(season);
+    var modern = playInOn(season) && confs.every(function (c) { return conferenceSeeds(season, c, 10).length >= 10; });
+    var bubble = !modern && !playInOn(season) && season.year === 2020;
+    if (!modern && !bubble) return buildBracket(season);
+    var pi = {}, seeds = {}, any = false;
+    if (modern) {
+      // real dates: East first round two days after the regular season, West the next day, both
+      // 8 seed games two days later (2020-21: East and West finals on back to back days), playoffs six days after
+      var d = function (n) { return addDays(last, n); };
+      var finE = season.year === 2021 ? d(4) : d(5), finW = d(5);
+      confs.forEach(function (c) {
+        var top = conferenceSeeds(season, c, 10);
+        seeds[c] = top.slice(0, 6);
+        var first = c === 'East' ? d(2) : d(3);
+        pi[c] = { '7v8': piGame(top[6], top[7], 7, 8, first), '9v10': piGame(top[8], top[9], 9, 10, first), final: piGame(null, null, null, null, c === 'East' ? finE : finW) };
+        top.forEach(function (a, i) { if (i >= 6) season.standings[a].clinch = 'playin'; });
+      });
+      any = true;
+    } else {
+      confs.forEach(function (c) {
+        var top = conferenceSeeds(season, c, 9);
+        if (top.length >= 9 && gamesBehind(season, top[7], top[8]) <= 4) {
+          seeds[c] = top.slice(0, 7);
+          pi[c] = { game1: piGame(top[7], top[8], 8, 9, addDays(last, 1)) };
+          any = true;
+        } else seeds[c] = top.slice(0, 8);
+      });
+      if (!any) return buildBracket(season);
+    }
+    return {
+      seeds: seeds,
+      rounds: [],
+      round: 0,
+      champion: null,
+      finalsMvp: null,
+      startDate: addDays(last, modern ? 6 : 3),
+      cal: 0,
+      stage: 'playIn',
+      playInFormat: modern ? 'modern' : 'bubble',
+      playIn: pi
     };
   }
 
   function seedPlayoffs(season) {
     if (season.playoffs && season.phase !== 'regular') return season.playoffs;
-    return buildBracket(season);
+    var b = startPostseason(season);
+    if (b.stage === 'playIn') { season.playoffs = b; schedulePlayInGames(season); }
+    return b;
+  }
+
+  // Puts every Play-In game whose teams are known on the schedule, on its real date, as soon as it is
+  // known (so the user's game shows up as his next game and can be watched live). Returns the count added.
+  function schedulePlayInGames(season) {
+    var b = season.playoffs, added = 0;
+    if (!b || !b.playIn) return 0;
+    ['East', 'West'].forEach(function (c) {
+      var x = b.playIn[c];
+      if (!x) return;
+      Object.keys(x).forEach(function (slot) {
+        var p = x[slot];
+        if (!p || typeof p !== 'object' || p.gameId || !p.hi || !p.lo) return;
+        p.gameId = 'pi' + c[0] + '-' + slot;
+        var game = { id: p.gameId, home: p.hi, away: p.lo, played: false, hs: null, as: null, playIn: c, slot: slot };
+        var day = null;
+        for (var i = season.day; i < season.days.length; i++) if (season.days[i].playIn && season.days[i].date === p.date) day = season.days[i];
+        if (!day) { day = { date: p.date, games: [], playoff: true, playIn: true }; season.days.push(day); }
+        day.games.push(game);
+        added++;
+      });
+    });
+    if (added) {
+      // keep the days still to come in date order (the day in progress stays first)
+      var from = season.day, cur = season.days[from];
+      if (cur && cur.games.some(function (gm) { return gm.played; })) from++;
+      var tail = season.days.splice(from);
+      tail.sort(function (u, v) { return u.date < v.date ? -1 : u.date > v.date ? 1 : 0; });
+      season.days.push.apply(season.days, tail);
+    }
+    return added;
+  }
+
+  function applyPlayInResult(season, g, res) {
+    var b = season.playoffs;
+    var x = b && b.playIn && b.playIn[g.playIn];
+    var p = x && x[g.slot];
+    if (!p) return;
+    p.hs = res.home.abbr === p.hi ? res.home.pts : res.away.pts;
+    p.as = res.home.abbr === p.hi ? res.away.pts : res.home.pts;
+    p.winner = p.hs > p.as ? p.hi : p.lo;
+    var loser = p.winner === p.hi ? p.lo : p.hi;
+    if (b.playInFormat === 'bubble') {
+      // the 8th place team needs one win, the 9th two
+      if (g.slot === 'game1' && p.winner === p.lo) x.game2 = piGame(p.hi, p.lo, p.hiSeed, p.loSeed, addDays(p.date, 1));
+      else x.seed8 = p.winner;
+    } else {
+      if (season.standings[loser] && (g.slot === '9v10' || g.slot === 'final')) season.standings[loser].clinch = 'out';
+      if (season.standings[p.winner] && g.slot !== '9v10') season.standings[p.winner].clinch = 'playoffs';
+      var a78 = x['7v8'], a910 = x['9v10'];
+      if (a78.winner && a910.winner && !x.final.hi) {
+        var l78 = a78.winner === a78.hi ? a78.lo : a78.hi;
+        x.final.hi = l78; x.final.hiSeed = a78.winner === a78.hi ? a78.loSeed : a78.hiSeed;
+        x.final.lo = a910.winner; x.final.loSeed = a910.winner === a910.hi ? a910.hiSeed : a910.loSeed;
+      }
+      if (g.slot === 'final') x.seed8 = p.winner;
+      if (g.slot === '7v8') x.seed7 = p.winner;
+    }
+    if (!finishPlayIn(season)) schedulePlayInGames(season);
+  }
+
+  // Once every Play-In game is decided: seed 7 and 8 into the bracket and draw the first round.
+  function finishPlayIn(season) {
+    var b = season.playoffs;
+    if (!b || b.stage !== 'playIn') return false;
+    var confs = ['East', 'West'];
+    if (!confs.every(function (c) { return !b.playIn[c] || b.playIn[c].seed8; })) return false;
+    var seeds = {};
+    confs.forEach(function (c) {
+      var x = b.playIn[c], list = b.seeds[c].slice();
+      if (x) {
+        if (x.seed7) list.push(x.seed7);
+        list.push(x.seed8);
+      }
+      seeds[c] = list;
+    });
+    var br = buildBracket(season, seeds, b.startDate);
+    b.seeds = br.seeds; b.rounds = br.rounds; b.round = 1; b.cal = 0; b.stage = 'bracket';
+    return true;
   }
 
   function playoffs(season) {
@@ -1316,6 +1493,11 @@
   function schedulePlayoffDay(season) {
     var b = season.playoffs;
     if (!b || b.champion) return false;
+    if (b.stage === 'playIn' && !finishPlayIn(season)) {
+      // normally every Play-In game is already on the schedule; this only catches older saves
+      return schedulePlayInGames(season) > 0 && season.day < season.days.length;
+    }
+    if (!b.rounds.length) return false;
     for (var tries = 0; tries < 10; tries++) {
       var round = b.rounds[b.round - 1];
       var games = [];
@@ -1344,7 +1526,7 @@
 
   function applyPlayoffResult(season, g, res) {
     var b = season.playoffs;
-    var s = findSeries(b, g.series);
+    var s = b && b.rounds && findSeries(b, g.series);
     if (!s) return;
     s.games.push(g.id);
     if (res.winner === s.hi) s.hw++; else s.lw++;
@@ -1442,6 +1624,8 @@
     simGame: simGame,
     playoffs: playoffs,
     seedPlayoffs: seedPlayoffs,
+    schedulePlayoffDay: schedulePlayoffDay,
+    recordGame: recordGame,
     getBoxScore: getBoxScore,
     teamSchedule: teamSchedule,
     standingsList: standingsList,

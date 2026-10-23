@@ -950,9 +950,16 @@
   P.leaders = function (app, arg) { P.stats(app, arg === 'playoffs' ? 'leaders/playoffs' : ''); };
 
   // ---------- Playoffs ----------
+  // Built like the NBA 2K Playoffs screen: the round and your status up top, 2K style sim buttons,
+  // the Play-In (when the season has one), then the 16 team bracket with the West on the left, the
+  // East on the right and the Finals in the middle. A series opens a side panel (#/playoffs/<id>).
   const ROUND_NAMES = ['FIRST ROUND', 'CONFERENCE SEMIFINALS', 'CONFERENCE FINALS', 'NBA FINALS'];
+  const RD_SHORT = ['FIRST ROUND', 'CONF. SEMIFINALS', 'CONF. FINALS', 'NBA FINALS'];
+  const RD_LOWER = ['the first round', 'the conference semifinals', 'the conference finals', 'the NBA Finals'];
+  const CONF_FULL = { West: 'WESTERN CONFERENCE', East: 'EASTERN CONFERENCE' };
   function normSeries(s) {
     return {
+      id: s.id || null, round: s.round || null, games: Array.isArray(s.games) ? s.games : [],
       a: UI.abbrOf(s.hi || s.high || s.a), b: UI.abbrOf(s.lo || s.low || s.b),
       aSeed: s.hiSeed != null ? s.hiSeed : s.highSeed, bSeed: s.loSeed != null ? s.loSeed : s.lowSeed,
       aw: s.hw != null ? s.hw : s.wins ? s.wins[0] : null, bw: s.lw != null ? s.lw : s.wins ? s.wins[1] : null,
@@ -961,6 +968,7 @@
   }
   UI.normBracket = function (b) {
     if (!b || !Array.isArray(b.rounds)) return null;
+    const drawn = b.rounds.length;
     const rounds = b.rounds.map((r, i) => {
       const list = Array.isArray(r) ? r : (r.series || []);
       const order = x => (x.conf === 'West' ? 0 : x.conf === 'East' ? 1 : 2);
@@ -968,17 +976,9 @@
     });
     // Placeholders for rounds not drawn yet.
     for (let i = rounds.length; i < 4; i++) rounds.push({ name: ROUND_NAMES[i], series: Array.from({ length: 8 >> i }, () => ({ a: null, b: null })) });
-    return { rounds, champion: UI.abbrOf(b.champion), finalsMvp: b.finalsMvp || null };
+    const fm = b.finalsMvp && typeof b.finalsMvp === 'object' ? b.finalsMvp.id : b.finalsMvp;
+    return { rounds, drawn, champion: UI.abbrOf(b.champion), finalsMvp: fm || null };
   };
-
-  function seriesHtml(s) {
-    const line = (abbr, seed, w, isWin) => abbr
-      ? `<a class="sr-team${isWin ? ' win' : ''}${s.winner && !isWin ? ' out' : ''}" href="#/team/${esc(abbr)}">${seed != null ? `<span class="sr-seed">${esc(seed)}</span>` : ''}${UI.logo(abbr, 26)}<span class="sr-abbr">${esc(abbr)}</span><b>${w != null ? esc(w) : ''}</b></a>`
-      : '<span class="sr-team tbd"><span class="sr-abbr">TBD</span></span>';
-    const user = UI.userTeam();
-    return `<div class="series${user && (s.a === user || s.b === user) ? ' mine' : ''}">${line(s.a, s.aSeed, s.aw, s.winner && s.winner === s.a)}${line(s.b, s.bSeed, s.bw, s.winner && s.winner === s.b)}</div>`;
-  }
-  const bracketHtml = br => `<div class="bracket">${br.rounds.map(r => `<div class="b-round"><div class="b-round-name">${esc(r.name)}</div>${r.series.map(seriesHtml).join('')}</div>`).join('')}</div>`;
 
   // Seeds 1 to 8 per conference: from standings when a league is loaded, else by team overall.
   function projected() {
@@ -989,33 +989,417 @@
       seeds = seeds.slice(0, 8);
       [[1, 8], [4, 5], [3, 6], [2, 7]].forEach(([x, y]) => r1.push({ hi: seeds[x - 1] || null, lo: seeds[y - 1] || null, hiSeed: x, loSeed: y, conf: c }));
     });
-    return UI.normBracket({ rounds: [r1], champion: null });
+    const br = UI.normBracket({ rounds: [r1], champion: null });
+    br.projected = true;
+    return br;
   }
 
-  P.playoffs = function (app) {
+  const minLeft = x => (!x || !x.a || x.winner ? 0 : 4 - Math.max(Number(x.aw) || 0, Number(x.bw) || 0));
+  const liveBracket = () => { const s = UI.state.season; return s && s.playoffs ? UI.normBracket(s.playoffs) : null; };
+  const curRoundIdx = br => Math.max(0, Math.min(3, (br.drawn || 1) - 1));
+  // The user's latest series in the bracket and its round index.
+  function mySeries(br, u) {
+    let found = null;
+    if (br && u) br.rounds.forEach((r, i) => r.series.forEach(x => { if (x.id && (x.a === u || x.b === u)) found = { x, ri: i }; }));
+    return found;
+  }
+  function findSeriesById(br, id) {
+    let out = null;
+    if (br && id) br.rounds.forEach((r, i) => r.series.forEach(x => { if (x.id && x.id === id) out = { x, ri: i }; }));
+    return out;
+  }
+  // Bracket slots per conference and round, with known winners carried into rounds not drawn yet.
+  function confSlots(br, conf, ri) {
+    const want = 4 >> ri;
+    const real = br.rounds[ri].series.filter(x => x.conf === conf && x.a);
+    if (real.length >= want || (ri === 0 && real.length)) return real;
+    if (ri === 0) return Array.from({ length: want }, () => ({ a: null, b: null }));
+    const prev = confSlots(br, conf, ri - 1);
+    return Array.from({ length: want }, (_, j) => {
+      const p = prev[2 * j], q = prev[2 * j + 1];
+      const sd = (x, w) => (x && w ? (x.a === w ? x.aSeed : x.bSeed) : null);
+      return { a: p && p.winner || null, b: q && q.winner || null, aSeed: sd(p, p && p.winner), bSeed: sd(q, q && q.winner), pend: true };
+    });
+  }
+  function finalsSlot(br) {
+    const f = br.rounds[3].series[0];
+    if (f && f.a) return f;
+    const w = confSlots(br, 'West', 2)[0], e = confSlots(br, 'East', 2)[0];
+    const sd = (x, k) => (x && x.winner ? (x.a === x.winner ? x.aSeed : x.bSeed) : null);
+    return { a: w && w.winner || null, b: e && e.winner || null, aSeed: sd(w), bSeed: sd(e), pend: true };
+  }
+
+  // "OKC leads 3-1", "MIA wins 4-2", "Series tied 2-2"
+  function seriesLine(x) {
+    if (!x || !x.a || !x.b) return x && (x.a || x.b) ? 'Waiting on the other series' : '';
+    if (!x.id) return x.pend ? 'Next round' : '';
+    const aw = Number(x.aw) || 0, bw = Number(x.bw) || 0;
+    if (x.winner) return x.winner + ' wins ' + Math.max(aw, bw) + '-' + Math.min(aw, bw);
+    if (!aw && !bw) return 'Game 1 next';
+    if (aw === bw) return 'Series tied ' + aw + '-' + bw;
+    return (aw > bw ? x.a : x.b) + ' leads ' + Math.max(aw, bw) + '-' + Math.min(aw, bw);
+  }
+  function pbTeam(x, side, u) {
+    const abbr = side ? x.b : x.a, seed = side ? x.bSeed : x.aSeed, w = side ? x.bw : x.aw;
+    if (!abbr) return '<div class="pb-t tbd"><span class="pb-seed"></span><span class="pb-n"><b>TBD</b></span></div>';
+    const won = !!x.winner && x.winner === abbr, lost = !!x.winner && !won;
+    return `<div class="pb-t${won ? ' win' : ''}${lost ? ' out' : ''}${abbr === u ? ' you' : ''}" style="--tc:${esc(UI.teamColor(abbr))}">
+      <span class="pb-seed">${seed != null ? esc(seed) : ''}</span>${UI.logo(abbr, 26)}<span class="pb-n"><b>${esc(abbr)}</b><small>${esc(UI.team(abbr).name || '')}</small></span><span class="pb-w">${x.id && w != null ? esc(w) : ''}</span></div>`;
+  }
+  function pbCard(x, u, sel) {
+    const mine = !!u && (x.a === u || x.b === u);
+    const cls = `pb-card${mine ? ' mine' : ''}${x.winner ? ' done' : ''}${x.id && x.id === sel ? ' sel' : ''}${x.id ? '' : ' pend'}`;
+    const inner = pbTeam(x, 0, u) + pbTeam(x, 1, u) + `<div class="pb-st">${esc(seriesLine(x)) || '&nbsp;'}</div>`;
+    if (!x.id) return `<div class="${cls}">${inner}</div>`;
+    return `<a class="${cls}" href="#/playoffs/${encodeURIComponent(x.id)}" aria-label="${esc(UI.teamName(x.a) + ' vs ' + UI.teamName(x.b) + ': ' + seriesLine(x) + '. Open the series')}">${inner}</a>`;
+  }
+  function bracket2k(br, sel) {
+    const u = UI.userTeam();
+    const col = (conf, ri) => `<div class="pb-col pb-${conf === 'West' ? 'w' : 'e'}${ri + 1}"><div class="pb-h"><small>${conf === 'West' ? 'WEST' : 'EAST'}</small>${RD_SHORT[ri]}</div>
+      <div class="pb-list">${confSlots(br, conf, ri).map(x => pbCard(x, u, sel)).join('')}</div></div>`;
+    const champ = br.champion;
+    const fin = `<div class="pb-col pb-f"><div class="pb-h pb-hf"><small>${br.projected ? 'PROJECTED' : esc(String(UI.state.season ? UI.state.season.year : UI.year()))}</small>NBA FINALS</div>
+      <div class="pb-list">${pbCard(finalsSlot(br), u, sel)}
+        <div class="pb-champ${champ ? '' : ' tbd'}"${champ ? ` style="--tc:${esc(UI.teamColor(champ))}"` : ''}>${champ ? UI.logo(champ, 64) : '<span class="pb-trophy" aria-hidden="true"></span>'}<b>${champ ? 'CHAMPIONS' : 'CHAMPION'}</b><span>${champ ? esc(UI.teamName(champ).toUpperCase()) : 'TBD'}</span></div>
+      </div></div>`;
+    return `<div class="pb" role="region" aria-label="Playoff bracket">${col('West', 0)}${col('West', 1)}${col('West', 2)}${fin}${col('East', 2)}${col('East', 1)}${col('East', 0)}</div>`;
+  }
+
+  // ---------- Play-In Tournament (2020-21 on) ----------
+  // Reads season.playoffs.playIn (or season.playIn): { West: { '7v8': g, '9v10': g, final: g }, East: ... },
+  // a { West: [g, g, g] } list, or a flat [g] list with g.conf. g: { hi|home, lo|away, hiSeed, loSeed,
+  // hs, as, winner, gameId|id } in any of those spellings; scores come from the box score when kept.
+  function playInGames() {
     const s = UI.state.season;
-    const br = s && s.playoffs ? UI.normBracket(s.playoffs) : null;
-    const yr = s ? s.year : UI.year();
-    if (br) {
-      const champ = br.champion;
-      const mvp = br.finalsMvp && UI.player(br.finalsMvp);
-      const canSim = UI.canPlay() && !UI.inOffseason();
-      app.innerHTML = UI.header(yr + ' PLAYOFFS', 'Best of seven, 16 teams.') +
-        (champ ? `<section class="champ" style="--c1:${esc(UI.teamColor(champ))}">${UI.logo(champ, 96)}<div><div class="ch-k">${esc(yr)} NBA CHAMPIONS</div><div class="ch-t">${esc(UI.teamName(champ))}</div>${mvp ? `<div class="ch-mvp">FINALS MVP: <a href="#/player/${esc(mvp.id)}">${esc(mvp.name)}</a></div>` : ''}${champ === UI.userTeam() ? '<div class="ch-you">YOUR TEAM WON THE TITLE</div>' : ''}</div></section>` : '') +
-        (canSim && !champ ? `${resultStrip()}<div class="row-btns po-btns">${canSimNext() ? `<button type="button" class="btn btn-gold sim-btn sim-next" data-how="&quot;nextGame&quot;">SIM NEXT GAME</button>` : ''}<button type="button" class="btn${canSimNext() ? '' : ' btn-gold'}" id="simPo">SIM TO PLAYOFFS END</button><button type="button" class="btn" id="simDay">SIM 1 DAY</button></div>` : '') +
-        bracketHtml(br);
-    } else {
-      const canSim = UI.canPlay() && UI.state.game && !UI.inOffseason();
-      const sub = !UI.state.game ? 'Projected by team overall. Start the Association to play it out.' : 'If the season ended today.';
-      app.innerHTML = UI.header(yr + ' PLAYOFFS', sub) +
-        (canSim ? `<div class="row-btns"><button type="button" class="btn btn-gold" id="simPo">SIM TO PLAYOFFS END</button></div>` : '') +
-        bracketHtml(projected());
+    const pi = s && ((s.playoffs && (s.playoffs.playIn || s.playoffs.playin)) || s.playIn);
+    if (!pi || typeof pi !== 'object') return null;
+    const list = [];
+    if (Array.isArray(pi)) pi.forEach(g => list.push(g));
+    else if (Array.isArray(pi.games)) pi.games.forEach(g => list.push(g));
+    else ['West', 'East'].forEach(c => {
+      const x = pi[c];
+      if (Array.isArray(x)) x.forEach(g => g && list.push(Object.assign({ conf: c }, g)));
+      else if (x && typeof x === 'object') Object.keys(x).forEach(k => { if (x[k] && typeof x[k] === 'object' && (x[k].hi || x[k].home || x[k].a || x[k].lo || x[k].away)) list.push(Object.assign({ conf: c, slot: k }, x[k])); });
+    });
+    const out = { West: {}, East: {} };
+    list.forEach(g => {
+      if (!g || typeof g !== 'object') return;
+      const gid = g.gameId || g.game || (typeof g.id === 'string' && UI.game(g.id) ? g.id : null);
+      const gm = gid ? UI.game(gid) : null;
+      const a = UI.abbrOf(g.hi || g.high || g.home || g.a), b = UI.abbrOf(g.lo || g.low || g.away || g.b);
+      const aSeed = [g.hiSeed, g.highSeed, g.homeSeed, g.aSeed].find(v => v != null);
+      const bSeed = [g.loSeed, g.lowSeed, g.awaySeed, g.bSeed].find(v => v != null);
+      let as = null, bs = null;
+      if (gm && gm.played) { as = gm.home === a ? gm.hs : gm.as; bs = gm.home === a ? gm.as : gm.hs; }
+      else if (g.hs != null || g.as != null) { const aHome = !g.home || UI.abbrOf(g.home) === a; as = aHome ? g.hs : g.as; bs = aHome ? g.as : g.hs; }
+      else if (Array.isArray(g.score)) { as = g.score[0]; bs = g.score[1]; }
+      let winner = UI.abbrOf(g.winner);
+      if (!winner && as != null && bs != null && (gm ? gm.played : g.played !== false)) winner = as > bs ? a : bs > as ? b : null;
+      const key = String(g.slot || g.kind || g.type || g.key || g.id || '');
+      const seeds = [Number(aSeed), Number(bSeed)].sort((m, n) => m - n).join('-');
+      const slot = /9\D{0,3}10|910/.test(key) ? '910' : /7\D{0,3}8|78/.test(key) ? '78' : /final|last|elim|second|8th/i.test(key) ? 'final'
+        : seeds === '7-8' ? '78' : seeds === '9-10' ? '910' : 'final';
+      const conf = g.conf === 'East' || g.conf === 'West' ? g.conf : a && UI.team(a).conf === 'East' ? 'East' : 'West';
+      out[conf][slot] = { a, b, aSeed, bSeed, as, bs, winner, gameId: gm ? gm.id : gid, date: (gm && gm.date) || g.date || null, slot };
+    });
+    return Object.keys(out.West).length || Object.keys(out.East).length ? out : null;
+  }
+  function piCard(g, label, u) {
+    if (!g) return `<div class="pi-g tbd"><div class="pi-l">${esc(label)}</div><div class="pb-t tbd"><span class="pb-n"><b>TBD</b></span></div><div class="pb-t tbd"><span class="pb-n"><b>TBD</b></span></div></div>`;
+    const row = (abbr, seed, pts) => {
+      if (!abbr) return '<div class="pb-t tbd"><span class="pb-seed"></span><span class="pb-n"><b>TBD</b></span></div>';
+      const won = g.winner === abbr, lost = !!g.winner && !won;
+      return `<div class="pb-t${won ? ' win' : ''}${lost ? ' out' : ''}${abbr === u ? ' you' : ''}" style="--tc:${esc(UI.teamColor(abbr))}"><span class="pb-seed">${seed != null ? esc(seed) : ''}</span>${UI.logo(abbr, 24)}<span class="pb-n"><b>${esc(abbr)}</b><small>${esc(UI.team(abbr).name || '')}</small></span><span class="pb-w">${pts != null ? esc(pts) : ''}</span></div>`;
+    };
+    const st = g.winner ? g.winner + ' wins' + (g.as != null && g.bs != null ? ' ' + Math.max(g.as, g.bs) + '-' + Math.min(g.as, g.bs) : '') : g.date ? shortDate(g.date) : 'Not played yet';
+    const mine = !!u && (g.a === u || g.b === u);
+    const inner = `<div class="pi-l">${esc(label)}</div>${row(g.a, g.aSeed, g.as)}${row(g.b, g.bSeed, g.bs)}<div class="pb-st">${esc(st)}${g.winner && g.gameId ? ' <span class="pi-box">BOX SCORE</span>' : ''}</div>`;
+    return g.gameId && g.winner ? `<a class="pi-g${mine ? ' mine' : ''}" href="#/game/${encodeURIComponent(g.gameId)}">${inner}</a>` : `<div class="pi-g${mine ? ' mine' : ''}">${inner}</div>`;
+  }
+  function playInHtml(pi) {
+    if (!pi) return '';
+    const u = UI.userTeam();
+    const conf = c => `<div class="pi-conf"><div class="pi-ch">${CONF_FULL[c]}</div><div class="pi-br">
+        <div class="pi-c1">${piCard(pi[c]['78'], '7 VS 8 | WINNER IS THE 7 SEED', u)}${piCard(pi[c]['910'], '9 VS 10 | LOSER IS OUT', u)}</div>
+        <div class="pi-c2">${piCard(pi[c].final, 'FOR THE 8 SEED', u)}</div></div></div>`;
+    return `<section class="pi" aria-label="Play-In Tournament"><div class="pi-head"><b>PLAY-IN TOURNAMENT</b><small>Seeds 7 to 10 play for the last two spots in each conference</small></div>
+      <div class="pi-grid">${conf('West')}${conf('East')}</div></section>`;
+  }
+  // The user's Play-In result, when he lost there.
+  function playInOut(pi, u) {
+    if (!pi || !u) return null;
+    const t = UI.team(u), c = pi[t.conf] || {};
+    const fin = c.final, nine = c['910'];
+    const lostIn = g => g && g.winner && (g.a === u || g.b === u) && g.winner !== u ? g : null;
+    const g = lostIn(fin) || lostIn(nine);
+    if (!g) return null;
+    const opp = g.a === u ? g.b : g.a, us = g.a === u ? g.as : g.bs, them = g.a === u ? g.bs : g.as;
+    return 'Eliminated in the Play-In by ' + opp + ' ' + them + '-' + us;
+  }
+
+  // ---------- header: the round and the user's status ----------
+  function roundTitle(br, u) {
+    const ri = curRoundIdx(br);
+    if (ri === 3) return 'NBA FINALS';
+    const me = mySeries(br, u);
+    const alive = me && (!me.x.winner || me.x.winner === u);
+    const conf = alive ? UI.team(u).conf : null;
+    return conf && CONF_FULL[conf] ? CONF_FULL[conf] + ' ' + (ri === 0 ? 'FIRST ROUND' : ri === 1 ? 'SEMIFINALS' : 'FINALS') : ROUND_NAMES[ri];
+  }
+  function youStatus(br, u) {
+    if (!u) return '';
+    const me = mySeries(br, u);
+    if (!me) {
+      const pio = playInOut(playInGames(), u);
+      if (pio) return pio + '.';
+      const t = UI.team(u), r = UI.confTable(t.conf).find(z => z.abbr === u);
+      return 'You missed the playoffs' + (r ? ' (#' + r.rank + ' in the ' + t.conf + ')' : '') + '.';
     }
-    wireSim(app);
-    const b = UI.$('#simPo');
-    if (b) b.addEventListener('click', () => { markSim(); UI.sim('endPlayoffs'); });
-    const d = UI.$('#simDay');
-    if (d) d.addEventListener('click', () => { markSim(); UI.sim({ days: 1 }); });
+    const x = me.x, ri = me.ri;
+    const opp = x.a === u ? x.b : x.a;
+    const my = Number(x.a === u ? x.aw : x.bw) || 0, th = Number(x.a === u ? x.bw : x.aw) || 0;
+    if (x.winner && x.winner !== u) return ri === 3 ? `Lost the NBA Finals to ${opp} ${th}-${my}` : `Eliminated in ${RD_LOWER[ri]} by ${opp} ${th}-${my}`;
+    if (x.winner === u) return ri === 3 ? `NBA Champions: beat ${opp} ${my}-${th} in the Finals` : `You beat ${opp} ${my}-${th}. Next: ${RD_LOWER[ri + 1]}`;
+    if (!my && !th) return `Game 1 vs ${opp} is next`;
+    if (my === th) return `Series tied ${my}-${th} with ${opp}`;
+    return my > th ? `You lead ${opp} ${my}-${th}` : `You trail ${opp} ${my}-${th}`;
+  }
+  function poHero(kicker, title, status, u, tone) {
+    return `<section class="po-hero"${u ? ` style="--tc:${esc(UI.teamColor(u))}"` : ''}>
+      <div class="po-hk">${esc(kicker)}</div><h1 class="po-rd">${esc(title)}</h1>
+      ${status ? `<div class="po-you${tone ? ' ' + tone : ''}">${u ? UI.logo(u, 30) : ''}<span>${esc(status)}</span></div>` : ''}</section>`;
+  }
+
+  // ---------- sims that stop at series and round ends ----------
+  // Playoff days are drawn one at a time, so these sim the fewest days the target can take
+  // (a series needs at least 4 - max(wins) more games, one a day at most) and check again.
+  async function simUntil(done, bound) {
+    if (UI.simming) return;
+    markSim();
+    for (let i = 0; i < 40; i++) {
+      if (done() || UI.simming || UI.pendingEvents() || UI.inOffseason()) break;
+      const n = Math.max(1, bound() || 1);
+      const r = await UI.sim({ days: n });
+      if (!r || (r.stopped && r.stopped !== 'days') || UI.pendingEvents()) break;
+      // the sim took the user somewhere else (the awards show, the draft room): stop there
+      if (!/^#\/playoffs/.test(location.hash)) break;
+    }
+  }
+  function simSeriesEnd() {
+    const u = UI.userTeam();
+    const me = mySeries(liveBracket(), u);
+    if (!me || me.x.winner) return;
+    const id = me.x.id;
+    const cur = () => findSeriesById(liveBracket(), id);
+    return simUntil(() => { const c = cur(); return !c || !!c.x.winner; }, () => { const c = cur(); return c ? minLeft(c.x) : 1; });
+  }
+  const roundLeft = br => br.rounds[curRoundIdx(br)].series.reduce((m, x) => Math.max(m, minLeft(x)), 0);
+  function simRound() {
+    const br0 = liveBracket();
+    if (!br0 || br0.champion) return;
+    const r0 = br0.drawn;
+    return simUntil(() => { const b = liveBracket(); return !b || !!b.champion || b.drawn > r0; }, () => { const b = liveBracket(); return b ? roundLeft(b) : 1; });
+  }
+  function simToFinals() {
+    const br0 = liveBracket();
+    if (!br0 || br0.champion || br0.drawn >= 4) return;
+    return simUntil(() => { const b = liveBracket(); return !b || !!b.champion || b.drawn >= 4; },
+      () => { const b = liveBracket(); return b ? roundLeft(b) + 4 * Math.max(0, 3 - b.drawn) : 1; });
+  }
+
+  // ---------- series panel ----------
+  function seriesGames(x) {
+    const list = UI.games().filter(g => g.series && g.series === x.id);
+    if (!list.length) return (x.games || []).map(id => UI.game(id)).filter(Boolean);
+    return list.sort((a, b) => (a.gameNum || 0) - (b.gameNum || 0));
+  }
+  // Per player totals over a set of games (full box scores only).
+  function linesOver(games) {
+    const per = {};
+    games.forEach(gm => {
+      const r = gm.played ? gm.result : null;
+      if (!r || !r.home || typeof r.home !== 'object') return;
+      ['home', 'away'].forEach(side => {
+        const sd = r[side];
+        (sd.box || []).forEach(row => {
+          if (!row || !(row.min > 0)) return;
+          const o = per[row.id] || (per[row.id] = { id: row.id, team: sd.abbr, g: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0 });
+          o.g++;
+          o.pts += Number(row.pts) || 0; o.reb += boxReb(row); o.ast += Number(row.ast) || 0; o.stl += Number(row.stl) || 0; o.blk += Number(row.blk) || 0;
+          o.fgm += Number(row.fgm) || 0; o.fga += Number(row.fga) || 0; o.tpm += Number(row.tpm) || 0; o.tpa += Number(row.tpa) || 0;
+        });
+      });
+    });
+    return per;
+  }
+  function topScorer(gm) {
+    const r = gm.result;
+    if (!r || !r.home || typeof r.home !== 'object') return null;
+    let best = null;
+    ['home', 'away'].forEach(side => (r[side].box || []).forEach(row => { if (row && (!best || (Number(row.pts) || 0) > (Number(best.row.pts) || 0))) best = { row, team: r[side].abbr }; }));
+    if (!best) return null;
+    const p = UI.player(best.row.id);
+    return { id: best.row.id, name: best.row.name || (p ? p.name : best.row.id), team: best.team, pts: Number(best.row.pts) || 0, reb: boxReb(best.row), ast: Number(best.row.ast) || 0 };
+  }
+  function panelHtml(x, ri) {
+    const u = UI.userTeam();
+    const games = seriesGames(x);
+    const rows = games.map(gm => {
+      const ts = gm.played ? topScorer(gm) : null;
+      const aw = gm.played && gm.as > gm.hs;
+      return `<li class="sp-g${gm.played ? '' : ' next'}">
+        <div class="sp-gk"><b>GAME ${esc(gm.gameNum || '')}</b><span>${esc(shortDate(gm.date))}</span><span class="sp-at">at ${esc(gm.home)}</span></div>
+        <div class="sp-sc"><span class="sp-side${aw ? ' win' : ''}">${UI.logo(gm.away, 22)}<b>${esc(gm.away)}</b><i>${gm.played ? esc(gm.as) : ''}</i></span><span class="sp-v">@</span><span class="sp-side${gm.played && !aw ? ' win' : ''}">${UI.logo(gm.home, 22)}<b>${esc(gm.home)}</b><i>${gm.played ? esc(gm.hs) : ''}</i></span></div>
+        <div class="sp-gf">${gm.played ? (ts ? `<span class="sp-top">TOP: <a href="#/player/${esc(ts.id)}">${esc(ts.name)}</a> <small>${esc(ts.team)}</small> ${ts.pts} PTS, ${ts.reb} REB, ${ts.ast} AST</span>` : '<span class="sp-top muted">Box score not kept</span>') +
+          `<a class="btn btn-small sp-box" href="#/game/${encodeURIComponent(gm.id)}">BOX SCORE</a>` : '<span class="sp-top muted">Up next</span>'}</div></li>`;
+    }).join('');
+    const per = linesOver(games);
+    const cats = [['pts', 'PTS'], ['reb', 'REB'], ['ast', 'AST']];
+    const leader = (abbr, k) => {
+      const best = Object.values(per).filter(o => o.team === abbr && o.g).sort((m, n) => n[k] / n.g - m[k] / m.g)[0];
+      if (!best) return '<td class="muted">-</td>';
+      const p = UI.player(best.id);
+      return `<td><a href="#/player/${esc(best.id)}">${esc(p ? p.name : best.id)}</a><b>${UI.fmt1(best[k] / best.g)}</b></td>`;
+    };
+    const anyLines = Object.keys(per).length > 0;
+    const lead = anyLines ? `<h3 class="sp-h">SERIES LEADERS <small>PER GAME</small></h3>
+      <table class="sp-lead"><thead><tr><th></th><th>${UI.logo(x.a, 20)} ${esc(x.a)}</th><th>${UI.logo(x.b, 20)} ${esc(x.b)}</th></tr></thead>
+      <tbody>${cats.map(([k, l]) => `<tr><th>${l}</th>${leader(x.a, k)}${leader(x.b, k)}</tr>`).join('')}</tbody></table>` : '';
+    const side = (abbr, seed, w) => `<a class="sp-tm${x.winner === abbr ? ' win' : x.winner ? ' out' : ''}${abbr === u ? ' you' : ''}" href="#/team/${esc(abbr)}">${UI.logo(abbr, 56)}<span><small>${seed != null ? '#' + esc(seed) + ' SEED' : ''}</small><b>${esc(UI.team(abbr).name || abbr)}</b></span><em>${esc(w != null ? w : 0)}</em></a>`;
+    const conf = x.conf && CONF_FULL[x.conf] ? CONF_FULL[x.conf] + ' ' : '';
+    return `<div class="sp-back" data-close></div>
+      <aside class="sp-panel" role="dialog" aria-modal="true" aria-label="Series details">
+        <div class="sp-top-bar"><span>${esc(ri === 3 ? 'NBA FINALS' : conf + (ri === 0 ? 'FIRST ROUND' : ri === 1 ? 'SEMIFINALS' : 'FINALS'))}</span><button type="button" class="sp-x" data-close aria-label="Close the series">&times;</button></div>
+        <div class="sp-head">${side(x.a, x.aSeed, x.aw)}<span class="sp-dash">-</span>${side(x.b, x.bSeed, x.bw)}</div>
+        <div class="sp-status">${esc(seriesLine(x))}</div>
+        <h3 class="sp-h">GAMES</h3>
+        ${rows ? `<ol class="sp-games">${rows}</ol>` : '<p class="muted">Game 1 has not been played yet.</p>'}
+        ${lead}
+      </aside>`;
+  }
+  let escWired = false;
+  function wireEsc() {
+    if (escWired) return;
+    escWired = true;
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && /^#\/playoffs\/./.test(location.hash) && document.querySelector('.sp-panel')) location.hash = '#/playoffs';
+    });
+  }
+
+  // ---------- champion screen ----------
+  let champOpen = null;   // the year whose champion screen is up in this session
+  function champScreen(br, yr) {
+    const champ = br.champion;
+    const fin = br.rounds[3].series[0] && br.rounds[3].series[0].a ? br.rounds[3].series[0] : null;
+    const u = UI.userTeam();
+    const g = UI.state.game;
+    const hist = g && g.history && (g.history.seasons || []).find(h => h.year === yr);
+    const mvpId = br.finalsMvp || (hist && hist.finalsMvp) || null;
+    const mvp = mvpId ? UI.player(typeof mvpId === 'object' ? mvpId.id : mvpId) : null;
+    let line = '';
+    if (mvp && fin) {
+      const o = linesOver(seriesGames(fin))[mvp.id];
+      if (o && o.g) {
+        line = [UI.fmt1(o.pts / o.g) + ' PPG', UI.fmt1(o.reb / o.g) + ' RPG', UI.fmt1(o.ast / o.g) + ' APG', o.fga ? (o.fgm / o.fga * 100).toFixed(1) + ' FG%' : ''].filter(Boolean).join(' | ');
+      }
+    }
+    const opp = fin ? (fin.a === champ ? fin.b : fin.a) : null;
+    const cw = fin ? Math.max(Number(fin.aw) || 0, Number(fin.bw) || 0) : 4, lw = fin ? Math.min(Number(fin.aw) || 0, Number(fin.bw) || 0) : 0;
+    const t = UI.team(champ);
+    return `<section class="po-champ" style="--c1:${esc(t.colors && t.colors[0] || '#333')};--c2:${esc(t.colors && t.colors[1] || t.colors && t.colors[0] || '#777')}" aria-label="${esc(yr)} NBA Champions">
+      <div class="pc-logo">${UI.logo(champ, 180)}</div>
+      <div class="pc-k">${esc(yr)} NBA CHAMPIONS</div>
+      <h1 class="pc-t">${esc(UI.teamName(champ).toUpperCase())}</h1>
+      ${opp ? `<div class="pc-sub">Beat the ${esc(UI.teamName(opp))} ${cw}-${lw} in the NBA Finals</div>` : ''}
+      ${champ === u ? '<div class="pc-you">YOUR TEAM WON THE TITLE</div>' : ''}
+      ${mvp ? `<a class="pc-mvp" href="#/player/${esc(mvp.id)}">${UI.headshot(mvp, 'pc-hs')}<span><small>FINALS MVP</small><b>${esc(mvp.name)}</b>${line ? `<em>${esc(line)}</em>` : ''}</span></a>` : ''}
+      <div class="pc-btns"><button type="button" class="btn btn-gold btn-big" id="poContinue">CONTINUE TO OFFSEASON</button><button type="button" class="btn btn-big" id="poBracket">VIEW BRACKET</button></div>
+    </section>`;
+  }
+  async function continueToOffseason() {
+    champOpen = null;
+    // The Finals are over but the season has not been closed yet: one more step ends it (awards, history).
+    if (!UI.inOffseason() && UI.state.season && UI.state.season.phase === 'done' && !UI.simming) await UI.sim({ days: 1 });
+    location.hash = '#/season';
+  }
+
+  P.playoffs = function (app, arg) {
+    const s = UI.state.season;
+    const g = UI.state.game;
+    const live = s && s.playoffs ? UI.normBracket(s.playoffs) : null;
+    const yr = s ? s.year : UI.year();
+    const u = UI.userTeam();
+    const sel = arg ? String(arg) : null;
+    wireEsc();
+    // Champion screen: once per season, right after the Finals
+    if (live && live.champion && g && !sel) {
+      g.champShown = g.champShown || {};
+      if (!g.champShown[yr]) {
+        g.champShown[yr] = true;
+        champOpen = yr;
+        // keep the "shown" mark even if the page is reloaded before the next sim saves
+        try { const w = UI.saves && UI.saves.write && UI.saves.write(); if (w && w.catch) w.catch(() => {}); } catch (e) { /* saved with the next sim */ }
+      }
+      if (champOpen === yr) {
+        app.innerHTML = champScreen(live, yr);
+        UI.$('#poContinue', app).addEventListener('click', continueToOffseason);
+        UI.$('#poBracket', app).addEventListener('click', () => { champOpen = null; UI.route(); });
+        return;
+      }
+    }
+    const br = live || projected();
+    const off = UI.inOffseason();
+    const canSim = UI.canPlay() && !!g && !off;
+    let hero, controls = '';
+    const btn = (id, label, on, gold, title) => `<button type="button" class="btn po-b${gold ? ' btn-gold' : ''}" id="${id}"${on ? '' : ' disabled'}${title ? ` title="${esc(title)}"` : ''}>${label}</button>`;
+    if (live) {
+      const me = mySeries(live, u);
+      const st = youStatus(live, u);
+      const out = !!me && !!me.x.winner && me.x.winner !== u;
+      const won = live.champion && live.champion === u;
+      hero = poHero(yr + ' NBA PLAYOFFS', live.champion ? 'NBA FINALS: ' + live.champion + ' WIN THE TITLE' : roundTitle(live, u), st, u, won ? 'gold' : out || !me ? 'dim' : '');
+      if (canSim && !live.champion) {
+        const nextOk = canSimNext();
+        const active = !!me && !me.x.winner;
+        controls = `${resultStrip()}<div class="po-ctl" role="group" aria-label="Sim the playoffs">
+          ${nextOk ? btn('poNext', 'SIM NEXT GAME', true, true) : btn('poDay', 'SIM DAY', true, true)}
+          ${btn('poSeries', 'SIM TO END OF SERIES', active, false, active ? '' : 'Your team has no series in progress')}
+          ${btn('poRound', 'SIM ROUND', true)}
+          ${btn('poFinals', 'SIM TO FINALS', live.drawn < 4, false, live.drawn < 4 ? '' : 'The Finals are on')}
+          ${btn('poAll', 'SIM PLAYOFFS', true)}</div>`;
+      } else if (live.champion && !off && g) {
+        controls = `<div class="po-ctl"><button type="button" class="btn btn-gold po-b" id="poContinue">CONTINUE TO OFFSEASON</button></div>`;
+      }
+    } else {
+      const t = u ? UI.team(u) : null;
+      const r = t && s ? UI.confTable(t.conf).find(z => z.abbr === u) : null;
+      const st = !g ? '' : r ? (r.rank <= 8 ? 'You would be the #' + r.rank + ' seed in the ' + t.conf : 'You are #' + r.rank + ' in the ' + t.conf + ', outside the top 8') : '';
+      hero = poHero(yr + ' NBA PLAYOFFS', 'PLAYOFF PICTURE', st, g ? u : null, r && r.rank > 8 ? 'dim' : '');
+      const sub = !g ? 'Projected by team overall. Start the Association to play it out.' : 'If the season ended today.';
+      controls = `<p class="po-note muted">${sub}</p>` + (canSim ? `<div class="po-ctl">${btn('poToPo', 'SIM TO PLAYOFFS', true, true)}${btn('poAll', 'SIM PLAYOFFS', true)}</div>` : '');
+    }
+    const champBanner = live && live.champion ? (() => {
+      const mvp = live.finalsMvp && UI.player(live.finalsMvp);
+      return `<a class="po-cb" href="#/playoffs" id="poShowChamp" style="--tc:${esc(UI.teamColor(live.champion))}">${UI.logo(live.champion, 40)}<span><small>${esc(yr)} NBA CHAMPIONS</small><b>${esc(UI.teamName(live.champion).toUpperCase())}</b></span>${mvp ? `<span class="po-cb-mvp"><small>FINALS MVP</small><b>${esc(mvp.name)}</b></span>` : ''}</a>`;
+    })() : '';
+    const found = live && sel ? findSeriesById(live, sel) : null;
+    app.innerHTML = `<div class="po-page">${hero}${controls}${champBanner}${live ? playInHtml(playInGames()) : ''}${bracket2k(br, found ? sel : null)}</div>${found ? panelHtml(found.x, found.ri) : ''}`;
+
+    // wiring
+    const on = (id, fn) => { const b = UI.$('#' + id, app); if (b) b.addEventListener('click', fn); };
+    on('poNext', () => simNextGame());
+    on('poDay', () => { markSim(); UI.sim({ days: 1 }); });
+    on('poSeries', () => simSeriesEnd());
+    on('poRound', () => simRound());
+    on('poFinals', () => simToFinals());
+    on('poAll', () => { markSim(); UI.sim('endPlayoffs'); });
+    on('poToPo', () => { markSim(); UI.sim('endRegular'); });
+    on('poContinue', continueToOffseason);
+    const sc = UI.$('#poShowChamp', app);
+    if (sc) sc.addEventListener('click', e => { e.preventDefault(); champOpen = yr; if (location.hash !== '#/playoffs') location.hash = '#/playoffs'; else UI.route(); window.scrollTo(0, 0); });
+    app.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', () => { location.hash = '#/playoffs'; }));
+    const x = UI.$('.sp-panel .sp-x', app);
+    if (x) x.focus({ preventScroll: true });
   };
 
   // ---------- Saves ----------

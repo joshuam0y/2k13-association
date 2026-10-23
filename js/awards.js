@@ -206,6 +206,8 @@
 
   // Full set of end-of-season awards. Returns ids.
   function season(state) {
+    var prev = locked(state);
+    if (prev) return prev;
     var year = yearOf(state), G = teamGames(state), minG = minGames(state);
     var all = candidates(state);
     var eligible = all.filter(function (c) { return c.line.g >= minG && c.line.mpg >= 20; });
@@ -246,8 +248,18 @@
     var allDefense = teamsOf(defList, 2, 5, positional);
     var allRookie = teamsOf(royList, 2, 5, false);
 
+    // Clutch Player of the Year (Jerry West Trophy), from 2022-23: closers on winning teams
+    var clutchList = [];
+    if (year >= 2023) {
+      eligible.forEach(function (c) {
+        c.clutch = c.value * (0.7 + 0.6 * c.winPct) + 0.3 * c.line.ppg + 0.08 * (attrAvg(c.p, ['oiq', 'mid', 'ft', 'handle']) - 70) +
+          (c.seed <= 6 ? 2 : -2);
+      });
+      clutchList = sortBy(eligible.filter(function (c) { return c.line.mpg >= 28; }), 'clutch');
+    }
+
     var coy = coachOfYear(state);
-    return {
+    var res = {
       year: year,
       mvp: mvpList[0] ? mvpList[0].id : null,
       dpoy: defList[0] ? defList[0].id : null,
@@ -263,6 +275,95 @@
         smoy: ballot(smoyList, 'smoy', 5), mip: ballot(mipList, 'mip', 5), coy: coy.ballot
       }
     };
+    if (year >= 2023) {
+      res.clutch = clutchList[0] ? clutchList[0].id : null;
+      res.ballots.clutch = ballot(clutchList, 'clutch', 5);
+    }
+    res.ballots.rules = { minGames: minG, teamGames: G, positionless: !positional, clutch: year >= 2023 };
+    votes(res);
+    // Ballots are due when the regular season ends: from then on every call returns the same result
+    if (lockable(state)) state.season.awardVote = JSON.parse(JSON.stringify(res));
+    return res;
+  }
+  function lockable(state) { return !!(state && state.season && state.season.phase && state.season.phase !== 'regular'); }
+  function locked(state) {
+    var v = lockable(state) && state.season.awardVote;
+    return v && v.year === yearOf(state) ? JSON.parse(JSON.stringify(v)) : null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Media voting: points and first place votes for every finalist, simulated from the candidate scores
+  // with a seeded random number generator (the same season always gets the same totals).
+  // ---------------------------------------------------------------------------
+  function seeded(str) {
+    var h = 2166136261;
+    for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    var a = h >>> 0;
+    return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; var t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  function gauss(rng) { var u = rng() || 1e-9, v = rng(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+  // The real panels: about 120 to 130 media members until 2016, 100 since (plus the fan vote 2017 to 2021).
+  function voterCount(year) { return year <= 2013 ? 121 : year <= 2014 ? 125 : year <= 2016 ? 130 : year <= 2021 ? 101 : 100; }
+  // All-Defensive and All-Rookie teams were picked by the 30 head coaches until 2013-14
+  function teamVoterCount(key, year) { return key !== 'allNba' && year <= 2014 ? 29 : voterCount(year); }
+  var PLACES = { mvp: [10, 7, 5, 3, 1], dpoy: [5, 3, 1], roy: [5, 3, 1], smoy: [5, 3, 1], mip: [5, 3, 1], coy: [5, 3, 1], clutch: [5, 3, 1] };
+  var TIER_POINTS = { allNba: [5, 3, 1], allDefense: [2, 1], allRookie: [2, 1] };
+
+  function voteSingle(list, places, voters, rng) {
+    var n = list.length;
+    if (!n) return;
+    var scores = list.map(function (b, i) { return typeof b.score === 'number' ? b.score : -i; });
+    var spread = Math.max(0.5, scores[0] - scores[Math.min(n, 5) - 1]);
+    var sd = 0.15 * spread + 0.3;
+    var tally = list.map(function () { return { pts: 0, first: 0, places: places.map(function () { return 0; }) }; });
+    for (var v = 0; v < voters; v++) {
+      var order = scores.map(function (s, i) { return { i: i, s: s + gauss(rng) * sd }; }).sort(function (a, b) { return b.s - a.s; });
+      for (var k = 0; k < places.length && k < n; k++) {
+        var t = tally[order[k].i];
+        t.pts += places[k]; t.places[k]++;
+        if (k === 0) t.first++;
+      }
+    }
+    // the official order stands: the best tallies go to the best scores, so the winner has the most points
+    tally.sort(function (a, b) { return b.pts - a.pts || b.first - a.first; });
+    list.forEach(function (b, i) { b.pts = tally[i].pts; b.first = tally[i].first; b.places = tally[i].places; b.voters = voters; b.maxPts = voters * places[0]; });
+  }
+  function voteTeams(teams, tierPts, voters, rng) {
+    var flat = [];
+    teams.forEach(function (t, ti) { t.forEach(function (id, k) { flat.push({ id: id, tier: ti, r: ti * 5 + k }); }); });
+    if (!flat.length) return [];
+    var tally = flat.map(function () { return { pts: 0, first: 0 }; });
+    for (var v = 0; v < voters; v++) {
+      var order = flat.map(function (x, i) { return { i: i, s: -x.r + gauss(rng) * 2.2 }; }).sort(function (a, b) { return b.s - a.s; });
+      order.forEach(function (o, pos) {
+        var tier = Math.floor(pos / 5);
+        if (tier < tierPts.length) { tally[o.i].pts += tierPts[tier]; if (tier === 0) tally[o.i].first++; }
+      });
+    }
+    tally.sort(function (a, b) { return b.pts - a.pts || b.first - a.first; });
+    var out = teams.map(function () { return []; });
+    flat.forEach(function (x, i) { out[x.tier].push({ id: x.id, pts: tally[i].pts, first: tally[i].first }); });
+    return out;
+  }
+  // Adds points and first place votes to res.ballots (and res.ballots.teamVotes for the team selections).
+  // Works on a stored season result too, so seasons saved before voting existed get totals once.
+  function votes(res) {
+    if (!res) return res;
+    var y = res.year || 2013, b = res.ballots = res.ballots || {};
+    Object.keys(PLACES).forEach(function (k) {
+      if (!Array.isArray(b[k]) || !b[k].length || b[k][0].pts != null) return;
+      voteSingle(b[k], PLACES[k], voterCount(y), seeded(y + ':' + k + ':' + b[k].map(function (x) { return x.id || x.team; }).join(',')));
+    });
+    if (!b.teamVotes) {
+      b.teamVotes = {};
+      Object.keys(TIER_POINTS).forEach(function (k) {
+        if (!Array.isArray(res[k])) return;
+        var n = teamVoterCount(k, y);
+        b.teamVotes[k] = { voters: n, maxPts: n * TIER_POINTS[k][0],
+          teams: voteTeams(res[k], TIER_POINTS[k], n, seeded(y + ':' + k + ':' + [].concat.apply([], res[k]).join(','))) };
+      });
+    }
+    return res;
   }
 
   // Writes awards onto players (player.awards) and coaches (coach.awards). Returns the same result.
@@ -275,6 +376,7 @@
     if (res.roy) give(res.roy, 'ROY');
     if (res.smoy) give(res.smoy, '6MOY');
     if (res.mip) give(res.mip, 'MIP');
+    if (res.clutch) give(res.clutch, 'Clutch Player of the Year');
     var nth = ['1st', '2nd', '3rd'];
     (res.allNba || []).forEach(function (t, i) { t.forEach(function (id) { give(id, 'All-NBA ' + nth[i] + ' Team'); }); });
     (res.allDefense || []).forEach(function (t, i) { t.forEach(function (id) { give(id, 'All-Defensive ' + nth[i] + ' Team'); }); });
@@ -483,7 +585,9 @@
     retireJerseys: retireJerseys,
     retiredNumbers: retiredNumbers,
     perGame: perGame,
-    minGames: minGames
+    minGames: minGames,
+    votes: votes,
+    voterCount: voterCount
   };
 
   if (typeof window !== 'undefined') window.AWARDS = AWARDS;
