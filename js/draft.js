@@ -504,11 +504,13 @@
     year = year != null ? year : state.year;
     state.players = state.players || {};
     state.draftClasses = state.draftClasses || {};
+    migrateRights(state);
     if (state.draftClasses[year]) return state.draftClasses[year].slice();
     var rng = seeded(state, 'prospects' + year);
     var D = root && root.DRAFTS, real = year < FICTIONAL_FROM && D && D[year] && D[year].length ? D[year] : null;
     var list;
-    if (real) list = real.map(function (x) { return normalizeProspect(x, year, rng); });
+    // players whose NBA rights a team already holds (drafted before 2013) are never in a class
+    if (real) list = real.filter(function (x) { return x && !x.rights; }).map(function (x) { return normalizeProspect(x, year, rng); });
     else {
       // fictional classes from js/draft-gen.js (window.DRAFTGEN), with the built-in generator as the fallback
       var G = (root && root.DRAFTGEN) || null;
@@ -535,7 +537,71 @@
   }
   function pool(state, year) {
     var ids = loadClass(state, year);
-    return ids.filter(function (id) { var p = state.players[id]; return p && p.team === 'DRAFT'; });
+    return ids.filter(function (id) { var p = state.players[id]; return p && p.team === 'DRAFT' && !p.rights; });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Draft rights held before 2013 (window.DRAFT_RIGHTS, data/drafts.js): players drafted in 2012 or
+  // earlier who were still overseas in October 2012. LEAGUE.newLeague puts them on the rights team
+  // as stash players; signRookies signs them when they arrive.
+  // ---------------------------------------------------------------------------
+  function rightsList() {
+    var R = root && root.DRAFT_RIGHTS;
+    return Array.isArray(R) ? R : [];
+  }
+  // Saves made before the rights fix carry these players as prospects (team DRAFT) of their arrival
+  // summer: they go to the rights team now, so nobody can draft them again.
+  function migrateRights(state) {
+    var players = (state && state.players) || {};
+    rightsList().forEach(function (src) {
+      var p = players[src.id], r = src.rights;
+      if (!p || p.team !== 'DRAFT' || !r || !isTeam(state, r.team)) return;
+      p.team = r.team;
+      p.rights = JSON.parse(JSON.stringify(r));
+      p.draftYear = r.draftYear; p.realPick = r.pick; p.undrafted = false;
+      p.draft = { year: r.draftYear, round: r.pick <= 30 ? 1 : 2, pick: r.pick, team: r.draftedBy || r.team };
+      p.contract = emptyContract();
+      var now = state.year || 2013;
+      if (src.arrivalYear != null && +src.arrivalYear > now) {
+        p.stashedUntil = +src.arrivalYear;
+        p.injury = { type: 'Playing overseas', games: 999 };
+      }
+      Object.keys(state.draftClasses || {}).forEach(function (y) {
+        state.draftClasses[y] = state.draftClasses[y].filter(function (id) { return id !== src.id; });
+      });
+    });
+  }
+
+  // Contract for a rights player who comes over: not a rookie scale deal (he was drafted years
+  // earlier), but a market deal at his arrival level, a little below the open market because the
+  // team holds his rights. 3 years (2 for older or minimum players), 4.5% raises.
+  function rightsSalaries(state, p, start) {
+    var T = root && root.TARGETS && root.TARGETS[p.id];
+    var lvl = T && T[start] != null ? +T[start] : p.ovr;
+    var min = minSalary(0, start), r = cbaRules(start);
+    var cap = (r && r.cap) || Math.round(58044000 * capRatio(start));
+    var F = root && root.FA, amount = null;
+    if (F && typeof F.marketValue === 'function') {
+      var q = JSON.parse(JSON.stringify(p));
+      q.ovr = lvl; q.injury = null; q.stats = null; q.stashedUntil = null; q.team = 'FA';
+      try { amount = +F.marketValue(state, q, start); } catch (e) { amount = null; }
+    }
+    if (!(amount > 0)) amount = cap * clamp(0.012 + 0.006 * (lvl - 65), 0.015, 0.25);
+    amount = Math.max(min, Math.round(amount * 0.85 / 10000) * 10000);
+    var years = (p.age || 25) <= 27 ? 3 : 2;
+    if (amount <= min * 1.5) years = 2;
+    var out = [];
+    for (var i = 0; i < years; i++) out.push({ year: start + i, amount: Math.round(amount * (1 + 0.045 * i)) });
+    return out;
+  }
+  function signRights(state, p, signYear) {
+    var start = signYear + 1, salaries = rightsSalaries(state, p, start);
+    p.contract = { salaries: salaries, option: null, rookie: false, twoWay: false, signedYear: signYear, via: 'rights' };
+    p.salary = salaries[0].amount;
+    p.contractEnd = salaries[salaries.length - 1].year;
+    p.yearsWithTeam = 0;
+    addTx(state, signYear, 'sign', teamName(state, p.team) + ' signed ' + p.name + ', whose draft rights they held (' + salaries.length + ' years, $' +
+      (salaries[0].amount / 1e6).toFixed(2) + 'M first season).', [p.id]);
   }
 
   // ---------------------------------------------------------------------------
@@ -658,7 +724,7 @@
     if (!slot) return { ok: false, reason: 'The draft is over.' };
     if (slot.team !== abbr) return { ok: false, reason: 'It is ' + slot.team + "'s pick, not " + abbr + "'s." };
     var p = state.players[prospectId];
-    if (!p || p.team !== 'DRAFT' || p.draftYear !== d.year) return { ok: false, reason: 'That player is not in the ' + d.year + ' draft pool.' };
+    if (!p || p.team !== 'DRAFT' || p.draftYear !== d.year || p.rights) return { ok: false, reason: 'That player is not in the ' + d.year + ' draft pool.' };
     p.team = abbr;
     p.draft = { year: d.year, round: slot.round, pick: slot.overall, team: abbr };
     p.yearsPro = 0; p.yearsWithTeam = 0;
@@ -805,7 +871,8 @@
         p.stashedUntil = null;
         if (p.injury && p.injury.type === 'Playing overseas') p.injury = null;
         arrived.push(id);
-        if (!hasDeal) { signOne(state, p, year); signed.push(id); }
+        // he signs with whoever holds his rights now (stashed players can be traded)
+        if (!hasDeal) { if (p.rights) signRights(state, p, year); else signOne(state, p, year); signed.push(id); }
         addTx(state, year, 'sign', p.name + ' arrives from overseas to join the ' + teamName(state, p.team) + '.', [id]);
         return;
       }
@@ -831,6 +898,8 @@
     aiPick: aiPick,
     pick: pick,
     signRookies: signRookies,
+    signRights: signRights,
+    migrateRights: migrateRights,
     startDraft: startDraft,
     current: current,
     simPicks: simPicks,

@@ -81,9 +81,36 @@
       if (tg) { var peak = p.ovr; for (var ty in tg) if (ty !== "retire" && typeof tg[ty] === "number") peak = Math.max(peak, tg[ty]); p.pot = Math.min(99, peak); }
       state.players[p.id] = p;
     });
+    // Players drafted before 2013 whose rights a team held in October 2012 (data/drafts.js DRAFT_RIGHTS):
+    // on the rights team as stash players (no contract, playing overseas) until their arrival season;
+    // never part of a draft class. DRAFT.signRookies signs them with whoever holds the rights then.
+    var teamAbbrs = {};
+    base.teams.forEach(function (t0) { teamAbbrs[t0.abbr] = true; });
+    var rightsPlayers = (W.DRAFT_RIGHTS || []).slice();
+    if (W.DRAFTS) Object.keys(W.DRAFTS).forEach(function (yr) { W.DRAFTS[yr].forEach(function (pr) { if (pr && pr.rights) rightsPlayers.push(pr); }); });
+    rightsPlayers.forEach(function (pr) {
+      var r = pr.rights;
+      if (state.players[pr.id] || !r || !teamAbbrs[r.team]) return;
+      var p = clone(pr);
+      p.team = r.team; p.draftYear = r.draftYear; p.realPick = r.pick; p.undrafted = false;
+      p.draft = { year: r.draftYear, round: r.pick <= 30 ? 1 : 2, pick: r.pick, team: r.draftedBy || r.team };
+      p.contract = { salaries: [], option: null, rookie: false, twoWay: false, signedYear: null };
+      p.yearsPro = 0; p.yearsWithTeam = 0;
+      p.personality = personalityFor(p.id, rng); p.mood = 60;
+      p.gleague = false; p.careerStats = []; p.awards = []; p.retired = false; p.hof = false;
+      if (pr.arrivalYear != null && +pr.arrivalYear > state.year) {
+        p.stashedUntil = +pr.arrivalYear;
+        p.injury = { type: "Playing overseas", games: 999 };
+        // the data has his arrival-season level: he starts a bit below it, since the age curve develops
+        // him each summer overseas (the real target takes over in his arrival summer)
+        var summers = +pr.arrivalYear - state.year - 1;
+        if (summers > 0 && mod("PROG") && W.PROG.setOvr) safe("rightsOvr", function () { W.PROG.setOvr(p, p.ovr - 1.5 * summers, { keepPot: true }); });
+      } else p.stashedUntil = null;
+      state.players[p.id] = p;
+    });
     if (W.DRAFTS) Object.keys(W.DRAFTS).forEach(function (yr) {
       W.DRAFTS[yr].forEach(function (pr) {
-        if (state.players[pr.id]) return;
+        if (state.players[pr.id] || pr.rights) return;
         var p = clone(pr); p.team = "DRAFT"; p.contract = null; p.yearsPro = 0; p.yearsWithTeam = 0;
         p.personality = personalityFor(p.id, rng); p.mood = 60; p.careerStats = []; p.awards = []; p.retired = false;
         state.players[p.id] = p;

@@ -410,6 +410,81 @@ if (REAL_TARGETS) {
   check(devs.length === 0 || m <= 3, 'real targets followed (mean gap ' + m.toFixed(2) + ')');
 }
 
+// ---------------------------------------------------------------------------
+// 7. Draft rights held before 2013 (data/drafts.js DRAFT_RIGHTS): never in a draft pool, on the
+//    rights team as stash players, signed by the rights team when they arrive
+// ---------------------------------------------------------------------------
+const RIGHTS = HAS_DRAFTS ? (window.DRAFT_RIGHTS || []) : [];
+if (RIGHTS.length) {
+  console.log('\n7. Draft rights held before 2013 (' + RIGHTS.map(p => p.name).join(', ') + ')');
+  global.TARGETS = REAL_TARGETS;
+  const rightsIds = new Set(RIGHTS.map(p => p.id));
+  // the data: rights entries are complete and none of them sits in a draft class
+  const rawHits = [];
+  Object.keys(window.DRAFTS).forEach(y => window.DRAFTS[y].forEach(p => { if (p.rights || rightsIds.has(p.id) || p.priorDraft) rawHits.push(y + ' ' + p.name); }));
+  check(!rawHits.length, 'no player with rights (or an earlier NBA draft) in any draft class in data/drafts.js' + (rawHits.length ? ': ' + rawHits.join(', ') : ''));
+  check(RIGHTS.every(p => p.rights && L.teams.some(t => t.abbr === p.rights.team) && p.rights.draftYear < 2013 && p.rights.pick > 0 && p.arrivalYear > 2013),
+    'every rights entry has a 2012-13 team, a pre-2013 draft year, a pick and an arrival year');
+
+  // the whole game, as index.html loads it
+  const all = ['data/cap-history.js', 'data/coaches.js', 'data/coach-history.js', 'data/gleague.js', 'data/history.js', 'data/personalities.js', 'data/logos.js',
+    'data/world-events.js', 'data/career-prior.js', 'data/picks-2012.js', 'data/awards-prior.js', 'data/schedules.js', 'js/engine.js', 'js/cba.js', 'js/trade.js',
+    'js/freeagency.js', 'js/mood.js', 'js/draft-gen.js', 'js/coaches.js', 'js/gleague.js', 'js/awards.js', 'js/news.js', 'js/league.js'];
+  all.forEach(f => { if (fs.existsSync(path.join(ROOT, f))) require(path.join(ROOT, f)); });
+  const LG = window.LEAGUE;
+  const origWarn = console.warn; console.warn = () => {};
+  const st = LG.newLeague('OKC', { seed: SEED + 7 });
+  check(RIGHTS.every(r => { const p = st.players[r.id]; return p && p.team === r.rights.team && p.stashedUntil === r.arrivalYear && p.injury && p.injury.type === 'Playing overseas' &&
+    p.contract && p.contract.salaries.length === 0 && p.draft && p.draft.year === r.rights.draftYear && p.draft.pick === r.rights.pick; }),
+    'newLeague: each one is on his rights team, overseas until his arrival season, with no contract');
+  check(!LG.leagueView(st).players.some(p => rightsIds.has(p.id)), 'none of them plays in 2012-13');
+  const poolHits = [];
+  for (let y = 2013; y <= 2026; y++) DRAFT.loadClass(st, y).forEach(id => { const p = st.players[id]; if (p.rights || rightsIds.has(id)) poolHits.push(y + ' ' + p.name); });
+  check(!poolHits.length, 'no player with rights in any draft class pool, 2013 to 2026' + (poolHits.length ? ': ' + poolHits.join(', ') : ''));
+  // a save from before the fix: the player still sits in his arrival summer's class
+  {
+    const old = makeState(SEED + 8);
+    const m = clone(RIGHTS.find(p => p.id === 'mirotni01') || RIGHTS[0]);
+    delete m.rights; m.team = 'DRAFT'; m.draftYear = m.arrivalYear - 1; m.undrafted = true; m.stashedUntil = null; m.contract = null;
+    old.players[m.id] = m;
+    const ids = DRAFT.loadClass(old, m.arrivalYear - 1);
+    const src = RIGHTS.find(p => p.id === m.id);
+    check(ids.indexOf(m.id) < 0 && old.players[m.id].team === src.rights.team && old.players[m.id].stashedUntil === src.arrivalYear,
+      'old saves: ' + m.name + ' leaves the ' + (m.arrivalYear - 1) + ' pool for his rights team ' + src.rights.team);
+  }
+  // simulated seasons (AI trades off, so the rights stay with the original team): Mirotic joins CHI for 2014-15
+  const T = window.TRADE, keep = T && { aiTrades: T.aiTrades, draftNightTrade: T.draftNightTrade };
+  if (T) { T.aiTrades = () => {}; T.draftNightTrade = () => null; }
+  const sim = LG.newLeague('OKC', { seed: SEED + 9 });
+  const mir = sim.players.mirotni01;
+  let ok = true;
+  for (let n = 0; n < 2 && ok; n++) {
+    let r, g = 0;
+    do { sim.events.forEach(e => (e.resolved = true)); LG.clearResolved(sim); r = LG.advance(sim, 'endPlayoffs'); } while (r.stopped !== 'seasonOver' && ++g < 400);
+    let steps = 0;
+    while (sim.phase !== 'regular' && steps++ < 120) { sim.events.forEach(e => (e.resolved = true)); LG.clearResolved(sim); LG.advance(sim, 'nextPhase', { auto: true }); }
+    ok = sim.phase === 'regular';
+  }
+  if (T) Object.assign(T, keep);
+  console.warn = origWarn;
+  check(ok && sim.year === 2015, 'two seasons and offseasons simmed (now ' + (sim.year - 1) + '-' + String(sim.year).slice(2) + ')');
+  if (mir) {
+    const c = mir.contract || { salaries: [] };
+    console.log('   Mirotic: ' + mir.team + ', ovr ' + mir.ovr + ', contract ' + c.salaries.map(s => s.year + ' $' + (s.amount / 1e6).toFixed(2) + 'M').join(', '));
+    check(mir.team === 'CHI' && !mir.stashedUntil && !(mir.injury && mir.injury.type === 'Playing overseas'), 'Mirotic joins CHI for 2014-15');
+    check(c.salaries.length >= 2 && c.salaries[0].year === 2015 && !c.rookie && c.salaries[0].amount > 2e6 && c.salaries[0].amount < 12e6,
+      'he signs a market deal (not the rookie scale) starting in 2014-15');
+    check(mir.draft && mir.draft.year === 2011 && mir.draft.pick === 23, 'his draft record stays 2011, pick 23 (not drafted again)');
+    check(LG.leagueView(sim).players.some(p => p.id === 'mirotni01'), 'he plays in 2014-15');
+  } else check(false, 'Mirotic is in the league');
+  const again = Object.values(sim.players).filter(p => rightsIds.has(p.id) && p.draft && p.draft.year >= 2013);
+  check(!again.length, 'no rights player drafted in 2013 or 2014' + (again.length ? ': ' + again.map(p => p.name).join(', ') : ''));
+  const bog = sim.players.bogdabo02;
+  if (bog) check(bog.team === 'BKN' && bog.contract.salaries.length && bog.contract.salaries[0].year === 2015, 'Bogdanovic joins BKN for 2014-15');
+  const later = RIGHTS.filter(r => r.arrivalYear > 2015).map(r => sim.players[r.id]);
+  check(later.every(p => p.stashedUntil > 2015 && p.contract.salaries.length === 0), 'later arrivals (' + later.map(p => p.name).join(', ') + ') still overseas');
+}
+
 console.log('\nLottery pick 1 odds measured: ' + JSON.stringify(measured));
 console.log('\n' + (checks - failures) + '/' + checks + ' checks passed');
 process.exit(failures ? 1 : 0);
