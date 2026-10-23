@@ -420,3 +420,6 @@
   .gd-dl dd { margin-bottom: 8px; }
 }
 .gs-row .btn { flex: none; white-space: nowrap; }
+/* tour card on phones: a bottom sheet under the highlighted tiles */
+.gd-card.gd-bottom { width: 100%; max-width: none; left: 0; border-left: 0; border-right: 0; border-bottom: 0; padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -12px 40px rgba(0, 0, 0, .8); }
+.gd-card.gd-bottom .gd-btns .btn { min-height: 44px; flex: 1; }

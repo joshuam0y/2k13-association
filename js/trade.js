@@ -1136,6 +1136,11 @@
     return done;
   }
 
+  // AI offers to the user. Realistic: teams mostly ask about role players, expiring deals and
+  // upgrades a contender needs. A star is asked about rarely, and only with a clearly better package
+  // for the user. The same player is not asked about again within 30 days, and offers come at most
+  // about every 2 to 3 weeks (every few days in the run-up to the deadline, one per offseason phase).
+  var OFFER_GAP = 18, OFFER_GAP_HOT = 5, ASK_AGAIN = 30;
   function aiOffers(state, rng, opts) {
     rng = rng || Math.random;
     opts = opts || {};
@@ -1143,33 +1148,60 @@
     if (!user || !state.teams[user] || !windowOpen(state)) return [];
     ensureDirections(state);
     var m = meta(state);
+    m.asked = m.asked || {};
     if (m.offers >= MAX_OFFERS && !opts.force) return [];
     var d = currentDate(state), hot = d && d >= state.year + "-02-01";
-    var p = OFFSEASON.indexOf(state.phase) >= 0 ? 0.3 : hot ? 0.5 : 0.25;
+    var off = OFFSEASON.indexOf(state.phase) >= 0, day = state.day || 0;
+    if (!opts.force) {
+      if (off) { if (m.lastOfferPhase === state.phase) return []; }
+      else if (m.lastOfferDay != null && m.lastOfferPhase === state.phase && day - m.lastOfferDay < (hot ? OFFER_GAP_HOT : OFFER_GAP)) return [];
+    }
+    var p = off ? 0.3 : hot ? 0.85 : 0.6;   // js/league.js asks on about 8% of days; the gap above caps the rate
     if (!opts.force && rng() >= p) return [];
     var ctx = makeCtx(state);
     var ai = Object.keys(state.teams).filter(function (a) { return a !== user; });
-    for (var tries = 0; tries < 5; tries++) {
+    // the user's stars: his two best players, anyone 85+, or a franchise-level talent
+    var mine = ctx.rosters[user].filter(function (id) { return countsOnRoster(state, state.players[id]); })
+      .sort(function (a, b) { return state.players[b].ovr - state.players[a].ovr; });
+    var star = {};
+    mine.forEach(function (id, i) { var q = state.players[id]; if (i < 2 || q.ovr >= 85 || parts(ctx, id, user).talent >= 20) star[id] = 1; });
+    for (var tries = 0; tries < 6; tries++) {
       var T = weighted(ai, function (a) { var dd = dirOf(ctx, a); return dd === "contend" ? 3 : dd === "neutral" ? 2 : 1; }, rng);
-      var targets = ctx.rosters[user].filter(function (id) {
-        var q = state.players[id];
-        return countsOnRoster(state, q) && parts(ctx, id, T).talent >= 1;
-      }).map(function (id) { return { id: id, v: parts(ctx, id, T).total, diff: parts(ctx, id, T).total - parts(ctx, id, user).total }; })
-        .sort(function (a, b) { return (b.diff + 0.2 * b.v) - (a.diff + 0.2 * a.v); }).slice(0, 5);
+      var tdir = dirOf(ctx, T);
+      var targets = mine.filter(function (id) {
+        var q = state.players[id], last = m.asked[id];
+        if (last && last.phase === state.phase && day - last.day < ASK_AGAIN) return false;
+        return parts(ctx, id, T).talent >= 1;
+      }).map(function (id) {
+        var q = state.players[id], vT = parts(ctx, id, T).total, vU = parts(ctx, id, user).total;
+        var w = Math.max(0.2, (vT - vU) + 0.2 * vT);
+        var rem = remaining(q, ctx.year);
+        if (star[id]) w *= 0.08;                                        // stars: rare
+        else if (q.ovr >= 66) w *= 1.4;                                 // role players: the usual ask
+        if (rem.length === 1 && tdir !== "rebuild") w *= 1.4;           // expiring deals
+        if (tdir === "contend" && !star[id] && fitMult(ctx, T, q) > 1) w *= 1.5;   // a contender's upgrade
+        if (tdir === "rebuild" && q.age >= 29) w *= 0.4;
+        return { id: id, w: w };
+      });
       if (!targets.length) continue;
-      var tgt = weighted(targets, function (t) { return Math.max(0.2, t.diff + 0.2 * t.v); }, rng);
-      // T gives, the user (R) receives value close to fair: slightly favoring the AI
+      var tgt = weighted(targets, function (t) { return t.w; }, rng);
+      var isStar = !!star[tgt.id];
+      // T gives, the user (R) receives value close to fair, slightly favoring the AI; for a star the
+      // user must come out clearly ahead
       var pk = buildPackages(ctx, T, user, [tgt.id], {
         limit: 1, maxAssets: 3, skipRecent: true, gRule: difficulty(state), rRule: { base: 0, pct: 0 },
-        rOk: function (e) { return e.gain >= -(0.1 * e.outValue + 0.5) && e.gain <= 0.25 * e.outValue + 1.5; },
+        rOk: isStar ? function (e) { return e.gain >= 0.06 * e.outValue + 0.5; }
+          : function (e) { return e.gain >= -(0.1 * e.outValue + 0.5) && e.gain <= 0.25 * e.outValue + 1.5; },
         gOk: function (e) { return e.margin >= 0; },
-        score: function (eR, eG) { return -Math.abs(eR.gain + 0.04 * eR.outValue); },
+        score: isStar ? function (eR) { return eR.gain; } : function (eR) { return -Math.abs(eR.gain + 0.04 * eR.outValue); },
         jitter: function () { return rng() * 0.3; }
       });
-      if (!pk.length) continue;
+      if (!pk.length) { m.asked[tgt.id] = { day: day, phase: state.phase }; continue; }
       m.offers++;
+      m.lastOfferDay = day; m.lastOfferPhase = state.phase;
+      m.asked[tgt.id] = { day: day, phase: state.phase };
       var tr = pk[0].trade;
-      return [{ type: "tradeOffer", from: T, trade: tr, year: state.year, day: state.day || 0,
+      return [{ type: "tradeOffer", from: T, trade: tr, year: state.year, day: day,
         text: describe(state, tr),
         message: "The " + shortName(state, T) + " want " + state.players[tgt.id].name + ". " + describe(state, tr) }];
     }

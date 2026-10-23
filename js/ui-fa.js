@@ -104,15 +104,46 @@
   }
 
   // ---------- offer panel ----------
+  // What the user can legally offer (cap room, MLE, room exception, BAE, minimum, Bird rights for his own
+  // players): the biggest first-year salary any route allows, and for a salary, the most years a route allows.
+  const legalTop = z => { const t = Math.min(z.max, z.limitAnyYears || z.min); return Math.max(z.min, t >= z.min + 10000 ? Math.floor(t / 10000) * 10000 : t); };
+  function legalYears(z, amount) {
+    let y = 0;
+    (z.routes || []).forEach(r => { if (amount <= r.max + 1) y = Math.max(y, r.years); });
+    return Math.max(1, Math.min(z.yearsCap, y || 1));
+  }
+  function bestLegal(z) {
+    let best = null;
+    (z.routes || []).forEach(r => { if (!best || r.max > best.max || (r.max === best.max && r.years > best.years)) best = r; });
+    return best;
+  }
   function offerState(id, z) {
     let o = offers[id];
     if (!o) {
-      const start = Math.min(z.max, Math.max(z.min, z.atMin ? z.min : z.center));
-      o = offers[id] = { amount: Math.round(start / 10000) * 10000, years: Math.min(z.yearsCap, z.wantYears), opt: '' };
+      const start = Math.min(legalTop(z), Math.max(z.min, z.atMin ? z.min : z.center));
+      const amt = Math.round(start / 10000) * 10000;
+      o = offers[id] = { amount: amt, years: Math.min(z.wantYears, legalYears(z, amt)), opt: '' };
     }
-    o.years = Math.max(1, Math.min(z.yearsCap, o.years));
-    o.amount = Math.max(z.min, Math.min(z.max, o.amount));
+    o.amount = Math.max(z.min, Math.min(legalTop(z), o.amount));
+    o.years = Math.max(1, Math.min(legalYears(z, o.amount), o.years));
     return o;
+  }
+  // A new offer starts at a length and salary that are legal and that he would take, when one exists:
+  // his favorite length first, then the others he accepts.
+  function seedOffer(st, id) {
+    if (offers[id]) return;
+    const z0 = loadZone(st, id);
+    if (!z0) return;
+    const tries = [z0.wantYears];
+    for (let n = z0.minYears; n <= z0.maxYears; n++) if (tries.indexOf(n) < 0) tries.push(n);
+    for (const n of tries) {
+      if (n > z0.yearsCap) continue;
+      offers[id] = { amount: z0.min, years: n, opt: '' };
+      const z = loadZone(st, id);
+      const lim = Math.max(z.min, z.limit || 0), want = z.atMin ? z.min : z.center;
+      if (!z.impossible && want <= lim + 1) { const v = Math.min(lim, Math.max(z.min, want)); offers[id] = { amount: v > z.min ? Math.max(z.min, Math.floor(v / 10000) * 10000) : z.min, years: n, opt: '' }; return; }
+    }
+    delete offers[id];
   }
   function loadZone(st, id) {
     const o = offers[id];
@@ -124,6 +155,11 @@
     const L = FAX().ROUTE_LABEL;
     if (z.locked) return { bad: true, text: z.locked + '.' };
     if (z.rosterFull) return { bad: true, text: 'Your roster is full (' + z.rosterLimit + '). Waive someone in the Team Salary tab first.' };
+    // nothing legal reaches his price: say so plainly (the offer can still be sent)
+    const bl = bestLegal(z), need = z.atMin ? z.min : z.low;
+    if (bl && !z.atMin && Math.max(z.limit || 0, z.min) + 1 < need) {
+      return { bad: false, warn: true, text: 'Your best legal offer is ' + money(Math.max(bl.max, z.min)) + ' for ' + yrs(bl.years) + ' (' + L[bl.via].toLowerCase() + '). He wants ' + money(z.ask) + ' for ' + yrs(z.wantYears) + '.' };
+    }
     const extra = z.roster >= 15 && !z.rosterFull ? ' Your roster goes to ' + (z.roster + 1) + ': get back to 15 before free agency ends.' : '';
     const minRt = z.routes.find(r => r.via === 'min');
     const fit = (minRt && o.amount <= minRt.max + 1 && o.years <= minRt.years ? minRt : null) || z.routes.find(r => o.amount <= r.max + 1 && o.years <= r.years);
@@ -134,17 +170,22 @@
     return { bad: true, text: 'More than you can pay. The most you can offer is ' + money(best.max) + ' a year (' + L[best.via] + ', ' + yrs(best.years) + ').' };
   }
   function bandStyle(z) {
-    const span = Math.max(1, z.max - z.min);
+    const top = legalTop(z);
+    const span = Math.max(1, top - z.min);
     const at = x => Math.max(0, Math.min(100, (x - z.min) / span * 100)).toFixed(2) + '%';
     if (z.impossible || z.unwilling) return 'background:var(--fa-no)';
     const L = at(z.low), C = at(z.center), H = at(z.high);
     return `background:linear-gradient(90deg,var(--fa-no) 0 ${L},var(--fa-close) ${L} ${C},var(--fa-likely) ${C} ${H},var(--fa-yes) ${H} 100%)`;
   }
   function offerPanel(st, p) {
-    const z = loadZone(st, p.id);
+    seedOffer(st, p.id);
+    let z = loadZone(st, p.id);
     if (!z) return '<div class="fa-offer"><p class="muted">No offer can be made right now.</p></div>';
     const o = offerState(p.id, z);
-    const span = Math.max(1, z.max - z.min);
+    if (z.years !== o.years) z = loadZone(st, p.id);   // the zone for the length actually offered
+    // the sliders only cover what is legal: salary up to the best route, years up to what that salary allows
+    const top = legalTop(z), ymax = legalYears(z, o.amount);
+    const span = Math.max(1, top - z.min);
     const limitPct = Math.max(0, Math.min(100, (Math.max(z.limit, z.min) - z.min) / span * 100));
     const v = FAX().verdict(z, o.amount), cn = capNote(z, o);
     const disabled = !!(z.locked || z.rosterFull);
@@ -157,21 +198,21 @@
         <div class="fa-slider">
           <div class="fa-track" style="${bandStyle(z)}"></div>
           ${limitPct < 99.9 ? `<div class="fa-cant" style="left:${limitPct.toFixed(2)}%" title="More than you can pay"></div>` : ''}
-          <input type="range" class="fa-range" data-role="amount" aria-label="Salary per year" min="${z.min}" max="${z.max}" step="10000" value="${o.amount}" ${disabled ? 'disabled' : ''}>
+          <input type="range" class="fa-range" data-role="amount" aria-label="Salary per year" min="${z.min}" max="${top}" step="10000" value="${o.amount}" ${disabled || top <= z.min ? 'disabled' : ''}>
         </div>
-        <div class="fa-scale"><span>MIN ${m2(z.min)}</span><span>MAX ${m2(z.max)}</span></div>
+        <div class="fa-scale"><span>MIN ${m2(z.min)}</span><span>MOST YOU CAN OFFER ${m2(top)}</span></div>
         <p class="fa-legend"><i class="k-no"></i>Declines <i class="k-close"></i>Close <i class="k-likely"></i>Good chance <i class="k-yes"></i>Accepts${limitPct < 99.9 ? ' <i class="k-cant"></i>Over your limit' : ''}</p>
         <p class="fa-zone-txt">${esc(zoneText(z))}</p>
       </div>
       <div class="fa-sl">
         <div class="fa-sl-label"><span>YEARS</span><output data-out="years">${yrs(o.years)}, thru ${esc(season(z.year + o.years - 1))}</output></div>
-        <input type="range" class="fa-range fa-years" data-role="years" aria-label="Contract years" min="1" max="${z.yearsCap}" step="1" value="${o.years}" ${disabled ? 'disabled' : ''}>
-        <div class="fa-scale">${Array.from({ length: z.yearsCap }, (_, i) => `<span>${i + 1}</span>`).join('')}</div>
+        <input type="range" class="fa-range fa-years" data-role="years" aria-label="Contract years" min="1" max="${ymax}" step="1" value="${o.years}" ${disabled || ymax <= 1 ? 'disabled' : ''}>
+        <div class="fa-scale" data-out="yscale">${Array.from({ length: ymax }, (_, i) => `<span>${i + 1}</span>`).join('')}</div>
       </div>
       <label class="field fa-opt"><span>OPTION IN THE FINAL YEAR</span><select data-role="opt" ${disabled ? 'disabled' : ''}>
         ${[['', 'None'], ['player', 'Player option (he likes it)'], ['team', 'Team option (he wants more)'], ['eto', 'Early termination']].map(([k, l]) => `<option value="${k}" ${o.opt === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       <div class="fa-verdict lvl-${v.level}" data-out="verdict" aria-live="polite">${esc(v.text)}</div>
-      <div class="fa-capnote ${cn.bad ? 'bad' : ''}" data-out="capnote">${esc(cn.text)}</div>
+      <div class="fa-capnote ${cn.bad ? 'bad' : cn.warn ? 'warn' : ''}" data-out="capnote">${esc(cn.text)}</div>
       <div class="fa-total"><small>TOTAL VALUE</small><b data-out="total">${money(o.amount * o.years)}</b><span data-out="totalsub">${yrs(o.years)} at ${m2(o.amount)}</span></div>
       <div class="fa-offer-btns"><button type="button" class="btn btn-gold" data-act="submit" data-id="${esc(p.id)}" ${subOff ? 'disabled' : ''}>SUBMIT OFFER</button><button type="button" class="btn" data-act="close">CANCEL</button></div>
     </div>`;
@@ -185,7 +226,7 @@
     set('amount', m2(o.amount));
     set('years', yrs(o.years) + ', thru ' + esc(season(zone.year + o.years - 1)));
     set('verdict', esc(v.text), 'fa-verdict lvl-' + v.level);
-    set('capnote', esc(cn.text), 'fa-capnote' + (cn.bad ? ' bad' : ''));
+    set('capnote', esc(cn.text), 'fa-capnote' + (cn.bad ? ' bad' : cn.warn ? ' warn' : ''));
     set('total', money(o.amount * o.years));
     set('totalsub', yrs(o.years) + ' at ' + m2(o.amount));
     const sub = panel.querySelector('[data-act="submit"]');
@@ -495,7 +536,22 @@
       if (!role || role === 'opt') return;
       const panel = t.closest('.fa-offer'); if (!panel) return;
       const id = panel.getAttribute('data-id'), o = offers[id]; if (!o) return;
-      if (role === 'amount') { o.amount = Number(t.value) || o.amount; updatePanel(panel); }
+      if (role === 'amount') {
+        o.amount = Number(t.value) || o.amount;
+        // a bigger salary may only fit a shorter route: the years slider follows
+        const ym = zone ? legalYears(zone, o.amount) : o.years, yr = panel.querySelector('[data-role="years"]');
+        if (yr && +yr.max !== ym) {
+          yr.max = ym; yr.disabled = ym <= 1;
+          const sc = panel.querySelector('[data-out="yscale"]'); if (sc) sc.innerHTML = Array.from({ length: ym }, (_, i) => `<span>${i + 1}</span>`).join('');
+        }
+        if (o.years > ym) {
+          o.years = ym; if (yr) yr.value = ym;
+          loadZone(st, id);
+          const tr = panel.querySelector('.fa-track'); if (tr && zone) tr.setAttribute('style', bandStyle(zone));
+          const zt = panel.querySelector('.fa-zone-txt'); if (zt && zone) zt.textContent = zoneText(zone);
+        }
+        updatePanel(panel);
+      }
       else if (role === 'years') {
         o.years = Number(t.value) || o.years;
         loadZone(st, id);

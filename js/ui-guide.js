@@ -45,17 +45,43 @@
   }
   const topH = () => { const t = document.querySelector('.topbar'); return t ? Math.max(0, t.getBoundingClientRect().bottom) : 0; };
 
-  // Scrolls the step into view: the target near the top when the card fits under it, else centered.
+  // Phones get the card as a bottom sheet; wider screens get a card beside, below or above the target.
+  // Either way the card never sits on top of the highlighted tiles.
+  const isPhone = () => document.documentElement.clientWidth <= 600;
+  const GAP = 12;
+
+  // Where the card goes for a target box, or null when no spot next to it fits on screen.
+  function placeCard(box, cw, ch, vw, vh, head) {
+    const midX = (box.left + box.right) / 2, midY = (box.top + box.bottom) / 2;
+    const clampX = x => Math.max(16, Math.min(x, vw - cw - 16));
+    const clampY = y => Math.max(head + 8, Math.min(y, vh - ch - 12));
+    if (vh - box.bottom >= ch + GAP + 12) return { left: clampX(midX - cw / 2), top: box.bottom + GAP, side: 'below' };
+    if (box.top - head >= ch + GAP + 8) return { left: clampX(midX - cw / 2), top: box.top - ch - GAP, side: 'above' };
+    if (vw - box.right >= cw + GAP + 16) return { left: box.right + GAP, top: clampY(midY - ch / 2), side: 'right' };
+    if (box.left >= cw + GAP + 16) return { left: box.left - cw - GAP, top: clampY(midY - ch / 2), side: 'left' };
+    return null;
+  }
+
+  // Scrolls the step into view so the card has room: on a phone the target sits between the top bar
+  // and the bottom sheet; on wider screens near the top (card below) or centered (card beside it).
   function scrollTo(step) {
     const r = rectOf(step);
     if (!r) return;
     const head = topH() + 12;
-    const cardH = tour.card.offsetHeight || 200;
+    const vw = document.documentElement.clientWidth, vh = window.innerHeight;
+    const cw = tour.card.offsetWidth || 360, ch = tour.card.offsetHeight || 200;
     const h = r.bottom - r.top;
-    const room = window.innerHeight - head;
-    let y = window.scrollY + r.top - head;
-    if (h + cardH + 24 > room) y = window.scrollY + r.top - head - Math.max(0, (room - h) / 2);
-    if (h > room) y = window.scrollY + r.top - head;
+    let y;
+    if (isPhone()) {
+      const room = vh - ch - head - 8;
+      y = window.scrollY + r.top - head - Math.max(0, (room - h) / 2);
+    } else {
+      const room = vh - head;
+      const side = Math.max(vw - r.right, r.left) >= cw + GAP + 16;
+      if (h + ch + GAP + 24 <= room) y = window.scrollY + r.top - head;
+      else if (side) y = window.scrollY + r.top - head - Math.max(0, (room - h) / 2);
+      else y = window.scrollY + r.top - head;
+    }
     window.scrollTo(0, Math.max(0, y));
   }
 
@@ -65,23 +91,28 @@
     const r = rectOf(step);
     const card = tour.card, spot = tour.spot;
     const vw = document.documentElement.clientWidth, vh = window.innerHeight;
+    const phone = isPhone();
+    card.classList.toggle('gd-bottom', phone);
     const cw = card.offsetWidth, ch = card.offsetHeight;
-    if (!r) { spot.hidden = true; card.style.left = Math.max(16, (vw - cw) / 2) + 'px'; card.style.top = Math.max(16, (vh - ch) / 2) + 'px'; return; }
+    if (!r) {
+      spot.hidden = true;
+      card.style.left = phone ? '0px' : Math.max(16, (vw - cw) / 2) + 'px';
+      card.style.top = phone ? (vh - ch) + 'px' : Math.max(16, (vh - ch) / 2) + 'px';
+      return;
+    }
     const pad = 6;
+    const head = topH();
     const box = { left: Math.max(4, r.left - pad), top: Math.max(4, r.top - pad), right: Math.min(vw - 4, r.right + pad), bottom: Math.min(vh - 4, r.bottom + pad) };
     spot.hidden = false;
     Object.assign(spot.style, { left: box.left + 'px', top: box.top + 'px', width: Math.max(0, box.right - box.left) + 'px', height: Math.max(0, box.bottom - box.top) + 'px' });
-    const head = topH();
-    let top;
-    if (vh - box.bottom >= ch + 24) top = box.bottom + 12;
-    else if (box.top - head >= ch + 24) top = box.top - ch - 12;
-    else top = vh - ch - 16;
-    top = Math.max(Math.min(top, vh - ch - 12), 12);
-    let left = (box.left + box.right) / 2 - cw / 2;
-    left = Math.max(16, Math.min(left, vw - cw - 16));
-    card.style.left = left + 'px';
-    card.style.top = top + 'px';
-    card.classList.toggle('gd-below', top > box.top);
+    let pos;
+    if (phone) pos = { left: 0, top: vh - ch, side: 'sheet' };
+    // nothing fits beside it (a target taller than the screen): dock the card at the bottom
+    else pos = placeCard(box, cw, ch, vw, vh, head) || { left: Math.max(16, Math.min((box.left + box.right) / 2 - cw / 2, vw - cw - 16)), top: vh - ch - 12, side: 'dock' };
+    card.style.left = pos.left + 'px';
+    card.style.top = pos.top + 'px';
+    card.setAttribute('data-side', pos.side);
+    card.classList.toggle('gd-below', pos.side === 'below');
   }
 
   function show(i) {
@@ -91,6 +122,7 @@
     tour.i = i;
     const step = STEPS[i];
     const last = i === STEPS.length - 1;
+    tour.card.classList.toggle('gd-bottom', isPhone());
     tour.card.innerHTML = `<div class="gd-k">GETTING STARTED <span>${i + 1} OF ${STEPS.length}</span></div>
       <div class="gd-t" id="gdTitle">${esc(step.title)}</div>
       <p class="gd-p" id="gdText">${esc(step.text)}</p>

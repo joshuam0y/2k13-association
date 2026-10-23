@@ -413,12 +413,39 @@
     refresh();
   };
 
+  // Layout: the bar is fixed to the bottom, so the page keeps that much room free. Its real height
+  // goes to the CSS variable --mb-h (body padding, sticky confirm bars, the phone More menu use it),
+  // and a dropdown or popup opened behind the bar is scrolled up so its buttons stay above it.
+  function keepClear(bar) {
+    const root = document.documentElement;
+    const row = () => bar.querySelector('.mb-row') || bar;
+    const sync = () => {
+      const h = bar.hidden || getComputedStyle(bar).display === 'none' ? 0 : Math.ceil(row().getBoundingClientRect().height);
+      root.style.setProperty('--mb-h', h + 'px');
+    };
+    sync();
+    if (typeof ResizeObserver === 'function') new ResizeObserver(sync).observe(row());
+    window.addEventListener('resize', sync);
+    // a <details> dropdown in the page (SIM TO... and the like) opened near the bottom of the screen
+    const lift = el => {
+      if (!el || !el.getBoundingClientRect || el.closest('#musicbar') || getComputedStyle(el).position === 'fixed') return;
+      const r = el.getBoundingClientRect(), top = bar.getBoundingClientRect().top;
+      if (r.bottom > top - 8 && r.height < top - 80) window.scrollBy({ top: r.bottom - top + 16, behavior: 'smooth' });
+    };
+    document.addEventListener('toggle', e => {
+      const d = e.target;
+      if (!d || d.tagName !== 'DETAILS' || !d.open) return;
+      requestAnimationFrame(() => lift(d));
+    }, true);
+  }
+
   M.init = function () {
     loadPrefs();
     if (!tracks()[M.idx]) M.idx = 0;
     build();
     refresh();
     const bar = document.getElementById('musicbar');
+    keepClear(bar);
     bar.addEventListener('click', e => {
       const b = e.target.closest('button');
       if (!b) return;

@@ -231,9 +231,32 @@
   // =====================================================================
   // NEWS
   // =====================================================================
-  const TX_FILTERS = [['', 'ALL'], ['trade', 'TRADES'], ['sign', 'SIGNINGS'], ['injury', 'INJURIES'], ['draft', 'DRAFT'], ['other', 'OTHER']];
-  const TX_GROUP = { trade: 'trade', sign: 'sign', release: 'sign', option: 'sign', resign: 'sign', extension: 'sign', offerSheet: 'sign', injury: 'injury', draft: 'draft' };
-  const TX_LABEL = { trade: 'TRADE', sign: 'SIGNING', release: 'RELEASED', option: 'OPTION', injury: 'INJURY', draft: 'DRAFT', retire: 'RETIRED', assign: 'G LEAGUE', coach: 'COACH' };
+  // Transaction groups. Injuries come in as type "injury" (js/news.js NEWS.tick logs them); the injury
+  // stories js/league.js and js/ui-live.js write to the news feed ("X injured") fill in for saves without them.
+  // G League assignments and recalls (type "assign") get their own chip and stay out of ALL unless picked.
+  const TX_FILTERS = [['', 'ALL'], ['trade', 'TRADES'], ['sign', 'SIGNINGS'], ['injury', 'INJURIES'], ['draft', 'DRAFT'], ['gleague', 'G LEAGUE'], ['other', 'OTHER']];
+  const TX_GROUP = { trade: 'trade', sign: 'sign', release: 'sign', option: 'sign', resign: 'sign', extension: 'sign', offerSheet: 'sign', injury: 'injury', draft: 'draft', assign: 'gleague', recall: 'gleague', gleague: 'gleague' };
+  const TX_LABEL = { trade: 'TRADE', sign: 'SIGNING', release: 'RELEASED', option: 'OPTION', injury: 'INJURY', draft: 'DRAFT', retire: 'RETIRED', coach: 'COACH' };
+  // "D-LEAGUE" through 2016-17, "G LEAGUE" from 2017-18 (GLEAGUE.leagueName takes the season-ending year)
+  const glName = year => {
+    let n = '';
+    try { n = window.GLEAGUE && typeof window.GLEAGUE.leagueName === 'function' ? String(window.GLEAGUE.leagueName(year) || '') : ''; } catch (e) { n = ''; }
+    return (n || (year >= 2018 ? 'NBA G League' : 'NBA D-League')).replace(/^NBA /, '');
+  };
+  const glShort = year => glName(year).toUpperCase();
+  // injury stories in the news feed as transaction rows, for injuries with no "injury" move logged
+  function injuryRowsFromNews(s, txs) {
+    const have = {};
+    txs.forEach(t => { if (t.type === 'injury') (t.ids || []).forEach(id => { (have[id + '|' + t.year] = have[id + '|' + t.year] || []).push(t.day || 0); }); });
+    return (s.news || []).filter(n => n && !n.world && (n.ids || []).length === 1 && (n.type === 'injury' || / injured$/.test(n.headline || ''))).filter(n => {
+      const days = have[n.ids[0] + '|' + n.year] || [];
+      return !days.some(d => Math.abs(d - (n.day || 0)) <= 1);
+    }).map(n => {
+      const p = playerOf(s, n.ids[0]);
+      const who = p ? (s.teams[p.team] ? s.teams[p.team].name + ': ' : '') + p.name : n.headline;
+      return { year: n.year, day: n.day, type: 'injury', text: (n.type === 'injury' ? n.headline : who + ', ' + String(n.body || 'injured').replace(/^([A-Z])/, c => c.toLowerCase())).replace(/\.?$/, '.'), ids: n.ids.slice(), fromNews: true };
+    });
+  }
   const byDate = list => list.map((x, i) => ({ x, i })).sort((a, b) =>
     ((b.x.year || 0) - (a.x.year || 0)) || ((b.x.day || 0) - (a.x.day || 0)) || (a.i - b.i)).map(o => o.x);
 
@@ -281,23 +304,29 @@
       return;
     }
     const filter = TX_FILTERS.some(f => f[0] === parts[1]) ? parts[1] || '' : '';
-    const all = byDate((s.transactions || []).filter(Boolean));
+    const txs = (s.transactions || []).filter(Boolean);
+    const everything = byDate(txs.concat(injuryRowsFromNews(s, txs)));
     const grp = t => TX_GROUP[t.type] || 'other';
     const counts = {};
-    all.forEach(t => { counts[grp(t)] = (counts[grp(t)] || 0) + 1; });
-    const list = filter ? all.filter(t => grp(t) === filter) : all;
+    everything.forEach(t => { counts[grp(t)] = (counts[grp(t)] || 0) + 1; });
+    // ALL leaves out the G League shuttle (hundreds of assign and recall moves a season)
+    const all = everything.filter(t => grp(t) !== 'gleague');
+    const list = filter ? everything.filter(t => grp(t) === filter) : all;
+    const chipName = k => (k === 'gleague' ? glShort(s.year) : (TX_FILTERS.find(f => f[0] === k) || [0, k])[1]);
+    const badge = t => (grp(t) === 'gleague' ? glShort(t.year || s.year) : TX_LABEL[t.type] || String(t.type || 'MOVE').toUpperCase());
     let shown = 60;
     const row = t => {
       const ps = (t.ids || []).map(id => playerOf(s, id)).filter(Boolean).slice(0, 3);
       return `<li class="fr-tx"><span class="fr-tx-date">${esc(fr.dateOf(s, t.year, t.day))}</span>
-        <span class="badge fr-tx-type t-${esc(grp(t))}">${esc(TX_LABEL[t.type] || String(t.type || 'MOVE').toUpperCase())}</span>
+        <span class="badge fr-tx-type t-${esc(grp(t))}">${esc(badge(t))}</span>
         <span class="fr-tx-text">${esc(t.text || '')}</span>
         <span class="fr-tx-hs">${ps.map(p => `<a href="#/player/${encodeURIComponent(p.id)}" title="${esc(p.name)}">${fr.head(p)}</a>`).join('')}</span></li>`;
     };
     const draw = () => {
       app.innerHTML = `${fr.subnav('news')}${UI.header('TRANSACTIONS', 'Every move in the league, newest first.')}${tabs}
-        <div class="fr-chips" role="group" aria-label="Filter transactions">${TX_FILTERS.map(([k, t]) =>
-          `<a href="#/news/transactions${k ? '/' + k : ''}" class="${k === filter ? 'on' : ''}">${t} <small>${k ? counts[k] || 0 : all.length}</small></a>`).join('')}</div>
+        <div class="fr-chips" role="group" aria-label="Filter transactions">${TX_FILTERS.filter(([k]) => k !== 'gleague' || counts.gleague || filter === 'gleague').map(([k]) =>
+          `<a href="#/news/transactions${k ? '/' + k : ''}" class="${k === filter ? 'on' : ''}${k === 'gleague' ? ' tx-gl' : ''}">${esc(chipName(k))} <small>${k ? counts[k] || 0 : all.length}</small></a>`).join('')}</div>
+        ${!filter && counts.gleague ? `<p class="muted fr-small tx-gl-note">${counts.gleague} ${esc(glName(s.year))} assignments and recalls are hidden here. Pick the ${esc(glShort(s.year))} chip to see them.</p>` : ''}
         ${list.length ? `<ul class="fr-txlist">${list.slice(0, shown).map(row).join('')}</ul>` : UI.empty('NOTHING HERE YET', filter ? 'No moves of this kind so far.' : 'No transactions yet. Trades, signings and the draft will show up here.', '')}
         ${list.length > shown ? '<div class="row-btns center"><button type="button" class="btn" id="frMore">SHOW MORE</button></div>' : ''}`;
       const more = UI.$('#frMore', app);

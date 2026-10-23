@@ -127,11 +127,11 @@
     if (g.phase === 'draft') {
       const left = L && L.userPicksLeft ? L.userPicksLeft(g) : [];
       if (!left.length) return { go: true, opts: {} };
+      // already on draft day: go pick, or let the AI pick
       const r = await UI.choose({
-        title: 'SIM PAST DRAFT DAY?',
-        text: 'Are you sure you want to simulate past Draft Day? The AI will pick for you.',
-        html: `<p class="ev-text"><small>Your picks still to make: ${left.map(x => '#' + esc(x.overall)).join(', ')}</small></p>`,
-        buttons: [{ value: 'stop', label: 'Stop at Draft Day', gold: true, note: 'The draft runs to your pick' }, { value: 'past', label: 'Sim past it' }, { value: 'cancel', label: 'Cancel' }]
+        title: 'DRAFT DAY',
+        text: 'Your ' + (left.length === 1 ? 'pick is' : 'picks are') + ' still to make (' + left.map(x => '#' + x.overall).join(', ') + ').',
+        buttons: [{ value: 'stop', label: 'Go to the draft room', gold: true, note: 'The draft runs to your pick' }, { value: 'past', label: 'Let the AI pick' }, { value: 'cancel', label: 'Cancel' }]
       });
       if (!r || r.value === 'cancel') return { go: false };
       return { go: true, opts: r.value === 'past' ? { auto: true } : {} };
@@ -216,8 +216,21 @@
     fill.style.width = '0%';
     const say = () => {
       const d = UI.currentDate();
-      text.textContent = (d ? UI.dateLabel(d) : 'Day ' + (UI.currentDay() + 1)) + ' | ' + (UI.PHASES[g.season.phase] || g.season.phase || '');
+      text.textContent = 'Simulating... ' + (d ? UI.dateLabel(d).replace(/, \d{4}$/, '') : 'Day ' + (UI.currentDay() + 1)) + ' | ' + (UI.PHASES[g.season.phase] || g.season.phase || '');
     };
+    // Long sims run in slices of about 30 ms, each followed by a real frame, so the date and the bar keep moving
+    // (the timeout keeps it going in a background tab, where frames stop).
+    let lastYield = performance.now();
+    const breathe = async () => {
+      if (performance.now() - lastYield < 30) return;
+      await new Promise(r => { let done = false; const go = () => { if (!done) { done = true; r(); } }; requestAnimationFrame(go); setTimeout(go, 60); });
+      lastYield = performance.now();
+    };
+    // "to the trade deadline / All-Star break" runs day by day too, with the same progress
+    if (!offseason && (how === 'tradeDeadline' || how === 'allStar') && g.season) {
+      const m = seasonMoments(g).find(x => x.how === how), cur = g.season.day || 0;
+      if (m && m.idx > cur) how = { days: m.idx - cur };
+    }
     let result = null;
     try {
       if (offseason || how === 'nextPhase' && UI.inOffseason()) {
@@ -250,7 +263,7 @@
           fill.style.width = Math.min(100, Math.round(n / total * 100)) + '%';
           say();
           if (result && (result.stopped === 'event' || result.stopped === 'seasonOver' || result.stopped === 'limit')) break;
-          await pause();
+          await breathe();
         }
         // stopped early by a decision: the rest of the sim runs once it is answered
         const reached = n >= target || UI.OFFSEASON().includes(g.phase) || (how === 'endRegular' && g.season.phase !== 'regular');
@@ -342,7 +355,7 @@
       const pre = e.preselect || [];
       const rows = (e.suggestions || []).map(s => `<li class="ev-card ev-cut"><label><input type="checkbox" data-pick="${esc(s.id)}" ${pre.indexOf(s.id) >= 0 ? 'checked' : ''}>
         ${signCard(s, false).replace(/^<li class="ev-card">|<\/li>$/g, '')}</label></li>`).join('');
-      return { body: `<p class="ev-text">${esc(e.text)}</p>${rows ? `<p class="ev-sub">Best fits you can afford are checked.</p><ul class="ev-list">${rows}</ul><p class="ev-total" data-sign-total></p>` : ''}`,
+      return { body: `<p class="ev-text">${esc(e.text)}</p>${rows ? `<p class="ev-sub">${(e.suggestions || []).every(x => !x.fitKey || x.fitKey === 'none') ? 'Best available you can afford' : 'Best fits you can afford'} are checked.</p><ul class="ev-list">${rows}</ul><p class="ev-total" data-sign-total></p>` : ''}`,
         actions: `${rows ? `<button type="button" class="btn btn-gold ev-big" data-sign-go>SIGN CHECKED</button>` : ''}<button type="button" class="btn ev-big" data-answer="${ans('choose')}">CHOOSE MYSELF</button><button type="button" class="btn ev-big${rows ? '' : ' btn-gold'}" data-answer="${ans('ai')}">LET THE AI FILL IT</button>` };
     }
     if (e.kind === 'cut') {

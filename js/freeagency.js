@@ -1339,17 +1339,27 @@
     freeAgents(state).forEach(function (p) {
       var d = demand(state, p.id, abbr, ctx);
       var rights = state.fa && state.fa.rights[p.id], own = !!(rights && rights.team === abbr && !rights.renounced);
-      var rq = requiredFor(p, d, d.years, null), u = own ? 0.04 : 0.07;
-      var est = clamp(Math.round(rq.required * (1 + (zoneNoise(p.id, abbr, Y) * 2 - 1) * u * 0.6) / 10000) * 10000, d.min, maxSalary(state, p, Y));
-      if (rq.required <= d.min * 1.001) est = d.min;
+      var u = own ? 0.04 : 0.07, noise = 1 + (zoneNoise(p.id, abbr, Y) * 2 - 1) * u * 0.6, maxS = maxSalary(state, p, Y);
       var routes = routesFor(state, abbr, p.id, pay);
-      var minRt = routes[routes.length - 1];
-      var rt = est <= minRt.max + 1 ? minRt : routeForAmount(routes, est, Math.min(d.years, 4)) || routeForAmount(routes, est, 1);
+      // affordable = some contract length he accepts (his price for that length) fits a route the team has
+      // for that many years; the same test the offer panel uses, so the tag and the panel agree
+      var tries = [d.years];
+      for (var yy = d.minYears; yy <= d.maxYears; yy++) if (tries.indexOf(yy) < 0) tries.push(yy);
+      var rt = null, est = 0, offerYears = d.years;
+      tries.forEach(function (n) {
+        if (rt) return;
+        var q = requiredFor(p, d, n, null).required;
+        var e1 = q <= d.min * 1.001 ? d.min : clamp(Math.round(q * noise / 10000) * 10000, d.min, maxS);
+        if (!est) est = e1;
+        var minRt = routes[routes.length - 1];
+        var r1 = e1 <= minRt.max + 1 && n <= minRt.years ? minRt : routeForAmount(routes, e1, n);
+        if (r1) { rt = r1; est = e1; offerYears = n; }
+      });
       var locked = stageLocked(state, abbr, p.id);
       var key = !rt ? 'none' : rt.via === 'room' || rt.via === 'bae' ? 'exception' : rt.via;
       if (rt && count >= limit) key = 'roster';
       var label = { bird: 'BIRD RIGHTS', space: 'CAP ROOM', mle: 'MLE ONLY', exception: 'EXCEPTION ONLY', min: 'MINIMUM DEAL', none: 'NOT AFFORDABLE', roster: 'ROSTER FULL' }[key];
-      out.push({ id: p.id, ask: d.amount, years: d.years, estimate: est, via: rt ? rt.via : null, afford: key, label: label,
+      out.push({ id: p.id, ask: d.amount, years: d.years, estimate: est, offerYears: offerYears, via: rt ? rt.via : null, afford: key, label: label,
         affordable: !!rt && key !== 'roster', own: own, rights: rights && rights.team && !rights.renounced ? rights.team : null,
         rfa: !!(rights && rights.rfa), locked: locked, offerSheet: pending[p.id] || null });
     });
@@ -1385,7 +1395,7 @@
       var p = state.players[id], rt = fa.rights[id], t = pers(p);
       var mood = typeof p.mood === 'number' ? p.mood : 55;
       var star = isStar(p) || p.ovr >= 85;
-      var rec = { id: id, name: p.name, ovr: p.ovr, age: p.age, action: 'letGo', reason: '' };
+      var rec = { id: id, name: p.name, ovr: p.ovr, age: p.age, action: 'letGo', reason: '', rfa: !!rt.rfa };
       out.push(rec);
       if (mood < 25 && t.loyalty < 60) { rec.action = 'refused'; rec.reason = 'Unhappy, wants to test free agency'; return; }
       if (rng) {
@@ -1430,7 +1440,8 @@
         if (!keep) rec.reason = 'Bench player: easy to replace';
       }
       if (!keep) return;
-      if (count >= MAX_ROSTER) {
+      // the user may carry up to 20 in the summer (he picks who to waive when free agency ends)
+      if (count >= (ai ? MAX_ROSTER : rosterLimit(state, abbr))) {
         var cut = ai ? worstCheap(state, ctx, abbr, Y) : null;
         if (!cut || !(star || p.ovr >= cut.ovr + 6)) { rec.action = 'blocked'; rec.reason = 'Roster is full'; return; }
         release(state, abbr, cut.id);
@@ -1439,7 +1450,7 @@
       }
       var sal = makeFirst(Y, amount, n, 0);
       var chk = canSign(state, abbr, id, sal, { pay: ctx.pay[abbr], count: ctx.count[abbr] });
-      if (!chk.ok) { rec.action = 'blocked'; rec.reason = chk.reason || 'Not allowed under the cap rules'; return; }
+      if (!chk.ok) { rec.action = 'blocked'; rec.reason = /Roster is full/.test(chk.reason || '') ? 'Roster is full' : 'His price (' + money(amount) + ' a year) is more than your cap room, Bird rights and exceptions allow'; return; }
       rec.signing = sign(state, abbr, p, sal, chk.via, {}, ctx);
       rec.action = 'resigned';
       rec.reason = star ? 'Franchise player' : p.ovr >= 80 ? 'Core player' : young ? 'Young player on the rise' : 'Rotation player at a fair price';
@@ -1449,6 +1460,7 @@
     // Simming past re-signing (not the Auto re-sign button): what was done goes in the summary popup.
     if (!ai && !opts.force) out.forEach(function (x) {
       if (x.action === 'resigned') userLog(state, 'Re-signed ' + x.name + ' (' + yrsText(x.salaries.length) + ', ' + money(x.total) + ')', [x.id]);
+      else if (x.rfa && fa.rights[x.id] && fa.rights[x.id].rfa) userLog(state, 'Kept ' + x.name + ' as a restricted free agent: you can match any offer he signs', [x.id]);
       else if (x.ovr >= 70) userLog(state, 'Did not re-sign ' + x.name + ': ' + (x.reason || 'his price was too high').replace(/^./, function (c) { return c.toLowerCase(); }), [x.id]);
     });
     return out;
@@ -1779,9 +1791,26 @@
       // one popup for the whole gap: the best fits are pre-checked as a group that fits the cap together
       var needN = MIN_ROSTER - cnt, all = rosterSuggestions(state, abbr, ctx, 40);
       var group = checkGroup(state, abbr, all.map(function (x) { return x.id; }), all, needN);
+      if (group.fits.length < needN) {
+        // not enough fit the cap together: add one-year minimum deals, which non-stars take this late
+        // (the same deals AI teams fill their rosters with), best fits first
+        var Ym = contractYear(state), needs = teamNeeds(state, abbr), have = {}, pend = {};
+        all.forEach(function (x) { have[x.id] = 1; });
+        state.fa.offerSheets.forEach(function (x) { pend[x.id] = 1; });
+        var camp = freeAgents(state).filter(function (p) { return !have[p.id] && !pend[p.id] && !otherRfa(state, p, abbr) && !isStar(p) && !p.generated; })
+          .map(function (p) {
+            var f = fitFor(needs, p), mn = minSalary(state, p, Ym);
+            return { id: p.id, name: p.name, pos: p.pos, age: p.age, ovr: p.ovr, amount: mn, years: 1, salaries: [{ year: Ym, amount: mn }], via: 'min', camp: true,
+              fit: f.label, fitKey: f.key, fitPos: f.pos, thin: !!f.fillsNeed, score: p.ovr + ({ great: 6, good: 3, depth: 1, none: 0 })[f.key] + (f.fillsNeed ? 2 : 0) };
+          }).sort(function (x, y) { return y.score - x.score; }).slice(0, 20);
+        all = all.concat(camp);
+        group = checkGroup(state, abbr, all.map(function (x) { return x.id; }), all, needN);
+      }
       // the group that fits together (best fits first, cheaper players filling the rest), plus a few alternates
       var sug = all.filter(function (x) { return group.fits.indexOf(x.id) >= 0; })
         .concat(all.filter(function (x) { return group.fits.indexOf(x.id) < 0; }).slice(0, 3));
+      // nothing fills a need: simply the best available, by overall
+      if (sug.every(function (x) { return x.fitKey === 'none'; })) sug.sort(function (a, b) { return b.ovr - a.ovr; });
       e = { type: 'roster', kind: 'short', count: cnt, need: needN, min: MIN_ROSTER, suggestions: sug, preselect: group.fits.slice(0, needN),
         text: 'You have ' + cnt + ' players. The league needs ' + MIN_ROSTER + '. Sign ' + needN + '?' + (sug.length ? '' : ' Nobody fits your cap right now, but your front office can find players on minimum deals.'),
         options: [{ value: { sign: group.fits.slice(0, needN) }, label: 'Sign checked' }, choose, { value: 'ai', label: 'Let the AI fill it' }] };

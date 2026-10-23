@@ -231,3 +231,4 @@
 .ev-total { margin: 10px 0 0; color: var(--text2); font-size: 14px; }
 .ev-total b { color: var(--gold2); font-family: var(--display); font-size: 18px; }
 .ev-total.bad span, .ev-total span { color: var(--fa-bad); }
+.fa-capnote.warn { color: var(--gold2); }

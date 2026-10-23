@@ -266,6 +266,8 @@
       });
     });
     if (now) state.lastNewsDate = now;
+    // in-season stories: player of the week, big games, streaks, milestones, injuries, rumors
+    if (mod("NEWS") && W.NEWS.tick) safe("newsTick", function () { W.NEWS.tick(state); });
     // All-Star selections at the break, once a season
     if (now && state.allStarsYear !== state.year && now >= state.year + "-" + keyDate("allStar", state.year) && now < state.year + "-07-01" && mod("AWARDS") && W.AWARDS.allStars) {
       state.allStarsYear = state.year;

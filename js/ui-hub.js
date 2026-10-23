@@ -692,22 +692,47 @@
   };
 
   // ---------- Draft classes (hub browser over window.DRAFTS) ----------
+  // Sortable columns: tap a header to sort, tap again to flip (draft order by default). The header
+  // buttons are full-cell tap targets, at least 44 px tall (css/style.css .classes .th-sort).
+  const classSort = { key: 'pick', dir: 1 };
+  const CLASS_COLS = [['pick', 'PICK', ''], ['name', 'PLAYER', 'l'], ['pos', 'POS', ''], ['age', 'AGE', ''], ['ht', 'HT', 'hide-sm'], ['ovr', 'OVR', '']];
+  const CLASS_ASC = ['pick', 'name', 'pos', 'age'];
   P.classes = function (app, arg) {
     const D = window.DRAFTS;
     if (!D || !Object.keys(D).length) { app.innerHTML = UI.header('DRAFT CLASSES') + UI.empty('DRAFT CLASSES NOT LOADED', 'The draft data file <code>data/drafts.js</code> has not loaded.'); return; }
     const years = Object.keys(D).map(Number).sort((a, b) => a - b);
     const year = years.includes(Number(arg)) ? Number(arg) : years[0];
-    const list = D[year].slice().sort((a, b) => (a.undrafted ? 999 : a.realPick || 998) - (b.undrafted ? 999 : b.realPick || 998) || (b.ovr || 0) - (a.ovr || 0));
-    const rows = list.map(p => {
+    const pickOf = p => (p.undrafted ? 999 : p.realPick || 998);
+    const val = (p, k) => (k === 'pick' ? pickOf(p) : k === 'name' ? String(p.name || '') : k === 'pos' ? String(p.pos || '') : Number(p[k]) || 0);
+    const sorted = () => D[year].slice().sort((a, b) => {
+      const x = val(a, classSort.key), y = val(b, classSort.key);
+      const c = typeof x === 'string' ? x.localeCompare(y) : x - y;
+      return c * classSort.dir || pickOf(a) - pickOf(b) || (b.ovr || 0) - (a.ovr || 0);
+    });
+    const rowHtml = p => {
       const live = UI.player(p.id) || p;
       const stash = p.arrivalYear && p.arrivalYear > year + 1 ? `<span class="badge badge-dim">OVERSEAS</span>` : '';
       return `<tr><td>${p.undrafted ? '<span class="muted">UDFA</span>' : esc(p.realPick || '-')}</td>
         <td class="l"><a class="cl-name" href="#/player/${esc(p.id)}"><span class="cl-hs">${UI.headshot(live)}</span><span>${esc(p.name)} ${stash}</span></a></td>
         <td>${esc(p.pos)}</td><td>${esc(p.age)}</td><td class="hide-sm">${UI.fmtHt(p.ht)}</td><td class="${UI.ovrClass(p.ovr)}"><b>${esc(p.ovr)}</b></td></tr>`;
+    };
+    const head = () => CLASS_COLS.map(([k, l, cls]) => {
+      const on = classSort.key === k;
+      return `<th class="${cls} th-s${on ? ' on' : ''}" aria-sort="${on ? (classSort.dir < 0 ? 'descending' : 'ascending') : 'none'}"><button type="button" class="th-sort" data-csort="${k}" title="Sort by ${esc(l.toLowerCase())}">${l}<i aria-hidden="true">${on ? (classSort.dir < 0 ? '&#9660;' : '&#9650;') : ''}</i></button></th>`;
     }).join('');
-    app.innerHTML = UI.header('DRAFT CLASSES', 'Draft-day ratings. Each class enters the league on its draft day.') +
+    app.innerHTML = UI.header('DRAFT CLASSES', 'Draft-day ratings. Each class enters the league on its draft day. Tap a column to sort.') +
       `<div class="tabs year-tabs">${years.map(y => `<a href="#/classes/${y}" class="${y === year ? 'on' : ''}">${y}</a>`).join('')}</div>
-      <div class="tscroll"><table class="stats classes"><thead><tr><th>PICK</th><th class="l">PLAYER</th><th>POS</th><th>AGE</th><th class="hide-sm">HT</th><th>OVR</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      <div class="tscroll"><table class="stats classes"><thead><tr id="clHead">${head()}</tr></thead><tbody id="clBody">${sorted().map(rowHtml).join('')}</tbody></table></div>`;
+    const thead = UI.$('#clHead', app);
+    if (thead) thead.addEventListener('click', e => {
+      const b = e.target.closest('[data-csort]');
+      if (!b) return;
+      const k = b.getAttribute('data-csort');
+      if (classSort.key === k) classSort.dir = -classSort.dir;
+      else { classSort.key = k; classSort.dir = CLASS_ASC.includes(k) ? 1 : -1; }
+      thead.innerHTML = head();
+      UI.$('#clBody', app).innerHTML = sorted().map(rowHtml).join('');
+    });
   };
 
   // ---------- Soundtrack ----------
