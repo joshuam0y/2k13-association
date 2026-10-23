@@ -81,7 +81,9 @@
     if (!s || !Array.isArray(s.days) || !s.days.length) return [];
     const firstOn = iso => s.days.findIndex(d => d && !d.playoff && d.date && d.date >= iso);
     const out = [];
-    const as = firstOn(g.year + '-02-17'), td = firstOn(g.year + '-02-21'), end = UI.regularDays();
+    // real dates for this season (js/league.js KEY_DATES), 2012-13 dates as a fallback
+    const kd = (k, d) => { try { const f = UI.state.L && UI.state.L.KEY_DATES && UI.state.L.KEY_DATES[k]; const v = typeof f === 'function' ? f(g.year) : f; return /^\d\d-\d\d$/.test(v || '') ? v : d; } catch (e) { return d; } };
+    const as = firstOn(g.year + '-' + kd('allStar', '02-17')), td = firstOn(g.year + '-' + kd('tradeDeadline', '02-21')), end = UI.regularDays();
     if (as > 0) out.push({ key: 'allStar', name: 'the All-Star Break', idx: as, how: 'allStar', season: true });
     if (td > 0) out.push({ key: 'tradeDeadline', name: 'the Trade Deadline', idx: td, how: 'tradeDeadline', season: true, note: 'No more trades after it this season.' });
     if (end > 0) out.push({ key: 'endRegular', name: 'the end of the regular season', idx: end, how: 'endRegular' });
@@ -99,18 +101,20 @@
     if (!g.season || UI.inOffseason() || !UI.autoOn('confirmations')) return { how };
     const cur = g.season.day || 0, ms = seasonMoments(g), target = targetDay(g, how, ms);
     const skip = (g.simAsk && g.simAsk.year === g.year && g.simAsk.skip) || {};
-    const m = ms.find(x => x.idx > cur && x.idx < target && !skip[x.key]);
-    if (!m) return { how };
-    const name = m.name.replace(/^the /, '');
-    const r = await UI.choose({
-      title: 'SIM PAST ' + name.toUpperCase() + '?',
-      text: 'Are you sure you want to simulate past ' + m.name + '?' + (m.note ? ' ' + m.note : ''),
-      buttons: [{ value: 'stop', label: 'Stop at ' + name, gold: true }, { value: 'past', label: 'Sim past it' }, { value: 'cancel', label: 'Cancel' }],
-      check: m.season ? "Don't ask again this season" : null
-    });
-    if (r && r.checked && m.season) g.simAsk = { year: g.year, skip: Object.assign({}, skip, { [m.key]: true }) };
-    if (!r || r.value === 'cancel') return null;
-    if (r.value === 'stop') return { how: m.how, stopAt: m };
+    // ask about every key moment the sim would pass, in order (All-Star break, then the trade deadline, ...)
+    const passing = ms.filter(x => x.idx > cur && x.idx < target && !skip[x.key]);
+    for (const m of passing) {
+      const name = m.name.replace(/^the /, '');
+      const r = await UI.choose({
+        title: 'SIM PAST ' + name.toUpperCase() + '?',
+        text: 'Are you sure you want to simulate past ' + m.name + '?' + (m.note ? ' ' + m.note : ''),
+        buttons: [{ value: 'stop', label: 'Stop at ' + name, gold: true }, { value: 'past', label: 'Sim past it' }, { value: 'cancel', label: 'Cancel' }],
+        check: m.season ? "Don't ask again this season" : null
+      });
+      if (r && r.checked && m.season) { skip[m.key] = true; g.simAsk = { year: g.year, skip: Object.assign({}, skip) }; }
+      if (!r || r.value === 'cancel') return null;
+      if (r.value === 'stop') return { how: m.how, stopAt: m };
+    }
     return { how };
   }
 
@@ -292,6 +296,8 @@
     else if (phaseBefore === 'draftLottery' && g.phase === 'draft' && UI.pages.draft) go = '#/draft';
     else if (phaseBefore === 'freeAgency' && g.phase === 'training' && UI.pages.progress && g.progressReport) go = '#/progress';
     else if (phaseBefore === 'training' && g.phase === 'regular') go = '#/season';
+    // the regular season just ended: the awards show (js/ui-awards.js), once a season, before the playoffs
+    if (!offseason && UI.awardShowDue && UI.awardShowDue()) go = '#/awardshow';
     if (go && location.hash !== go) location.hash = go;
     else if (seasonJustEnded && how === 'endPlayoffs' && location.hash !== '#/playoffs') location.hash = '#/playoffs';
     else UI.route();
