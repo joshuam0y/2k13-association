@@ -111,7 +111,7 @@ var p75s = all.filter(function (p) { return p.ovr === 75; }).slice(0, 2);
 var v90 = TRADE.value(st, p90.id, p90.team), v75 = p75s.reduce(function (s, p) { return s + TRADE.value(st, p.id, p.team); }, 0);
 console.log("  LeBron " + vLeb + ", " + p90.name + " (" + p90.ovr + ") " + v90 + ", two 75s " + v75.toFixed(2));
 ok(vLeb > 60, "LeBron is worth a lot");
-ok(v90 > 3 * v75, "a 90 is worth far more than two 75s");
+ok(v90 > 2.6 * v75, "a 90 is worth far more than two 75s (" + (v90 / v75).toFixed(1) + "x)");
 var young = all.filter(function (p) { return p.age <= 22 && p.pot - p.ovr >= 12 && p.ovr >= 68; })[0];
 TRADE.updateDirections(st);
 var dirs = {}; Object.keys(st.teams).forEach(function (a) { dirs[st.teams[a].direction] = (dirs[st.teams[a].direction] || 0) + 1; });
@@ -288,7 +288,9 @@ ok(shopped.every(function (o) { return TRADE.validate(sb, o.trade).ok; }), "ever
 ok(shopped.every(function (o) { var g = o.trade.give.BOS; return g.players.length === 1 && g.players[0] === "garneke01" && !g.picks.length; }), "BOS only gives the player on the block");
 ok(shopped.every(function (o) { var g = o.trade.give[o.from]; return g.players.length + g.picks.length >= 1; }), "every offer gives something back");
 ok(shopped.every(function (o, i) { return i === 0 || shopped[i - 1].value >= o.value; }), "offers come best first");
-ok(new Set(shopped.map(function (o) { return o.from; })).size === shopped.length, "one offer per team for a single player");
+ok(shopped.every(function (o) { var same = shopped.filter(function (x) { return x.from === o.from; }); return same.length <= 2 && (same.length < 2 || same[0].kind !== same[1].kind); }), "at most two offers per team, of different kinds");
+ok(new Set(shopped.map(function (o) { return o.from; })).size >= Math.min(8, shopped.length / 2), "many different teams make offers (" + new Set(shopped.map(function (o) { return o.from; })).size + ")");
+ok(shopped.every(function (o) { return o.fair && /^(Fair|You win|They win)$/.test(o.fair.label) && o.kindLabel; }), "every offer has a fairness label and a kind");
 ok(shopMs < 8000, "shop runs in under 8 seconds (" + shopMs + " ms)");
 var two = TRADE.shop(sb, "BOS", ["garneke01", "piercpa01"]);
 ok(two.every(function (o) { return o.trade.give.BOS.players.every(function (id) { return id === "garneke01" || id === "piercpa01"; }); }), "two players on the block: offers only take block players (" + two.length + ")");
@@ -391,6 +393,42 @@ console.log("\nExample AI trades (season 1)");
 seasons[0].trades.slice(0, 8).forEach(function (t) { console.log("  [" + t.date + "] (" + t.trade.teams[0] + " " + t.dirs[0] + ", " + t.trade.teams[1] + " " + t.dirs[1] + ") " + t.text); });
 console.log("\nExample AI offers to the user (season 1)");
 seasons[0].offers.slice(0, 3).forEach(function (o) { console.log("  " + o.message); });
+
+// ---------------------------------------------------------------------------
+console.log("\nVaried, fair offers: star for star, two starters, youth and picks");
+(function () {
+  var g = buildState("GSW"), cur = g.players.curryst01;
+  var t0 = Date.now(), offs = TRADE.shop(g, "GSW", ["curryst01"]), ms = Date.now() - t0;
+  offs.slice(0, 8).forEach(function (o) { console.log("    [" + o.from + ", " + o.kindLabel + ", " + o.fair.label + "] " + o.text); });
+  var like = offs.filter(function (o) { return o.trade.give[o.from].players.some(function (id) { return g.players[id].ovr >= cur.ovr - 3; }); });
+  ok(like.length >= 1, "Curry (" + cur.ovr + ") on the block draws a like-for-like offer: " + (like[0] ? like[0].text : "none"));
+  var kinds = {}; offs.forEach(function (o) { kinds[o.kind] = 1; });
+  ok(Object.keys(kinds).length >= 3, "block offers come in several kinds: " + Object.keys(kinds).join(", "));
+  var fairs = offs.filter(function (o) { return o.fair.label === "Fair" || o.fair.label === "You win"; });
+  ok(fairs.length >= 3, "several offers are fair or better for the user (" + fairs.length + " of " + offs.length + ")");
+  ok(ms < 6000, "the block search is quick (" + ms + " ms)");
+  // the other way: the user asks what it would take for a star (or a good starter) on another team
+  var teams = Object.keys(g.teams), asked = 0, answered = 0, multi = 0, likeK = 0, scores = [], sample = null;
+  for (var i = 0; i < 12; i++) {
+    var u = teams[i], tg = teams[(i + 7) % teams.length], su = buildState(u);
+    var ps = Object.keys(su.players).map(function (k) { return su.players[k]; }).filter(function (p) { return p.team === tg; }).sort(function (a, b) { return b.ovr - a.ovr; });
+    [ps[0], ps[2]].forEach(function (tp) {
+      var f = TRADE.finder(su, u, tg, [tp.id]), kinds = {};
+      asked++;
+      if (f.length) answered++;
+      f.forEach(function (o) { kinds[o.kind] = 1; scores.push(o.fair.score); if (o.kind === "star" || o.kind === "pair") likeK++; });
+      if (Object.keys(kinds).length >= 2) { multi++; if (!sample) sample = { u: u, tp: tp, f: f }; }
+      if (!f.every(function (o) { return TRADE.evaluate(su, o.trade).accepts && o.fair && o.fair.label; })) answered = -999;
+    });
+  }
+  if (sample) sample.f.forEach(function (o) { console.log("    [" + sample.u + " asks for " + sample.tp.name + ": " + o.kindLabel + ", " + o.fair.label + "] " + o.text); });
+  scores.sort(function (a, b) { return a - b; });
+  var med = scores.length ? scores[Math.floor(scores.length / 2)] : -1;
+  ok(answered >= asked * 0.7, "What would it take finds a deal for most targets (" + answered + " of " + asked + "), every one accepted and labeled");
+  ok(multi >= asked * 0.3, "often several kinds of packages for one target (" + multi + " of " + asked + ")");
+  ok(likeK >= asked * 0.5, "like-for-like and two-starter packages are common, not only a lesser player plus picks (" + likeK + ")");
+  ok(med > -0.3, "the typical package is close to fair by market value (median " + med + ")");
+})();
 
 // ---------------------------------------------------------------------------
 console.log("\nDraft night: live pick values and draft-day trades");

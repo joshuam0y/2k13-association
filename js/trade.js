@@ -213,8 +213,10 @@
     }
     return e;
   }
-  var REPLACEMENT = Math.exp(2 / 8);   // a 62 overall is worth nothing above a minimum signing
-  function talentCurve(eff) { return Math.max(0, Math.exp((eff - 60) / 8) - REPLACEMENT); }
+  // value grows about 2.7 times every 8 OVR: stars are worth far more than depth
+  var CURVE = 8;
+  var REPLACEMENT = Math.exp(2 / CURVE);   // a 62 overall is worth nothing above a minimum signing
+  function talentCurve(eff) { return Math.max(0, Math.exp((eff - 60) / CURVE) - REPLACEMENT); }
 
   function marketSalary(r, capRatio) {
     var x = clamp((r - 60) / 32, 0, 1);
@@ -234,9 +236,10 @@
     var others = (ctx.posInfo[abbr][p.pos] || []).filter(function (o) { return o.id !== p.id; });
     var best = others.length ? others[0].ovr : 0;
     var m = 1;
-    if (p.ovr >= best + 8) m = 1.14;                 // a big upgrade where the team is weak
-    else if (p.ovr >= best + 3) m = 1.08;
-    else if (others.filter(function (o) { return o.ovr >= p.ovr; }).length >= 2) m = 0.9;   // already covered
+    if (p.ovr >= best + 8) m = 1.1;                  // a big upgrade where the team is weak
+    else if (p.ovr >= best + 3) m = 1.06;
+    else if (others.filter(function (o) { return o.ovr >= p.ovr; }).length >= 2) m = 0.94;   // already covered
+    if (p.team === abbr && m > 1.03) m = 1.03;      // a team's own starter: no premium on top of his market value
     return m * taste(abbr, p.id);
   }
   // every front office reads a player a little differently (fixed per team and player): this is what
@@ -258,7 +261,7 @@
       talent *= dir === "rebuild" ? 0.8 : dir === "contend" ? 0.4 : 0.6;
     } else {
       var g = injuryGames(st, p);
-      if (g > 0) talent *= 1 - Math.min(1, g / 82) * (dir === "contend" ? 0.8 : dir === "rebuild" ? 0.3 : 0.55);
+      if (g > 0) talent *= 1 - Math.min(1, g / 82) * (dir === "contend" ? 0.65 : dir === "rebuild" ? 0.4 : 0.5);
     }
     if (ctx.rosters[abbr]) talent *= fitMult(ctx, abbr, p);
     if (p.tradeRequest && p.team === abbr) talent *= 0.85;   // an unhappy player is easier to pry loose
@@ -289,6 +292,7 @@
   // Pick value
   // ---------------------------------------------------------------------------
   function pickCurve(round, s) {
+    // on the player scale: a number one pick is worth about an 84 overall player
     return round === 1 ? 1.5 + 18 * Math.exp(-(s - 1) / 6.5) : 0.3 + 1.0 * Math.exp(-(s - 1) / 10);
   }
   function projections(ctx) {
@@ -733,7 +737,7 @@
     var starOut = best && outSet[best.id] && best.t >= 25 ? best.id : null;
     var bestIn = 0;
     f.inP.forEach(function (id) { bestIn = Math.max(bestIn, parts(ctx, id, abbr).talent); });
-    if (starOut && bestIn < 0.75 * best.t) required += 0.06 * best.t;   // franchise players cost extra, unless a star comes back
+    if (starOut && bestIn < 0.75 * best.t) required += 0.04 * best.t;   // franchise players cost extra, unless a star comes back
     var g = playersDelta + pin - pout - taxPenalty;
     return { team: abbr, gain: g, required: required, margin: g - required, outValue: outValue, inValue: inValue,
       taxPenalty: taxPenalty, starOut: starOut, dir: dir, payAfter: payA, inSalary: inS, outSalary: outS, flows: f };
@@ -828,7 +832,7 @@
 
   function fixLegal(ctx, trade, G, R, opts) {
     var st = ctx.state;
-    for (var step = 0; step < 6; step++) {
+    for (var step = 0; step < 8; step++) {
       var v = validate(st, trade, ctx);
       if (v.ok) return trade;
       if (v.closed) return null;
@@ -849,14 +853,29 @@
           return !used[id] && !core[id] && countsOnRoster(st, p) && salaryOf(p, ctx.year) > 0 && !(opts.protect && opts.protect[id]);
         }).map(function (id) { return { id: id, s: salaryOf(st.players[id], ctx.year), v: parts(ctx, id, X).total }; });
         if (!fill.length) return null;
-        var enough = fill.filter(function (f) { return f.s >= need; }).sort(function (a, b2) { return a.v - b2.v || a.s - b2.s; });
+        // the filler closest to the salary needed (so the other side's matching still works), cheap in value
+        var cost = function (f) { return (f.s - need) / 1e6 / ctx.capRatio + 0.6 * Math.max(0, f.v); };
+        var enough = fill.filter(function (f) { return f.s >= need; }).sort(function (a, b2) { return cost(a) - cost(b2); });
         var pickF = enough.length ? enough[0] : fill.sort(function (a, b2) { return b2.s - a.s; })[0];
         addPlayer(trade, X, pickF.id);
         if (trade.dest) trade.dest[pickF.id] = other;
         fixed = true;
       } else if (v.roster.length) {
         var rb = v.roster[0];
-        if (!rb.over) return null;
+        if (!rb.over) {
+          // a 2-for-1 leaves a team short: the other side throws in its cheapest player
+          var S = rb.team, O = S === G ? R : G;
+          if (opts.noFiller && opts.noFiller[O]) return null;
+          var used3 = {};
+          trade.teams.forEach(function (a) { sideOf(trade, a).players.forEach(function (id) { used3[id] = 1; }); });
+          var thr = ctx.rosters[O].filter(function (id) { return !used3[id] && countsOnRoster(st, st.players[id]) && !(opts.protect && opts.protect[id]); })
+            .sort(function (a, b2) { return parts(ctx, a, O).total - parts(ctx, b2, O).total || salaryOf(st.players[a], ctx.year) - salaryOf(st.players[b2], ctx.year); });
+          if (!thr.length) return null;
+          addPlayer(trade, O, thr[0]);
+          if (trade.dest) trade.dest[thr[0]] = S;
+          fixed = true;
+          continue;
+        }
         var X2 = rb.team, other2 = X2 === G ? R : G;
         if (opts.noFiller && opts.noFiller[X2]) return null;
         var used2 = {};
@@ -993,17 +1012,55 @@
       ok: function (sel) { return sel.some(function (c) { var p = P(c); return p && (p.age || 30) <= 23; }) && sel.some(function (c) { return c.kind === "k"; }); } };
     return null;
   }
+  // the kind of a finished package (fillers added for salary can change it), from what giver sends
+  function kindOf(state, trade, giver, ref) {
+    var ps = sideOf(trade, giver).players.map(function (id) { return state.players[id]; }).filter(Boolean);
+    var picks = sideOf(trade, giver).picks.length;
+    if (ps.some(function (p) { return p.ovr >= ref - 3; })) return "star";
+    if (ps.filter(function (p) { return p.ovr >= ref - 12; }).length >= 2) return "pair";
+    if (picks && ps.some(function (p) { return (p.age || 30) <= 23; })) return "youth";
+    return "value";
+  }
   function sumOf(sel, key) { var v = 0; sel.forEach(function (c) { v += c[key]; }); return v; }
 
   // Fairness for the user: what he gets against what he gives, by his own team's needs.
   // { label: "Fair" | "You win" | "They win", score } (score: user gain over the size of the deal)
+  // market value: what a typical (neutral) team pays, without one team's fit or taste
+  function marketVal(ctx, id) {
+    var key = "mkt|" + id;
+    if (ctx.vcache[key]) return ctx.vcache[key];
+    var st = ctx.state, p = st.players[id], talent = talentCurve(effRating(p, "neutral"));
+    if (isStashed(st, p)) talent *= 0.6;
+    else { var g = injuryGames(st, p); if (g > 0) talent *= 1 - Math.min(1, g / 82) * 0.5; }
+    var rem = remaining(p, ctx.year), surplus = 0;
+    for (var i = 0; i < rem.length; i++) {
+      var ratio = ctx.capRatio * Math.pow(1.045, i);
+      surplus += (marketSalary(projRating(p, i), ratio) - rem[i].amount) / 1e6 / ratio * Math.pow(0.88, i);
+    }
+    var v = talent + 0.35 * surplus;
+    ctx.vcache[key] = v;
+    return v;
+  }
+  // market value a team gets minus what it gives, from its flows (gain().flows)
+  function marketNet(ctx, f) {
+    var v = 0;
+    f.inP.forEach(function (id) { v += marketVal(ctx, id); });
+    f.outP.forEach(function (id) { v -= marketVal(ctx, id); });
+    f.inK.forEach(function (k) { v += rawPick(ctx, k, 0); });
+    f.outK.forEach(function (k) { v -= rawPick(ctx, k, 0); });
+    return v;
+  }
+  // Fairness for the user, by market value: { label: "Fair" | "You win" | "They win", score, give, get }
   function fairnessOf(ctx, trade) {
-    var user = ctx.state.userTeam;
+    var st = ctx.state, user = st.userTeam;
     if (trade.teams.indexOf(user) < 0) return null;
-    var e = gain(ctx, user, trade, { base: 0, pct: 0 });
-    var scale = Math.max(4, e.outValue, e.inValue);
-    var sc = e.gain / scale;
-    return { label: sc > 0.1 ? "You win" : sc < -0.1 ? "They win" : "Fair", score: round2(sc), gain: round2(e.gain) };
+    var f = flows(st, trade, user), give = 0, get = 0;
+    f.outP.forEach(function (id) { give += marketVal(ctx, id); });
+    f.inP.forEach(function (id) { get += marketVal(ctx, id); });
+    f.outK.forEach(function (k) { give += rawPick(ctx, k, 0); });
+    f.inK.forEach(function (k) { get += rawPick(ctx, k, 0); });
+    var sc = (get - give) / Math.max(4, give, get);
+    return { label: sc > 0.12 ? "You win" : sc < -0.12 ? "They win" : "Fair", score: round2(sc), give: round2(give), get: round2(get) };
   }
   function fairness(state, trade) {
     ensureDirections(state);
@@ -1036,7 +1093,8 @@
         topN: spec ? 6 : 9, pickN: spec ? 4 : 5, maxTries: spec ? 25 : 80,
         prune: function (sel) { return sumOf(sel, "vR") < 0.6 * wantR - 1; },   // they would never take that little
         rOk: function (e) { return e.margin >= 0; },
-        score: function (eR, eG) { return eG.gain - 0.3 * eR.margin; },   // cheapest for the user that still works
+        // the best deal for the user by market value that they still accept, then by his own needs
+        score: function (eR, eG) { return marketNet(ctx, eG.flows) + 0.4 * eG.gain - 0.2 * eR.margin; },
         maxOverpay: function (eR) { return 0.4 * eR.inValue + 2; },        // never suggest giving away the farm
         keep: opts.keep
       });
@@ -1044,7 +1102,8 @@
         var key = sideOf(r.trade, userAbbr).players.slice().sort().join(",") + "|" + sideOf(r.trade, userAbbr).picks.map(function (k) { return pickId(parsePickRef(k)); }).sort().join(",");
         if (seen[key]) return;
         seen[key] = 1;
-        out.push({ trade: r.trade, accepts: true, margin: round2(r.eR.margin), kind: kind, kindLabel: KIND_LABEL[kind],
+        var kd = want.length ? kindOf(state, r.trade, userAbbr, ref) : "value";
+        out.push({ trade: r.trade, accepts: true, margin: round2(r.eR.margin), kind: kd, kindLabel: KIND_LABEL[kd],
           fair: fairnessOf(ctx, r.trade), text: describe(state, r.trade),
           message: "The " + shortName(state, targetAbbr) + " would accept this deal." });
       });
@@ -1075,14 +1134,21 @@
     Object.keys(state.teams).forEach(function (T) {
       if (T === userAbbr || (opts.teams && opts.teams.indexOf(T) < 0)) return;
       sets.forEach(function (set) {
-        var want = 0;
-        set.forEach(function (id) { want += parts(ctx, id, T).total; });
+        var want = 0, ref = 0;
+        set.forEach(function (id) { want += parts(ctx, id, T).total; ref = Math.max(ref, state.players[id].ovr); });
         if (want <= 0.3) return;     // this team has no use for them
-        var res = buildPackages(ctx, T, userAbbr, set, {
-          limit: 1, maxAssets: 3, maxTries: 30, gRule: rule, rRule: { base: 0, pct: 0 }, noFiller: noFiller,
-          rOk: function (e) { return e.inValue > 0.2 || e.gain > 0; },
-          gOk: function (e) { return e.margin >= 0; },
-          score: function (eR) { return eR.gain; }
+        // several kinds of offers per team: star for star, two starters, youth and picks, anything
+        var res = [];
+        ["star", "pair", "youth", "value"].forEach(function (kind) {
+          var spec = kindSpec(ctx, kind, ref);
+          buildPackages(ctx, T, userAbbr, set, {
+            limit: 1, maxAssets: 3, maxTries: spec ? 12 : 25, topN: spec ? 6 : 8, pickN: 4, spec: spec,
+            gRule: rule, rRule: { base: 0, pct: 0 }, noFiller: noFiller,
+            prune: function (sel) { return sumOf(sel, "vG") > 1.4 * want + 2; },   // more than they think he is worth
+            rOk: function (e) { return e.inValue > 0.2 || e.gain > 0; },
+            gOk: function (e) { return e.margin >= 0; },
+            score: function (eR) { return marketNet(ctx, eR.flows) + 0.5 * eR.gain; }
+          }).forEach(function (r) { r.kind = kindOf(state, r.trade, T, ref); res.push(r); });
         });
         res.forEach(function (r) {
           var tr = { teams: [userAbbr, T], give: {} };
@@ -1096,20 +1162,32 @@
             try { cv = C.validateTrade(state, tr); } catch (e) { cv = { ok: false }; }
             if (!cv || !cv.ok) return;
           }
+          var fair = fairnessOf(ctx, tr);
+          if (fair && fair.score < -0.5) return;   // not a serious offer
           found.push({ from: T, trade: tr, accepts: true, value: round2(r.eR.gain), margin: ev.margin,
+            kind: r.kind, kindLabel: KIND_LABEL[r.kind], fair: fair,
             text: describe(state, tr), message: "The " + shortName(state, T) + " would do this deal." });
         });
       });
     });
     found.sort(function (a, b) { return b.value - a.value; });
-    // keep the best offer per team for each block set, then the overall best
-    var seen = {}, out = [];
+    // one offer per team, kind and block set; the best few of every kind make the list, then the best of the rest
+    var seen = {}, uniq = [];
     found.forEach(function (o) {
-      var key = o.from + "|" + o.trade.give[userAbbr].players.slice().sort().join(",");
-      if (seen[key]) return;
-      seen[key] = 1; out.push(o);
+      var key = o.from + "|" + o.kind + "|" + o.trade.give[userAbbr].players.slice().sort().join(",");
+      var same = o.from + "|" + describe(state, o.trade);
+      if (seen[key] || seen[same]) return;
+      seen[key] = seen[same] = 1; uniq.push(o);
     });
-    return out.slice(0, opts.limit || 15);
+    // at most two offers per team (of different kinds), so many teams get a say
+    var limit = opts.limit || 15, out = [], taken = {}, perKind = {}, perTeam = {};
+    function take(o, i) { taken[i] = 1; perTeam[o.from] = (perTeam[o.from] || 0) + 1; out.push(o); }
+    uniq.forEach(function (o, i) { if ((perKind[o.kind] || 0) < 3 && (perTeam[o.from] || 0) < 2) { perKind[o.kind] = (perKind[o.kind] || 0) + 1; take(o, i); } });
+    uniq.forEach(function (o, i) { if (!taken[i] && (perTeam[o.from] || 0) < 1) take(o, i); });
+    uniq.forEach(function (o, i) { if (!taken[i] && (perTeam[o.from] || 0) < 2) take(o, i); });
+    out = out.slice(0, limit);
+    out.sort(function (a, b) { return b.value - a.value; });
+    return out;
   }
 
   // ---------------------------------------------------------------------------
@@ -1258,20 +1336,33 @@
       var isStar = !!star[tgt.id];
       // T gives, the user (R) receives value close to fair, slightly favoring the AI; for a star the
       // user must come out clearly ahead
-      var pk = buildPackages(ctx, T, user, [tgt.id], {
-        limit: 1, maxAssets: 3, skipRecent: true, gRule: difficulty(state), rRule: { base: 0, pct: 0 },
-        rOk: isStar ? function (e) { return e.gain >= 0.06 * e.outValue + 0.5; }
-          : function (e) { return e.gain >= -(0.1 * e.outValue + 0.5) && e.gain <= 0.25 * e.outValue + 1.5; },
-        gOk: function (e) { return e.margin >= 0; },
-        score: isStar ? function (eR) { return eR.gain; } : function (eR) { return -Math.abs(eR.gain + 0.04 * eR.outValue); },
-        jitter: function () { return rng() * 0.3; }
-      });
+      // the kind of package: a star only for a star; contenders like like-for-like swaps and
+      // consolidation, rebuilders offer youth and picks; anything else is players and picks
+      var ref = state.players[tgt.id].ovr, r0 = rng(), kinds;
+      if (isStar) kinds = ["star"];
+      else if (tdir === "contend") kinds = r0 < 0.45 ? ["star", "value"] : r0 < 0.6 ? ["pair", "value"] : ["value"];
+      else if (tdir === "rebuild") kinds = r0 < 0.5 ? ["youth", "value"] : ["value"];
+      else kinds = r0 < 0.3 ? ["star", "value"] : ["value"];
+      var pk = [];
+      for (var kk = 0; kk < kinds.length && !pk.length; kk++) {
+        var spec = kindSpec(ctx, kinds[kk], ref);
+        pk = buildPackages(ctx, T, user, [tgt.id], {
+          limit: 1, maxAssets: 3, skipRecent: true, gRule: difficulty(state), rRule: { base: 0, pct: 0 },
+          spec: spec, topN: spec ? 6 : 9, pickN: spec ? 4 : 5, maxTries: spec ? 15 : 80,
+          rOk: isStar ? function (e) { return e.gain >= 0.06 * e.outValue + 0.5; }
+            : function (e) { return e.gain >= -(0.1 * e.outValue + 0.5) && e.gain <= 0.25 * e.outValue + 1.5; },
+          gOk: function (e) { return e.margin >= 0; },
+          score: isStar ? function (eR) { return eR.gain; } : function (eR) { return -Math.abs(eR.gain + 0.04 * eR.outValue); },
+          jitter: function () { return rng() * 0.3; }
+        });
+      }
       if (!pk.length) { m.asked[tgt.id] = { day: day, phase: state.phase }; continue; }
       m.offers++;
       m.lastOfferDay = day; m.lastOfferPhase = state.phase;
       m.asked[tgt.id] = { day: day, phase: state.phase };
-      var tr = pk[0].trade;
+      var tr = pk[0].trade, kd = kindOf(state, tr, T, ref);
       return [{ type: "tradeOffer", from: T, trade: tr, year: state.year, day: day,
+        kind: kd, kindLabel: KIND_LABEL[kd], fair: fairnessOf(ctx, tr),
         text: describe(state, tr),
         message: "The " + shortName(state, T) + " want " + state.players[tgt.id].name + ". " + describe(state, tr) }];
     }
@@ -1450,7 +1541,7 @@
     var best = null;
     for (var i = 0; i < cands.length && i < 40; i++) {
       var c = cands[i];
-      if (c.vU <= 0.15) continue;
+      if (c.vU <= 0.05) continue;
       var t = cloneTrade(base);
       if (c.kind === "k") t.give[T].picks.push({ year: c.pick.year, round: c.pick.round, original: c.pick.original });
       else t.give[T].players.push(c.id);
@@ -1536,7 +1627,7 @@
     shop: shop, pickText: pickText, protectionText: protectionText,
     // draft night and trade screen helpers
     pickLabel: pickLabel, slotForEntry: slotForEntry, entryForSlot: entryForSlot, pickUsed: pickUsed,
-    deadline: deadline, deadlineMD: deadlineMD, askForMore: askForMore, draftNightTrade: draftNightTrade, liveDraft: liveDraft
+    deadline: deadline, deadlineMD: deadlineMD, fairness: fairness, KIND_LABEL: KIND_LABEL, askForMore: askForMore, draftNightTrade: draftNightTrade, liveDraft: liveDraft
   };
   W.TRADE = API;
   if (typeof module !== "undefined" && module.exports) module.exports = API;

@@ -188,6 +188,13 @@
     .ftx-pkrow { display: flex; gap: 6px; align-items: stretch; }
     .ftx-pkrow > .ft-item { flex: 1 1 auto; min-width: 0; }
     .ftx-more { margin-top: 6px; font-size: 13px; }
+    .ftx-fair { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 10px 0 0; font-size: 12px; }
+    .ftx-fair-l { font-family: var(--display); letter-spacing: .14em; color: var(--muted); font-size: 11px; }
+    .ftx-fair-bar { position: relative; flex: 0 1 160px; min-width: 90px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #8a2f2f 0, #8a2f2f 38%, var(--gold-dim) 38%, var(--gold-dim) 62%, #2f7a45 62%, #2f7a45 100%); }
+    .ftx-fair-bar i { position: absolute; top: -3px; width: 4px; height: 14px; margin-left: -2px; background: #fff; border-radius: 2px; box-shadow: 0 0 0 1px #000; }
+    .ftx-fair b { font-family: var(--display); letter-spacing: .08em; }
+    .ftx-fair.win b { color: #7fd99a; } .ftx-fair.even b { color: var(--gold2); } .ftx-fair.lose b { color: #ff9b9b; }
+    .ftx-kind { display: inline-block; margin-left: 8px; padding: 1px 6px; border: 1px solid var(--line2); color: var(--text2); font-size: 10px; letter-spacing: .1em; font-family: var(--display); vertical-align: middle; }
     @media (max-width: 700px) { .ftx-ba { grid-template-columns: minmax(0, 1fr); } }
   `);
 
@@ -452,7 +459,7 @@
     if (take.error) return `<div class="ft-answer bad"><div class="ft-k">WHAT WOULD IT TAKE</div><p>${esc(take.error)}</p></div>`;
     if (!take.list.length) return `<div class="ft-answer bad"><div class="ft-k">WHAT WOULD IT TAKE: ${esc(nm.toUpperCase())}</div><p>The ${esc(UI.team(deal.partner).name)} would not trade ${esc(nm)} for anything you have that fits the salary rules.</p></div>`;
     noTradeLink = true;
-    const cards = take.list.map((t, i) => offerCard(st, t, deal.partner, [`<button type="button" class="btn btn-gold btn-small" data-act="takeDo" data-i="${i}">MAKE THIS TRADE</button>`, `<button type="button" class="btn btn-small" data-act="takeLoad" data-i="${i}">EDIT IT</button>`])).join('');
+    const cards = take.list.map((t, i) => offerCard(st, t, deal.partner, [`<button type="button" class="btn btn-gold btn-small" data-act="takeDo" data-i="${i}">MAKE THIS TRADE</button>`, `<button type="button" class="btn btn-small" data-act="takeLoad" data-i="${i}">EDIT IT</button>`], 'PACKAGE ' + (i + 1), (take.meta && take.meta[i]) || {})).join('');
     noTradeLink = false;
     return `<div class="ftx-finds">${UI.header('WHAT WOULD IT TAKE: ' + esc(nm.toUpperCase()), 'Packages the ' + esc(UI.team(deal.partner).name) + ' would accept, cheapest for you first')}
       ${cards}</div>`;
@@ -511,7 +518,7 @@
       </div>
       <section class="ft-deal">
         <div class="ft-deal-cols"><div><div class="ft-k">YOU GIVE</div>${assetList(st, tr, user, true)}</div><div><div class="ft-k">YOU GET</div>${assetList(st, tr, partner, true)}</div></div>
-        ${dealSize(tr) ? beforeAfterHtml(st, tr, chk, yr) + salaryHtml(st, tr, chk, yr) : ''}
+        ${dealSize(tr) ? fairHtml(st, tr) + beforeAfterHtml(st, tr, chk, yr) + salaryHtml(st, tr, chk, yr) : ''}
         ${cbaHtml}
         ${verdict}
       </section>
@@ -550,7 +557,8 @@
           const pk = pkey ? pickObj(st, partner, pkey) : null;
           const r = pid ? Fd.finder(st, user, partner, [pid]) : pk ? Fd.finder(st, user, partner, [], { wantPicks: [pk] }) : [];
           const arr = Array.isArray(r) ? r : (r && Array.isArray(r.proposals) ? r.proposals : []);
-          take = { pid, pick: pkey, list: arr.map(x => (x && x.trade) || x).filter(x => x && x.give && Array.isArray(x.teams)).slice(0, 4) };
+          const ok = arr.filter(x => { const t = (x && x.trade) || x; return t && t.give && Array.isArray(t.teams); }).slice(0, 5);
+          take = { pid, pick: pkey, list: ok.map(x => x.trade || x), meta: ok.map(x => (x && x.trade ? { kindLabel: x.kindLabel, fair: x.fair } : {})) };
         } catch (e) { console.warn('TRADE.finder', e); take = { pid, pick: pkey, list: [], error: 'Could not ask: ' + (e && e.message ? e.message : e) }; }
         renderBuild(app, st, yr);
         const el = app.querySelector('.ftx-finds, .ft-answer'); if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
@@ -572,16 +580,28 @@
     };
   }
 
+  // fairness for the user by market value (TRADE.fairness): "Fair", "You win", "They win"
+  function fairHtml(st, tr, fair) {
+    const Fz = F.fn('TRADE', 'fairness');
+    const f = fair || (Fz ? F.try('TRADE.fairness', () => Fz.fairness(st, tr), null) : null);
+    if (!f || !f.label) return '';
+    const pct = Math.max(4, Math.min(96, 50 + (Number(f.score) || 0) * 100));
+    const cls = f.label === 'You win' ? 'win' : f.label === 'They win' ? 'lose' : 'even';
+    return `<div class="ftx-fair ${cls}" title="By market value: what a typical team would pay for each side"><span class="ftx-fair-l">FAIRNESS</span><span class="ftx-fair-bar"><i style="left:${pct}%"></i></span><b>${esc(f.label.toUpperCase())}</b></div>`;
+  }
+
   // ---------- offer cards (trading block results, finder results, AI offers) ----------
-  function offerCard(st, tr, from, buttons, note) {
+  function offerCard(st, tr, from, buttons, note, meta) {
+    meta = meta || {};
     const user = st.userTeam;
     const chk = cbaCheck(st, tr);
     const yr = F.capYear(st);
     const sumOf = a => ((tr.give[a] && tr.give[a].players) || []).reduce((s, id) => s + F.salary(st.players[id], yr), 0);
     const out = sumOf(user), inn = sumOf(from);
     return `<article class="ft-offer">
-      <div class="ft-offer-head">${UI.logo(from, 44)}<div><div class="ft-k">${note ? esc(note) : 'OFFER FROM'}</div><div class="ft-t">${esc(UI.teamName(from))}</div></div></div>
+      <div class="ft-offer-head">${UI.logo(from, 44)}<div><div class="ft-k">${note ? esc(note) : 'OFFER FROM'}${meta.kindLabel ? `<span class="ftx-kind">${esc(String(meta.kindLabel).toUpperCase())}</span>` : ''}</div><div class="ft-t">${esc(UI.teamName(from))}</div></div></div>
       <div class="ft-find-cols"><div><div class="ft-k">YOU GIVE</div>${assetList(st, tr, user)}</div><div><div class="ft-k">YOU GET</div>${assetList(st, tr, from)}</div></div>
+      ${fairHtml(st, tr, meta.fair)}
       <p class="ftx-offer-sal">Salary: you send ${F.money(out)}, take back ${F.money(inn)}${chk ? (chk.ok ? ' | <span class="win">CBA OK</span>' : ' | <span class="loss">' + esc(chk.reasons[0] || 'breaks the rules') + '</span>') : ''}</p>
       <div class="row-btns">${buttons.join('')}</div></article>`;
   }
@@ -610,10 +630,10 @@
     let results = '';
     if (shopRes && shopRes.error) results = `<div class="ft-answer bad"><div class="ft-k">FIND TRADES</div><p>${esc(shopRes.error)}</p></div>`;
     else if (shopRes && !shopRes.list.length) results = `<div class="ft-answer bad"><div class="ft-k">NO OFFERS</div><p>No team wants to give anything for ${esc(names.join(' and '))} that fits the salary rules. Try a different player.</p></div>`;
-    else if (shopRes) results = `${UI.header('OFFERS FOR ' + esc(names.join(', ').toUpperCase()), shopRes.list.length + ' teams answered, best offer for you first. Every one of these is legal and the other team will say yes.')}
+    else if (shopRes) results = `${UI.header('OFFERS FOR ' + esc(names.join(', ').toUpperCase()), shopRes.list.length + ' offers from ' + new Set(shopRes.list.map(o => o.from)).size + ' teams: star swaps, two-for-ones, youth and picks. Each is legal, the other team will say yes, and the meter shows how fair it is.')}
       <div class="ft-offers">${shopRes.list.map((o, i) => offerCard(st, o.trade, o.from, [
         `<button type="button" class="btn btn-gold" data-act="shopDo" data-i="${i}">ACCEPT</button>`,
-        `<button type="button" class="btn" data-act="shopEdit" data-i="${i}">EDIT IN TRADE SCREEN</button>`], i === 0 ? 'BEST OFFER' : 'OFFER ' + (i + 1))).join('')}</div>`;
+        `<button type="button" class="btn" data-act="shopEdit" data-i="${i}">EDIT IN TRADE SCREEN</button>`], i === 0 ? 'BEST OFFER' : 'OFFER ' + (i + 1), { kindLabel: o.kindLabel })).join('')}</div>`;
 
     app.innerHTML = `${UI.header('TRADES', 'Put players on the block, then ask every team what they would give.')}
       ${tabs(st, 'block')}
@@ -694,7 +714,7 @@
       return offerCard(st, tr, from, [`<button type="button" class="btn btn-gold" data-act="accept" data-i="${i}">ACCEPT</button>`,
         more,
         `<button type="button" class="btn" data-act="decline" data-i="${i}">DECLINE</button>`,
-        `<button type="button" class="btn" data-act="counter" data-i="${i}">EDIT IN TRADE SCREEN</button>`], note);
+        `<button type="button" class="btn" data-act="counter" data-i="${i}">EDIT IN TRADE SCREEN</button>`], note, { kindLabel: o.kindLabel });
     }).join('');
     app.innerHTML = `${UI.header('TRADES', 'Offers other teams have sent you. Accept, ask for more (once per offer), or decline.')}
       ${tabs(st, 'offers')}
