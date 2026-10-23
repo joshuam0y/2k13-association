@@ -66,7 +66,6 @@
     const over = cs.roster > cs.maxRoster;
     const btns = [];
     if (ph === 'resign') {
-      btns.push('<button type="button" class="btn" data-act="auto">AUTO RE-SIGN</button>');
       btns.push('<button type="button" class="btn btn-gold" data-act="openfa">DONE: OPEN FREE AGENCY</button>');
     } else if (ph === 'freeAgency' && !(fa && fa.stage === 'done')) {
       btns.push('<button type="button" class="btn btn-gold" data-act="simday">SIM ONE FA DAY</button>');
@@ -259,61 +258,64 @@
     </article>`;
   }
 
-  // ---------- re-sign tab ----------
+  // ---------- re-sign tab (2K style re-sign screen) ----------
+  // One list of the user's expiring players: OVR, age, position, last season's line, how he feels about
+  // staying, what he asks, the Bird rights in plain words and the front office recommendation. Each row:
+  // NEGOTIATE (the same legal-range slider panel as free agency), RE-SIGN AT ASKING, LET GO.
+  const statLine = l => l ? `${l.pts.toFixed(1)} PTS ${l.reb.toFixed(1)} REB ${l.ast.toFixed(1)} AST in ${l.g} games` : 'Did not play last season';
+  const INTEREST_CLASS = { 'Wants to stay': 'good', 'Open to returning': '', 'Wants a max': 'gold', 'Testing the market': 'bad', 'Unhappy here': 'bad' };
   function resignTab(st, info) {
     const user = st.userTeam, fa = st.fa, inWindow = !!(fa && fa.stage === 'resign');
+    const board = FAX().resignBoard ? F.try('FA.resignBoard', () => FAX().resignBoard(st, user), null) : null;
     const parts = [];
     if (view.auto) {
       const done = view.auto.filter(x => x.action === 'resigned');
-      parts.push(`<div class="fa-auto"><b>AUTO RE-SIGN</b> ${done.length ? done.map(x => esc(x.name) + ' (' + yrs(x.salaries.length) + ', ' + money(x.total) + ')').join(', ') + ' re-signed.' : 'Nobody re-signed.'}
-        ${view.auto.filter(x => x.action !== 'resigned').map(x => `<div class="fa-auto-x">${esc(x.name)}: ${esc(x.reason || x.action)}</div>`).join('')}</div>`);
+      parts.push(`<div class="fa-auto"><b>RE-SIGNED THE RECOMMENDED PLAYERS</b> ${done.length ? done.map(x => esc(x.name) + ' (' + yrs(x.salaries.length) + ', ' + money(x.total) + ')').join(', ') + '.' : 'Nobody was worth re-signing at his price.'}</div>`);
     }
-    // team options and qualifying offers
-    const dec = [];
-    if (fa && inWindow) {
-      (fa.decisions || []).filter(d => d.team === user && d.type === 'team').forEach(d => {
-        const p = st.players[d.id]; if (!p) return;
-        const ex = d.decision === 'exercised';
-        dec.push(`<li><span><b>${esc(p.name)}</b> team option, ${money(d.amount)} for ${esc(season(d.year))}: <em class="${ex ? 'yes' : 'no'}">${ex ? 'EXERCISED' : 'DECLINED'}</em></span>
-          <button type="button" class="btn btn-small" data-act="option" data-id="${esc(d.id)}" data-v="${ex ? 0 : 1}">${ex ? 'DECLINE IT' : 'EXERCISE IT'}</button></li>`);
-      });
-      Object.keys(fa.rights).forEach(id => {
-        const r = fa.rights[id], p = st.players[id];
-        if (r.team !== user || !r.qo || r.renounced || !p || p.team !== 'FA') return;
-        dec.push(`<li><span><b>${esc(p.name)}</b> qualifying offer ${money(r.qo)}: <em class="${r.rfa ? 'yes' : 'no'}">${r.rfa ? 'EXTENDED (restricted, you can match offers)' : 'NOT EXTENDED (unrestricted)'}</em></span>
-          <button type="button" class="btn btn-small" data-act="qo" data-id="${esc(id)}" data-v="${r.rfa ? 0 : 1}">${r.rfa ? 'WITHDRAW' : 'EXTEND'}</button></li>`);
-      });
+    if (board) {
+      const c = board.cap, recN = board.players.filter(x => x.recommended).length;
+      parts.push(`<section class="rs-cap" aria-label="Cap after re-signing">
+        <div><small>PAYROLL NOW</small><b>${money(c.payroll)}</b><span>Cap ${money(c.cap)} | Tax line ${money(c.tax)}</span></div>
+        <div class="${c.roomIfAllGo > 0 ? 'good' : ''}"><small>LET THEM ALL GO</small><b>${money(c.roomIfAllGo)}</b><span>cap room in free agency</span></div>
+        ${recN ? `<div><small>RE-SIGN THE RECOMMENDED (${recN})</small><b>${money(c.payrollIfRecommended)}</b><span>${c.roomIfRecommended > 0 ? money(c.roomIfRecommended) + ' of room left' : c.payrollIfRecommended > c.tax ? 'over the tax line' : 'over the cap: exceptions only'}</span></div>`
+          : '<div><small>RECOMMENDED</small><b>None</b><span>Your front office would not pay their prices</span></div>'}
+        ${inWindow && recN ? '<div class="rs-cap-btn"><button type="button" class="btn btn-gold" data-act="auto">RE-SIGN ALL RECOMMENDED</button></div>' : ''}
+      </section>`);
+      // options this summer: team options can still be changed in the window, player options are his call
+      const opts = board.options.map(o => {
+        const p = st.players[o.id]; if (!p) return '';
+        const lbl = o.type === 'team' ? 'Team option' : o.type === 'eto' ? 'Early termination' : 'Player option';
+        const res = { exercised: 'EXERCISED: he stays', declined: 'DECLINED: he is a free agent', optedIn: 'HE OPTED IN: he stays', optedOut: 'HE OPTED OUT: free agent' }[o.decision] || o.decision;
+        const btn = o.canChange ? `<button type="button" class="btn btn-small" data-act="option" data-id="${esc(o.id)}" data-v="${o.decision === 'exercised' ? 0 : 1}">${o.decision === 'exercised' ? 'DECLINE IT' : 'EXERCISE IT'}</button>` : '';
+        return `<li><span><b>${esc(p.name)}</b> ${lbl}, ${money(o.amount)} for ${esc(season(o.year))}: <em class="${/exercised|optedIn/.test(o.decision) ? 'yes' : 'no'}">${res}</em></span>${btn}</li>`;
+      }).join('');
+      if (opts) parts.push(`<h3 class="fa-h3">OPTIONS THIS SUMMER</h3><ul class="fa-dec">${opts}</ul>`);
+      parts.push('<h3 class="fa-h3">YOUR EXPIRING PLAYERS</h3>');
+      if (!board.players.length) parts.push('<p class="muted">No unsigned free agents with your rights.</p>');
+      else parts.push('<div class="fa-list rs-list">' + board.players.map(x => {
+        const p = st.players[x.id], open = view.open === x.id;
+        const tags = [`<span class="badge rs-int ${INTEREST_CLASS[x.interest] || ''}">${esc(x.interest.toUpperCase())}</span>`];
+        if (x.recommended) tags.push('<span class="badge badge-gold" title="' + esc(x.recReason) + '">RECOMMENDED</span>');
+        if (x.rfa) tags.push('<span class="badge ft-badge">RESTRICTED</span>');
+        const meta = `${esc(posLabel(p))} | ${esc(x.age)} YRS | Mood ${Math.round(x.mood)}${x.last ? ' | Was ' + money(x.last) : ''} ${tags.join(' ')}`;
+        const qo = x.qo ? `<div class="rs-note">Qualifying offer ${money(x.qo)}: ${x.rfa ? 'extended, so you can match any offer sheet he signs.' : 'not extended, he is unrestricted.'}
+          ${inWindow ? `<button type="button" class="btn btn-small" data-act="qo" data-id="${esc(x.id)}" data-v="${x.rfa ? 0 : 1}">${x.rfa ? 'WITHDRAW' : 'EXTEND'}</button>` : ''}</div>` : '';
+        return `<article class="fa-row fa-own${open ? ' open' : ''}" data-row="${esc(x.id)}">
+          <a class="fa-who" href="#/player/${esc(x.id)}">${F.mini(p, { meta })}</a>
+          <div class="fa-ask"><small>ASKING</small><b>${money(x.ask)}</b><span>${yrs(x.years)}</span></div>
+          <div class="fa-fit rs-mid"><small class="rs-line">${esc(statLine(x.line))}</small><small class="rs-bird">${esc(x.birdText)}</small></div>
+          <div class="fa-act">${open ? '' : `<button type="button" class="btn btn-small btn-gold" data-act="open" data-id="${esc(x.id)}">NEGOTIATE</button>
+            <button type="button" class="btn btn-small" data-act="asking" data-id="${esc(x.id)}" ${x.willing ? '' : 'disabled title="He wants to test free agency"'}>RE-SIGN AT ASKING</button>
+            <button type="button" class="btn btn-small btn-danger" data-act="letgo" data-id="${esc(x.id)}">LET GO</button>`}</div>
+          ${qo}
+          ${!x.willing && !replies[x.id] ? `<div class="fa-reply bad"><b>AGENT</b> ${esc(x.name)} is unhappy and wants to test free agency.</div>` : ''}
+          ${replyHtml(x.id)}
+          ${open ? offerPanel(st, p) : ''}
+        </article>`;
+      }).join('') + '</div>');
     }
-    if (dec.length) parts.push(`<h3 class="fa-h3">DECISIONS BEFORE FREE AGENCY</h3><ul class="fa-dec">${dec.join('')}</ul>`);
-    const list = info.players.filter(m => m.own);
-    const ids = list.map(m => m.id);
-    const win = F.try('FA.resignWindow', () => FAX().resignWindow(st, { all: true }), null);
-    const wmap = {};
-    ((win && win.players) || []).forEach(x => { wmap[x.id] = x; });
-    parts.push('<h3 class="fa-h3">YOUR EXPIRING PLAYERS</h3>');
-    if (!list.length) parts.push('<p class="muted">No unsigned free agents with your Bird rights.</p>');
-    else parts.push('<div class="fa-list">' + list.map(m => {
-      const p = st.players[m.id], w = wmap[m.id] || {};
-      const open = view.open === p.id;
-      const lc = p.lastContract && p.lastContract.salaries;
-      const prev = lc && lc.length ? lc[lc.length - 1].amount : 0;
-      const tags = [`<span class="badge badge-gold">${w.bird === 'full' ? 'FULL BIRD' : w.bird === 'early' ? 'EARLY BIRD' : 'NON-BIRD'}</span>`];
-      if (w.rfa) tags.push('<span class="badge ft-badge">RESTRICTED</span>');
-      if (w.willing === false) tags.push('<span class="badge badge-inj">WANTS OUT</span>');
-      const meta = `${esc(p.pos || '')} | ${esc(p.age || '-')} YRS | Mood ${Math.round(typeof p.mood === 'number' ? p.mood : 55)}${prev ? ' | Was ' + money(prev) : ''} ${tags.join(' ')}`;
-      return `<article class="fa-row fa-own${open ? ' open' : ''}" data-row="${esc(p.id)}">
-        <a class="fa-who" href="#/player/${esc(p.id)}">${F.mini(p, { meta })}</a>
-        <div class="fa-ask"><small>ASKING</small><b>${money(m.ask)}</b><span>${yrs(m.years)}</span></div>
-        <div class="fa-fit"><span class="fa-tag ${FIT_CLASS[m.afford] || ''}">${esc(m.label)}</span></div>
-        <div class="fa-act">${open ? '' : `<button type="button" class="btn btn-small btn-gold" data-act="open" data-id="${esc(p.id)}">NEGOTIATE</button>
-          <button type="button" class="btn btn-small btn-danger" data-act="letgo" data-id="${esc(p.id)}">LET GO</button>`}</div>
-        ${w.willing === false && !replies[p.id] ? `<div class="fa-reply bad"><b>AGENT</b> ${esc(w.message)}</div>` : ''}
-        ${replyHtml(p.id)}
-        ${open ? offerPanel(st, p) : ''}
-      </article>`;
-    }).join('') + '</div>');
-    const re = ((fa && fa.signings) || []).filter(s => s.abbr === user && s.resign && s.year === fa.year && !ids.includes(s.id));
-    if (re.length) parts.push(`<h3 class="fa-h3">RE-SIGNED THIS OFFSEASON</h3><ul class="fa-news">${re.map(s => `<li><b>${esc(s.name)}</b>: ${yrs(s.salaries.length)}, ${money(s.salaries.reduce((a, x) => a + x.amount, 0))} (${esc(FAX().ROUTE_LABEL[s.via] || s.via)})</li>`).join('')}</ul>`);
+    const re = ((fa && fa.signings) || []).filter(s => s.abbr === user && s.resign && s.year === fa.year);
+    if (re.length) parts.push(`<h3 class="fa-h3">RE-SIGNED THIS SUMMER</h3><ul class="fa-news">${re.map(s => `<li><b>${esc(s.name)}</b>: ${yrs(s.salaries.length)}, ${money(s.salaries.reduce((a, x) => a + x.amount, 0))} (${esc(FAX().ROUTE_LABEL[s.via] || s.via)})</li>`).join('')}</ul>`);
     return parts.join('');
   }
 
@@ -361,7 +363,11 @@
       ${pool.length > shown.length ? `<div class="row-btns center"><button type="button" class="btn" data-act="more">SHOW MORE (${pool.length - shown.length} LEFT)</button></div>` : ''}`;
   }
   function faTab(st, info, phaseOpen) {
-    const recent = (st.transactions || []).filter(t => t && t.type === 'sign' && t.year === st.year).slice(-8).reverse();
+    // latest signings: this summer's (fa.signings) in the offseason, this season's otherwise; never last year's
+    const offPh = { resign: 1, freeAgency: 1, training: 1 }[st.phase] && st.fa;
+    const recent = offPh
+      ? (st.fa.signings || []).slice(-8).reverse().map(x => ({ text: x.abbr + (x.resign ? ' re-signs ' : ' signs ') + x.name + ' (' + yrs(x.salaries.length) + ', ' + money(x.salaries.reduce((a, y) => a + y.amount, 0)) + ')' }))
+      : (st.transactions || []).filter(t => t && t.type === 'sign' && t.year === st.year && !t.offseason).slice(-8).reverse();
     return `${needsPanel(st, addFit(st, info))}<div class="fa-filters">
         <nav class="tabs" aria-label="Position">${POS.map(x => `<a href="#/fa" data-act="pos" data-pos="${x}" class="${view.pos === x ? 'on' : ''}">${x}</a>`).join('')}</nav>
         <label class="fa-check"><input type="checkbox" data-act="afford" ${view.afford ? 'checked' : ''}> Only players I can afford</label>
@@ -488,6 +494,12 @@
         const r = FAX().setQualifyingOffer(st, id, b.getAttribute('data-v') === '1');
         await F.save(); UI.toast(r.message, r.ok ? '' : 'error'); render(app, st);
       }
+      else if (act === 'asking') {
+        const r = F.try('FA.resignAtAsking', () => FAX().resignAtAsking(st, st.userTeam, id), null) || { accepted: false, message: 'Could not re-sign him.' };
+        replies[id] = { accepted: !!r.accepted, message: r.message };
+        if (r.accepted) { view.open = null; delete offers[id]; await F.save(); }
+        UI.toast(r.message, r.accepted ? '' : 'error'); render(app, st);
+      }
       else if (act === 'auto') {
         view.auto = F.try('FA.autoResign', () => FAX().autoResign(st, st.userTeam, { force: true }), []) || [];
         const n = view.auto.filter(x => x.action === 'resigned').length;
@@ -574,6 +586,16 @@
     app.onsubmit = ev => ev.preventDefault();
   }
 
+  // Offers, agent replies and the auto re-sign note belong to one summer: a new offseason (or another
+  // league) starts clean, so last year's messages never show up again.
+  function resetForSummer(st) {
+    // a new summer means a new state.fa object (and a different save means a different state)
+    if (view.summerFa === st.fa && view.summerState === st) return;
+    view.summerFa = st.fa; view.summerState = st;
+    Object.keys(offers).forEach(k => delete offers[k]);
+    Object.keys(replies).forEach(k => delete replies[k]);
+    view.auto = null; view.open = null; view.cut = null;
+  }
   P.fa = function (app) {
     app.onclick = null; app.onchange = null; app.onsubmit = null; app.oninput = null;
     const st = F.state();
@@ -586,6 +608,7 @@
       F.try('FA.openMarket', () => FAX().openMarket(st, F.rng(st)), null);
       F.save();
     }
+    resetForSummer(st);
     if (view.open && !(st.players[view.open] && st.players[view.open].team === 'FA')) view.open = null;
     bind(app, st);
     try { render(app, st); } catch (e) {

@@ -269,7 +269,7 @@
     for (var id in inj) if (!injBefore[id] && state.players[id] && state.players[id].team === state.userTeam && inj[id].games > 0) {
       var iev = injuryEvent(state, id, inj[id]);
       if (autoOn(state, "injuryAlerts")) state.events.push(iev);
-      else { state.notices = state.notices || []; state.notices.push({ text: iev.text, ids: [id] }); }   // GM Assistant: no stop
+      else { state.notices = state.notices || []; state.notices.push({ text: iev.text, ids: [id], year: state.year }); }   // GM Assistant: no stop
       news(state, state.players[id].name + " injured", inj[id].type + ", expected to miss about " + inj[id].games + " games.", [id]);
     }
     safe("injuryReturns", function () { injuryReturns(state, injBefore, inj); });
@@ -411,7 +411,7 @@
         var ev0 = { type: "injuryReturn", playerId: id };
         injuryAnswer(state, ev0, "restore");
         state.notices = state.notices || [];
-        state.notices.push({ text: back + " He is back in the starting lineup.", ids: [id] });
+        state.notices.push({ text: back + " He is back in the starting lineup.", ids: [id], year: state.year });
       } else if (isManual(t) && sw && t.rotation.indexOf(id) >= 5) {
         // until the user answers he plays bench minutes (his stand-in may have had none)
         t.minutes = t.minutes || {};
@@ -421,7 +421,7 @@
       } else {
         if (sw) delete t.injurySwaps[id];
         state.notices = state.notices || [];
-        state.notices.push({ text: back + (isManual(t) ? "" : " Your coach put him back in the rotation."), ids: [id] });
+        state.notices.push({ text: back + (isManual(t) ? "" : " Your coach put him back in the rotation."), ids: [id], year: state.year });
       }
     }
   }
@@ -623,6 +623,9 @@
         if (p.stashedUntil && p.stashedUntil <= state.year) { p.stashedUntil = null; if (p.injury && p.injury.type === "Playing overseas") p.injury = null; }
       }
       enforceRosters(state);
+      // a new season: last season's notices and unanswered quiet trade offers do not carry over
+      state.notices = [];
+      state.events = state.events.filter(function (e) { return !(e && e.quiet && e.type === "tradeOffer"); });
       startSeason(state);
       news(state, "The " + (state.year - 1) + "-" + String(state.year).slice(2) + " season begins", "", []);
     }

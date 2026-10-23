@@ -7,7 +7,7 @@ const origWarn = console.warn;
 console.warn = (...a) => { warnings.push(a.join(" ")); };
 const files = ["data/league2012.js", "data/drafts.js", "data/targets.js", "data/cap-history.js", "data/coaches.js", "data/coach-history.js", "data/gleague.js",
   "data/history.js", "data/personalities.js", "data/logos.js", "data/world-events.js", "data/career-prior.js", "data/picks-2012.js", "data/awards-prior.js", "data/schedules.js", "js/engine.js", "js/cba.js", "js/trade.js", "js/freeagency.js", "js/mood.js",
-  "js/draft.js", "js/draft-gen.js", "js/progression.js", "js/coaches.js", "js/gleague.js", "js/awards.js", "js/news.js", "js/league.js"];
+  "js/draft.js", "js/draft-gen.js", "js/progression.js", "js/coaches.js", "js/gleague.js", "js/awards.js", "js/news.js", "js/league.js", "js/allstar.js", "js/positions.js"];
 const loaded = [];
 for (const f of files) if (fs.existsSync(f)) { try { require("../" + f); loaded.push(f); } catch (e) { console.log("LOAD FAIL", f, e.message); } }
 console.log("loaded:", loaded.map(f => f.replace(/^(js|data)\//, "")).join(", "));

@@ -65,7 +65,7 @@ check(starsHeld === 0 || starsStayed / starsHeld >= 0.7, 'stars mostly stay with
   const u = L.newLeague('CHA', { seed: seed + 5 });
   const mine = () => new Set(Object.values(u.players).filter(p => p.team === u.userTeam && !p.retired).map(p => p.id));
   const seen = { short: 0, cut: 0, pitch: 0, summary: 0, offerSheet: 0, injury: 0, injuryReturn: 0, restored: 0, notices: 0 };
-  let unexplained = [], k = 0, injuredPlayed = [];
+  let unexplained = [], k = 0, injuredPlayed = [], stale = [];
   const answer = e => {
     if (e.type === 'roster' && e.kind === 'short') { seen.short++; return k++ % 3 === 2 || !(e.preselect || []).length ? 'ai' : { sign: e.preselect }; }
     if (e.type === 'roster' && e.kind === 'cut') { seen.cut++; return k++ % 2 ? 'ai' : { waive: e.preselect }; }
@@ -154,6 +154,14 @@ check(starsHeld === 0 || starsStayed / starsHeld >= 0.7, 'stars mostly stay with
           if (!res.accepted && p.team === 'FA') { p.team = u.userTeam; p.contract = { salaries: [{ year: u.fa.year, amount: d.min }], option: null, rookie: false, twoWay: false, signedYear: u.fa.year, via: 'min' }; }
         });
       }
+      // nothing from an earlier summer may show up in this one
+      if (u.fa && { resign: 1, freeAgency: 1, training: 1 }[u.phase]) {
+        const Yf = u.fa.year;
+        u.events.forEach(e => { if (e.faYear != null && e.faYear !== Yf) stale.push(Yf + ': ' + e.type + ' ' + (e.text || '').slice(0, 40)); });
+        (u.simLog || []).forEach(x => { if (x.faYear != null && x.faYear !== Yf) stale.push(Yf + ': log ' + x.text); });
+        if (u.phase === 'resign' && FA.resignBoard) { const b = FA.resignBoard(u, u.userTeam); if (b.year !== Yf) stale.push('board year ' + b.year); b.players.forEach(x => { if (!u.fa.rights[x.id]) stale.push('board player without rights ' + x.name); }); }
+        (u.fa.signings || []).forEach(x => { if (x.year !== Yf) stale.push(Yf + ': signing from ' + x.year); });
+      }
       const opts = u.phase === 'draft' || u.phase === 'resign' ? { auto: true } : {};
       if (u.phase === 'freeAgency' && n === 1 && u.fa && u.fa.day < 25) {
         step(() => { for (let d = 0; d < 30 && u.fa.day < 25 && !u.events.some(e => !e.resolved); d++) FA.simDay(u); }, 'fa days ' + u.year);
@@ -175,6 +183,7 @@ check(starsHeld === 0 || starsStayed / starsHeld >= 0.7, 'stars mostly stay with
   check(seen.injury > 0, 'user run: injury popups (' + seen.injury + ')');
   check(seen.injuryReturn > 0 && seen.restored > 0, 'user run: back from injury popups put manual starters back (' + seen.injuryReturn + ' asked, ' + seen.restored + ' restored)');
   check(seen.notices > 0, 'user run: auto rotation returns are short notices (' + seen.notices + ')');
+  check(!stale.length, 'user run: no messages from an earlier summer in a later one ' + stale.slice(0, 4).join('; '));
   check(!injuredPlayed.length, 'user run: hurt players never play ' + injuredPlayed.slice(0, 5).join(', '));
   console.log('user run: ' + JSON.stringify(seen));
   E.simDays = simDays0;

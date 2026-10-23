@@ -285,7 +285,7 @@
     const seasonJustEnded = !offseason && UI.inOffseason();
     // short notices (a player back from injury in an auto rotation): no stop needed
     if (Array.isArray(g.notices) && g.notices.length) {
-      g.notices.slice(-3).forEach(x => UI.toast(x.text));
+      g.notices.filter(x => !x.year || x.year === g.year).slice(-3).forEach(x => UI.toast(x.text));
       g.notices = [];
     }
     if (so.stopAt && !UI.pendingEvents()) { hold(g); UI.toast('Stopped at ' + so.stopAt.name + '.'); }

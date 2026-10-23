@@ -360,7 +360,7 @@
       if (!t || !t.g || t.g < Math.max(3, Math.floor(G * 0.4)) || injured(state, p.id)) return null;
       if ((t.tpa || 0) / t.g < 2.5) return null;
       var tpg = (t.tpm || 0) / t.g, pct = t.tpa ? t.tpm / t.tpa : 0;
-      return { p: p, tpg: tpg, pct: pct, s: tpg * 1.6 + (pct - 0.33) * 30 + (attr(p, 'three') - 70) * 0.08 };
+      return { p: p, tpg: tpg, pct: pct, s: tpg * 1.6 + (pct - 0.33) * 25 + (attr(p, 'three') - 70) * 0.2 };
     }).filter(Boolean).sort(function (a, b) { return b.s - a.s; });
   }
   function shootRound(c, rules, rng) {
@@ -437,11 +437,15 @@
   ];
   function dunkCount(year) { return year <= 2014 ? 6 : 4; }
   function dunkPool(state) {
+    var allStarIds = {}, as = state.allStars;
+    if (as) ['East', 'West'].forEach(function (c) { if (as[c]) (as[c].starters || []).concat(as[c].reserves || []).forEach(function (id) { allStarIds[id] = 1; }); });
     return nbaPlayers(state).map(function (p) {
       var l = perGame(statsOf(state, p.id));
-      if (!l || l.g < 3 || injured(state, p.id) || /^C/.test(String(p.pos || ''))) return null;
+      // the biggest stars sit it out: the field is young high flyers, rarely an All-Star
+      if (!l || l.g < 3 || injured(state, p.id) || /^C/.test(String(p.pos || '')) || (p.ovr || 70) >= 90) return null;
       var age = p.age || 30;
-      var s = attr(p, 'dunk') * 0.45 + attr(p, 'vert') * 0.4 + attr(p, 'speed') * 0.15 + (age <= 25 ? 3 : age >= 30 ? -4 : 0) - Math.max(0, (p.ovr || 70) - 86) * 0.6;
+      var s = attr(p, 'dunk') * 0.4 + attr(p, 'vert') * 0.4 + attr(p, 'speed') * 0.2 - (/^PF/.test(String(p.pos || '')) ? 3 : 0) + (age <= 25 ? 3 : age >= 30 ? -4 : 0) -
+        Math.max(0, (p.ovr || 70) - 84) * 0.8 - (allStarIds[p.id] ? 6 : 0);
       return { p: p, s: s };
     }).filter(Boolean).sort(function (a, b) { return b.s - a.s; });
   }
@@ -504,7 +508,7 @@
   }
   // one run through the course: dribble the cones, chest pass, bounce pass, layup, then the jumper (a three from 2016)
   function courseTime(p, year, rng) {
-    var t = 26.5 + (88 - skillScore(p)) * 0.32 + gauss(rng) * 1.1;
+    var t = 29.5 + (88 - skillScore(p)) * 0.32 + gauss(rng) * 1.1;
     var passP = clamp(0.72 + (attr(p, 'pass') - 75) * 0.008, 0.45, 0.95), passMiss = 0;
     for (var i = 0; i < 2; i++) while (rng() > passP && passMiss < 4) { passMiss++; t += 1.6; }
     var shot = year >= 2016 ? attr(p, 'three') : attr(p, 'mid'), shotP = clamp(0.3 + (shot - 70) * 0.013, 0.12, 0.7), shotMiss = 0;

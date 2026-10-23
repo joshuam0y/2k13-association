@@ -232,3 +232,23 @@
 .ev-total b { color: var(--gold2); font-family: var(--display); font-size: 18px; }
 .ev-total.bad span, .ev-total span { color: var(--fa-bad); }
 .fa-capnote.warn { color: var(--gold2); }
+
+/* ---------- re-sign screen ---------- */
+.rs-cap { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 10px; align-items: stretch; margin: 0 0 14px; }
+.rs-cap > div { background: var(--bg2); border: 1px solid var(--line); padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rs-cap small { font-family: var(--display); font-size: 11px; letter-spacing: .14em; color: var(--muted); }
+.rs-cap b { font-family: var(--display); font-size: 24px; color: #fff; }
+.rs-cap .good b { color: var(--fa-good); }
+.rs-cap span { font-size: 12px; color: var(--text2); }
+.rs-cap .rs-cap-btn { background: none; border: 0; justify-content: center; padding: 0; }
+.rs-mid { display: flex; flex-direction: column; gap: 4px; }
+.rs-line { color: var(--text2); font-size: 12px; }
+.rs-bird { color: var(--gold2); font-size: 12px; }
+.rs-int.good { background: var(--fa-yes); color: #fff; }
+.rs-int.bad { background: #5a2424; color: #fff; }
+.rs-int.gold { background: var(--gold-dim); color: #fff; }
+.rs-note { grid-column: 1 / -1; padding: 0 0 4px 15px; font-size: 13px; color: var(--text2); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+@media (max-width: 860px) { .rs-cap { grid-template-columns: minmax(0, 1fr); } }
+.rs-list .fa-row { grid-template-columns: minmax(0, 1fr) 110px 240px 180px; }
+.rs-list .fa-act { flex-direction: column; align-items: stretch; gap: 6px; }
+@media (max-width: 860px) { .rs-list .fa-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .rs-list .fa-act { flex-direction: row; flex-wrap: wrap; } }
