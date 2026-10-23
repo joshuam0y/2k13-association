@@ -254,7 +254,61 @@
     return { score, label, cls: score >= 58 ? 'good' : score >= 42 ? 'mid' : 'bad', reasons: (m && Array.isArray(m.reasons) && m.reasons) || [] };
   }
 
-  const TABS = [['ratings', 'RATINGS'], ['career', 'CAREER STATS'], ['awards', 'AWARDS'], ['log', 'GAME LOG']];
+  // ---------- compare ----------
+  // Group averages for the compare view.
+  const groupAvgs = p => {
+    const a = p.attrs || {};
+    return GROUPS.map(([title, keys]) => ({ title, v: Math.round(keys.reduce((s, k) => s + num(a[k[0]]), 0) / keys.length) }));
+  };
+  // The most recent season line: the season in progress, else the last real or saved season.
+  const lastSeason = p => { const r = careerRows(p); return r.length ? r[r.length - 1] : null; };
+  const STAT_ROWS = [['g', 'GAMES', v => (v == null ? '-' : String(v))], ['mpg', 'MINUTES', UI.fmt1], ['pts', 'POINTS', UI.fmt1], ['reb', 'REBOUNDS', UI.fmt1],
+    ['ast', 'ASSISTS', UI.fmt1], ['stl', 'STEALS', UI.fmt1], ['blk', 'BLOCKS', UI.fmt1], ['fgp', 'FG%', UI.fmtPct], ['tpp', '3P%', UI.fmtPct], ['ftp', 'FT%', UI.fmtPct]];
+
+  function cmpSide(p, right) {
+    const onTeam = p.team && p.team !== 'FA' && p.team !== 'DRAFT' && !p.retired;
+    return `<a class="cmp-side${right ? ' r' : ''}" href="#/player/${encodeURIComponent(p.id)}" style="--c1:${esc(UI.teamColor(onTeam ? p.team : 'FA'))}">
+        <span class="cmp-hs">${UI.headshot(p)}</span>
+        <span class="cmp-who"><span class="cmp-tm">${UI.logo(onTeam ? p.team : 'FA', 22)}${esc(onTeam ? p.team : 'FA')}</span><b>${esc(p.name)}</b>
+        <small>${esc(window.POSITIONS ? window.POSITIONS.label(p) : p.pos || '-')} | Age ${esc(p.age == null ? '-' : p.age)} | ${UI.fmtHt(p.ht)}</small></span>
+        <span class="cmp-ovr"><b>${esc(p.ovr == null ? '-' : p.ovr)}</b><small>OVR</small></span>
+      </a>`;
+  }
+  // One compare row: values on both sides with bars growing out from the label; the better side is gold.
+  function cmpRow(label, a, b, fmt, max, cls) {
+    const x = a == null || isNaN(a) ? null : Number(a), y = b == null || isNaN(b) ? null : Number(b);
+    const win = x != null && y != null && fmt(x) !== fmt(y) ? (x > y ? 'l' : 'r') : '';
+    const w = v => (v == null ? 0 : Math.max(2, Math.min(100, v / max * 100)));
+    return `<div class="cmp-row${cls ? ' ' + cls : ''}">
+        <span class="cmp-v${win === 'l' ? ' win' : ''}">${x == null ? '-' : fmt(x)}</span>
+        <span class="cmp-bar l"><i class="${win === 'l' ? 'win' : ''}" style="width:${w(x)}%"></i></span>
+        <span class="cmp-l">${esc(label)}</span>
+        <span class="cmp-bar r"><i class="${win === 'r' ? 'win' : ''}" style="width:${w(y)}%"></i></span>
+        <span class="cmp-v r${win === 'r' ? ' win' : ''}">${y == null ? '-' : fmt(y)}</span>
+      </div>`;
+  }
+  function compareHtml(p, q) {
+    const pick = `<div class="cmp-pick"><div class="cmp-find" id="cmpSearch"></div>${q ? '' : `<div class="cmp-sugg" id="cmpSugg"></div>`}</div>`;
+    if (!q) return `${pick}<p class="pk-note">Pick a player to compare with ${esc(p.name)}: OVR, attribute groups and the latest season side by side.</p>`;
+    const ga = groupAvgs(p), gb = groupAvgs(q);
+    const sa = lastSeason(p), sb = lastSeason(q);
+    const sLabel = r => (r ? UI.seasonLabel(r.year) + (r.live ? ' so far' : '') : 'No games');
+    const id = v => String(Math.round(v));
+    const statMax = { g: 82, mpg: 48, pts: 35, reb: 15, ast: 12, stl: 3, blk: 4, fgp: 0.7, tpp: 0.5, ftp: 1 };
+    const stats = STAT_ROWS.map(([k, l, f]) => cmpRow(l, sa ? sa.s[k] : null, sb ? sb.s[k] : null, f, statMax[k] || 1)).join('');
+    return `${pick}
+      <div class="cmp">
+        <div class="cmp-head">${cmpSide(p)}<span class="cmp-vs">VS</span>${cmpSide(q, true)}</div>
+        <div class="cmp-sec">RATINGS</div>
+        ${cmpRow('OVERALL', p.ovr, q.ovr, id, 99, 'big')}
+        ${ga.map((g, i) => cmpRow(g.title, g.v, gb[i].v, id, 99)).join('')}
+        <div class="cmp-sec"><span>${esc(sLabel(sa))}</span>SEASON STATS<span>${esc(sLabel(sb))}</span></div>
+        ${stats}
+      </div>
+      <p class="pk-note">Per game. Gold marks the better number. Group scores average the attributes in each group.</p>`;
+  }
+
+  const TABS = [['ratings', 'RATINGS'], ['career', 'CAREER STATS'], ['awards', 'AWARDS'], ['log', 'GAME LOG'], ['compare', 'COMPARE']];
 
   P.player = function (app, arg) {
     const parts = String(arg || '').split('/');
@@ -264,6 +318,7 @@
     const hasLog = !!UI.state.season && UI.gameLog(p.id).length > 0;
     const tabs = TABS.filter(t => t[0] !== 'log' || hasLog);
     let tab = tabs.some(t => t[0] === parts[1]) ? parts[1] : 'ratings';
+    let cmpId = tab === 'compare' && parts[2] && parts[2] !== p.id && UI.player(parts[2]) ? parts[2] : null;
 
     const onTeam = p.team && p.team !== 'FA' && p.team !== 'DRAFT' && !p.retired;
     const team = onTeam ? p.team : 'FA';
@@ -299,7 +354,7 @@
             : `<span class="pk-team">${UI.logo('FA', 30)}<span>${esc(teamLabel)}</span></span>`}
           <h1 class="pk-name">${first ? `<span>${esc(first)}</span>` : ''}${esc(last)}</h1>
           <div class="pk-cells">
-            ${cell('POS', esc(p.pos || '-'))}
+            ${cell('POS', esc(window.POSITIONS ? window.POSITIONS.label(p) : (p.pos || '-')))}
             ${cell('AGE', esc(p.age == null ? '-' : p.age))}
             ${cell('HEIGHT', UI.fmtHt(p.ht))}
             ${cell('WEIGHT', p.wt ? esc(p.wt) + ' <span>lbs</span>' : '-')}
@@ -308,6 +363,11 @@
           </div>
           <div class="pk-status">${status.join('')}</div>
           ${badges.length ? `<div class="pk-badges">${badges.map(b => `<span class="pk-badge${b.top ? ' top' : ''}"><b>${b.n}x</b> ${esc(b.label)}</span>`).join('')}</div>` : ''}
+          <div class="row-btns pk-acts">
+            ${UI.state.game && onTeam && UI.pages.trade ? `<a class="btn btn-gold" href="#/trade/for/${encodeURIComponent(p.id)}">${p.team === UI.state.game.userTeam ? 'SHOP HIM' : 'TRADE FOR HIM'}</a>` : ''}
+            ${UI.state.game && !onTeam && p.team === 'FA' && UI.pages.fa ? `<a class="btn btn-gold" href="#/fa">SIGN IN FREE AGENCY</a>` : ''}
+            <a class="btn" id="pkCompare" href="#/player/${encodeURIComponent(p.id)}/compare">COMPARE</a>
+          </div>
         </div>
         <div class="pk-ovr"><b>${esc(p.ovr == null ? '-' : p.ovr)}</b><small>OVERALL</small></div>
       </section>
@@ -315,20 +375,45 @@
       <div class="pk-panel" id="pkPanel"></div>`;
 
     const panel = UI.$('#pkPanel', app);
-    const draw = k => {
+    const setHash = h => { try { history.replaceState(null, '', h); } catch (err) { /* sandboxed */ } };
+    const base = '#/player/' + encodeURIComponent(p.id);
+    const drawCompare = focus => {
+      const q = cmpId ? UI.player(cmpId) : null;
+      panel.innerHTML = compareHtml(p, q);
+      const box = UI.$('#cmpSearch', panel);
+      const choose = other => { cmpId = other.id; setHash(base + '/compare/' + encodeURIComponent(other.id)); drawCompare(false); };
+      if (box && UI.playerSearch) UI.playerSearch(box, { placeholder: q ? 'Compare with someone else' : 'Search a player to compare, like Kevin Durant', exclude: p.id, onPick: choose, autofocus: focus });
+      const sugg = UI.$('#cmpSugg', panel);
+      if (sugg) {
+        // Quick picks: the closest OVRs at the same primary position.
+        const pos = window.POSITIONS ? window.POSITIONS.of(p).pos : p.pos;
+        const list = UI.allPlayers().filter(x => x && x.id !== p.id && !x.retired && x.team !== 'DRAFT' && (window.POSITIONS ? window.POSITIONS.of(x).pos : x.pos) === pos)
+          .sort((a, b) => Math.abs((a.ovr || 0) - (p.ovr || 0)) - Math.abs((b.ovr || 0) - (p.ovr || 0)) || (b.ovr || 0) - (a.ovr || 0)).slice(0, 4);
+        sugg.innerHTML = list.length ? `<small>SIMILAR ${esc(pos)}S</small>${list.map(x => `<button type="button" class="btn btn-small" data-id="${esc(x.id)}">${esc(x.name)} <b>${esc(x.ovr)}</b></button>`).join('')}` : '';
+        UI.$$('button[data-id]', sugg).forEach(b => b.addEventListener('click', () => choose(UI.player(b.getAttribute('data-id')))));
+      }
+    };
+    const draw = (k, focus) => {
       if (k === 'career') panel.innerHTML = careerHtml(p);
       else if (k === 'awards') panel.innerHTML = awardsHtml(p, awards);
       else if (k === 'log') panel.innerHTML = gameLogHtml(p);
+      else if (k === 'compare') drawCompare(focus);
       else panel.innerHTML = ratingsHtml(p);
     };
-    draw(tab);
+    const show = (k, focus) => {
+      tab = k;
+      UI.$$('.pk-tabs a', app).forEach(x => { const on = x.getAttribute('data-tab') === k; x.classList.toggle('on', on); x.setAttribute('aria-selected', String(on)); });
+      draw(k, focus);
+      setHash(base + '/' + k + (k === 'compare' && cmpId ? '/' + encodeURIComponent(cmpId) : ''));
+    };
+    draw(tab, false);
     // Switch tabs in place (no re-render or scroll jump); the hash still records the tab.
-    UI.$$('.pk-tabs a', app).forEach(a => a.addEventListener('click', e => {
+    UI.$$('.pk-tabs a', app).forEach(a => a.addEventListener('click', e => { e.preventDefault(); show(a.getAttribute('data-tab'), true); }));
+    UI.$('#pkCompare', app).addEventListener('click', e => {
       e.preventDefault();
-      tab = a.getAttribute('data-tab');
-      UI.$$('.pk-tabs a', app).forEach(x => { const on = x === a; x.classList.toggle('on', on); x.setAttribute('aria-selected', String(on)); });
-      draw(tab);
-      try { history.replaceState(null, '', a.getAttribute('href')); } catch (err) { /* sandboxed */ }
-    }));
+      show('compare', true);
+      const tabs = UI.$('.pk-tabs', app);
+      if (tabs && tabs.getBoundingClientRect().top > window.innerHeight * 0.6) tabs.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 })();

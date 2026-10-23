@@ -392,5 +392,117 @@ seasons[0].trades.slice(0, 8).forEach(function (t) { console.log("  [" + t.date 
 console.log("\nExample AI offers to the user (season 1)");
 seasons[0].offers.slice(0, 3).forEach(function (o) { console.log("  " + o.message); });
 
+// ---------------------------------------------------------------------------
+console.log("\nDraft night: live pick values and draft-day trades");
+(function () {
+  if (!fs.existsSync(path.join(ROOT, "data/drafts.js")) || !fs.existsSync(path.join(ROOT, "js/draft.js"))) { console.log("  (skipped: no draft data)"); return; }
+  require(path.join(ROOT, "data/drafts.js"));
+  try { require(path.join(ROOT, "js/progression.js")); } catch (e) { /* optional */ }
+  var DRAFT = require(path.join(ROOT, "js/draft.js"));
+  function draftState(user) {
+    var s = buildState(user || "OKC");
+    // records from team strength, so the order is realistic and fixed
+    Object.keys(s.teams).forEach(function (a) { var r = teamRating(s, a), w = Math.max(15, Math.min(66, Math.round((r - 66) * 4 + 41))); s.season.standings[a] = { w: w, l: 82 - w, pf: 0, pa: 0 }; });
+    s.season.day = s.season.days.length - 1; s.day = s.season.day;
+    s.phase = "draftLottery"; s.season.phase = "done";
+    DRAFT.lottery(s, mulberry32(5), { retirements: false });
+    DRAFT.startDraft(s, 2013);
+    s.phase = "draft";
+    return s;
+  }
+  var s = draftState("OKC"), d = s.draft;
+  ok(d.order.every(function (sl) { return !!TRADE.entryForSlot(s, sl); }), "every slot of the live draft has a tradable pick entry (protected picks that stayed home too)");
+  var entry = function (slot) { return TRADE.entryForSlot(s, slot); };
+  var v = [1, 5, 15, 30, 45].map(function (n) { return TRADE.pickValue(s, entry(d.order[n - 1]), "OKC"); });
+  ok(v[0] > v[1] && v[1] > v[2] && v[2] > v[3] && v[3] > v[4] && v[4] > 0, "live pick values fall with the slot: #1 " + v.join(", #").replace(/, #/, ", #5 ").replace(/^/, "") );
+  ok(v[0] >= 2.5 * v[2], "the top pick is worth far more than #15 (" + v[0] + " vs " + v[2] + ")");
+  // the prospects still on the board change a pick's value
+  var a = draftState("OKC"), b = draftState("OKC");
+  DRAFT.simPicks(a, { count: 3, stopAtUser: false });
+  var pool = Object.keys(b.players).map(function (id) { return b.players[id]; })
+    .filter(function (p) { return p.team === "DRAFT" && p.draftYear === 2013 && !p.undrafted; })
+    .sort(function (x, y) { return (0.62 * x.pot + 0.38 * x.ovr) - (0.62 * y.pot + 0.38 * y.ovr); });
+  for (var i = 0; i < 3; i++) DRAFT.pick(b, DRAFT.current(b).team, pool[i].id);
+  var va = TRADE.pickValue(a, TRADE.entryForSlot(a, a.draft.order[3]), "OKC"), vb = TRADE.pickValue(b, TRADE.entryForSlot(b, b.draft.order[3]), "OKC");
+  ok(vb > va, "pick #4 is worth more when the best prospects are still there (" + vb + " vs " + va + ")");
+
+  // trade up: the user (holder of #12) goes to #5
+  var user = d.order[11].team;
+  s.userTeam = user;
+  var T = d.order[4].team, up = entry(d.order[4]);
+  ok(/^2013 #5( \(from [A-Z]+\))?$/.test(TRADE.pickLabel(s, up, T)), "current picks read like 2013 #5: " + TRADE.pickLabel(s, up, T));
+  var props = TRADE.finder(s, user, T, [], { wantPicks: [up] });
+  ok(props.length > 0, "the finder builds trade-up packages for a pick (" + (props[0] ? props[0].text : "none") + ")");
+  var ev = props.length ? TRADE.evaluate(s, props[0].trade) : { accepts: false };
+  ok(ev.accepts, "the other team accepts the finder's trade-up offer");
+  var ex = props.length ? TRADE.execute(s, props[0].trade) : { ok: false };
+  ok(ex.ok && d.order[4].team === user && d.order[4].via === d.order[4].original, "after the trade the #5 slot belongs to " + user + " (via " + d.order[4].via + ")");
+  ok(TRADE.pickLabel(s, up, user) === "2013 #5 (from " + d.order[4].original + ")", "label after the trade: " + TRADE.pickLabel(s, up, user));
+  var made = DRAFT.simPicks(s);
+  ok(made.length === 4 && DRAFT.current(s).overall === 5 && DRAFT.current(s).team === user, "the AI picks 1 to 4, then " + user + " is on the clock at #5");
+  var old = DRAFT.pick(s, T, Object.keys(s.players).filter(function (id) { return s.players[id].team === "DRAFT" && s.players[id].draftYear === 2013; })[0]);
+  ok(!old.ok, "the old owner can no longer make the #5 pick");
+  var best = Object.keys(s.players).map(function (id) { return s.players[id]; }).filter(function (p) { return p.team === "DRAFT" && p.draftYear === 2013; }).sort(function (x, y) { return y.ovr - x.ovr; })[0];
+  var r5 = DRAFT.pick(s, user, best.id);
+  ok(r5.ok && best.team === user && best.draft.pick === 5, user + " drafts " + best.name + " with the new #5 pick");
+  var used = { teams: [user, T], give: {} };
+  used.give[user] = { players: [], picks: [up] }; used.give[T] = { players: [], picks: [{ year: 2014, round: 2, original: T }] };
+  ok(!TRADE.validate(s, used).ok, "a pick that has been made cannot be traded");
+  var rookie = { teams: [user, T], give: {} };
+  rookie.give[user] = { players: [best.id], picks: [] }; rookie.give[T] = { players: [], picks: [{ year: 2014, round: 1, original: T }] };
+  var rv = TRADE.validate(s, rookie);
+  ok(rv.ok, "a rookie can be traded right after the pick" + (rv.ok ? "" : ": " + rv.reasons.join(" ")));
+  ok(TRADE.value(s, best.id, T) > 0, "the new rookie has trade value (" + TRADE.value(s, best.id, T) + ")");
+
+  // AI teams trade picks among themselves on draft night
+  var n = draftState("OKC"), got = null;
+  for (var k = 0; k < 20 && !got && DRAFT.current(n); k++) {
+    got = TRADE.draftNightTrade(n, mulberry32(100 + k), { force: true });
+    if (!got) DRAFT.aiPick(n, DRAFT.current(n).team);
+  }
+  ok(!!got && /trade up to No\. \d+/.test(got.headline) && n.news.some(function (x) { return x.draftTrade && x.headline === got.headline; }), "an AI draft night trade makes the news: " + (got ? got.headline + ". " + got.body : "none"));
+  if (got) {
+    var buyer = got.trade.teams[0], cur = DRAFT.current(n);
+    ok(cur.team === buyer, "the team that traded up is on the clock");
+    var rr = DRAFT.aiPick(n, cur.team);
+    ok(rr.ok && n.players[rr.id].team === buyer, "and makes the pick");
+  }
+  var full = draftState("OKC");
+  DRAFT.simPicks(full, { stopAtUser: false });
+  ok(full.draft.done && (full.draft.aiTrades || 0) <= 3, "a full draft with TRADE loaded finishes, " + (full.draft.aiTrades || 0) + " AI pick trades");
+})();
+
+// ---------------------------------------------------------------------------
+console.log("\nTrade deadline, closed window and asking for more");
+(function () {
+  var s = buildState("OKC");
+  var idx = s.season.days.findIndex(function (x) { return x.date === "2013-02-13"; });
+  s.season.day = idx; s.day = idx;
+  var dl = TRADE.deadline(s);
+  ok(dl.text === "Trade deadline: Feb 21, 8 days left" && dl.daysLeft === 8, "deadline text: " + dl.text);
+  s.season.day = idx + 8; s.day = idx + 8;
+  ok(TRADE.deadline(s).status === "deadline", "deadline day: " + TRADE.deadline(s).text);
+  s.season.day = idx + 9; s.day = idx + 9;
+  var dc = TRADE.deadline(s);
+  ok(!dc.open && /Trades reopen after the playoffs/.test(dc.text), "after the deadline: " + dc.text);
+  var t = { teams: ["OKC", "HOU"], give: { OKC: { players: ["collini01"], picks: [] }, HOU: { players: [], picks: [{ year: 2014, round: 2, original: "HOU" }] } } };
+  var e = TRADE.evaluate(s, t);
+  ok(!e.accepts && /reopen after the playoffs/.test(e.message), "trades are blocked after the deadline: " + e.message);
+  s.phase = "draftLottery";
+  ok(TRADE.deadline(s).open && TRADE.deadline(s).status === "offseason", "the offseason reopens trades: " + TRADE.deadline(s).text);
+  // ask for more
+  var s2 = buildState("OKC"), tries = 0, offer = null, more = null, rng = mulberry32(9);
+  while (tries++ < 20 && !more) {
+    offer = TRADE.aiOffers(s2, rng, { force: true })[0];
+    if (!offer) continue;
+    more = TRADE.askForMore(s2, offer.trade, offer.from);
+  }
+  ok(!!more, "asking for more gets an extra asset on some offers" + (more ? ": " + more.message : ""));
+  if (more) {
+    var cnt = function (tr) { return tr.give[offer.from].players.length + tr.give[offer.from].picks.length; };
+    ok(cnt(more.trade) === cnt(offer.trade) + 1 && TRADE.evaluate(s2, more.trade).accepts, "the improved offer has one more asset and they still accept");
+  }
+})();
+
 console.log("\n" + passes + " passed, " + fails + " failed");
 process.exit(fails ? 1 : 0);

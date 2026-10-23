@@ -165,14 +165,101 @@ function buildState(year) {
   ok(GLEAGUE.twoWayRules(2020).limitType === 'days' && GLEAGUE.twoWayRules(2020).limit === 45, '45 days through 2019-20');
   ok(GLEAGUE.twoWayRules(2022).limitType === 'games' && GLEAGUE.twoWayRules(2022).limit === 50, '50 games from 2021-22');
   ok(GLEAGUE.twoWayRules(2024).slots === 3, 'three two-way slots from 2023-24');
+  // a fake engine season: 170 days, OKC plays every other day
+  const fakeSeason = () => ({ day: 0, phase: 'regular', injuries: {}, lineups: {},
+    days: Array.from({ length: 170 }, (_, i) => ({ date: 'd' + i, games: i % 2 ? [] : [{ home: 'OKC', away: 'HOU' }] })) });
+
+  // two-way players live in the G League; called up, they use NBA days, then go back down at the limit
   const s18 = buildState(2018);
+  s18.season = fakeSeason();
   s18.players.teaguma01.contract.twoWay = true;
-  let weeks = 0;
-  while (GLEAGUE.nbaAvailable(s18, 'teaguma01') && weeks < 40) { GLEAGUE.simWeek(s18, rng(100 + weeks)); weeks++; }
-  ok(weeks >= 10 && weeks <= 20, 'two-way player hits the 45-day limit mid-season (week ' + weeks + ')');
-  ok(s18.players.teaguma01.gleague === true, 'two-way player then stays in the G League');
-  ok(GLEAGUE.playerStats(s18, 'teaguma01').g > 0, 'two-way player has G League stats');
-  ok(!GLEAGUE.recall(s18, 'teaguma01').ok, 'cannot recall a two-way player past his limit');
+  s18.userTeam = s18.players.teaguma01.team;   // the AI would send him back down on its own
+  GLEAGUE.sync(s18);
+  ok(s18.players.teaguma01.gleague === true, 'a new two-way player starts in the G League');
+  ok(GLEAGUE.roster(s18, s18.userTeam).affiliate.some(r => r.id === 'teaguma01'), 'roster() lists him with the affiliate');
+  ok(GLEAGUE.recall(s18, 'teaguma01').ok, 'two-way player can be called up');
+  let days = 0;
+  while (GLEAGUE.nbaAvailable(s18, 'teaguma01') && days < 160) { s18.season.day++; days++; GLEAGUE.sync(s18); }
+  ok(days === 45, 'two-way player hits the 45-day limit after 45 NBA days (' + days + ')');
+  ok(s18.players.teaguma01.gleague === true, 'two-way player then goes back to the G League');
+  s18.season.day += 14; GLEAGUE.sync(s18);
+  ok(GLEAGUE.playerStats(s18, 'teaguma01') && GLEAGUE.playerStats(s18, 'teaguma01').g > 0, 'two-way player has G League stats');
+  const rc = GLEAGUE.recall(s18, 'teaguma01');
+  ok(!rc.ok && /left/.test(rc.reason), 'cannot recall a two-way player past his limit: ' + rc.reason);
+  ok(GLEAGUE.nbaLeft(s18, 'teaguma01').left === 0, 'zero NBA days left');
+  const s22 = buildState(2022);
+  s22.season = fakeSeason();
+  s22.players.jonespe01.contract.twoWay = true;
+  GLEAGUE.sync(s22);
+  GLEAGUE.recall(s22, 'jonespe01');
+  s22.season.day = 30; GLEAGUE.sync(s22);
+  const nl = GLEAGUE.nbaLeft(s22, 'jonespe01');
+  ok(nl && nl.type === 'games' && nl.left === 35, 'games limit counts team games: NBA games left ' + (nl && nl.left));
+
+  // eligible / assign / recall / roster, 2012-13 rules: first two NBA seasons only
+  const s = buildState();
+  s.season = fakeSeason();
+  ok(GLEAGUE.eligible(s, 'jonespe01').ok, 'young Perry Jones can be sent down');
+  const kd = GLEAGUE.eligible(s, 'duranke01');
+  ok(!kd.ok && /second-year/.test(kd.reason), 'Durant cannot be sent down: ' + kd.reason);
+  s.players.ortonda01.yearsPro = 2;
+  ok(!GLEAGUE.eligible(s, 'ortonda01').ok, 'third-year player needs to agree in 2012-13');
+  s.teams.OKC.rotation = ['westbru01', 'hardeja01', 'duranke01', 'ibakase01', 'perkike01', 'jonespe01', 'sefolth01'];
+  s.teams.OKC.minutes = { jonespe01: 10 };
+  s.season.lineups.OKC = { starters: s.teams.OKC.rotation.slice(0, 5), minutes: { jonespe01: 10 } };
+  const a1 = GLEAGUE.assign(s, 'jonespe01');
+  ok(a1.ok && a1.clubName === 'Tulsa 66ers', 'Jones goes to the Tulsa 66ers');
+  ok(s.players.jonespe01.gleague === true && !s.teams.OKC.rotation.includes('jonespe01') && s.season.lineups.OKC.minutes.jonespe01 == null, 'assigned player leaves the rotation');
+  let r0 = GLEAGUE.roster(s, 'OKC');
+  ok(r0.affiliate.length === 1 && r0.affiliate[0].id === 'jonespe01' && !r0.nba.some(x => x.id === 'jonespe01'), 'roster() splits NBA and affiliate');
+  ok(r0.counts.down === 1 && r0.counts.active === r0.nba.length && r0.counts.roster === r0.nba.length + 1, 'roster counts');
+  ok(r0.nba.every(x => x.action && typeof x.action.ok === 'boolean' && x.pot === undefined), 'rows carry an action and never potential');
+  ok(!GLEAGUE.assign(s, 'jonespe01').ok, 'cannot assign twice');
+  s.season.day = 15; GLEAGUE.sync(s);
+  ok(s.gleague.week === 2, 'sync plays two weeks after 15 days, week ' + s.gleague.week);
+  s.season.day = 16; GLEAGUE.sync(s);
+  ok(s.gleague.week === 2, 'sync does not replay a partial week');
+  r0 = GLEAGUE.roster(s, 'OKC');
+  ok(r0.affiliate[0].gp >= 4 && r0.affiliate[0].stats.pts > 0, 'Jones has D-League games and stats: ' + r0.affiliate[0].gp + ' GP');
+  ok(s.players.jonespe01.gleague === true, 'the user\'s player is never recalled by the AI');
+  ok(GLEAGUE.recall(s, 'jonespe01').ok && !s.players.jonespe01.gleague, 'Jones called up');
+  ok(s.teams.OKC.rotation[s.teams.OKC.rotation.length - 1] === 'jonespe01' && s.season.lineups.OKC.minutes.jonespe01 === 0, 'called-up player returns to the end of the bench');
+  ok(!GLEAGUE.recall(s, 'jonespe01').ok, 'cannot recall twice');
+  s.season.injuries.jonespe01 = { type: 'Ankle', games: 3 };
+  ok(/Injured/.test(GLEAGUE.eligible(s, 'jonespe01').reason), 'injured players stay up');
+  delete s.season.injuries.jonespe01;
+  // keep eight healthy players
+  const okc = Object.values(s.players).filter(p => p && p.team === 'OKC');
+  okc.forEach(p => { p.yearsPro = 0; });
+  let sent = 0;
+  okc.forEach(p => { if (GLEAGUE.assign(s, p.id).ok) sent++; });
+  ok(okc.length - sent === 8, 'stops at eight healthy NBA players (' + (okc.length - sent) + ')');
+  ok(/at least 8/.test(GLEAGUE.eligible(s, okc.find(p => !p.gleague).id).reason), 'explains the eight-player rule');
+  // a trade clears the flag elsewhere: reconcile keeps the books in step
+  s.players.jonespe01.team = 'HOU'; s.players.jonespe01.gleague = false;
+  GLEAGUE.roster(s, 'HOU');
+  ok(!s.gleague.assigned.jonespe01, 'traded player drops off the affiliate');
+
+  // AI teams use their affiliates; after the regular season they bring players back
+  const sa = buildState();
+  sa.season = fakeSeason();
+  GLEAGUE.sync(sa);
+  sa.season.day = 140; GLEAGUE.sync(sa);
+  const aiDown = Object.keys(sa.gleague.assigned).length;
+  const aiStats = Object.keys(sa.gleague.stats).length;
+  ok(aiStats >= 10, 'AI teams sent players down during the season (' + aiStats + ' with D-League stats)');
+  ok(Object.keys(sa.gleague.stats).every(id => sa.players[id].team !== 'OKC'), 'the user\'s team is left alone');
+  ok(GLEAGUE.standings(sa).every(x => x.w + x.l <= 50), 'at most 50 D-League games');
+  sa.season.phase = 'playoffs'; GLEAGUE.sync(sa);
+  ok(Object.keys(sa.gleague.assigned).length === 0, 'AI teams recall everyone for the playoffs (' + aiDown + ' were down)');
+  ok(/over/.test(GLEAGUE.eligible(sa, 'jonespe01').reason), 'no assignments after the regular season');
+
+  // 2017-18 on: fewer than three years of service
+  const s19 = buildState(2019);
+  s19.players.jonespe01.yearsPro = 2;
+  ok(GLEAGUE.eligible(s19, 'jonespe01').ok, 'third-year player can go down from 2017-18');
+  s19.players.jonespe01.yearsPro = 3;
+  ok(/under three/.test(GLEAGUE.eligible(s19, 'jonespe01').reason), 'fourth-year player cannot');
 })();
 
 // ---------------------------------------------------------------------------

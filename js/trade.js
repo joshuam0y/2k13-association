@@ -11,9 +11,13 @@
   // ---------------------------------------------------------------------------
   var BASE_CAP = 58044000;          // 2012-13 salary cap
   var BASE_TAX = 70307000;          // 2012-13 luxury tax line
-  var ROSTER_MIN = 13, ROSTER_MAX = 15;
+  var ROSTER_MIN = 13, ROSTER_MAX = 15, OFFSEASON_MAX = 20;   // offseason rosters may carry up to 20 (CBA)
   var OFFSEASON = ["draftLottery", "draft", "resign", "freeAgency", "training"];
-  var DEADLINE_MD = "02-21";        // real 2013 deadline, also used by js/league.js
+  // Real trade deadlines by season-ending year (month-day); later seasons use the recent early-February date
+  var DEADLINES = { 2013: "02-21", 2014: "02-20", 2015: "02-19", 2016: "02-18", 2017: "02-23", 2018: "02-08", 2019: "02-07",
+    2020: "02-06", 2021: "03-25", 2022: "02-10", 2023: "02-09", 2024: "02-08", 2025: "02-06", 2026: "02-05" };
+  function deadlineMD(year) { return DEADLINES[year] || "02-05"; }
+  var DEADLINE_MD = "02-21";        // 2012-13 deadline, kept for older callers; use deadlineMD(year)
   var DIFFICULTY = {                // margin the AI wants: base + pct of the value it gives
     easy: { base: 0, pct: 0 },
     normal: { base: 0.4, pct: 0.05 },
@@ -351,8 +355,116 @@
     return (tw ? ev / tw : 0) * Math.pow(0.92, d);
   }
   function pickVal(ctx, pick, abbr) {
-    var dir = dirOf(ctx, abbr), mult = dir === "rebuild" ? 1.35 : dir === "contend" ? 0.75 : 1;
+    var dir = dirOf(ctx, abbr);
+    var live = liveSlotValue(ctx, pick);
+    if (live != null) {
+      // draft night: a known slot and a known pool, so the plan matters less than for future picks
+      return live * (dir === "rebuild" ? 1.2 : dir === "contend" ? 0.85 : 1);
+    }
+    var mult = dir === "rebuild" ? 1.35 : dir === "contend" ? 0.75 : 1;
     return rawPick(ctx, pick, 0) * mult;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Draft night: the live order (state.draft.order) and the prospects still on the board
+  // ---------------------------------------------------------------------------
+  function liveDraft(state) {
+    var d = state && state.draft;
+    if (!d || !isArr(d.order) || !d.order.length || d.done || +d.year !== +state.year) return null;
+    if (state.phase !== "draft" && state.phase !== "draftLottery") return null;
+    return d;
+  }
+  // the slot of the live draft a pick entry stands for (holder: the team that holds the entry)
+  function slotForEntry(state, entry, holder) {
+    var d = liveDraft(state), r = parsePickRef(entry);
+    if (!d || !r || +r.year !== +d.year) return null;
+    var same = null, swapped = null;
+    for (var i = 0; i < d.order.length; i++) {
+      var s = d.order[i];
+      if (+s.round !== +r.round) continue;
+      if (s.original === r.original) {
+        if (!holder || s.team === holder) return s;
+        if (!same) same = s;
+      } else if (holder && s.team === holder && s.swapped && !swapped) swapped = s;
+    }
+    return swapped || same;
+  }
+  // the pick entry a slot stands for: the holder's entry for that original, else (pick swaps)
+  // the holder's entry for the round that has no slot of its own
+  function entryForSlot(state, slot) {
+    if (!slot || !state.teams[slot.team]) return null;
+    var t = state.teams[slot.team], list = t.picks || [], i;
+    for (i = 0; i < list.length; i++) {
+      var k = list[i];
+      if (+k.year === +slot.year && +k.round === +slot.round && k.original === slot.original) return k;
+    }
+    for (i = 0; i < list.length; i++) {
+      var q = list[i];
+      if (+q.year !== +slot.year || +q.round !== +slot.round) continue;
+      var s2 = slotForEntry(state, q, slot.team);
+      if (s2 === slot) return q;
+    }
+    return null;
+  }
+  function pickUsed(state, entry, holder) {
+    var s = slotForEntry(state, entry, holder);
+    return !!(s && s.player);
+  }
+  // a prospect is a long-term asset: what he is now and what he projects to in four years
+  function prospectTalent(ovr, pot, age) {
+    var q = { ovr: ovr, pot: Math.max(pot || ovr, ovr), age: age || 20 };
+    return talentCurve(0.3 * ovr + 0.7 * projRating(q, 4));
+  }
+  function prospectScore(p) { return prospectTalent(p.ovr, p.pot, p.age); }
+  // what a typical class offers at an overall pick (same curve js/draft.js uses for fictional classes)
+  function baselineTalent(overall) {
+    var x = clamp((overall - 1) / 69, 0, 1);
+    return prospectTalent(74 - 20 * Math.pow(x, 0.7), 90 - 30 * Math.pow(x, 0.55), 20);
+  }
+  function boardOf(ctx) {
+    if (ctx.board) return ctx.board;
+    var st = ctx.state, d = liveDraft(st), out = [];
+    if (d) {
+      var ids = Object.keys(st.players);
+      for (var i = 0; i < ids.length; i++) {
+        var p = st.players[ids[i]];
+        if (p && p.team === "DRAFT" && +p.draftYear === +d.year && !p.undrafted && !p.retired) out.push(p);
+      }
+      out.sort(function (a, b) { return prospectScore(b) - prospectScore(a); });
+    }
+    ctx.board = out;
+    return out;
+  }
+  // value of a current-draft pick by its slot and the prospects still available; null when not live
+  function liveSlotValue(ctx, pick) {
+    var st = ctx.state, d = liveDraft(st);
+    if (!d || +pick.year !== +d.year) return null;
+    var slot = slotForEntry(st, pick, null);
+    if (!slot) return null;
+    if (slot.player) return 0;
+    var k = 0;
+    for (var i = 0; i < d.order.length; i++) {
+      var s = d.order[i];
+      if (s.player) continue;
+      k++;
+      if (s === slot) break;
+    }
+    var board = boardOf(ctx), pr = board[k - 1];
+    var curve = pickCurve(slot.round, slot.pickInRound || (slot.round === 1 ? slot.overall : slot.overall - 30));
+    if (!pr) return curve * 0.4;
+    var ratio = clamp((prospectScore(pr) + 1) / (baselineTalent(slot.overall) + 1), 0.5, 1.8);
+    return curve * ratio;
+  }
+  // the order slot moves with the pick entry, so the new owner makes the pick right away
+  function moveLiveSlot(state, entry, from, to) {
+    var s = slotForEntry(state, entry, from);
+    if (!s || s.player || s.team !== from) return null;
+    s.team = to;
+    s.via = s.original !== to ? s.original : null;
+    s.traded = { from: from, day: state.day || 0 };
+    var d = state.draft;
+    if (d && d.userOnClock === s.overall && to !== state.userTeam) d.userOnClock = null;
+    return s;
   }
 
   // ---------------------------------------------------------------------------
@@ -415,11 +527,40 @@
     if (state.season && state.season.phase === "playoffs" && OFFSEASON.indexOf(state.phase) < 0) return false;
     if (state.phase === "regular") {
       var d = currentDate(state);
-      if (d && d > state.year + "-" + DEADLINE_MD) return false;
+      if (d && d > state.year + "-" + deadlineMD(state.year)) return false;
     }
     return true;
   }
   function inSeason(state) { return OFFSEASON.indexOf(state.phase) < 0; }
+  function closedText(state) {
+    return "The trade deadline has passed. Trades reopen after the playoffs.";
+  }
+  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  function dayNum(iso) { var t = Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)); return Math.round(t / 864e5); }
+  // the trade window for the UI: { open, status, date, label, daysLeft, text }
+  //   status: "open" (before the deadline), "deadline" (deadline day), "closed" (after it, until the
+  //   playoffs end), "offseason" (open: the real NBA reopens trades after the Finals)
+  function deadline(state) {
+    var md = deadlineMD(state.year), nmd = deadlineMD(state.year + 1);
+    var date = state.year + "-" + md;
+    var label = MONTHS[+md.slice(0, 2) - 1] + " " + (+md.slice(3));
+    var nextLabel = MONTHS[+nmd.slice(0, 2) - 1] + " " + (+nmd.slice(3));
+    var out = { open: windowOpen(state), date: date, label: label, daysLeft: null, status: "open", text: "" };
+    if (OFFSEASON.indexOf(state.phase) >= 0) {
+      out.status = "offseason";
+      out.text = "Offseason: trades are open. Next deadline: " + nextLabel + ", " + (state.year + 1) + ".";
+      return out;
+    }
+    if (!out.open) { out.status = "closed"; out.text = "Trade deadline passed (" + label + "). Trades reopen after the playoffs."; return out; }
+    var d = currentDate(state);
+    if (d) {
+      var left = dayNum(date) - dayNum(d);
+      out.daysLeft = left;
+      if (left <= 0) { out.status = "deadline"; out.text = "Trade deadline: today, " + label + ". Last chance to deal."; return out; }
+      out.text = "Trade deadline: " + label + ", " + left + " day" + (left === 1 ? "" : "s") + " left";
+    } else out.text = "Trade deadline: " + label + ".";
+    return out;
+  }
 
   // simple 2012 CBA salary check, also used to find which side must change
   function salaryCheck(ctx, trade) {
@@ -436,13 +577,14 @@
     return bad;
   }
   function rosterCheck(ctx, trade) {
-    var st = ctx.state, bad = [], season = inSeason(st);
+    var st = ctx.state, bad = [], season = inSeason(st), userless = trade.teams.indexOf(st.userTeam) < 0;
     trade.teams.forEach(function (a) {
       var f = flows(st, trade, a), before = ctx.counts[a], after = before;
       f.outP.forEach(function (id) { if (countsOnRoster(st, st.players[id])) after--; });
       f.inP.forEach(function (id) { if (countsOnRoster(st, st.players[id])) after++; });
-      var min = season ? ROSTER_MIN : 10;
-      if ((after > ROSTER_MAX && after > before) || (after < min && after < before)) bad.push({ team: a, after: after, over: after > ROSTER_MAX });
+      // offseason rosters may hold 20 in deals with the user; AI to AI deals stay at 15
+      var min = season ? ROSTER_MIN : 10, max = season || userless ? ROSTER_MAX : OFFSEASON_MAX;
+      if ((after > max && after > before) || (after < min && after < before)) bad.push({ team: a, after: after, over: after > ROSTER_MAX });
     });
     return bad;
   }
@@ -462,7 +604,8 @@
         if (!gone || (gone.protection && gone.original === a)) held[k.year] = true;
       });
       f.inK.forEach(function (k) { if (k.round === 1) held[k.year] = true; });
-      for (var y = ctx.draftYear; y < maxY; y++) {
+      var y0 = liveDraft(st) && st.phase === "draft" ? ctx.draftYear + 1 : ctx.draftYear;
+      for (var y = y0; y < maxY; y++) {
         if (!held[y] && !held[y + 1]) { bad.push({ team: a, years: [y, y + 1] }); break; }
       }
     });
@@ -480,7 +623,7 @@
       if (seen[a]) { res.ok = false; reasons.push("A team appears twice."); return res; }
       seen[a] = 1;
     }
-    if (!windowOpen(state)) { res.ok = false; res.closed = true; reasons.push("The trade deadline has passed."); return res; }
+    if (!windowOpen(state)) { res.ok = false; res.closed = true; reasons.push(closedText(state)); return res; }
     var any = 0;
     trade.teams.forEach(function (a) {
       var s = sideOf(trade, a);
@@ -492,6 +635,7 @@
       s.picks.forEach(function (pk) {
         any++;
         if (!findPick(state, a, pk)) { res.ok = false; reasons.push(a + " does not own that pick (" + pickId(parsePickRef(pk)) + ")."); }
+        else if (pickUsed(state, pk, a)) { res.ok = false; reasons.push("The " + pickLabel(state, pk, a) + " pick has already been made."); }
       });
     });
     if (!any) { res.ok = false; reasons.push("The trade is empty."); }
@@ -609,7 +753,7 @@
     return who + " want more value." + tail;
   }
   function legalMessage(state, trade, v) {
-    if (v.closed) return "The trade deadline has passed.";
+    if (v.closed) return closedText(state);
     if (v.roster.length) return v.reasons[0];
     if (v.salary.length) {
       var b = v.salary[0];
@@ -737,7 +881,7 @@
     top.forEach(function (c) { topSet[c.id] = 1; });
     var fillers = pl.filter(function (c) { return !topSet[c.id] && c.s >= 1500000 * ctx.capRatio; })
       .sort(function (a, b) { return a.vG - b.vG; }).slice(0, 3);
-    var picks = ((st.teams[G].picks) || []).filter(function (k) { return k.year >= ctx.draftYear; })
+    var picks = ((st.teams[G].picks) || []).filter(function (k) { return k.year >= ctx.draftYear && !pickUsed(st, k, G); })
       .map(function (k) { return { kind: "k", pick: k, vR: pickVal(ctx, k, R), vG: pickVal(ctx, k, G) }; })
       .sort(function (a, b) { return b.vR - a.vR; });
     var seconds = picks.filter(function (c) { return c.pick.round === 2; });
@@ -820,9 +964,13 @@
     var ctx = makeCtx(state);
     if (!windowOpen(state) || !state.teams[userAbbr] || !state.teams[targetAbbr] || userAbbr === targetAbbr) return [];
     var want = (wantIds || []).filter(function (id) { var p = state.players[id]; return p && p.team === targetAbbr && !p.retired; });
-    if (!want.length) return [];
+    // opts.wantPicks: picks of the target team the user wants (draft night: "trade for this pick")
+    var wantPicks = (opts.wantPicks || []).map(function (k) { return findPick(state, targetAbbr, k); })
+      .filter(function (k) { return k && !pickUsed(state, k, targetAbbr); })
+      .map(function (k) { return { year: k.year, round: k.round, original: k.original }; });
+    if (!want.length && !wantPicks.length) return [];
     var res = buildPackages(ctx, userAbbr, targetAbbr, want, {
-      limit: opts.limit || 3, maxAssets: 3, greedy: true,
+      limit: opts.limit || 3, maxAssets: 3, greedy: true, wantPicks: wantPicks,
       rOk: function (e) { return e.margin >= 0; },
       score: function (eR, eG) { return eG.gain - 0.3 * eR.margin; },   // cheapest for the user that still works
       maxOverpay: function (eR) { return 0.4 * eR.inValue + 2; },        // never suggest giving away the farm
@@ -916,7 +1064,7 @@
     if (ph === "draftLottery" || ph === "playoffs") return 0;
     var d = currentDate(state);
     if (!d) return 0.04;
-    var y = state.year, dl = y + "-" + DEADLINE_MD;
+    var y = state.year, dl = y + "-" + deadlineMD(y);
     if (d > dl) return 0;
     if (d === dl) return 2.5;
     if (d >= y + "-02-01") return 0.18;
@@ -961,7 +1109,7 @@
       var f = flows(st, trade, a), before = ctx.counts[a], after = before;
       f.outP.forEach(function (id) { if (countsOnRoster(st, st.players[id])) after--; });
       f.inP.forEach(function (id) { if (countsOnRoster(st, st.players[id])) after++; });
-      return after >= ROSTER_MIN || after >= before;
+      return (after >= ROSTER_MIN || after >= before) && (after <= ROSTER_MAX || after <= before);
     });
   }
 
@@ -1059,7 +1207,14 @@
     var pr = protectionText(r.protection, r);
     return r.year + " " + rd + " (" + r.original + (pr ? ", " + pr : "") + ")";
   }
-  function pickLabel(state, k) { return pickText(k); }
+  // current-draft picks read "2013 #7 (from DET)" once the order is known; others use pickText
+  function pickLabel(state, k, holder) {
+    if (!k) return "";
+    var r = parsePickRef(k), s = state ? slotForEntry(state, r, holder || null) : null;
+    if (!s) return pickText(k);
+    var own = holder || s.team;
+    return r.year + " #" + s.overall + (s.original && s.original !== own ? " (from " + s.original + ")" : "");
+  }
   function listText(arr) {
     if (!arr.length) return "nothing";
     if (arr.length === 1) return arr[0];
@@ -1070,7 +1225,7 @@
     trade.teams.forEach(function (a) {
       var s = sideOf(trade, a), items = [];
       s.players.forEach(function (id) { var p = state.players[id]; items.push(p ? p.name + " (" + p.ovr + ")" : id); });
-      s.picks.forEach(function (pk) { var r = findPick(state, a, pk) || parsePickRef(pk); items.push(pickLabel(state, r)); });
+      s.picks.forEach(function (pk) { var r = findPick(state, a, pk) || parsePickRef(pk); items.push(pickLabel(state, r, a)); });
       var to = trade.teams.length === 2 ? " to " + (a === trade.teams[0] ? trade.teams[1] : trade.teams[0]) : "";
       parts2.push(a + " sends " + listText(items) + to);
     });
@@ -1132,6 +1287,7 @@
         ids.push(mv.id);
       } else {
         var from = state.teams[mv.from], to = state.teams[mv.to];
+        moveLiveSlot(state, mv.pick, mv.from, mv.to);
         var idx = from.picks.indexOf(mv.pick);
         if (idx >= 0) from.picks.splice(idx, 1);
         (to.picks = to.picks || []).push(mv.pick);
@@ -1151,13 +1307,128 @@
     return { ok: true, text: text, headline: headline };
   }
 
+  // ---------------------------------------------------------------------------
+  // Ask for more: the AI team adds one pick or player to its own offer, if it still says yes.
+  // Returns { trade, added: { kind, id|pick }, text } or null ("that is our best offer").
+  // ---------------------------------------------------------------------------
+  function askForMore(state, trade, fromAbbr) {
+    var user = state.userTeam;
+    if (!trade || !isArr(trade.teams) || trade.teams.length !== 2 || trade.teams.indexOf(user) < 0) return null;
+    var T = fromAbbr || (trade.teams[0] === user ? trade.teams[1] : trade.teams[0]);
+    if (!state.teams[T] || !windowOpen(state)) return null;
+    ensureDirections(state);
+    var ctx = makeCtx(state), base = cloneTrade(trade);
+    if (!validate(state, base, ctx).ok) return null;
+    var used = {};
+    base.teams.forEach(function (a) { sideOf(base, a).players.forEach(function (id) { used[id] = 1; }); });
+    var usedK = {};
+    sideOf(base, T).picks.forEach(function (k) { usedK[pickId(parsePickRef(k))] = 1; });
+    // the team's core never goes in as an add-on
+    var core = {};
+    ctx.rosters[T].slice().sort(function (a, b) { return parts(ctx, b, T).talent - parts(ctx, a, T).talent; })
+      .forEach(function (id, rk) { if (rk < 4) core[id] = 1; });
+    var cands = [];
+    (state.teams[T].picks || []).forEach(function (k) {
+      if (k.year < ctx.draftYear || usedK[pickId(k)] || pickUsed(state, k, T)) return;
+      cands.push({ kind: "k", pick: k, vT: pickVal(ctx, k, T), vU: pickVal(ctx, k, user) });
+    });
+    ctx.rosters[T].forEach(function (id) {
+      var p = state.players[id];
+      if (used[id] || core[id] || !countsOnRoster(state, p)) return;
+      cands.push({ kind: "p", id: id, vT: parts(ctx, id, T).total, vU: parts(ctx, id, user).total });
+    });
+    // cheapest for them first, so the search finds something they can live with
+    cands.sort(function (a, b) { return a.vT - b.vT; });
+    var best = null;
+    for (var i = 0; i < cands.length && i < 40; i++) {
+      var c = cands[i];
+      if (c.vU <= 0.15) continue;
+      var t = cloneTrade(base);
+      if (c.kind === "k") t.give[T].picks.push({ year: c.pick.year, round: c.pick.round, original: c.pick.original });
+      else t.give[T].players.push(c.id);
+      var ev = evaluate(state, t, { ctx: ctx });
+      if (!ev.accepts) continue;
+      if (!best || c.vU > best.c.vU) best = { c: c, trade: t };
+    }
+    if (!best) return null;
+    var added = best.c.kind === "k" ? pickLabel(state, best.c.pick, T) : state.players[best.c.id].name;
+    return { trade: best.trade, added: best.c.kind === "k" ? { kind: "pick", pick: best.c.pick } : { kind: "player", id: best.c.id },
+      addedText: added, text: describe(state, best.trade),
+      message: "The " + shortName(state, T) + " agree to add " + added + "." };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Draft night AI to AI pick trades: a team that loves a prospect moves up to the pick on the
+  // clock, sending its later first and a sweetener. Called by js/draft.js before each AI pick.
+  // ---------------------------------------------------------------------------
+  var MAX_DRAFT_TRADES = 3;
+  function draftNightTrade(state, rng, opts) {
+    opts = opts || {};
+    rng = rng || Math.random;
+    var d = liveDraft(state);
+    if (!d || state.phase !== "draft") return null;
+    var slot = d.order[d.index];
+    if (!slot || slot.player || slot.round !== 1 || slot.team === state.userTeam) return null;
+    d.aiTrades = d.aiTrades || 0;
+    if (d.aiTrades >= MAX_DRAFT_TRADES) return null;
+    if (!opts.force && rng() >= (opts.rate != null ? opts.rate : 0.07)) return null;
+    ensureDirections(state);
+    var ctx = makeCtx(state), S = slot.team;
+    var upEntry = entryForSlot(state, slot);
+    if (!upEntry) return null;
+    // buyers: AI teams with a later first-round pick in this draft
+    var later = d.order.filter(function (s) {
+      return !s.player && s.round === 1 && s.overall > slot.overall && s.overall <= slot.overall + 14 &&
+        s.team !== S && s.team !== state.userTeam;
+    });
+    var seen = {}, buyers = [];
+    later.forEach(function (s) { if (!seen[s.team]) { seen[s.team] = 1; buyers.push(s); } });
+    for (var i = buyers.length - 1; i > 0; i--) { var j = Math.floor(rng() * (i + 1)), x = buyers[i]; buyers[i] = buyers[j]; buyers[j] = x; }
+    var rule = { base: 0.1, pct: 0.02 };
+    for (var b = 0; b < buyers.length && b < 6; b++) {
+      var bs = buyers[b], B = bs.team, downEntry = entryForSlot(state, bs);
+      if (!downEntry) continue;
+      var love = 0.15 + rng() * 0.35;   // how much the buyer wants the player on the board
+      var vUp = pickVal(ctx, upEntry, B) * (1 + love);
+      // sweeteners: nothing, then the buyer's second-rounders and future picks, cheapest first
+      var extras = [null].concat((state.teams[B].picks || []).filter(function (k) {
+        return k !== downEntry && k.year >= d.year && !pickUsed(state, k, B) && (k.year > d.year || k.round === 2);
+      }).sort(function (a, c) { return pickVal(ctx, a, B) - pickVal(ctx, c, B); }));
+      for (var e = 0; e < extras.length && e < 8; e++) {
+        var t = { teams: [B, S], give: {} };
+        t.give[B] = { players: [], picks: [{ year: downEntry.year, round: downEntry.round, original: downEntry.original }] };
+        if (extras[e]) t.give[B].picks.push({ year: extras[e].year, round: extras[e].round, original: extras[e].original });
+        t.give[S] = { players: [], picks: [{ year: upEntry.year, round: upEntry.round, original: upEntry.original }] };
+        var eS = gain(ctx, S, t, rule);
+        if (eS.margin < 0) continue;
+        var cost = pickVal(ctx, downEntry, B) + (extras[e] ? pickVal(ctx, extras[e], B) : 0);
+        if (vUp - cost < 0) break;   // more sweetener only costs more
+        if (!validate(state, t, ctx).ok) continue;
+        var upNo = slot.overall, downNo = bs.overall;
+        var r = execute(state, t);
+        if (!r.ok) return null;
+        d.aiTrades++;
+        var head = "The " + teamName(state, B) + " trade up to No. " + upNo;
+        var body = "Draft night deal: the " + shortName(state, B) + " move up from No. " + downNo + " to No. " + upNo +
+          ", sending " + listText(t.give[B].picks.map(function (k) { return k.year === d.year && k.round === downEntry.round && k.original === downEntry.original ? "No. " + downNo : pickLabel(state, findPick(state, S, k) || k, B); })) +
+          " to the " + shortName(state, S) + ".";
+        if (state.news && state.news[0] && state.news[0].body === r.text) { state.news[0].headline = head; state.news[0].body = body; state.news[0].draftTrade = true; }
+        return { trade: t, text: r.text, headline: head, body: body };
+      }
+    }
+    return null;
+  }
+
   var API = {
     value: value, pickValue: pickValue, evaluate: evaluate, finder: finder,
     aiOffers: aiOffers, aiTrades: aiTrades, execute: execute,
     // extras
     validate: function (state, trade) { return validate(state, trade); },
     describe: describe, updateDirections: updateDirections, windowOpen: windowOpen, pickId: pickId,
-    shop: shop, pickText: pickText, protectionText: protectionText
+    shop: shop, pickText: pickText, protectionText: protectionText,
+    // draft night and trade screen helpers
+    pickLabel: pickLabel, slotForEntry: slotForEntry, entryForSlot: entryForSlot, pickUsed: pickUsed,
+    deadline: deadline, deadlineMD: deadlineMD, askForMore: askForMore, draftNightTrade: draftNightTrade, liveDraft: liveDraft
   };
   W.TRADE = API;
   if (typeof module !== "undefined" && module.exports) module.exports = API;

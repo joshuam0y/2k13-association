@@ -256,20 +256,23 @@ console.log("\nSigning: space, MLE, minimum, Bird rights");
 var s9 = buildState(), fa = Object.keys(s9.players).map(function (k) { return s9.players[k]; }).filter(function (p) { return p.team === "FA"; })[0];
 fa.yearsPro = 3;
 forcePayroll(s9, "CHA", 50000000, []);
-// CHA has 13 players, so room on the roster
+// signing checks need a roster spot (15 max): CHA and the over-cap test team must have room
+ok(teamOf(s9, "CHA").length < 15, "CHA has a free roster spot (" + teamOf(s9, "CHA").length + " players)");
+var M9 = Object.keys(s9.teams).sort().filter(function (a) { return a !== "CHA" && teamOf(s9, a).length < 15; })[0];
+ok(!!M9, "found an over-cap test team with a free roster spot (" + M9 + ", " + (M9 ? teamOf(s9, M9).length : 0) + " players)");
 var c1 = CBA.canSign(s9, "CHA", fa.id, [{ year: 2013, amount: 8044000 }]);
 ok(c1.ok && c1.via === "space", "CHA with $8.044M room signs a $8.044M player with space (" + c1.via + ")");
 var c2 = CBA.canSign(s9, "CHA", fa.id, [{ year: 2013, amount: 8044001 }]);
 ok(!(c2.ok && c2.via === "space"), "one dollar over the room is not a space signing");
-forcePayroll(s9, "MIA", 66000000, []);
-var c3 = CBA.canSign(s9, "MIA", fa.id, [{ year: 2013, amount: 5000000 }]);
+forcePayroll(s9, M9, 66000000, []);
+var c3 = CBA.canSign(s9, M9, fa.id, [{ year: 2013, amount: 5000000 }]);
 ok(c3.ok && c3.via === "mle" && !c3.tax, "over-cap team below the apron: $5M via the non-taxpayer MLE");
-var c4 = CBA.canSign(s9, "MIA", fa.id, [{ year: 2013, amount: 5100000 }]);
+var c4 = CBA.canSign(s9, M9, fa.id, [{ year: 2013, amount: 5100000 }]);
 ok(!c4.ok, "$5.1M is more than the 2012-13 MLE");
-forcePayroll(s9, "MIA", 74000000, []);
-var c5 = CBA.canSign(s9, "MIA", fa.id, [{ year: 2013, amount: 3000000 }]);
+forcePayroll(s9, M9, 74000000, []);
+var c5 = CBA.canSign(s9, M9, fa.id, [{ year: 2013, amount: 3000000 }]);
 ok(c5.ok && c5.via === "mle" && c5.tax, "team near the apron gets the $3.09M taxpayer MLE");
-var c6 = CBA.canSign(s9, "MIA", fa.id, [{ year: 2013, amount: 885120 }]);
+var c6 = CBA.canSign(s9, M9, fa.id, [{ year: 2013, amount: 885120 }]);
 ok(c6.ok && c6.via === "min", "3-year veteran at $885,120 via the minimum");
 // Bird rights: an over-cap team re-signs its own player with 3 seasons
 var kobe = s9.players.bryanko01;

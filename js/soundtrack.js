@@ -1,13 +1,15 @@
 // Official NBA 2K13 soundtrack, in order. All IDs are verified in docs/soundtrack-ids.json.
-// sp is the Spotify track ID (the default, ad-free source). yt is the YouTube video ID and backup is
-// tried when the primary video will not play. A song with no ID for the chosen source is skipped.
-window.SOUNDTRACK = [
+// sp is the Spotify track ID (tried first: ad-free, full songs only for logged-in listeners). yt is the
+// YouTube video ID (full songs, used when Spotify only gives a 30 second preview) and backup is tried
+// when the primary video will not play. A song with no ID for the chosen source is skipped.
+(function (root) {
+root.SOUNDTRACK = [
   { title: "Ali in the Jungle", artist: "The Hours", sp: "3kr2i1P9eQZitASv83V8zh", yt: "AxNX5M_XSeA", backup: "VWuVEhTJPdw" },
   { title: "Blow the Whistle", artist: "Too Short", sp: "2RPl2HMZE0ycVf1UdlpUkA", yt: "CBJtzEKetBM", backup: "ARMjcGfj_ts" },
   { title: "I Ain't No Joke", artist: "Eric B. and Rakim", sp: "0SwuCcwpFM6x4cu5zOvmi0", yt: "2TN-kDEKxF0", backup: "C_WSlOwP8io" },
   { title: "1901", artist: "Phoenix", sp: "68hYdj3GepWm2R202KhJT7", yt: "36_4xjLFjM0", backup: "Zk4aLrsZVrM" },
   { title: "Pump It Up (Freestyle)", artist: "Jay-Z", sp: "04t8KUfSfNae6iC2yxMzy4", yt: "QZHDoFqH-9E", backup: "UPy36WHJI8w" },
-  { title: "Victory (feat. The Notorious B.I.G. and Busta Rhymes)", artist: "Puff Daddy and the Family", sp: "2B9aYvlGefTIgKLhM6ia8t", yt: "x7KIOFaqZeY", backup: "ChNBMA-soXA" },
+  { title: "Victory (feat. The Notorious B.I.G. and Busta Rhymes)", artist: "Puff Daddy and the Family", sp: "2B9aYvlGefTIgKLhM6ia8t", yt: "ChNBMA-soXA", backup: "x7KIOFaqZeY" },
   { title: "Around the World", artist: "Daft Punk", sp: "1pKYYY0dkg23sQQXi0Q5zN", yt: "K0HSD_i2DvA", backup: "ARfJ55bUAw0" },
   { title: "Shove It (feat. Spank Rock)", artist: "Santigold", sp: "2RBmWAhs6yX4SDYQX4zgF1", yt: "Tg9cN2A7-cA", backup: "2cJComcafGs" },
   { title: "Amazing", artist: "Kanye West", sp: "0m3Ze0cy8qBHSsV2exAfCw", yt: "PH4JPgVD2SM", backup: "16jeTNcEhKs" },
@@ -28,4 +30,5 @@ window.SOUNDTRACK = [
   { title: "H.A.M.", artist: "Jay-Z", sp: "4tSr86RHxuwctZjZk4mGlL", yt: "U2ozD2B3gIk", backup: "UtoHI0JEfDg" }
 ];
 
-if (typeof module !== "undefined") module.exports = window.SOUNDTRACK;
+if (typeof module !== "undefined") module.exports = root.SOUNDTRACK;
+})(typeof window !== "undefined" ? window : globalThis);

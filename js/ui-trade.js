@@ -136,9 +136,12 @@
     if (pr.top == null) return 'protected';
     return (+pr.top >= 30 ? 'fully protected' : 'top ' + pr.top + ' protected') + (pr.until != null ? ' through ' + pr.until : '');
   };
-  F.pickLabel = function (pk) {
+  // holder: the team that holds the pick. Current-draft picks read "2013 #7 (from DET)" once the order is known.
+  F.pickLabel = function (pk, holder) {
     if (!pk) return '';
     if (typeof pk === 'string') return pk;
+    const L = F.fn('TRADE', 'pickLabel'), st = L ? F.state() : null;
+    if (L && st) { const t = F.try('TRADE.pickLabel', () => L.pickLabel(st, pk, holder), ''); if (t) return t; }
     const T = F.fn('TRADE', 'pickText');
     if (T) return T.pickText(pk);
     const rd = pk.round === 1 ? '1st' : pk.round === 2 ? '2nd' : pk.round + 'th';
@@ -155,6 +158,39 @@
       <span class="ft-ovr ${UI.ovrClass(ovr)}">${ovr}</span>`;
   };
 
+  // styles for the pieces this file and the draft room add (kept here: no CSS file of our own)
+  F.css = function (id, text) {
+    if (document.getElementById(id)) return;
+    const el = document.createElement('style');
+    el.id = id; el.textContent = text;
+    document.head.appendChild(el);
+  };
+  F.css('ftx-extra-css', `
+    .ftx-dl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 10px 14px; margin: 0 0 14px; border: 1px solid var(--line2); border-left: 3px solid var(--gold); background: var(--bg2); font-size: 13px; }
+    .ftx-dl b { font-family: var(--display); letter-spacing: .08em; color: var(--gold2); }
+    .ftx-dl.closed { border-left-color: #b24a4a; }
+    .ftx-dl.closed b { color: #ff9b9b; }
+    .ftx-dl.hot b { color: #fff; }
+    .ftx-dl small { color: var(--muted); }
+    .ftx-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 6px; border-radius: 9px; background: var(--gold); color: #000; font-size: 11px; font-weight: 700; line-height: 1; vertical-align: middle; }
+    .ftx-ba { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 12px 0; }
+    .ftx-ba-team { border: 1px solid var(--line); background: var(--bg2); padding: 10px 12px; min-width: 0; }
+    .ftx-ba-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-family: var(--display); letter-spacing: .06em; }
+    .ftx-ba table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .ftx-ba th { text-align: right; color: var(--muted); font-weight: 400; font-size: 11px; letter-spacing: .08em; padding: 2px 4px; }
+    .ftx-ba th:first-child, .ftx-ba td:first-child { text-align: left; }
+    .ftx-ba td { text-align: right; padding: 3px 4px; border-top: 1px solid var(--line); white-space: nowrap; }
+    .ftx-ba td.up { color: #ff9b9b; } .ftx-ba td.down { color: #7fd99a; }
+    .ftx-ba td.bad { color: #ff9b9b; font-weight: 700; }
+    .ftx-tag2 { display: inline-block; font-size: 10px; letter-spacing: .08em; padding: 1px 5px; border: 1px solid var(--line2); color: var(--text2); margin-left: 4px; white-space: nowrap; }
+    .ftx-tradebtn { display: inline-block; margin-left: 6px; padding: 1px 7px; border: 1px solid var(--gold-dim); color: var(--gold2); font-family: var(--display); font-size: 11px; letter-spacing: .1em; text-decoration: none; white-space: nowrap; }
+    .ftx-tradebtn:hover { background: var(--gold); color: #000; }
+    .ftx-pkrow { display: flex; gap: 6px; align-items: stretch; }
+    .ftx-pkrow > .ft-item { flex: 1 1 auto; min-width: 0; }
+    .ftx-more { margin-top: 6px; font-size: 13px; }
+    @media (max-width: 700px) { .ftx-ba { grid-template-columns: minmax(0, 1fr); } }
+  `);
+
   F.phaseName = ph => ({ preseason: 'Preseason', regular: 'Regular season', playoffs: 'Playoffs', draftLottery: 'Draft lottery',
     draft: 'Draft', resign: 'Re-signing', freeAgency: 'Free agency', training: 'Training camp' }[ph] || ph || '-');
 
@@ -165,16 +201,28 @@
   let take = null;        // "what would it take" results: { pid, list, error }
   let done = null;        // last completed trade message
   let shopRes = null;     // trading block results: { key, list, error }
+  let noTradeLink = false; // finder results: the player is already the target, no extra TRADE link
 
   function blankSel() { return { players: new Set(), picks: new Set() }; }
   function resetDeal(user, partner) { deal = { user, partner, sel: { [user]: blankSel(), [partner]: blankSel() } }; take = null; }
 
+  // the live draft slot a pick stands for (draft night), or null
+  function liveSlot(st, pk, abbr) {
+    const S = F.fn('TRADE', 'slotForEntry');
+    return S ? F.try('TRADE.slotForEntry', () => S.slotForEntry(st, pk, abbr), null) : null;
+  }
   function teamPicks(st, abbr) {
     const t = st.teams[abbr];
     const from = ['resign', 'freeAgency', 'training'].indexOf(st.phase) >= 0 ? st.year + 1 : st.year;   // the next draft
+    const U = F.fn('TRADE', 'pickUsed');
+    const no = pk => { const s = liveSlot(st, pk, abbr); return s ? s.overall : 999; };
     return (t && Array.isArray(t.picks) ? t.picks : []).slice()
       .filter(pk => pk && (pk.year == null || pk.year >= from))
-      .sort((a, b) => (a.year - b.year) || (a.round - b.round) || String(a.original).localeCompare(String(b.original)));
+      .filter(pk => !(U && F.try('TRADE.pickUsed', () => U.pickUsed(st, pk, abbr), false)))   // picks already made tonight
+      .sort((a, b) => (a.year - b.year) || (a.round - b.round) || (no(a) - no(b)) || String(a.original).localeCompare(String(b.original)));
+  }
+  function pickHolder(st, key) {
+    return Object.keys(st.teams).find(a => (st.teams[a].picks || []).some(pk => F.pickKey(pk) === key)) || null;
   }
   function pickObj(st, abbr, key) { return teamPicks(st, abbr).find(pk => F.pickKey(pk) === key) || null; }
 
@@ -193,12 +241,29 @@
   const dealSize = tr => tr.teams.reduce((n, a) => n + tr.give[a].players.length + tr.give[a].picks.length, 0);
   const otherOf = (tr, a) => tr.teams.find(x => x !== a);
 
+  function deadlineInfo(st) {
+    const D = F.fn('TRADE', 'deadline');
+    return D ? F.try('TRADE.deadline', () => D.deadline(st), null) : null;
+  }
+  // real NBA rule: no trades from the deadline until the playoffs are over
   function tradeClosed(st) {
+    const dl = deadlineInfo(st);
+    if (dl && !dl.open) return 'The trade deadline (' + dl.label + ') has passed. Trades reopen after the playoffs.';
     const playoffs = st.phase === 'playoffs' || (st.phase === 'regular' && st.season && st.season.phase === 'playoffs');
-    if (playoffs) return 'Trades are closed during the playoffs.';
+    if (playoffs) return 'Trades reopen after the playoffs.';
     const W = F.fn('TRADE', 'windowOpen');
-    if (W && F.try('TRADE.windowOpen', () => W.windowOpen(st), true) === false) return 'The trade deadline has passed. Trades open again after the season.';
+    if (W && F.try('TRADE.windowOpen', () => W.windowOpen(st), true) === false) return 'The trade deadline has passed. Trades reopen after the playoffs.';
     return null;
+  }
+  const liveDraftOn = st => { const L = F.fn('TRADE', 'liveDraft'); return !!(L && st.phase === 'draft' && F.try('TRADE.liveDraft', () => L.liveDraft(st), null)); };
+  function deadlineBar(st) {
+    const dl = deadlineInfo(st);
+    const closed = tradeClosed(st);
+    if (closed) return `<div class="ftx-dl closed" id="ftxDeadline"><b>TRADES CLOSED</b><span>${esc(closed)}</span></div>`;
+    if (!dl) return '';
+    const hot = dl.status === 'deadline' || (dl.daysLeft != null && dl.daysLeft <= 14);
+    const extra = liveDraftOn(st) ? '<small>Draft night: tonight\'s picks show their slot. Trade up, trade down, or deal a rookie right after you pick him. <a href="#/draft">Back to the draft room</a></small>' : '';
+    return `<div class="ftx-dl${hot ? ' hot' : ''}" id="ftxDeadline"><b>${esc(dl.text)}</b>${extra}</div>`;
   }
 
   // the CBA check and the salary numbers for each side
@@ -237,17 +302,53 @@
     }).join('')}</div>`;
   }
 
+  function rosterNow(st, abbr, yr) {
+    const C = F.fn('CBA', 'rosterCount');
+    if (C) { const v = F.try('CBA.rosterCount', () => C.rosterCount(st, abbr, yr), null); if (typeof v === 'number') return v; }
+    return F.teamPlayers(st, abbr).filter(p => !(p.stashedUntil && p.stashedUntil > st.year) && !(p.contract && p.contract.twoWay)).length;
+  }
+  const countsOnRoster = (st, p) => p && !(p.stashedUntil && p.stashedUntil > st.year) && !(p.contract && p.contract.twoWay);
+  // both teams' cap situation and roster count, before and after the trade
+  function beforeAfterHtml(st, tr, chk, yr) {
+    const r = F.rules(yr) || {};
+    const inSeason = OFFSEASON.indexOf(st.phase) < 0;
+    const maxR = inSeason ? (r.rosterMax || 15) : (r.offseasonRosterMax || 20), minR = inSeason ? (r.rosterMin || 13) : 0;
+    const capTxt = pay => !r.cap ? '-' : pay <= r.cap ? F.money(r.cap - pay) + ' room' : F.money(pay - r.cap) + ' over';
+    const taxTxt = pay => !r.tax ? '-' : pay <= r.tax ? F.money(r.tax - pay) + ' under' : F.money(pay - r.tax) + ' over';
+    return `<div class="ftx-ba" id="ftxBA">${tr.teams.map(a => {
+      const o = otherOf(tr, a), info = chk && chk.teams && chk.teams[a];
+      const out = tr.give[a].players.reduce((s, id) => s + F.salary(st.players[id], yr), 0);
+      const inn = tr.give[o].players.reduce((s, id) => s + F.salary(st.players[id], yr), 0);
+      const before = info && info.payrollBefore != null ? info.payrollBefore : F.payroll(st, a, yr);
+      const after = info && info.payrollAfter != null ? info.payrollAfter : before - out + inn;
+      const rb = rosterNow(st, a, yr);
+      const ra = info && info.rosterAfter != null ? info.rosterAfter
+        : rb - tr.give[a].players.filter(id => countsOnRoster(st, st.players[id])).length + tr.give[o].players.filter(id => countsOnRoster(st, st.players[id])).length;
+      const dir = after > before ? 'up' : after < before ? 'down' : '';
+      const rBad = (ra > maxR && ra > rb) || (inSeason && ra < minR && ra < rb);
+      return `<div class="ftx-ba-team">
+        <div class="ftx-ba-top">${UI.logo(a, 22)}<b>${esc(a)}</b>${a === st.userTeam ? '<span class="ftx-tag2">YOU</span>' : ''}</div>
+        <table><thead><tr><th></th><th>BEFORE</th><th>AFTER</th></tr></thead><tbody>
+          <tr><td>Payroll</td><td>${F.money(before)}</td><td class="${dir}">${F.money(after)}</td></tr>
+          <tr><td>Salary cap</td><td>${capTxt(before)}</td><td>${capTxt(after)}</td></tr>
+          <tr><td>Luxury tax</td><td>${taxTxt(before)}</td><td class="${r.tax && after > r.tax && before <= r.tax ? 'bad' : ''}">${taxTxt(after)}</td></tr>
+          <tr><td>Roster</td><td>${rb}</td><td class="${rBad ? 'bad' : ''}">${ra}${inSeason ? ' of ' + maxR : ''}</td></tr>
+        </tbody></table></div>`;
+    }).join('')}</div>`;
+  }
+
   function assetList(st, tr, abbr, removable) {
     const g = tr.give[abbr] || { players: [], picks: [] };
     const items = [];
     (g.players || []).forEach(id => {
       const p = st.players[id];
       const x = removable ? `<button type="button" class="ftx-x" data-act="toggle" data-side="${esc(abbr)}" data-kind="player" data-id="${esc(id)}" aria-label="Remove">&times;</button>` : '';
-      items.push(p ? `<li><b class="${UI.ovrClass(p.ovr || 0)}">${p.ovr || '-'}</b> <a href="#/player/${esc(p.id)}">${esc(p.name)}</a> <small>${esc(p.pos || '')} | ${esc(p.age || '-')} yrs | ${F.money(F.salary(p, F.capYear(st)))} | ${esc(F.contractText(p, st))}</small>${x}</li>` : `<li>${esc(id)}</li>`);
+      const tb = !removable && !noTradeLink && p && p.team !== st.userTeam && st.teams[p.team] ? `<a class="ftx-tradebtn" href="#/trade/for/${esc(p.id)}" title="Build a new trade for him">TRADE</a>` : '';
+      items.push(p ? `<li><b class="${UI.ovrClass(p.ovr || 0)}">${p.ovr || '-'}</b> <a href="#/player/${esc(p.id)}">${esc(p.name)}</a> <small>${esc(p.pos || '')} | ${esc(p.age || '-')} yrs | ${F.money(F.salary(p, F.capYear(st)))} | ${esc(F.contractText(p, st))}</small>${tb}${x}</li>` : `<li>${esc(id)}</li>`);
     });
     (g.picks || []).forEach(pk => {
       const x = removable ? `<button type="button" class="ftx-x" data-act="toggle" data-side="${esc(abbr)}" data-kind="pick" data-id="${esc(F.pickKey(pk))}" aria-label="Remove">&times;</button>` : '';
-      items.push(`<li><b class="ft-pk">PICK</b> ${esc(F.pickLabel(pk))}${x}</li>`);
+      items.push(`<li><b class="ft-pk">PICK</b> ${esc(F.pickLabel(pk, abbr))}${x}</li>`);
     });
     return items.length ? `<ul class="ft-assets">${items.join('')}</ul>` : '<p class="muted ft-nothing">Nothing yet</p>';
   }
@@ -257,13 +358,13 @@
     const blk = blockIds(st).length;
     return `<nav class="tabs"><a href="#/trade${deal.partner ? '/' + esc(deal.partner) : ''}" class="${on === 'build' ? 'on' : ''}">MAKE A TRADE</a>
       <a href="#/trade/block" class="${on === 'block' ? 'on' : ''}">TRADING BLOCK${blk ? ' (' + blk + ')' : ''}</a>
-      <a href="#/trade/offers" class="${on === 'offers' ? 'on' : ''}">OFFERS${n ? ' (' + n + ')' : ''}</a></nav>`;
+      <a href="#/trade/offers" class="${on === 'offers' ? 'on' : ''}">OFFERS${n ? '<span class="ftx-badge" id="ftxOfferBadge">' + n + '</span>' : ''}</a></nav>`;
   }
 
   function doneHtml() {
     if (!done) return '';
     const h = `<div class="ft-answer ok"><div class="ft-k">TRADE COMPLETE</div><p>${esc(done)}</p>
-      <div class="row-btns"><a class="btn btn-small" href="#/team/${esc(F.state() ? F.state().userTeam : '')}">SEE YOUR ROSTER</a><a class="btn btn-small" href="#/manage">ROTATION</a></div></div>`;
+      <div class="row-btns">${F.state() && F.state().phase === 'draft' ? '<a class="btn btn-small btn-gold" href="#/draft">BACK TO THE DRAFT</a>' : ''}<a class="btn btn-small" href="#/team/${esc(F.state() ? F.state().userTeam : '')}">SEE YOUR ROSTER</a><a class="btn btn-small" href="#/manage">ROTATION</a></div></div>`;
     done = null;
     return h;
   }
@@ -310,16 +411,20 @@
     const prow = picks.map(pk => {
       const k = F.pickKey(pk), on = s.picks.has(k);
       const pr = F.protText(pk);
-      return `<button type="button" class="ft-item ft-pick${on ? ' on' : ''}" data-act="toggle" data-side="${esc(abbr)}" data-kind="pick" data-id="${esc(k)}" aria-pressed="${on}">
-        <span class="ft-pick-yr">${esc(pk.year)}<small>${pk.round === 1 ? '1ST' : '2ND'}</small></span>
-        <span class="ft-main"><b class="ft-name">${esc(F.pickLabel(pk))}</b>
-          <span class="ft-meta">${pk.original && pk.original !== abbr ? 'From ' + esc(UI.teamName(pk.original)) : 'Own pick'} | ${pr ? esc(pr) : 'Unprotected'}</span></span>
-        ${UI.logo(pk.original || abbr, 28)}</button>`;
+      const ls = liveSlot(st, pk, abbr);
+      const meta = ls ? `${ls.round === 1 ? 'Round 1' : 'Round 2'}, pick ${ls.overall} tonight${ls.original && ls.original !== abbr ? ' | From ' + esc(UI.teamName(ls.original)) : ''}`
+        : `${pk.original && pk.original !== abbr ? 'From ' + esc(UI.teamName(pk.original)) : 'Own pick'} | ${pr ? esc(pr) : 'Unprotected'}`;
+      const ask = isUser ? '' : `<button type="button" class="btn btn-small ftx-ask" data-act="takePick" data-id="${esc(k)}" title="Ask what the ${esc(UI.team(abbr).name)} want for this pick">WHAT WOULD IT TAKE</button>`;
+      return `<div class="ftx-prow"><button type="button" class="ft-item ft-pick${on ? ' on' : ''}" data-act="toggle" data-side="${esc(abbr)}" data-kind="pick" data-id="${esc(k)}" aria-pressed="${on}">
+        <span class="ft-pick-yr">${ls ? '#' + esc(ls.overall) : esc(pk.year)}<small>${ls ? esc(pk.year) : pk.round === 1 ? '1ST' : '2ND'}</small></span>
+        <span class="ft-main"><b class="ft-name">${esc(F.pickLabel(pk, abbr))}</b>
+          <span class="ft-meta">${meta}</span></span>
+        ${UI.logo(pk.original || abbr, 28)}</button>${ask}</div>`;
     }).join('');
     return `<section class="ft-side${isUser ? ' mine' : ''}">
       <div class="ft-side-head">${UI.logo(abbr, 44)}<div><div class="ft-k">${isUser ? 'YOUR TEAM' : 'THEIR TEAM'}</div>
         <div class="ft-t">${esc(UI.teamName(abbr))}</div>
-        <div class="ft-sub">Payroll ${F.money(F.payroll(st, abbr, yr))} | ${players.length} players | ${esc(({ contend: 'Contending', rebuild: 'Rebuilding', neutral: 'Middle of the pack' })[st.teams[abbr].direction] || '')}</div></div></div>
+        <div class="ft-sub">Payroll ${F.money(F.payroll(st, abbr, yr))} | ${rosterNow(st, abbr, yr)} on the roster | ${esc(({ contend: 'Contending', rebuild: 'Rebuilding', neutral: 'Middle of the pack' })[st.teams[abbr].direction] || '')}</div></div></div>
       <div class="ft-group">PLAYERS</div>
       <div class="ft-list">${rows || '<p class="muted">No players.</p>'}</div>
       <div class="ft-group">DRAFT PICKS</div>
@@ -329,12 +434,34 @@
 
   function takeHtml(st) {
     if (!take) return '';
-    const p = st.players[take.pid];
-    const nm = p ? p.name : 'him';
+    const p = take.pid ? st.players[take.pid] : null;
+    const pk = take.pick ? pickObj(st, deal.partner, take.pick) : null;
+    const nm = p ? p.name : pk ? 'the ' + F.pickLabel(pk, deal.partner) + ' pick' : take.pick ? 'that pick' : 'him';
     if (take.error) return `<div class="ft-answer bad"><div class="ft-k">WHAT WOULD IT TAKE</div><p>${esc(take.error)}</p></div>`;
     if (!take.list.length) return `<div class="ft-answer bad"><div class="ft-k">WHAT WOULD IT TAKE: ${esc(nm.toUpperCase())}</div><p>The ${esc(UI.team(deal.partner).name)} would not trade ${esc(nm)} for anything you have that fits the salary rules.</p></div>`;
+    noTradeLink = true;
+    const cards = take.list.map((t, i) => offerCard(st, t, deal.partner, [`<button type="button" class="btn btn-gold btn-small" data-act="takeDo" data-i="${i}">MAKE THIS TRADE</button>`, `<button type="button" class="btn btn-small" data-act="takeLoad" data-i="${i}">EDIT IT</button>`])).join('');
+    noTradeLink = false;
     return `<div class="ftx-finds">${UI.header('WHAT WOULD IT TAKE: ' + esc(nm.toUpperCase()), 'Packages the ' + esc(UI.team(deal.partner).name) + ' would accept, cheapest for you first')}
-      ${take.list.map((t, i) => offerCard(st, t, deal.partner, [`<button type="button" class="btn btn-gold btn-small" data-act="takeDo" data-i="${i}">MAKE THIS TRADE</button>`, `<button type="button" class="btn btn-small" data-act="takeLoad" data-i="${i}">EDIT IT</button>`])).join('')}</div>`;
+      ${cards}</div>`;
+  }
+
+  // after a deep link (#/trade/for/<id>, #/trade/pick/<key>): the target, one click from the finder
+  function focusHtml(st) {
+    const f = deal.focus;
+    if (!f || take || tradeClosed(st)) return '';
+    let what = '', act = '';
+    if (f.kind === 'player') {
+      const p = st.players[f.id];
+      if (!p || p.team !== deal.partner) return '';
+      what = p.name; act = `data-act="take" data-id="${esc(p.id)}"`;
+    } else if (f.kind === 'pick') {
+      const pk = pickObj(st, deal.partner, f.id);
+      if (!pk) return '';
+      what = 'the ' + F.pickLabel(pk, deal.partner) + ' pick'; act = `data-act="takePick" data-id="${esc(f.id)}"`;
+    } else return '';
+    return `<div class="ftx-verdict" id="ftxFocus"><div><div class="ft-k">TARGET: ${esc(what.toUpperCase())}</div><p>Already in the deal. Add what you would give, or ask the ${esc(UI.team(deal.partner).name)} what it would take.</p></div>
+      <button type="button" class="btn btn-gold" ${act}>WHAT WOULD IT TAKE</button></div>`;
   }
 
   function renderBuild(app, st, yr) {
@@ -359,8 +486,9 @@
 
     app.innerHTML = `${UI.header('TRADES', esc(F.phaseName(st.phase)) + ' ' + esc(UI.fmtSeasonEnd(st.year)) + '. Pick a team, click players and picks on both sides, and see their answer right away.')}
       ${tabs(st, 'build')}
+      ${deadlineBar(st)}
       ${doneHtml()}
-      ${closed ? `<div class="note">${esc(closed)}</div>` : ''}
+      ${focusHtml(st)}
       <div class="ft-bar">
         <label class="field ft-partner"><span>TRADE WITH</span>
           <select data-act="partner">${teams.map(t => `<option value="${esc(t.abbr)}" ${t.abbr === partner ? 'selected' : ''}>${esc(t.city + ' ' + t.name)}</option>`).join('')}</select></label>
@@ -368,7 +496,7 @@
       </div>
       <section class="ft-deal">
         <div class="ft-deal-cols"><div><div class="ft-k">YOU GIVE</div>${assetList(st, tr, user, true)}</div><div><div class="ft-k">YOU GET</div>${assetList(st, tr, partner, true)}</div></div>
-        ${dealSize(tr) ? salaryHtml(st, tr, chk, yr) : ''}
+        ${dealSize(tr) ? beforeAfterHtml(st, tr, chk, yr) + salaryHtml(st, tr, chk, yr) : ''}
         ${cbaHtml}
         ${verdict}
       </section>
@@ -396,17 +524,19 @@
         if (err) UI.toast(err, 'error'); else resetDeal(user, partner);
         renderBuild(app, st, yr);
         window.scrollTo(0, 0);
-      } else if (act === 'take') {
-        const pid = b.getAttribute('data-id');
+      } else if (act === 'take' || act === 'takePick') {
+        const id = b.getAttribute('data-id');
+        const pid = act === 'take' ? id : null, pkey = act === 'takePick' ? id : null;
         const Fd = F.fn('TRADE', 'finder');
         if (!Fd) return;
         b.disabled = true; b.textContent = 'ASKING...';
         await new Promise(r => setTimeout(r, 20));
         try {
-          const r = Fd.finder(st, user, partner, [pid]);
+          const pk = pkey ? pickObj(st, partner, pkey) : null;
+          const r = pid ? Fd.finder(st, user, partner, [pid]) : pk ? Fd.finder(st, user, partner, [], { wantPicks: [pk] }) : [];
           const arr = Array.isArray(r) ? r : (r && Array.isArray(r.proposals) ? r.proposals : []);
-          take = { pid, list: arr.map(x => (x && x.trade) || x).filter(x => x && x.give && Array.isArray(x.teams)).slice(0, 4) };
-        } catch (e) { console.warn('TRADE.finder', e); take = { pid, list: [], error: 'Could not ask: ' + (e && e.message ? e.message : e) }; }
+          take = { pid, pick: pkey, list: arr.map(x => (x && x.trade) || x).filter(x => x && x.give && Array.isArray(x.teams)).slice(0, 4) };
+        } catch (e) { console.warn('TRADE.finder', e); take = { pid, pick: pkey, list: [], error: 'Could not ask: ' + (e && e.message ? e.message : e) }; }
         renderBuild(app, st, yr);
         const el = app.querySelector('.ftx-finds, .ft-answer'); if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
       } else if (act === 'takeDo' || act === 'takeLoad') {
@@ -542,12 +672,18 @@
       const from = tr ? (tr.teams.find(a => a !== user) || tr.teams[0]) : (e.offer && e.offer.from) || '?';
       if (!tr || !valid) return `<article class="ft-offer"><div class="ft-offer-head">${UI.logo(from, 44)}<div><div class="ft-k">OFFER FROM</div><div class="ft-t">${esc(UI.teamName(from))}</div></div></div>
         <p class="ft-warn">This offer is no longer valid: a player in it has moved.</p><div class="row-btns"><button type="button" class="btn" data-act="decline" data-i="${i}">DISMISS</button></div></article>`;
+      const o = e.offer || {};
+      const asked = !!o.askedMore;
+      const note = o.improved ? 'IMPROVED OFFER: THEY ADDED ' + String(o.improved).toUpperCase() : asked ? 'THEIR BEST OFFER' : 'OFFER FROM';
+      const more = F.fn('TRADE', 'askForMore') ? `<button type="button" class="btn" data-act="more" data-i="${i}" ${asked || tradeClosed(st) ? 'disabled' : ''} title="Ask them to add a pick or a player">${asked ? 'ASKED FOR MORE' : 'ASK FOR MORE'}</button>` : '';
       return offerCard(st, tr, from, [`<button type="button" class="btn btn-gold" data-act="accept" data-i="${i}">ACCEPT</button>`,
+        more,
         `<button type="button" class="btn" data-act="decline" data-i="${i}">DECLINE</button>`,
-        `<button type="button" class="btn" data-act="counter" data-i="${i}">EDIT IN TRADE SCREEN</button>`]);
+        `<button type="button" class="btn" data-act="counter" data-i="${i}">EDIT IN TRADE SCREEN</button>`], note);
     }).join('');
-    app.innerHTML = `${UI.header('TRADES', 'Offers other teams have sent you during the season.')}
+    app.innerHTML = `${UI.header('TRADES', 'Offers other teams have sent you. Accept, ask for more (once per offer), or decline.')}
       ${tabs(st, 'offers')}
+      ${deadlineBar(st)}
       ${doneHtml()}
       ${cards ? `<div class="ft-offers">${cards}</div>` : UI.empty('NO OFFERS RIGHT NOW', 'Teams send offers during the season, and the sim stops when one arrives. To shop a player yourself, use the trading block.', '<div class="row-btns"><a class="btn btn-gold" href="#/trade/block">TRADING BLOCK</a></div>')}`;
     app.onchange = null;
@@ -557,6 +693,27 @@
       const act = b.getAttribute('data-act'), e = st.events[Number(b.getAttribute('data-i'))];
       if (!e) return;
       const tr = offerTrade(e);
+      if (act === 'more') {
+        const A = F.fn('TRADE', 'askForMore');
+        if (!A || !tr) return;
+        const from = tr.teams.find(a => a !== st.userTeam);
+        b.disabled = true; b.textContent = 'ASKING...';
+        await new Promise(r => setTimeout(r, 20));
+        const r = F.try('TRADE.askForMore', () => A.askForMore(st, tr, from), null);
+        if (!e.offer || typeof e.offer !== 'object') e.offer = { trade: tr };
+        e.offer.askedMore = true;
+        if (r && r.trade) {
+          if (e.offer.trade || !e.offer.give) e.offer.trade = r.trade; else e.offer = { trade: r.trade, askedMore: true, from };
+          if (e.trade) e.trade = r.trade;
+          e.offer.improved = r.addedText;
+          e.offer.text = r.text;
+          e.offer.message = 'The ' + UI.team(from).name + ' added ' + r.addedText + '. ' + r.text;
+          UI.toast(r.message || 'They added more.');
+        } else UI.toast('The ' + UI.team(from).name + ' say this is their best offer.');
+        await F.save();
+        renderOffers(app, st);
+        return;
+      }
       if (act === 'counter') {
         const from = tr.teams.find(a => a !== st.userTeam);
         resetDeal(st.userTeam, from);
@@ -584,6 +741,51 @@
     else st.events = st.events.filter(x => !x.resolved);
   }
 
+  // Deep links: #/trade/with/<ABBR>, #/trade/for/<playerId>, #/trade/pick/<year-round-original>
+  // (someone else's pick) and #/trade/give/<year-round-original>[/<ABBR>] (one of yours). Each one
+  // preloads the deal and returns the partner abbr, or null when the link is not one of these.
+  function deepLink(st, arg) {
+    const parts = arg.split('/'), kind = parts[0], val = parts[1];
+    if (['with', 'for', 'pick', 'give'].indexOf(kind) < 0 || !val) return null;
+    const user = st.userTeam;
+    const firstOther = () => (deal.partner && deal.partner !== user && st.teams[deal.partner]) ? deal.partner : Object.keys(st.teams).filter(a => a !== user).sort()[0];
+    let partner = null;
+    if (kind === 'with') {
+      partner = val.toUpperCase();
+      if (!st.teams[partner] || partner === user) return null;
+      if (deal.partner !== partner) resetDeal(user, partner);
+    } else if (kind === 'for') {
+      const p = st.players[val];
+      if (!p || p.retired || !st.teams[p.team]) { UI.toast((p ? p.name : 'That player') + ' is not on an NBA team.', 'error'); return null; }
+      if (p.team === user) {
+        partner = firstOther();
+        if (deal.partner !== partner) resetDeal(user, partner);
+        deal.sel[user].players.add(p.id);
+      } else {
+        partner = p.team;
+        resetDeal(user, partner);
+        deal.sel[partner].players.add(p.id);
+        deal.focus = { kind: 'player', id: p.id };
+      }
+    } else if (kind === 'pick') {
+      const holder = pickHolder(st, val);
+      if (!holder) { UI.toast('Nobody holds that pick any more.', 'error'); return null; }
+      if (holder === user) return deepLink(st, 'give/' + val);
+      partner = holder;
+      resetDeal(user, partner);
+      deal.sel[partner].picks.add(val);
+      deal.focus = { kind: 'pick', id: val };
+    } else if (kind === 'give') {
+      if (!pickObj(st, user, val)) { UI.toast('You no longer hold that pick.', 'error'); return null; }
+      const to = parts[2] && st.teams[parts[2].toUpperCase()] && parts[2].toUpperCase() !== user ? parts[2].toUpperCase() : firstOther();
+      partner = to;
+      if (deal.partner !== partner) resetDeal(user, partner);
+      deal.sel[user].picks.add(val);
+    }
+    deal.keep = true;
+    return partner;
+  }
+
   P.trade = function (app, arg) {
     app.onclick = null; app.onchange = null;
     const st = F.state();
@@ -592,6 +794,12 @@
     if (deal.user !== user) resetDeal(user, null);
     if (arg === 'block') { renderBlock(app, st); return; }
     if (arg === 'offers') { renderOffers(app, st); return; }
+    const link = deepLink(st, String(arg || ''));
+    if (link) {
+      // the deep link has done its job: the plain team route stays in the address bar
+      try { history.replaceState(null, '', location.pathname + location.search + '#/trade/' + link); } catch (e) { /* ignore */ }
+      arg = link;
+    }
     const want = arg && st.teams[arg.toUpperCase()] && arg.toUpperCase() !== user ? arg.toUpperCase() : null;
     let partner = want || deal.partner;
     if (!partner || !st.teams[partner] || partner === user) partner = Object.keys(st.teams).filter(a => a !== user).sort()[0];

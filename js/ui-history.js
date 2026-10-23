@@ -244,14 +244,24 @@
     const mode = parts[0] === 'transactions' ? 'transactions' : 'news';
     const tabs = fr.tabs('news', [['', 'NEWS FEED'], ['transactions', 'TRANSACTIONS']], mode === 'news' ? '' : 'transactions');
     if (mode === 'news') {
-      const items = byDate((s.news || []).filter(n => n && (n.headline || n.body)));
+      // Newest first in the order the UI first saw each story (js/ui-season.js), with a badge by type.
+      const all = (UI.newsList ? UI.newsList() : byDate((s.news || []).filter(n => n && (n.headline || n.body))))
+        .map(n => ({ n, info: UI.newsInfo ? UI.newsInfo(n) : { kind: 'league', label: 'NEWS', mine: false, big: false } }));
+      const kinds = (UI.NEWS_KINDS || []).map(k => k[0]);
+      const filter = parts[0] === 'mine' || kinds.includes(parts[0]) ? parts[0] : '';
+      const counts = { mine: 0 };
+      all.forEach(x => { counts[x.info.kind] = (counts[x.info.kind] || 0) + 1; if (x.info.mine) counts.mine++; });
+      const items = filter === 'mine' ? all.filter(x => x.info.mine) : filter ? all.filter(x => x.info.kind === filter) : all;
+      const chips = [['', 'ALL', all.length], ['mine', 'MY TEAM', counts.mine]].concat((UI.NEWS_KINDS || []).filter(k => counts[k[0]] || k[0] === filter).map(k => [k[0], k[1], counts[k[0]] || 0]));
+      const user = s.userTeam;
       let shown = 30;
-      const card = (n, i) => {
+      const card = ({ n, info }, i) => {
         const ps = (n.ids || []).map(id => playerOf(s, id)).filter(Boolean).slice(0, 4);
-        const teamTag = ps[0] && s.teams[ps[0].team] ? ps[0].team : null;
-        return `<article class="fr-news${i === 0 ? ' lead' : ''}">
-          ${ps.length ? `<div class="fr-news-hs n${ps.length}">${ps.map(p => `<a href="#/player/${encodeURIComponent(p.id)}" title="${esc(p.name)}">${fr.head(p)}</a>`).join('')}</div>` : `<div class="fr-news-hs none">${teamTag ? fr.logo(teamTag, 54) : '<span class="fr-news-mark">2K13</span>'}</div>`}
-          <div class="fr-news-body"><div class="fr-news-date">${esc(fr.dateOf(s, n.year, n.day))}</div>
+        const teamTag = info.mine && s.teams[user] ? user : ps[0] && s.teams[ps[0].team] ? ps[0].team : null;
+        const when = UI.newsDate ? UI.newsDate(n) : fr.dateOf(s, n.year, n.day);
+        return `<article class="fr-news nk-${esc(info.kind)}${i === 0 ? ' lead' : ''}${info.mine ? ' mine' : ''}${info.big ? ' big' : ''}">
+          ${ps.length ? `<div class="fr-news-hs n${ps.length}">${ps.map(p => `<a href="#/player/${encodeURIComponent(p.id)}" title="${esc(p.name)}">${fr.head(p)}</a>`).join('')}</div>` : `<div class="fr-news-hs none">${teamTag ? fr.logo(teamTag, 54) : `<span class="fr-news-mark">${info.kind === 'world' ? 'WORLD' : '2K13'}</span>`}</div>`}
+          <div class="fr-news-body"><div class="fr-news-date">${UI.newsBadge ? UI.newsBadge(info) : ''}${info.mine ? '<span class="nbadge nb-mine">YOUR TEAM</span>' : ''}<span>${esc(when)}</span></div>
             <h3 class="fr-news-h">${esc(n.headline || '')}</h3>
             ${n.body ? `<p>${esc(n.body)}</p>` : ''}
             ${ps.length ? `<div class="fr-news-tags">${ps.map(p => fr.plink(p)).join('<span>|</span>')}</div>` : ''}</div>
@@ -259,7 +269,9 @@
       };
       const draw = () => {
         app.innerHTML = `${fr.subnav('news')}${UI.header('NEWS', 'Around the league: headlines from trades, signings, injuries, awards and milestones.')}${tabs}
-          ${items.length ? `<div class="fr-feed">${items.slice(0, shown).map(card).join('')}</div>` : UI.empty('NO NEWS YET', 'Sim some days and the stories will start rolling in.', '')}
+          <div class="fr-chips nf-chips" role="group" aria-label="Filter news">${chips.map(([k, t, c]) =>
+            `<a href="#/news${k ? '/' + k : ''}" class="${k === filter ? 'on' : ''}${k === 'mine' ? ' nf-mine' : ''}">${esc(t)} <small>${c}</small></a>`).join('')}</div>
+          ${items.length ? `<div class="fr-feed">${items.slice(0, shown).map(card).join('')}</div>` : UI.empty(all.length ? 'NOTHING HERE YET' : 'NO NEWS YET', all.length ? 'No stories of this kind so far.' : 'Sim some days and the stories will start rolling in.', '')}
           ${items.length > shown ? '<div class="row-btns center"><button type="button" class="btn" id="frMore">MORE STORIES</button></div>' : ''}
           ${window.NEWS ? '' : `<p class="muted fr-small">The league's own headlines show here. The full news writer (<code>js/news.js</code>) is still being built, so stories are short for now.</p>`}`;
         const more = UI.$('#frMore', app);
@@ -294,12 +306,65 @@
     draw();
   };
 
+  // Award winners of finished seasons, as stories for the news feed (the award module writes none).
+  // Cached so each story keeps its place in the feed.
+  const extraCache = new Map();
+  const EXTRA_AWARDS = [[['mvp'], 'MVP'], [['finalsMvp', 'fmvp'], 'Finals MVP'], [['dpoy'], 'Defensive Player of the Year'], [['roy'], 'Rookie of the Year'], [['smoy', 'sixthMan', '6moy'], 'Sixth Man of the Year'], [['mip'], 'Most Improved Player']];
+  UI.newsExtras = function (s) {
+    const out = [];
+    ((s && s.history && s.history.seasons) || []).forEach(h => {
+      EXTRA_AWARDS.forEach(([keys, label]) => {
+        const w = keys[0] === 'finalsMvp' && h.finalsMvp != null ? ref(s, h.finalsMvp) : winnerOf(s, h.awards, keys);
+        if (!w || !w.name || w.name === '?') return;
+        const k = h.year + ':' + keys[0] + ':' + w.name;
+        let it = extraCache.get(k);
+        if (!it) {
+          const line = w.kind === 'player' ? lineFor(s, w.id, h.year) : '';
+          it = { year: h.year, day: null, type: 'award', derived: true, headline: w.name + ' named ' + fr.seasonLabel(h.year) + ' ' + label, body: line ? line + '.' : '', ids: w.kind === 'player' ? [w.id] : [] };
+          extraCache.set(k, it);
+        }
+        out.push(it);
+      });
+    });
+    return out;
+  };
+
+  // The All-Star rosters: this season's once they are named, else the last ones on record.
+  function allStarsView(s) {
+    const cur = s.allStars && s.allStars.East ? s.allStars : null;
+    const past = ((s.history && s.history.seasons) || []).filter(h => h.allStars && h.allStars.East).slice(-1)[0];
+    const as = cur || (past && past.allStars);
+    if (!as) return UI.empty('NOT NAMED YET', 'The All-Star rosters are named at the All-Star break in February. Check back then.', '<div class="row-btns center"><a class="btn" href="#/season">BACK TO THE HUB</a></div>');
+    const user = s.userTeam;
+    const card = (id, starter) => {
+      const p = playerOf(s, id);
+      if (!p) return '';
+      const st = s.season && s.year === as.year && s.season.playerStats ? s.season.playerStats[id] : null;
+      const pg = st && st.g ? `${f1(st.pts / st.g)} PTS | ${f1((st.reb != null ? st.reb : (st.oreb || 0) + (st.dreb || 0)) / st.g)} REB | ${f1(st.ast / st.g)} AST` : lineFor(s, id, as.year);
+      return `<a class="as-p${p.team === user ? ' mine' : ''}" href="#/player/${encodeURIComponent(p.id)}"><span class="as-hs">${fr.head(p)}</span><span class="as-n"><b>${esc(p.name)}</b><small>${esc(p.team)} | ${esc(p.pos || '')}${starter ? ' | STARTER' : ''}</small><small>${esc(pg)}</small></span>${fr.logo(p.team, 28)}</a>`;
+    };
+    const conf = c => {
+      const x = as[c];
+      if (!x) return '';
+      return `<section class="as-conf">${UI.header(c.toUpperCase(), '')}<div class="as-group"><div class="as-gk">STARTERS</div>${(x.starters || []).map(id => card(id, true)).join('')}</div>
+        <div class="as-group"><div class="as-gk">RESERVES</div>${(x.reserves || []).map(id => card(id, false)).join('')}</div></section>`;
+    };
+    const mine = ['East', 'West'].reduce((n, c) => n + ((as[c] && (as[c].starters || []).concat(as[c].reserves || [])) || []).filter(id => playerOf(s, id) && playerOf(s, id).team === user).length, 0);
+    return `<div class="note">${esc(fr.seasonLabel(as.year))} All-Stars${as.format ? '. Format: ' + esc(as.format) : ''}. ${mine ? mine + ' of your players made it.' : 'None of your players made it.'}</div>
+      <div class="two-col">${conf('East')}${conf('West')}</div>`;
+  }
+
   // =====================================================================
   // AWARDS
   // =====================================================================
-  P.awards = function (app) {
+  P.awards = function (app, arg) {
     const s = fr.state();
     if (!s) { fr.needState(app, 'awards'); return; }
+    const atabs = fr.tabs('awards', [['', 'AWARD RACE'], ['allstars', 'ALL-STARS']], arg === 'allstars' ? 'allstars' : '');
+    if (arg === 'allstars') {
+      app.innerHTML = `${fr.subnav('awards')}${UI.header('ALL-STARS', 'Voted by the fans and the coaches at the break.')}${atabs}${allStarsView(s)}`;
+      return;
+    }
     const A = window.AWARDS;
     let race = '';
     if (A && typeof A.season === 'function') {
@@ -325,7 +390,7 @@
     }).join('');
     const H = prior(s);
     const mv = H ? priorMvps(H) : [];
-    app.innerHTML = `${fr.subnav('awards')}${UI.header('AWARD RACE', esc(fr.seasonLabel(s.year)) + ' season')}${race}
+    app.innerHTML = `${fr.subnav('awards')}${UI.header('AWARD RACE', esc(fr.seasonLabel(s.year)) + ' season')}${atabs}${race}
       ${UI.header('PAST WINNERS', 'Seasons played in this Association.')}
       ${past ? `<div class="tscroll"><table class="stats fr-past"><thead><tr><th class="l">SEASON</th>${cols.map((k, i) => `<th class="l${i > 1 ? ' hide-sm' : ''}">${SHORT[k[0]]}</th>`).join('')}</tr></thead><tbody>${past}</tbody></table></div>`
         : '<p class="muted">No seasons finished yet. Winners are added at the end of every season.</p>'}

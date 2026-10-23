@@ -14,7 +14,7 @@
   const POS = ['ALL', 'PG', 'SG', 'SF', 'PF', 'C'];
   const PAGE = 40;
   const OPEN_PHASES = { preseason: 1, regular: 1, resign: 1, freeAgency: 1, training: 1 };
-  const view = { tab: null, tabPhase: null, pos: 'ALL', sort: 'ovr', shown: PAGE, open: null, afford: false, q: '', cut: null, auto: null };
+  const view = { tab: null, tabPhase: null, pos: 'ALL', sort: 'ovr', shown: PAGE, open: null, afford: false, need: false, q: '', cut: null, auto: null };
   const offers = {};    // playerId -> { amount, years, opt }
   const replies = {};   // playerId -> { accepted, message }
   let zone = null;      // the open offer panel's zone (FA.offerZone)
@@ -92,7 +92,7 @@
         <div class="fa-stat ${cs.overTax ? 'bad' : ''}"><small>TAX LINE</small><b>${money(cs.tax)}</b>
           <span>${cs.overTax ? money(-cs.taxRoom) + ' over: paying tax' : money(cs.taxRoom) + ' below'}</span></div>
         <div class="fa-stat ${over ? 'bad' : ''}"><small>ROSTER</small><b>${cs.roster} / ${cs.maxRoster}</b>
-          <span>${over ? (cs.roster - cs.maxRoster) + ' over 15: your lowest players are waived when free agency ends' : cs.openSpots + (cs.openSpots === 1 ? ' open spot' : ' open spots')}${cs.signLimit > cs.maxRoster && !over ? ' (up to ' + cs.signLimit + ' this summer)' : ''}${cs.twoWaySlots ? ' | two-way ' + cs.twoWay + '/' + cs.twoWaySlots : ''}</span></div>
+          <span>${over ? (cs.roster - cs.maxRoster) + ' over 15: you pick who to waive before free agency ends' : cs.openSpots + (cs.openSpots === 1 ? ' open spot' : ' open spots')}${cs.signLimit > cs.maxRoster && !over ? ' (up to ' + cs.signLimit + ' this summer)' : ''}${cs.twoWaySlots ? ' | two-way ' + cs.twoWay + '/' + cs.twoWaySlots : ''}</span></div>
       </div>
       <div class="fa-meter" role="img" aria-label="Payroll ${esc(money(cs.payroll))}, cap ${esc(money(cs.cap))}, tax ${esc(money(cs.tax))}">
         <div class="fa-meter-fill ${cs.overTax ? 'tax' : cs.overCap ? 'over' : ''}" style="width:${pct(cs.payroll)}%"></div>
@@ -203,13 +203,14 @@
     if (m.own) tags.push('<span class="badge badge-gold">YOUR FREE AGENT</span>');
     else if (m.rights) tags.push(`<span class="badge ft-badge" title="${esc(m.rights)} holds his Bird rights">${esc(m.rights)}${m.rfa ? ' | RFA' : ''}</span>`);
     if (m.offerSheet) tags.push(`<span class="badge badge-dim">OFFER SHEET: ${esc(m.offerSheet)}</span>`);
-    const meta = `${esc(p.pos || '')} | ${esc(p.age || '-')} YRS | ${UI.fmtHt(p.ht)} ${UI.injuryBadge(p)} ${tags.join(' ')}`;
+    const meta = `${esc(posLabel(p))} | ${esc(p.age || '-')} YRS | ${UI.fmtHt(p.ht)} ${UI.injuryBadge(p)} ${tags.join(' ')}`;
     const open = view.open === p.id;
     const canOpen = phaseOpen && !m.locked && !m.offerSheet;
+    const fit = m.fit ? `<span class="fa-fitb fit-${esc(m.fit.key)}" title="${esc(m.fit.pos)}: ${esc(m.fit.label)}">${esc(m.fit.label.toUpperCase())}${m.fit.key !== 'none' ? ' <small>' + esc(m.fit.pos) + '</small>' : ''}</span>` : '';
     return `<article class="fa-row${open ? ' open' : ''}" data-row="${esc(p.id)}">
       <a class="fa-who" href="#/player/${esc(p.id)}">${F.mini(p, { meta })}</a>
       <div class="fa-ask"><small>ASKING</small><b>${money(m.ask)}</b><span>${yrs(m.years)}</span></div>
-      <div class="fa-fit"><span class="fa-tag ${FIT_CLASS[m.afford] || ''}" title="${m.via ? 'Estimated price about ' + esc(m2(m.estimate)) : 'More than any route you have'}">${esc(m.label)}</span>
+      <div class="fa-fit">${fit}<span class="fa-tag ${FIT_CLASS[m.afford] || ''}" title="${m.via ? 'Estimated price about ' + esc(m2(m.estimate)) : 'More than any route you have'}">${esc(m.label)}</span>
         ${m.locked ? `<small>${esc(m.locked.split(':')[0])}</small>` : ''}</div>
       <div class="fa-act">${open ? '' : `<button type="button" class="btn btn-small${m.affordable && canOpen ? ' btn-gold' : ''}" data-act="open" data-id="${esc(p.id)}" ${canOpen ? '' : 'disabled'}>${m.own ? 'RE-SIGN' : 'MAKE OFFER'}</button>`}</div>
       ${replyHtml(p.id)}
@@ -276,8 +277,28 @@
   }
 
   // ---------- free agents tab ----------
+  // Team needs (FA.teamNeeds) and each free agent's fit, worked out once per list.
+  const posLabel = p => (window.POSITIONS && typeof window.POSITIONS.label === 'function' ? F.try('POSITIONS.label', () => window.POSITIONS.label(p), null) : null) || p.pos || '';
+  function addFit(st, info) {
+    if (info.needs !== undefined) return info.needs;
+    info.needs = FAX().teamNeeds ? F.try('FA.teamNeeds', () => FAX().teamNeeds(st, st.userTeam), null) : null;
+    info.players.forEach(m => { m.fit = info.needs ? F.try('FA.fitFor', () => FAX().fitFor(info.needs, st.players[m.id]), null) : null; });
+    return info.needs;
+  }
+  function needsPanel(st, needs) {
+    if (!needs) return '';
+    const cols = ['PG', 'SG', 'SF', 'PF', 'C'].map(P => {
+      const x = needs.pos[P];
+      const rows = x.players.slice(0, 4).map(r => `<li><a href="#/player/${esc(r.id)}">${esc(r.name)}</a><span><b class="${UI.ovrClass(r.ovr)}">${r.ovr}</b> ${esc(r.age || '-')}y ${r.years ? r.years + (r.years === 1 ? ' yr' : ' yrs') : 'FA'}</span></li>`).join('');
+      const tag = x.status === 'need' ? '<em class="fa-need">NEED</em>' : x.status === 'thin' ? '<em class="fa-thin">THIN</em>' : '';
+      return `<div class="fa-npos fa-n-${x.status}"><h4>${P} ${tag}</h4><ul>${rows || '<li class="muted">Nobody</li>'}</ul></div>`;
+    }).join('');
+    return `<section class="fa-needs" aria-label="Team needs"><div class="fa-needs-h"><b>TEAM NEEDS</b><span>${esc(needs.gaps.join(' '))}</span></div><div class="fa-needs-grid">${cols}</div></section>`;
+  }
   function sortedPool(st, info) {
+    addFit(st, info);
     let list = info.players.filter(m => !m.own || st.phase !== 'resign');
+    if (view.need) list = list.filter(m => m.fit && m.fit.fillsNeed);
     if (view.pos !== 'ALL') list = list.filter(m => String(st.players[m.id].pos || '').toUpperCase().split(/[-/ ]/).indexOf(view.pos) >= 0);
     if (view.afford) list = list.filter(m => m.affordable && !m.locked);
     if (view.q) { const q = view.q.toLowerCase(); list = list.filter(m => String(st.players[m.id].name).toLowerCase().indexOf(q) >= 0); }
@@ -286,25 +307,27 @@
       ovr: (a, b) => (pl(b.id).ovr || 0) - (pl(a.id).ovr || 0) || (pl(a.id).age || 0) - (pl(b.id).age || 0),
       age: (a, b) => (pl(a.id).age || 0) - (pl(b.id).age || 0) || (pl(b.id).ovr || 0) - (pl(a.id).ovr || 0),
       ask: (a, b) => b.ask - a.ask,
-      cheap: (a, b) => a.estimate - b.estimate || (pl(b.id).ovr || 0) - (pl(a.id).ovr || 0)
+      cheap: (a, b) => a.estimate - b.estimate || (pl(b.id).ovr || 0) - (pl(a.id).ovr || 0),
+      fit: (a, b) => ((b.fit ? b.fit.rank : 0) - (a.fit ? a.fit.rank : 0)) || (pl(b.id).ovr || 0) - (pl(a.id).ovr || 0)
     };
     return list.sort(sorters[view.sort] || sorters.ovr);
   }
   function listHtml(st, info, phaseOpen) {
     const pool = sortedPool(st, info);
     const shown = pool.slice(0, view.shown);
-    return `<p class="fa-count">${pool.length} ${pool.length === 1 ? 'player' : 'players'}${view.afford ? ' you can afford' : ''}${view.pos !== 'ALL' ? ' at ' + view.pos : ''}</p>
+    return `<p class="fa-count">${pool.length} ${pool.length === 1 ? 'player' : 'players'}${view.afford ? ' you can afford' : ''}${view.need ? ' who fill a need' : ''}${view.pos !== 'ALL' ? ' at ' + view.pos : ''}</p>
       <div class="fa-list">${shown.length ? shown.map(m => faRow(st, st.players[m.id], m, phaseOpen)).join('') : `<p class="muted">${view.afford ? 'Nobody fits your cap right now. Clear room in Team Salary, or wait: asking prices drop as free agency goes on.' : 'No free agents here.'}</p>`}</div>
       ${pool.length > shown.length ? `<div class="row-btns center"><button type="button" class="btn" data-act="more">SHOW MORE (${pool.length - shown.length} LEFT)</button></div>` : ''}`;
   }
   function faTab(st, info, phaseOpen) {
     const recent = (st.transactions || []).filter(t => t && t.type === 'sign' && t.year === st.year).slice(-8).reverse();
-    return `<div class="fa-filters">
+    return `${needsPanel(st, addFit(st, info))}<div class="fa-filters">
         <nav class="tabs" aria-label="Position">${POS.map(x => `<a href="#/fa" data-act="pos" data-pos="${x}" class="${view.pos === x ? 'on' : ''}">${x}</a>`).join('')}</nav>
         <label class="fa-check"><input type="checkbox" data-act="afford" ${view.afford ? 'checked' : ''}> Only players I can afford</label>
+        <label class="fa-check"><input type="checkbox" data-act="need" ${view.need ? 'checked' : ''}> Fills a need</label>
         <label class="field fa-search"><span>SEARCH</span><input type="search" data-act="q" value="${esc(view.q)}" placeholder="Player name"></label>
         <label class="field fa-sort"><span>SORT BY</span><select data-act="sort">
-          ${[['ovr', 'Overall'], ['age', 'Youngest'], ['ask', 'Asking salary'], ['cheap', 'Cheapest']].map(([k, l]) => `<option value="${k}" ${view.sort === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+          ${[['ovr', 'Overall'], ['fit', 'Fit'], ['age', 'Youngest'], ['ask', 'Asking salary'], ['cheap', 'Cheapest']].map(([k, l]) => `<option value="${k}" ${view.sort === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       </div>
       <div id="fa-listbox">${listHtml(st, info, phaseOpen)}</div>
       ${recent.length ? `<h3 class="fa-h3">LATEST SIGNINGS</h3><ul class="fa-news">${recent.map(t => `<li>${esc(t.text || '')}</li>`).join('')}</ul>` : ''}`;
@@ -450,7 +473,11 @@
         UI.toast((st.fa && st.fa.stage === 'done' ? 'Free agency is over. ' : 'Day ' + (st.fa ? st.fa.day : '') + ' done. ') + (signed > 0 ? signed + ' signing' + (signed > 1 ? 's' : '') + ' around the league.' : 'No signings.'));
         if (view.open && !(st.players[view.open] && st.players[view.open].team === 'FA')) view.open = null;
         render(app, st);
-        if (UI.pendingEvents && UI.pendingEvents() && UI.showEvents) UI.showEvents();
+        // a decision stopped the days (a free agent pitch, an offer sheet, the roster at the end):
+        // show it, and "sim to the end" carries on once it is answered
+        if (UI.pendingEvents && UI.pendingEvents() && UI.showEvents) {
+          UI.showEvents({ then: act === 'simall' ? () => { const again = app.querySelector('[data-act="simall"]'); if (again && location.hash === '#/fa') again.click(); } : null });
+        }
       }
       else if (act === 'cut') {
         if (view.cut !== id) { view.cut = id; render(app, st); return; }
@@ -482,6 +509,7 @@
       const t = ev.target;
       if (t.matches('[data-act="sort"]')) { view.sort = t.value; refreshList(app, st); }
       else if (t.matches('[data-act="afford"]')) { view.afford = t.checked; view.shown = PAGE; refreshList(app, st); }
+      else if (t.matches('[data-act="need"]')) { view.need = t.checked; view.shown = PAGE; refreshList(app, st); }
       else if (t.matches('[data-role="opt"]')) {
         const panel = t.closest('.fa-offer'), id = panel && panel.getAttribute('data-id');
         if (id && offers[id]) { offers[id].opt = t.value; render(app, st); }

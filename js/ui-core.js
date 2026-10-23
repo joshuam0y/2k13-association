@@ -166,7 +166,8 @@
     const c = p && p.contract;
     if (!c) return '';
     const bits = [];
-    if (c.option && c.option.type) bits.push((c.option.type === 'eto' ? 'ETO' : c.option.type === 'player' ? 'Player option' : 'Team option') + ' ' + UI.seasonLabel(c.option.year));
+    const opts = Array.isArray(c.options) && c.options.length ? c.options : c.option ? [c.option] : [];
+    opts.forEach(o => { if (o && o.type) bits.push((o.type === 'eto' ? 'ETO' : o.type === 'player' ? 'Player option' : 'Team option') + ' ' + UI.seasonLabel(o.year)); });
     if (c.rookie) bits.push('Rookie scale');
     if (c.twoWay) bits.push('Two-way');
     return bits.join(', ');

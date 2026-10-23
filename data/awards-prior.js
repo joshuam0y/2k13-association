@@ -175,6 +175,21 @@ window.AWARDS_PRIOR = {
 "flynnjo01":[{"year":2010,"award":"All-Rookie 2nd Team"}],
 "bellra01":[{"year":2007,"award":"All-Defensive 1st Team"},{"year":2008,"award":"All-Defensive 2nd Team"}],
 "fryech01":[{"year":2006,"award":"All-Rookie 1st Team"}],
-"bynuman01":[{"year":2009,"award":"Champion"},{"year":2010,"award":"Champion"},{"year":2012,"award":"All-NBA 2nd Team"},{"year":2012,"award":"All-Star"}]
+"bynuman01":[{"year":2009,"award":"Champion"},{"year":2010,"award":"Champion"},{"year":2012,"award":"All-NBA 2nd Team"},{"year":2012,"award":"All-Star"}],
+"childjo01":[{"year":2005,"award":"All-Rookie 2nd Team"}],
+"milicda01":[{"year":2004,"award":"Champion"}],
+"curryed01":[{"year":2012,"award":"Champion"}],
+"harrite01":[{"year":2012,"award":"Champion"}],
+"wallara01":[{"year":1996,"award":"All-Rookie 2nd Team"},{"year":2000,"award":"All-Star"},{"year":2001,"award":"All-Star"},{"year":2004,"award":"Champion"},{"year":2006,"award":"All-Star"},{"year":2008,"award":"All-Star"}],
+"barroea01":[{"year":2006,"award":"Champion"}],
+"fishede01":[{"year":2000,"award":"Champion"},{"year":2001,"award":"Champion"},{"year":2002,"award":"Champion"},{"year":2009,"award":"Champion"},{"year":2010,"award":"Champion"}],
+"howarjo01":[{"year":2004,"award":"All-Rookie 2nd Team"},{"year":2007,"award":"All-Star"}],
+"mcgratr01":[{"year":2001,"award":"MIP"},{"year":2001,"award":"All-NBA 2nd Team"},{"year":2001,"award":"All-Star"},{"year":2002,"award":"All-NBA 1st Team"},{"year":2002,"award":"All-Star"},{"year":2003,"award":"Scoring Champion"},{"year":2003,"award":"All-NBA 1st Team"},{"year":2003,"award":"All-Star"},{"year":2004,"award":"Scoring Champion"},{"year":2004,"award":"All-NBA 2nd Team"},{"year":2004,"award":"All-Star"},{"year":2005,"award":"All-NBA 3rd Team"},{"year":2005,"award":"All-Star"},{"year":2006,"award":"All-Star"},{"year":2007,"award":"All-NBA 2nd Team"},{"year":2007,"award":"All-Star"},{"year":2008,"award":"All-NBA 3rd Team"}],
+"bibbymi01":[{"year":1999,"award":"All-Rookie 1st Team"}],
+"okurme01":[{"year":2004,"award":"Champion"},{"year":2007,"award":"All-Star"}],
+"simmobo01":[{"year":2005,"award":"MIP"}],
+"magloja01":[{"year":2004,"award":"All-Star"}],
+"howarju01":[{"year":1995,"award":"All-Rookie 2nd Team"},{"year":1996,"award":"All-NBA 3rd Team"},{"year":1996,"award":"All-Star"},{"year":2012,"award":"Champion"}],
+"reddmi01":[{"year":2004,"award":"All-NBA 3rd Team"},{"year":2004,"award":"All-Star"}]
 };
 if (typeof module !== "undefined" && module.exports) module.exports = window.AWARDS_PRIOR;

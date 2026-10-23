@@ -187,7 +187,7 @@ row('pot >= 85 share, ages 22+', share(realAll.filter(p => p.age >= 22), p => p.
   row(pos + ' weight mean (lb)', mean(r.map(p => p.wt)), mean(g.map(p => p.wt)), 4, 1);
   row(pos + ' weight sd (lb)', sd(r.map(p => p.wt)), sd(g.map(p => p.wt)), 3, 1);
 });
-row('stashed overseas share', share(realAll, p => p.arrivalYear > p.draftYear + 1), share(genAll, p => p.arrivalYear > p.draftYear + 1), 0.03, 3);
+row('stashed overseas share, drafted only', share(realAll.filter(p => !p.undrafted), p => p.arrivalYear > p.draftYear + 1), share(genAll, p => p.arrivalYear > p.draftYear + 1), 0.03, 3);
 row('international share', NaN, share(genAll, p => p.country !== 'USA'), 0, 3, 'info: no country in real data, target 0.24');
 // Attributes: attr minus ovr by position, mean and spread, over all 22 keys
 ['PG', 'SG', 'SF', 'PF', 'C'].forEach(pos => {

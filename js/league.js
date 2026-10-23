@@ -13,15 +13,31 @@
   function rngFor(state) { state.rngSeed = (state.rngSeed * 1103515245 + 12345) % 2147483647; return mulberry32(state.rngSeed); }
   function clone(x) { return JSON.parse(JSON.stringify(x)); }
 
-  var KEY_DATES = { tradeDeadline: "02-21", allStar: "02-17" };
+  // Real trade deadline and All-Star Sunday by season-ending year (month-day); trade.js owns the deadline table
+  var ALL_STAR = { 2013: "02-17", 2014: "02-16", 2015: "02-15", 2016: "02-14", 2017: "02-19", 2018: "02-18", 2019: "02-17",
+    2020: "02-16", 2021: "03-07", 2022: "02-20", 2023: "02-19", 2024: "02-18", 2025: "02-16", 2026: "02-15" };
+  var KEY_DATES = {
+    tradeDeadline: function (year) { return W.TRADE && W.TRADE.deadlineMD ? W.TRADE.deadlineMD(year) : "02-21"; },
+    allStar: function (year) { return ALL_STAR[year] || "02-15"; }
+  };
+  function keyDate(how, year) { var f = KEY_DATES[how]; return f ? f(year) : null; }
   var OFFSEASON = ["draftLottery", "draft", "resign", "freeAgency", "training"];
 
   // ---------- building a new league ----------
   function contractFor(p, year) {
-    var end = Math.max(year, p.contractEnd || year), salaries = [];
-    for (var y = year; y <= end; y++) salaries.push({ year: y, amount: Math.round((p.salary || 0) * Math.pow(1.045, y - year)) });
+    var end = Math.max(year, p.contractEnd || year), salaries = [], real = {};
+    // real year-by-year salaries from the league file when known; missing years grow 4.5% from the last known one
+    (p.salaries || []).forEach(function (s) { if (s && s.year != null && s.amount > 0) real[s.year] = s.amount; });
+    var last = real[year] || p.salary || 0;
+    for (var y = year; y <= end; y++) {
+      if (real[y]) last = real[y]; else if (y > year) last = Math.round(last * 1.045);
+      salaries.push({ year: y, amount: last });
+    }
+    // real player, team and early termination options (year = the season the option covers)
+    var options = (p.options || []).filter(function (o) { return o && o.year > year && o.year <= end && /^(player|team|eto)$/.test(o.type); })
+      .map(function (o) { return { year: o.year, type: o.type }; }).sort(function (a, b) { return a.year - b.year; });
     var rookie = (p.age || 30) <= 24 && end - year <= 3 && (p.salary || 0) < 6000000;
-    return { salaries: salaries, option: null, rookie: rookie, twoWay: false, signedYear: year - 1 };
+    return { salaries: salaries, option: options[0] || null, options: options, rookie: rookie, twoWay: false, signedYear: year - 1 };
   }
   function personalityFor(id, rng) {
     var real = W.PERSONALITIES && W.PERSONALITIES[id];
@@ -41,6 +57,7 @@
     base.players.forEach(function (p0) {
       var p = clone(p0);
       p.contract = p.team === "FA" ? null : contractFor(p0, state.year);
+      delete p.salaries; delete p.options; // folded into p.contract
       // real NBA seasons before 2012-13 (0 for true rookies), and the latest run of seasons with his team
       var prior = W.CAREER_PRIOR ? (W.CAREER_PRIOR[p.id] || []) : null;
       if (prior) {
@@ -49,6 +66,10 @@
         p.yearsPro = Object.keys(seasonsPlayed).length;
         for (var k = prior.length - 1; k >= 0 && prior[k] && prior[k].team === p.team; k--) run++;
         p.yearsWithTeam = Math.min(p.yearsPro, run);
+        // league-file players with no career-prior entry (the extra October 2012 free agents) carry their own count
+        if (!prior.length && p0.yearsPro > 0) { p.yearsPro = p0.yearsPro; p.yearsWithTeam = 0; }
+      } else if (p0.yearsPro != null) {
+        p.yearsPro = p0.yearsPro; p.yearsWithTeam = 0;
       } else {
         p.yearsPro = Math.max(0, (p.age || 22) - 21);
         p.yearsWithTeam = p.contract && p.contract.rookie ? Math.min(p.yearsPro, 3) : 2;
@@ -216,19 +237,22 @@
     var injBefore = clone(state.season.injuries || {});
     var res = E.simDays(state.season, days, rng, leagueView(state)) || {};
     state.day = state.season.day || state.day + days;
-    // injuries to the user's players become events
+    // injuries to the user's players become events, and so do returns (see userInjuries below)
     var inj = state.season.injuries || {};
     for (var id in inj) if (!injBefore[id] && state.players[id] && state.players[id].team === state.userTeam && inj[id].games > 0) {
-      state.events.push({ type: "injury", playerId: id, text: state.players[id].name + ": " + inj[id].type + ", out about " + inj[id].games + " games" });
+      var iev = injuryEvent(state, id, inj[id]);
+      if (autoOn(state, "injuryAlerts")) state.events.push(iev);
+      else { state.notices = state.notices || []; state.notices.push({ text: iev.text, ids: [id] }); }   // GM Assistant: no stop
       news(state, state.players[id].name + " injured", inj[id].type + ", expected to miss about " + inj[id].games + " games.", [id]);
     }
+    safe("injuryReturns", function () { injuryReturns(state, injBefore, inj); });
     if (mod("TRADE") && state.season.phase === "regular") {
       safe("aiTrades", function () { W.TRADE.aiTrades(state, rng); });
-      if (rng() < 0.08 * days) safe("aiOffers", function () { (W.TRADE.aiOffers(state, rng) || []).forEach(function (o) { state.events.push({ type: "tradeOffer", offer: o }); }); });
+      if (rng() < 0.08 * days) safe("aiOffers", function () { (W.TRADE.aiOffers(state, rng) || []).forEach(function (o) { state.events.push({ type: "tradeOffer", offer: o, quiet: !autoOn(state, "tradeOffers") }); }); });
     }
     if (mod("MOOD") && rng() < days / 30) safe("mood", function () { W.MOOD.update(state); });
     if (mod("PROG") && rng() < days / 30) safe("inSeason", function () { W.PROG.inSeason(state, rng); });
-    if (mod("GLEAGUE") && days >= 7) safe("gleague", function () { W.GLEAGUE.simWeek(state, rng); });
+    if (mod("GLEAGUE")) safe("gleague", function () { if (typeof W.GLEAGUE.sync === "function") W.GLEAGUE.sync(state, rng); else if (days >= 7) W.GLEAGUE.simWeek(state, rng); });
     // real-world headlines (elections, COVID, other sports) for the dates just simmed
     var now = currentDate(state);
     if (now && mod("NEWS") && W.NEWS.worldFor) safe("worldNews", function () {
@@ -243,7 +267,7 @@
     });
     if (now) state.lastNewsDate = now;
     // All-Star selections at the break, once a season
-    if (now && state.allStarsYear !== state.year && now >= state.year + "-" + KEY_DATES.allStar && now < state.year + "-07-01" && mod("AWARDS") && W.AWARDS.allStars) {
+    if (now && state.allStarsYear !== state.year && now >= state.year + "-" + keyDate("allStar", state.year) && now < state.year + "-07-01" && mod("AWARDS") && W.AWARDS.allStars) {
       state.allStarsYear = state.year;
       safe("allStars", function () {
         var as = W.AWARDS.allStars(state);
@@ -268,18 +292,119 @@
       if (before === "done") { endSeason(state); return { stopped: "seasonOver" }; }
       if (how === "endRegular" && before !== "regular") return { stopped: "endRegular" };
       var date = currentDate(state);
-      if (KEY_DATES[how] && date && date.slice(5) >= KEY_DATES[how] && date.slice(5) < "07-01") return { stopped: how };
+      if (KEY_DATES[how] && date && date.slice(5) >= keyDate(how, state.year) && date.slice(5) < "07-01") return { stopped: how };
       simChunk(state, 1);
       if (target !== null && --target <= 0) return { stopped: "days" };
       if (how === "endPlayoffs" && state.season.phase === "done") { endSeason(state); return { stopped: "seasonOver" }; }
     }
     return { stopped: "limit" };
   }
-  function pendingEvents(state) { return state.events.some(function (e) { return !e.resolved; }); }
+  // quiet events (trade offers with the GM Assistant's popups off) wait in their tab and never stop the sim
+  function pendingEvents(state) { return state.events.some(function (e) { return !e.resolved && !e.quiet; }); }
+  // GM Assistant toggles (state.settings.auto, set on the settings page); a missing key is its default
+  var AUTO_DEFAULTS = { rotation: true, roster: false, resign: true, draft: true, tradeOffers: true, injuryAlerts: true, confirmations: true };
+  function autoOn(state, key) {
+    var S = W.AUTO_SETTINGS, all = S && typeof S.get === "function" ? safe("autoSettings", function () { return S.get(state); }, null) : null;
+    var a = all || (state.settings && state.settings.auto);
+    return a && typeof a[key] === "boolean" ? a[key] : AUTO_DEFAULTS[key];
+  }
   function resolveEvent(state, index, answer) {
     var e = state.events[index]; if (!e) return;
     e.resolved = true; e.answer = answer;
     if (e.type === "tradeOffer" && answer === "accept" && mod("TRADE")) safe("execute", function () { W.TRADE.execute(state, e.offer.trade || e.offer); });
+    // roster popups (sign one, waive some, a free agent pitch) and contract decisions go to FA
+    if (e.type === "roster" && mod("FA") && W.FA.resolveRosterEvent) e.result = safe("rosterEvent", function () { return W.FA.resolveRosterEvent(state, e, answer); }, null);
+    if (e.type === "contractDecision" && mod("FA") && W.FA.applyDecision) e.result = safe("contractDecision", function () { return W.FA.applyDecision(state, e, answer); }, null);
+    if (e.type === "injury" || e.type === "injuryReturn") safe("injuryAnswer", function () { injuryAnswer(state, e, answer); });
+  }
+
+  // ---------- injuries and the user's manual rotation ----------
+  // A manual rotation is team.rotation (ids, the first five start) plus team.minutes; the engine reads
+  // state.season.lineups[abbr] and never plays a hurt player (his minutes go to the others). When a
+  // manual starter gets hurt, the best healthy player at his position takes his slot and minutes (they
+  // swap, kept in team.injurySwaps); when he is back the user can swap them back. Auto rotations only
+  // get a short notice (state.notices), since auto already puts him back.
+  function isManual(t) { return !!(t && Array.isArray(t.rotation) && t.rotation.length >= 5); }
+  function posGroup(pos) {
+    var p = String(pos || "").toUpperCase().split(/[-\/ ]/)[0];
+    return p === "PG" || p === "SG" || p === "G" ? "G" : p === "PF" || p === "C" || p === "FC" ? "B" : "W";
+  }
+  function syncLineup(state, abbr) {
+    var t = state.teams[abbr];
+    if (!state.season) return;
+    state.season.lineups = state.season.lineups || {};
+    state.season.lineups[abbr] = { starters: t.rotation.slice(0, 5), minutes: Object.assign({}, t.minutes || {}) };
+  }
+  function swapSlots(t, a, b) {
+    var r = t.rotation, ia = r.indexOf(a), ib = r.indexOf(b);
+    if (ia < 0) return;
+    if (ib < 0) { r[ia] = b; r.push(a); } else { r[ia] = b; r[ib] = a; }
+    t.minutes = t.minutes || {};
+    var ma = t.minutes[a], mb = t.minutes[b];
+    t.minutes[a] = mb != null ? mb : 0; t.minutes[b] = ma != null ? ma : 0;
+  }
+  function injuryName(type) {
+    var t = String(type || "");
+    if (!t || /^(injury|out for the season|recovering|playing overseas)/i.test(t)) return "injury";
+    return "his " + (/^[A-Z][a-z]/.test(t) ? t.charAt(0).toLowerCase() + t.slice(1) : t);
+  }
+  function injuryEvent(state, id, e) {
+    var p = state.players[id], t = state.teams[state.userTeam], rep = null;
+    var slot = isManual(t) ? t.rotation.indexOf(id) : -1;
+    if (slot >= 0 && slot < 5) {
+      var inj = state.season.injuries || {}, starters = t.rotation.slice(0, 5), out = t.inactive || [];
+      var cands = leagueView(state).players.filter(function (q) {
+        return q.team === state.userTeam && q.id !== id && starters.indexOf(q.id) < 0 && out.indexOf(q.id) < 0 && !(inj[q.id] && inj[q.id].games > 0);
+      }).sort(function (a, b) { return (b.ovr || 0) - (a.ovr || 0); });
+      rep = cands.filter(function (q) { return posGroup(q.pos) === posGroup(p.pos); })[0] || cands[0] || null;
+      if (rep) {
+        swapSlots(t, id, rep.id);
+        t.injurySwaps = t.injurySwaps || {};
+        t.injurySwaps[id] = { slot: slot, with: rep.id };
+        syncLineup(state, state.userTeam);
+      }
+    }
+    var text = p.name + " is out about " + e.games + (e.games === 1 ? " game" : " games") + " (" + injuryName(e.type).replace(/^his /, "") + ")." +
+      (rep ? " " + rep.name + " takes his spot in the starting lineup." : "");
+    var ev = { type: "injury", playerId: id, text: text, replacedBy: rep ? rep.id : null, options: [{ value: "ok", label: "OK" }] };
+    if (isManual(t)) ev.options.push({ value: "rotation", label: "Open rotation" });
+    return ev;
+  }
+  function injuryReturns(state, before, now) {
+    var abbr = state.userTeam, t = state.teams[abbr];
+    for (var id in before) {
+      var p = state.players[id];
+      if (!p || p.retired || p.team !== abbr || !(before[id].games > 0) || (now[id] && now[id].games > 0)) continue;
+      var sw = t.injurySwaps && t.injurySwaps[id];
+      var back = p.name + " is back from " + injuryName(before[id].type) + ".";
+      if (isManual(t) && sw && t.rotation.indexOf(id) >= 5 && !autoOn(state, "injuryAlerts")) {
+        // no popups wanted: he goes straight back into his starting spot
+        var ev0 = { type: "injuryReturn", playerId: id };
+        injuryAnswer(state, ev0, "restore");
+        state.notices = state.notices || [];
+        state.notices.push({ text: back + " He is back in the starting lineup.", ids: [id] });
+      } else if (isManual(t) && sw && t.rotation.indexOf(id) >= 5) {
+        // until the user answers he plays bench minutes (his stand-in may have had none)
+        t.minutes = t.minutes || {};
+        if (!(t.minutes[id] > 0)) { t.minutes[id] = 12; syncLineup(state, abbr); }
+        state.events.push({ type: "injuryReturn", playerId: id, text: back + " Adjust the lineup?",
+          options: [{ value: "restore", label: "Put him back in the starting lineup" }, { value: "keep", label: "Keep the current lineup" }, { value: "rotation", label: "Open rotation" }] });
+      } else {
+        if (sw) delete t.injurySwaps[id];
+        state.notices = state.notices || [];
+        state.notices.push({ text: back + (isManual(t) ? "" : " Your coach put him back in the rotation."), ids: [id] });
+      }
+    }
+  }
+  function injuryAnswer(state, e, answer) {
+    var t = state.teams[state.userTeam], id = e.playerId;
+    if (answer === "rotation") e.navigate = "#/manage";
+    if (e.type !== "injuryReturn" || !t || !t.injurySwaps || !t.injurySwaps[id]) return;
+    var sw = t.injurySwaps[id];
+    delete t.injurySwaps[id];
+    if (answer !== "restore" || !isManual(t) || state.players[id].team !== state.userTeam) return;
+    var occ = t.rotation[sw.slot];
+    if (occ && occ !== id && t.rotation.indexOf(id) >= 0) { swapSlots(t, occ, id); syncLineup(state, state.userTeam); }
   }
   function clearResolved(state) { state.events = state.events.filter(function (e) { return !e.resolved; }); }
 
@@ -416,6 +541,10 @@
             if (!r || r.ok === false) break;
           }
           if (state.draft) state.draft.userOnClock = null;
+          if (opts.auto && state.draft && Array.isArray(state.draft.order) && mod("FA") && W.FA.userLog) state.draft.order.forEach(function (sl) {
+            var dp = sl.player && state.players[sl.player];
+            if (sl.team === state.userTeam && dp && !sl.logged) { sl.logged = true; W.FA.userLog(state, "Drafted " + dp.name + " (" + dp.pos + ") with pick " + sl.overall, [dp.id]); }
+          });
           D.signRookies(state);
           return null;
         }, null);
@@ -439,9 +568,13 @@
       offseasonTrades(state, rng, 2);
       state.phase = "freeAgency"; state.faDay = 0;
     } else if (phase === "freeAgency") {
+      // the user's decisions (good free agents, a short or long roster, offer sheets) stop the sim; the
+      // next call carries on. opts.auto: he chose to sim past free agency, the front office decides.
+      if (mod("FA") && W.FA.setSimMode && (opts.auto || !state.fa || !state.fa.simMode)) safe("simMode", function () { W.FA.setSimMode(state, opts.auto ? "auto" : "ask"); });
       if (mod("FA")) for (var d = 0; d < 60; d++) {
         if (d >= 30 && (!state.fa || state.fa.stage === "done")) break;
-        safe("faDay", function () { W.FA.simDay(state, rng); });
+        var day = safe("faDay", function () { return W.FA.simDay(state, rng); }, null);
+        if (day && day.waiting) return finishStep(state, { phase: state.phase, step: i, stopped: "event" });
         if (d % 6 === 5) offseasonTrades(state, rng, 1);
       }
       // offseason progression, before training camp; the before and after numbers go to state.progressReport
@@ -449,6 +582,9 @@
       if (state.progressReport) { state.progressReport.team = state.userTeam; state.progressReport.seen = false; }
       state.phase = "training";
     } else if (phase === "training") {
+      // the user's roster must be 13 to 15 before the season: he is asked (or the AI fixes it when he simmed past free agency)
+      if (mod("FA") && W.FA.preseasonCheck && safe("preseasonCheck", function () { return W.FA.preseasonCheck(state, opts); }, false))
+        return finishStep(state, { phase: state.phase, step: i, stopped: "event" });
       if (mod("PROG")) safe("progression", function () { W.PROG.offseason(state, rng); }); // no-op if it already ran
       offseasonTrades(state, rng, 1);
       if (mod("COACH") && W.COACH.offseason) safe("coaches", function () { W.COACH.offseason(state, rng); });
@@ -461,7 +597,12 @@
       startSeason(state);
       news(state, "The " + (state.year - 1) + "-" + String(state.year).slice(2) + " season begins", "", []);
     }
-    return { phase: state.phase, step: i };
+    return finishStep(state, { phase: state.phase, step: i });
+  }
+  // what the AI did for the user in this step goes into one "While you simmed" popup
+  function finishStep(state, out) {
+    if (mod("FA") && W.FA.flushSummary) safe("summary", function () { W.FA.flushSummary(state); });
+    return out;
   }
 
   // Brings a loaded save up to date: current logos and names, world news without duplicates,
@@ -475,9 +616,9 @@
     return state;
   }
 
-  var API = { newLeague: newLeague, advance: advance, nextPhase: nextPhase, leagueView: leagueView, resolveEvent: resolveEvent,
+  var API = { KEY_DATES: KEY_DATES, newLeague: newLeague, advance: advance, nextPhase: nextPhase, leagueView: leagueView, resolveEvent: resolveEvent,
     clearResolved: clearResolved, currentDate: currentDate, pendingEvents: pendingEvents, OFFSEASON: OFFSEASON,
-    userPicksLeft: userPicksLeft, applyBrands: applyBrands, migrate: migrate, rosterRules: rosterRules, rosterOf: rosterOf, enforceRosters: enforceRosters, assignPicks: assignPicks };
+    userPicksLeft: userPicksLeft, handlesContractDecisions: true, autoOn: autoOn, applyBrands: applyBrands, migrate: migrate, rosterRules: rosterRules, rosterOf: rosterOf, enforceRosters: enforceRosters, assignPicks: assignPicks };
   W.LEAGUE = API;
   if (typeof module !== "undefined") module.exports = API;
 })(typeof window !== "undefined" ? window : globalThis);

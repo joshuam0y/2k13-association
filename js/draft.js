@@ -559,7 +559,20 @@
     if (!state.draft.order) {
       loadClass(state, year);
       var slots = order(state, year);
+      // protected picks in their last protected year that are extinguished: no pick entry is made for them
+      var gone = {};
+      slots.forEach(function (s) {
+        if (!s.protectedFor) return;
+        var f = findPick(state, s.year, s.round, s.original), pr = f && f.entry.protection;
+        if (pr && pr.extinguish && (pr.until == null || s.year >= +pr.until)) gone[s.overall] = true;
+      });
       applyRollovers(state, slots);
+      // draft night trades: a protected pick that rolled over stays home tonight as the original team's
+      // pick, so it gets a pick entry it can trade (entries for this draft are cleared in finish())
+      slots.forEach(function (s) {
+        if (gone[s.overall] || findPick(state, year, s.round, s.original) || !isTeam(state, s.team)) return;
+        (teams(state)[s.team].picks = teams(state)[s.team].picks || []).push({ year: year, round: s.round, original: s.original, protection: null });
+      });
       state.draft.order = slots;
       state.draft.index = 0;
       state.draft.done = false;
@@ -605,6 +618,17 @@
   // aiPick(state, abbr) makes the current pick for abbr. With a slot (from order()), it makes that
   // pick; any earlier picks still open (for example the user's, when the caller skipped it) are
   // made first by the same logic, so the draft always runs in order.
+  // Draft night trades between AI teams (js/trade.js, when loaded): checked once per AI pick on the
+  // clock. A trade moves the slot to its new owner, who then makes the pick. Off with
+  // state.settings.draftTrades === false.
+  function draftNightTrade(state, d, slot) {
+    var T = root && root.TRADE;
+    if (!T || typeof T.draftNightTrade !== 'function' || slot.dntChecked || slot.team === state.userTeam) return;
+    if (state.settings && state.settings.draftTrades === false) return;
+    slot.dntChecked = true;
+    try { T.draftNightTrade(state, seeded(state, 'dnt' + d.year + ':' + slot.overall)); } catch (e) { /* no trade */ }
+  }
+
   function aiPick(state, abbr, slotArg) {
     var d = startDraft(state);
     var slot = current(state);
@@ -621,6 +645,7 @@
       slot = current(state);
       if (!slot) return { ok: false, reason: 'The draft is over.' };
     }
+    draftNightTrade(state, d, slot);
     abbr = slot.team;
     var id = aiChoice(state, abbr, d.year);
     if (!id) return { ok: false, reason: 'No prospects left.' };
@@ -681,7 +706,13 @@
       p.contract = emptyContract();
       p.draft = null;
       p.undraftedFA = true;
-      if (p.undrafted) named.push(p.name);
+      // a real undrafted player who first played in the NBA later (overseas first) stays out of
+      // free agency until his arrival season
+      if (p.arrivalYear != null && +p.arrivalYear > d.year + 1) {
+        p.stashedUntil = +p.arrivalYear;
+        p.injury = { type: 'Playing overseas', games: 999 };
+      }
+      if (p.undrafted && !p.stashedUntil) named.push(p.name);
     });
     if (leftover.length) addTx(state, d.year, 'sign', leftover.length + ' undrafted players became free agents' + (named.length ? ', including ' + named.slice(0, 6).join(', ') : '') + '.', leftover);
     var explicit = ownPicksExplicit(state);

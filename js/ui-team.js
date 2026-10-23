@@ -128,6 +128,13 @@
   };
   // put five starters in PG, SG, SF, PF, C order
   const slotOrder = list => list.slice().sort((a, b) => posRank(a.pos) - posRank(b.pos) || (b.ovr || 0) - (a.ovr || 0));
+  // primary and secondary position (js/positions.js), "PG/SG"
+  const POSN = () => window.POSITIONS || null;
+  const posOf = p => (POSN() ? POSN().of(p) : { pos: primaryPos(p && p.pos), pos2: null });
+  const posLabel = p => (POSN() ? POSN().label(p) : String((p && p.pos) || '-'));
+  fr.posLabel = posLabel;
+  const TOTAL_MIN = 240;
+  const sumMin = rot => rot.active.reduce((a, id) => a + (Number(rot.minutes[id]) || 0), 0);
 
   // The lineup the engine picks on its own: the best five of the top eight healthy players,
   // with at least one guard and one big, then the bench by overall. Injured players sit.
@@ -227,9 +234,83 @@
   };
 
   // ---------- rotation (2K13 style: five slots, bench, inactive) ----------
+  // Leaving the rotation page with fewer than 240 minutes set: a 2K style prompt.
+  // rotationTab fills in guard.check (current total, or null when there is nothing to guard)
+  // and guard.autoFill. Link clicks are stopped before they change the hash; back, forward
+  // and typed URLs are caught on hashchange and put back.
+  const guard = { body: null, check: null, autoFill: null, pass: false, open: false };
+  const ROT_HASH = /^#\/(manage|myteam|gm)\/?$/;
+  function guardActive() {
+    if (guard.pass || guard.open || !guard.body || !guard.body.isConnected || typeof guard.check !== 'function') return null;
+    const t = guard.check();
+    return t != null && t < TOTAL_MIN ? t : null;
+  }
+  function leavePrompt(total, go) {
+    guard.open = true;
+    const wrap = document.createElement('div');
+    wrap.className = 'frr-leave';
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-modal', 'true');
+    wrap.setAttribute('aria-labelledby', 'frLeaveT');
+    wrap.innerHTML = `<div class="frr-leave-box">
+      <div class="frr-leave-k">ROTATION</div>
+      <div class="frr-leave-t" id="frLeaveT">Only ${total} of ${TOTAL_MIN} minutes are set.</div>
+      <p>${TOTAL_MIN - total} minutes are not given to anyone. Auto-fill hands them to your bench in order.</p>
+      <div class="frr-leave-btns">
+        <button type="button" class="btn btn-gold" data-leave="fill">AUTO-FILL THE REST</button>
+        <button type="button" class="btn" data-leave="go">LEAVE ANYWAY</button>
+        <button type="button" class="btn" data-leave="stay">STAY</button>
+      </div></div>`;
+    document.body.appendChild(wrap);
+    const close = () => { guard.open = false; wrap.remove(); document.removeEventListener('keydown', onKey, true); };
+    const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
+    document.addEventListener('keydown', onKey, true);
+    wrap.addEventListener('click', e => {
+      const b = e.target.closest('[data-leave]');
+      if (!b) { if (e.target === wrap) close(); return; }
+      const k = b.getAttribute('data-leave');
+      close();
+      if (k === 'stay') return;
+      if (k === 'fill' && guard.autoFill) { guard.autoFill(); UI.toast && UI.toast('Bench minutes filled: 240 of 240 set.'); }
+      guard.pass = true;
+      setTimeout(() => { guard.pass = false; }, 800);
+      go();
+    });
+    const first = wrap.querySelector('[data-leave="fill"]');
+    if (first) first.focus();
+  }
+  const sameRot = href => ROT_HASH.test(href);
+  if (typeof document !== 'undefined') {
+    document.addEventListener('click', e => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+      if (!a || a.target === '_blank') return;
+      const href = a.getAttribute('href') || '';
+      if (href.charAt(0) !== '#' || sameRot(href) || !ROT_HASH.test(location.hash)) return;
+      const t = guardActive();
+      if (t == null) return;
+      e.preventDefault(); e.stopPropagation();
+      leavePrompt(t, () => { location.hash = href; });
+    }, true);
+    window.addEventListener('hashchange', e => {
+      if (guard.pass) { guard.pass = false; return; }
+      const from = String(e.oldURL || '').replace(/^[^#]*/, '');
+      if (!ROT_HASH.test(from) || ROT_HASH.test(location.hash)) return;
+      const t = guardActive();
+      if (t == null) return;
+      e.stopImmediatePropagation();
+      const to = location.hash;
+      try { history.replaceState(null, '', from); } catch (x) { /* ignore */ }
+      leavePrompt(t, () => { location.hash = to; });
+    }, true);
+  }
+
   function rotationTab(body, s, team) {
     let rot = currentRotation(s, team);
     let picked = null;          // { list: 'active'|'inactive', i } waiting for a second click
+    guard.body = body; guard.check = null; guard.autoFill = null;
+    // older saves may hold more than 240 minutes: trim them now
+    if (!rot.auto && sumMin(rot) > TOTAL_MIN) { trimTo240(); applyRotation(s, rot); }
 
     const where = id => rot.active.indexOf(id) >= 0 ? { list: 'active', i: rot.active.indexOf(id) } : { list: 'inactive', i: rot.inactive.indexOf(id) };
     const idAt = loc => (loc.list === 'active' ? rot.active : rot.inactive)[loc.i];
@@ -239,20 +320,24 @@
       if (!p) return '';
       const starter = list === 'active' && i < 5;
       const label = list === 'inactive' ? 'INA' : starter ? SLOTS[i] : (i + 1) + 'TH';
-      const off = starter && primaryPos(p.pos) !== SLOTS[i];
+      const po = posOf(p);
+      const sec = starter && po.pos !== SLOTS[i] && po.pos2 === SLOTS[i];
+      const off = starter && po.pos !== SLOTS[i] && !sec;
       const inj = injuryOf(s, p);
       const sel = picked && picked.list === list && picked.i === i;
       const min = Math.round(rot.minutes[id] || 0);
+      const cap = maxFor(id);
       const minCell = list === 'inactive' ? '<span class="frr-dnp">INACTIVE</span>'
-        : `<span class="frr-min"><button type="button" class="frr-step" data-step="-2" data-id="${esc(id)}" aria-label="Fewer minutes for ${esc(p.name)}">&minus;</button>
-            <input type="number" inputmode="numeric" min="0" max="48" step="1" value="${min}" data-min="${esc(id)}" aria-label="Minutes for ${esc(p.name)}">
-            <button type="button" class="frr-step" data-step="2" data-id="${esc(id)}" aria-label="More minutes for ${esc(p.name)}">+</button></span>`;
+        : `<span class="frr-min"><button type="button" class="frr-step" data-step="-2" data-id="${esc(id)}" aria-label="Fewer minutes for ${esc(p.name)}"${min <= 0 ? ' disabled' : ''}>&minus;</button>
+            <input type="number" inputmode="numeric" min="0" max="${cap}" step="1" value="${min}" data-min="${esc(id)}" aria-label="Minutes for ${esc(p.name)}">
+            <button type="button" class="frr-step" data-step="2" data-id="${esc(id)}" aria-label="More minutes for ${esc(p.name)}"${min >= cap ? ' disabled' : ''}>+</button></span>`;
+      const posTitle = sec ? 'Playing his secondary position' : off ? 'Playing out of position' : 'Primary/secondary position';
       return `<li class="frr-row${starter ? ' starter' : ''}${list === 'inactive' ? ' ina' : ''}${sel ? ' sel' : ''}${inj ? ' hurt' : ''}" draggable="true" data-list="${list}" data-i="${i}" data-id="${esc(id)}" tabindex="0" aria-label="${esc(label + ' ' + p.name)}">
         <span class="frr-slot">${label}</span>
         <span class="frr-hs">${fr.head(p)}</span>
         <span class="frr-main"><span class="frr-name">${esc(p.name)}</span>
           <span class="frr-meta">${esc(p.age || '-')} yrs ${fr.badges(p)}${inj && starter && !rot.auto ? ' <span class="loss">Hurt: the best healthy player starts</span>' : ''}</span></span>
-        <span class="frr-pos${off ? ' off' : ''}" title="${off ? 'Playing out of position' : 'Position'}">${esc(p.pos || '-')}</span>
+        <span class="frr-pos${off ? ' off' : sec ? ' sec' : ''}" title="${posTitle}">${esc(posLabel(p))}</span>
         ${fr.ovr(p)}
         ${minCell}
       </li>`;
@@ -260,9 +345,58 @@
     function dropRow(list, label) {
       return `<li class="frr-row frr-drop" data-drop="${list}">${label}</li>`;
     }
+    // the most minutes a player can get: 48, and never past 240 for the team
+    function maxFor(id) {
+      const m = Math.round(Number(rot.minutes[id]) || 0);
+      return Math.max(0, Math.min(48, m + (TOTAL_MIN - sumMin(rot))));
+    }
+    function totalHtml(total) {
+      const left = TOTAL_MIN - total;
+      return `<div class="fr-mintotal ${left === 0 ? 'ok' : 'open'}" id="frMinTotal"><b>${total}</b> / ${TOTAL_MIN} MIN${left > 0 && !rot.auto ? ` <small>${left} LEFT</small>` : ''}</div>`;
+    }
+    // Position coverage: minutes at PG, SG, SF, PF and C against the 48 each one needs
+    function coverageHtml(minutes) {
+      const PS = POSN();
+      if (!PS || typeof PS.coverage !== 'function') return '';
+      const players = rot.active.map(id => rot.byId.get(id)).filter(Boolean);
+      const cv = PS.coverage(players, minutes);
+      const need = cv.need;
+      const bars = SLOTS.map(k => {
+        const c = cv.by[k];
+        const scale = Math.max(need * 1.5, c.min);
+        const w1 = c.primary / scale * 100, w2 = c.secondary / scale * 100;
+        const st = c.min < need - 4 ? 'thin' : c.min > need + 8 ? 'deep' : 'ok';
+        const who = c.players.map(x => `${x.name} ${x.min}${x.via === 'secondary' ? ' (2nd)' : ''}`).join(', ');
+        return `<div class="frc-row ${st}" title="${esc(who || 'Nobody')}">
+          <span class="frc-pos">${k}</span>
+          <span class="frc-track"><i class="p" style="width:${w1.toFixed(1)}%"></i><i class="s" style="width:${w2.toFixed(1)}%"></i><em style="left:${(need / scale * 100).toFixed(1)}%"></em></span>
+          <span class="frc-num"><b>${c.min}</b> / ${need}</span>
+          <span class="frc-who">${c.players.length ? c.players.slice(0, 3).map(x => `${esc(x.name.split(' ').slice(-1)[0])} ${x.min}${x.via === 'secondary' ? '*' : ''}`).join(', ') + (c.players.length > 3 ? ' +' + (c.players.length - 3) : '') : '<span class="loss">Nobody</span>'}</span>
+        </div>`;
+      }).join('');
+      const thin = SLOTS.filter(k => cv.by[k].min < need - 4);
+      const deep = SLOTS.filter(k => cv.by[k].min > need + 8);
+      const notes = thin.map(k => `<li class="bad"><b>Thin at ${k}:</b> only ${cv.by[k].min} of ${need} minutes. Consider trading for a ${k}.</li>`);
+      deep.forEach(k => notes.push(`<li class="deep"><b>Crowded at ${k}:</b> ${cv.by[k].min} minutes for ${need}. A ${k} could be your trade bait.</li>`));
+      if (!notes.length) notes.push(`<li class="good"><b>Every position is covered.</b> All five spots have close to ${need} minutes.</li>`);
+      return `<div class="frc-head"><span>POSITION COVERAGE</span><small>Minutes at each position. A player's minutes count at his primary position, then fill a short position he can play as his secondary (*).</small></div>
+        <div class="frc-bars">${bars}</div>
+        <ul class="frc-notes">${notes.join('')}</ul>
+        <div class="frc-key"><span><i class="p"></i>Primary</span><span><i class="s"></i>Secondary</span><span><em></em>48 needed</span></div>`;
+    }
+    // live preview while a minutes box is being typed in
+    function preview(id, v) {
+      const tmp = Object.assign({}, rot.minutes);
+      tmp[id] = Math.max(0, Math.min(maxFor(id), Math.round(Number(v) || 0)));
+      const cov = UI.$('#frCov', body);
+      if (cov) cov.innerHTML = coverageHtml(tmp);
+      const tot = UI.$('#frMinTotal', body);
+      if (tot) tot.outerHTML = totalHtml(rot.active.reduce((a, x) => a + (Number(tmp[x]) || 0), 0));
+    }
     function render() {
-      const total = rot.active.reduce((a, id) => a + (Number(rot.minutes[id]) || 0), 0);
+      const total = sumMin(rot);
       const starters = rot.active.slice(0, 5), bench = rot.active.slice(5);
+      guard.body = body;
       const hint = picked ? `<b>${esc(rot.byId.get(idAt(picked)).name)}</b> picked. Click another player to swap them, or click him again to cancel.`
         : 'Click two players to swap them, or drag one onto another.';
       body.innerHTML = `
@@ -276,12 +410,12 @@
             : '<b>MANUAL ROTATION.</b> Your starters and minutes are used every game. Hurt starters are replaced by the best healthy player.'}</div>
         </div>
         <div class="frr-bar">
-          <div class="fr-mintotal ${Math.abs(total - 240) <= 2 ? 'ok' : 'off'}"><b>${total}</b> / 240 MIN</div>
+          ${totalHtml(total)}
           <span class="frr-hint">${hint}</span>
           ${rot.auto ? '' : `<span class="fr-rot-btns"><button type="button" class="btn btn-small" id="frAutoMin">DEFAULT MINUTES</button>
             <button type="button" class="btn btn-small" id="frBalance">FIT TO 240</button></span>`}
         </div>
-        ${!rot.auto && Math.abs(total - 240) > 2 ? '<div class="note">A game has 240 player minutes (5 spots x 48). The engine scales your targets to fit, or use FIT TO 240.</div>' : ''}
+        <section class="frc" id="frCov" aria-label="Position coverage">${coverageHtml(rot.minutes)}</section>
         <div class="frr-head" aria-hidden="true"><span>SLOT</span><span></span><span>PLAYER</span><span>POS</span><span>OVR</span><span>MIN</span></div>
         <div class="frr-sec">STARTERS</div>
         <ol class="frr-list">${starters.map((id, i) => row(id, 'active', i)).join('')}</ol>
@@ -296,6 +430,7 @@
     function commit(msg) {
       const wasAuto = rot.auto;
       rot.auto = false;
+      trimTo240();
       applyRotation(s, rot);
       render();
       if (wasAuto && UI.toast) UI.toast('Manual rotation on. ' + (msg || ''));
@@ -326,9 +461,35 @@
       swap(a, loc);
     }
     function setMin(id, v) {
-      rot.minutes[id] = Math.max(0, Math.min(48, Math.round(Number(v) || 0)));
+      const want = Math.max(0, Math.round(Number(v) || 0));
+      const cap = maxFor(id);
+      rot.minutes[id] = Math.min(cap, want);
+      commit();
+      if (want > cap && UI.toast) UI.toast(cap >= 48 ? 'A player can play at most 48 minutes.' : 'Only 240 minutes in a game: ' + cap + ' is the most he can get right now.');
+    }
+    // never more than 240: take the extra off the end of the bench first
+    function trimTo240() {
+      let over = sumMin(rot) - TOTAL_MIN;
+      for (let i = rot.active.length - 1; over > 0 && i >= 0; i--) {
+        const id = rot.active[i], m = Number(rot.minutes[id]) || 0;
+        const cut = Math.min(m, over);
+        rot.minutes[id] = m - cut; over -= cut;
+      }
+    }
+    // give the missing minutes to the bench in order (then the starters if the bench is full)
+    function autoFill() {
+      let left = TOTAL_MIN - sumMin(rot);
+      const order = rot.active.slice(5).concat(rot.active.slice(0, 5));
+      order.forEach(id => {
+        if (left <= 0) return;
+        const m = Math.round(Number(rot.minutes[id]) || 0);
+        const add = Math.min(48 - m, left);
+        if (add > 0) { rot.minutes[id] = m + add; left -= add; }
+      });
       commit();
     }
+    guard.check = () => (!rot.auto && body.isConnected ? sumMin(rot) : null);
+    guard.autoFill = autoFill;
     function bind() {
       UI.$$('[data-mode]', body).forEach(b => b.addEventListener('click', () => {
         const mode = b.getAttribute('data-mode');
@@ -364,7 +525,15 @@
         const a = picked; picked = null;
         moveTo(a, li.getAttribute('data-drop') === 'inactive' ? 'inactive' : 'active');
       }));
-      UI.$$('[data-min]', body).forEach(inp => inp.addEventListener('change', () => setMin(inp.getAttribute('data-min'), inp.value)));
+      UI.$$('[data-min]', body).forEach(inp => {
+        inp.addEventListener('input', () => {
+          const id = inp.getAttribute('data-min'), cap = maxFor(id);
+          if (Number(inp.value) > cap) inp.value = cap;
+          preview(id, inp.value);
+        });
+        inp.addEventListener('change', () => setMin(inp.getAttribute('data-min'), inp.value));
+        inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
+      });
       UI.$$('[data-step]', body).forEach(b => b.addEventListener('click', () => {
         const id = b.getAttribute('data-id');
         setMin(id, (rot.minutes[id] || 0) + Number(b.getAttribute('data-step')));
@@ -556,6 +725,8 @@
     return { ok: r !== false };
   }
   function gleagueTab(body, s) {
+    // The D-League / G League screen has its own page now
+    if (UI.pages && typeof UI.pages.gleague === 'function') { location.hash = '#/gleague'; return; }
     const G = window.GLEAGUE;
     const all = userRoster(s, { withGleague: true }).sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
     const free = p => (p.yearsPro || 0) < 3 || !!(p.contract && p.contract.twoWay);

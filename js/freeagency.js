@@ -744,8 +744,8 @@
     var sheet = { id: p.id, from: abbr, rightsTeam: r.team, salaries: salaries, via: via, day: fa.day, expires: fa.day + 3, option: (opts && opts.option) || null };
     fa.offerSheets.push(sheet);
     log(state, 'sign', p.name + ' signs an offer sheet with ' + abbr + ' (' + salaries.length + ' years, ' + money(salaries.reduce(function (a, s) { return a + s.amount; }, 0)) + '); ' + r.team + ' has 3 days to match', [p.id]);
-    if (r.team === state.userTeam) {
-      state.events.push({ type: 'contractDecision', kind: 'offerSheet', playerId: p.id, team: r.team, from: abbr, salaries: salaries, expiresDay: sheet.expires,
+    if (r.team === state.userTeam && !isAuto(state)) {
+      state.events.push({ type: 'contractDecision', kind: 'offerSheet', stopSim: true, playerId: p.id, team: r.team, from: abbr, salaries: salaries, expiresDay: sheet.expires,
         options: [{ value: 'match', label: 'Match: keep him' }, { value: 'letgo', label: 'Let him go' }],
         text: p.name + ' signed an offer sheet with ' + abbr + ': ' + salaries.length + (salaries.length === 1 ? ' year' : ' years') + ' at ' + money(salaries[0].amount) + ' a year. Match it to keep him, or let him go. You have 3 days.' });
     }
@@ -1031,7 +1031,14 @@
     var fa = state.fa;
     fa.offerSheets.slice().forEach(function (s) {
       if (s.rightsTeam === state.userTeam) {
-        if (fa.day >= s.expires || force) { var r0 = resolveSheet(state, s, false, ctx); if (r0) out.signings.push(r0); }
+        // The user answers his own offer sheets in a popup (the sim waits for it). Simming past free
+        // agency, or a popup closed without an answer, lets the front office decide; it goes in the summary.
+        if (openEventFor(state, 'offerSheet', s.id)) return;
+        var keep = userWantsToMatch(state, s, ctx), nm = state.players[s.id].name;
+        var r0 = resolveSheet(state, s, keep, ctx);
+        if (r0) out.signings.push(r0);
+        userLog(state, keep ? 'Matched the offer sheet for ' + nm + ' (' + yrsText(s.salaries.length) + ', ' + money(s.salaries[0].amount) + ' a year)'
+          : 'Let ' + nm + ' go: did not match his offer sheet from ' + s.from, [s.id]);
         return;
       }
       if (fa.day <= s.day && !force) return;
@@ -1043,7 +1050,8 @@
   // Late free agency: teams under 13 fill with minimum deals; players take them as camp nears.
   function fillRosters(state, ctx, rng, out, final) {
     var fa = state.fa;
-    var teams = Object.keys(state.teams).filter(function (a) { return final || a !== state.userTeam; });
+    // The user's team is never filled here: he is asked (userRosterGate) or, simming past, autoFixUser does it.
+    var teams = Object.keys(state.teams).filter(function (a) { return a !== state.userTeam; });
     var pending = {};
     fa.offerSheets.forEach(function (s) { pending[s.id] = 1; });
     var pool = freeAgents(state).filter(function (p) { return !pending[p.id]; });
@@ -1086,6 +1094,7 @@
   function trimRosters(state, ctx, out) {
     var Y = contractYear(state);
     Object.keys(state.teams).forEach(function (abbr) {
+      if (abbr === state.userTeam) return;   // the user picks who to waive (userRosterGate)
       while (ctx.count[abbr] > MAX_ROSTER) {
         var std = (ctx.rosters[abbr] || []).filter(function (p) { return !(p.contract && p.contract.twoWay) && !isStashed(p); });
         // Release the player with the least guaranteed money left, worst overall first.
@@ -1134,18 +1143,25 @@
     });
   }
 
-  function finish(state, ctx, rng, out) {
+  // The last day, part one (safe to run twice): offer sheets are settled, unsigned restricted free agents
+  // take their qualifying offers and the last good players sign with AI teams.
+  function finishSheets(state, ctx, rng, out) {
     var fa = state.fa, Y = contractYear(state);
     processOfferSheets(state, ctx, rng, out, true);
-    // Unsigned restricted free agents take their qualifying offers.
     Object.keys(fa.rights).forEach(function (id) {
       var r = fa.rights[id], p = state.players[id];
       if (!r.rfa || p.team !== 'FA' || !isTeam(state, r.team)) return;
       var rec = sign(state, r.team, p, [{ year: Y, amount: r.qo }], 'qo', {}, ctx);
       rec.qualifyingOffer = true;
       out.signings.push(rec);
+      if (r.team === state.userTeam) userLog(state, p.name + ' signed your qualifying offer (1 year, ' + money(r.qo) + ')', [id]);
     });
-    lastCall(state, ctx, rng, out, 80);
+    lastCall(state, ctx, rng, out, 80);   // good players still unsigned find AI teams before the user's roster check
+  }
+
+  // Part two, once the user's roster is between 13 and 15.
+  function finish(state, ctx, rng, out) {
+    var fa = state.fa;
     fillRosters(state, ctx, rng, out, true);
     trimRosters(state, ctx, out);
     signTwoWays(state, ctx, rng, out);
@@ -1154,21 +1170,33 @@
     out.done = true;
   }
 
+  // One free agency day. Returns out.waiting (and plays no day) while a decision for the user is open:
+  // a good free agent he can afford, his own offer sheet, or a roster that is short or too long at the end.
   function simDay(state, rng) {
     if (!state.fa || state.fa.year <= state.year && state.fa.stage === 'done') startOffseason(state);
     var fa = state.fa;
     rng = rng || seededRng(state);
     var out = { day: fa.day, signings: [], offerSheets: [], released: [], retired: [], done: false };
     if (fa.stage === 'done') { out.done = true; return out; }
+    if (userWaiting(state, rng)) { out.waiting = true; return out; }
     if (fa.stage === 'resign') out.signings = out.signings.concat(openFreeAgency(state, rng));
-    fa.day++;
-    out.day = fa.day;
-    var ctx = buildCtx(state);
-    processOfferSheets(state, ctx, rng, out, false);
-    aiSignings(state, ctx, rng, out);
-    if (fa.day >= 8) lastCall(state, ctx, rng, out, 85);
-    if (fa.day >= 20) fillRosters(state, ctx, rng, out, false);
-    if (fa.day >= fa.length) finish(state, ctx, rng, out);
+    if (fa.day < fa.length) {
+      // before the day is played, so the user gets the first shot at the player
+      if (maybePitch(state)) { out.waiting = true; return out; }
+      fa.day++;
+      out.day = fa.day;
+      var ctx = buildCtx(state);
+      processOfferSheets(state, ctx, rng, out, false);
+      aiSignings(state, ctx, rng, out);
+      if (fa.day >= 8) lastCall(state, ctx, rng, out, 85);
+      if (fa.day >= 20) fillRosters(state, ctx, rng, out, false);
+      if (fa.day < fa.length) return out;
+      if (userWaiting(state, rng)) { out.waiting = true; return out; }
+    }
+    var ctx2 = buildCtx(state);
+    finishSheets(state, ctx2, rng, out);
+    if (userRosterGate(state, ctx2, rng)) { out.waiting = true; return out; }
+    finish(state, ctx2, rng, out);
     return out;
   }
 
@@ -1176,7 +1204,11 @@
   function finishFreeAgency(state, rng) {
     var all = [];
     var guard = 0;
-    while (state.fa && state.fa.stage !== 'done' && guard++ < 100) all.push(simDay(state, rng));
+    while (state.fa && state.fa.stage !== 'done' && guard++ < 100) {
+      var o = simDay(state, rng);
+      all.push(o);
+      if (o.waiting) break;   // a decision for the user: the caller shows it, then calls finish again
+    }
     return all;
   }
 
@@ -1414,6 +1446,11 @@
       rec.salaries = sal;
       rec.total = amount * n;
     });
+    // Simming past re-signing (not the Auto re-sign button): what was done goes in the summary popup.
+    if (!ai && !opts.force) out.forEach(function (x) {
+      if (x.action === 'resigned') userLog(state, 'Re-signed ' + x.name + ' (' + yrsText(x.salaries.length) + ', ' + money(x.total) + ')', [x.id]);
+      else if (x.ovr >= 70) userLog(state, 'Did not re-sign ' + x.name + ': ' + (x.reason || 'his price was too high').replace(/^./, function (c) { return c.toLowerCase(); }), [x.id]);
+    });
     return out;
   }
 
@@ -1482,6 +1519,403 @@
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // The user's roster while simming: popups instead of silent moves
+  // ---------------------------------------------------------------------------
+  // AI teams sign and waive on their own. The user's team never gains or loses a player without him:
+  // the sim stops with a 'roster' event (kind 'short', 'cut' or 'pitch') and waits for the answer.
+  // state.fa.simMode 'auto' (the user chose to sim past free agency) lets the front office decide;
+  // everything it does goes to state.simLog and then into one "While you simmed" popup (flushSummary).
+  var PITCH_MAX = 3, PITCH_GAP = 4, PITCH_LAST_DAY = 20;
+
+  function isAuto(state) { return !!(state.fa && state.fa.simMode === 'auto'); }
+  // GM Assistant "roster" toggle (state.settings.auto.roster, default off): the AI fills and trims the
+  // user's roster without asking, and lists what it did in the summary.
+  function aiRoster(state) {
+    var S = G.AUTO_SETTINGS, a = null;
+    if (S && typeof S.get === 'function') { try { a = S.get(state); } catch (e) { a = null; } }
+    a = a || (state.settings && state.settings.auto);
+    return isAuto(state) || !!(a && a.roster === true);
+  }
+  function setSimMode(state, mode) {
+    if (!state.fa || state.fa.year <= state.year) startOffseason(state);
+    state.fa.simMode = mode === 'auto' ? 'auto' : 'ask';
+    return state.fa.simMode;
+  }
+  function yrsText(n) { return n + (n === 1 ? ' year' : ' years'); }
+  function nextUid(state) { state.eventSeq = (state.eventSeq || 0) + 1; return 'ev' + state.eventSeq; }
+  function userLog(state, text, ids) {
+    state.simLog = state.simLog || [];
+    state.simLog.push({ text: text, ids: ids || [] });
+  }
+  // One "While you simmed" popup with everything done for the user since the last one, or null.
+  function flushSummary(state) {
+    var log = state.simLog;
+    if (!log || !log.length) return null;
+    state.simLog = [];
+    var ids = [];
+    log.forEach(function (x) { (x.ids || []).forEach(function (id) { if (ids.indexOf(id) < 0) ids.push(id); }); });
+    var e = { type: 'simSummary', uid: nextUid(state), items: log.map(function (x) { return x.text; }), moved: ids,
+      text: 'While you simmed:', options: [{ value: 'ok', label: 'OK' }] };
+    state.events = state.events || [];
+    state.events.push(e);
+    return e;
+  }
+  function openEventFor(state, kind, id) {
+    return (state.events || []).some(function (e) { return e && !e.resolved && e.type === 'contractDecision' && e.kind === kind && e.playerId === id; });
+  }
+  // The front office's call on the user's own restricted free agent: match a fair offer with room for him.
+  function userWantsToMatch(state, sheet, ctx) {
+    var p = state.players[sheet.id], abbr = sheet.rightsTeam, Y = sheet.salaries[0].year, r = rules(Y);
+    if (ctx.count[abbr] >= rosterLimit(state, abbr)) return false;
+    var avg = sheet.salaries.reduce(function (a, s) { return a + s.amount; }, 0) / sheet.salaries.length;
+    if (avg > marketValue(state, p, Y) * (p.age <= 24 ? 1.4 : 1.25)) return false;
+    return ctx.pay[abbr] + sheet.salaries[0].amount <= r.tax || p.ovr >= 80;
+  }
+  function otherRfa(state, p, abbr) { var r = state.fa && state.fa.rights[p.id]; return !!(r && r.rfa && r.team !== abbr); }
+
+  // Standard contracts on the user's team for the season ahead (draft picks arriving from overseas count).
+  function userCount(state) {
+    var abbr = state.userTeam, Y = contractYear(state);
+    if (state.phase !== 'training') return rosterCount(state, abbr);
+    var n = 0;
+    Object.keys(state.players).forEach(function (id) {
+      var p = state.players[id];
+      if (p.team === abbr && !p.retired && !(p.contract && p.contract.twoWay) && !(p.stashedUntil != null && +p.stashedUntil > Y)) n++;
+    });
+    return n;
+  }
+
+  // What a free agent takes from this team right now and how it pays him, or null when it cannot.
+  function userPrice(state, abbr, p, ctx) {
+    if (!p || p.team !== 'FA' || p.retired || otherRfa(state, p, abbr)) return null;
+    var Y = contractYear(state), r = rules(Y), d = demand(state, p.id, abbr, ctx), maxS = maxSalary(state, p, Y);
+    var routes = routesFor(state, abbr, p.id, ctx.pay[abbr]), pay = ctx.pay[abbr];
+    var tries = [clamp(d.years, 1, 4)];
+    for (var k = d.minYears; k <= Math.min(4, d.maxYears); k++) if (tries.indexOf(k) < 0) tries.push(k);
+    for (var i = 0; i < tries.length; i++) {
+      var n = tries[i], q = requiredFor(p, d, n, null).required;
+      var amt = q <= d.min * 1.001 ? d.min : Math.min(maxS, Math.ceil(q * 1.002 / 10000) * 10000);
+      if (!routeForAmount(routes, amt, n)) continue;
+      var sal = makeFirst(Y, amt, n, 0);
+      var chk = canSign(state, abbr, p.id, sal, { pay: pay, count: ctx.count[abbr] });
+      if (!chk.ok) continue;
+      if (chk.via !== 'min' && chk.via !== 'bird' && pay + amt > r.tax) continue;   // never pushes him into the tax
+      return { id: p.id, name: p.name, pos: p.pos, age: p.age, ovr: p.ovr, amount: amt, years: n, salaries: sal, via: chk.via };
+    }
+    return null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Team needs by position and how well a free agent fits (the free agency page and the popups)
+  // ---------------------------------------------------------------------------
+  var POS5 = ['PG', 'SG', 'SF', 'PF', 'C'];
+  function positionsOf(p) {
+    var P = G.POSITIONS;
+    if (P && typeof P.of === 'function') { try { var o = P.of(p); if (o && o.pos) return o; } catch (e) { /* fall back */ } }
+    var parts = String(p.pos || '').toUpperCase().split(/[-\/ ]/);
+    var alias = { G: 'SG', F: 'SF', GF: 'SF', FC: 'PF' }, a = alias[parts[0]] || parts[0], b = parts[1] ? alias[parts[1]] || parts[1] : null;
+    return { pos: POS5.indexOf(a) >= 0 ? a : 'SF', pos2: POS5.indexOf(b) >= 0 ? b : null };
+  }
+  // { pos: { PG: { players, starter, backup, depth, status: 'need'|'thin'|'ok' } }, gaps: [text], floor }
+  function teamNeeds(state, abbr) {
+    var Y = contractYear(state), list = standardOn(state, abbr).slice().sort(function (a, b) { return b.ovr - a.ovr; });
+    var out = { team: abbr, pos: {}, gaps: [], floor: list.length >= 9 ? list[8].ovr : list.length ? list[list.length - 1].ovr : 60 };
+    POS5.forEach(function (P) { out.pos[P] = { players: [], cover: [], starter: 0, backup: 0, depth: 0, status: 'ok' }; });
+    list.forEach(function (p) {
+      var o = positionsOf(p), c = p.contract, left = c && c.salaries ? c.salaries.filter(function (x) { return x.year >= Y; }).length : 0;
+      var row = { id: p.id, name: p.name, ovr: p.ovr, age: p.age, years: left, pos2: o.pos2 };
+      out.pos[o.pos].players.push(row);
+      out.pos[o.pos].cover.push(p.ovr); out.pos[o.pos].depth += 1;
+      if (o.pos2 && out.pos[o.pos2]) { out.pos[o.pos2].cover.push(p.ovr - 2); out.pos[o.pos2].depth += 0.5; }
+    });
+    var avg = list.slice(0, 8).reduce(function (a, p) { return a + p.ovr; }, 0) / Math.max(1, Math.min(8, list.length));
+    POS5.forEach(function (P) {
+      var x = out.pos[P];
+      x.cover.sort(function (a, b) { return b - a; });
+      x.starter = x.cover[0] || 0; x.backup = x.cover[1] || 0;
+      if (!x.players.length && x.depth < 1) { x.status = 'need'; out.gaps.push('Need: ' + P + '.'); }
+      else if (x.depth < 2) { x.status = 'thin'; out.gaps.push('Thin at ' + P + '.'); }
+      else if (x.backup && x.backup < Math.min(66, avg - 8)) { x.status = 'thin'; out.gaps.push('Backup ' + P + ' is ' + Math.round(x.backup) + ' OVR.'); }
+      delete x.cover;
+    });
+    if (!out.gaps.length) out.gaps.push('No big holes. Look for upgrades.');
+    return out;
+  }
+  // How a player would fit the team: 'great' (starts or fills a hole), 'good' (rotation help),
+  // 'depth' (a body for the bench), 'none'. Uses only overall and position, never potential.
+  var FIT_LABEL = { great: 'Great fit', good: 'Good fit', depth: 'Depth', none: 'Not needed' }, FIT_RANK = { great: 3, good: 2, depth: 1, none: 0 };
+  function fitFor(needs, p) {
+    var o = positionsOf(p), best = null;
+    [[o.pos, 0], [o.pos2, 2]].forEach(function (pp) {
+      var P = pp[0], x = P && needs.pos[P];
+      if (!x) return;
+      var ovr = p.ovr - pp[1], k = 'none';
+      if (x.status === 'need' && ovr >= needs.floor - 3) k = 'great';
+      else if (ovr >= x.starter + 1 && (x.status !== 'ok' || ovr >= x.starter + 3)) k = 'great';
+      else if (ovr >= x.starter + 1 || (x.status !== 'ok' && ovr >= x.backup)) k = 'good';
+      else if (ovr > x.backup || x.status !== 'ok' || ovr >= needs.floor) k = 'depth';
+      if (!best || FIT_RANK[k] > FIT_RANK[best.key]) best = { key: k, pos: P };
+    });
+    best = best || { key: 'none', pos: o.pos };
+    best.label = FIT_LABEL[best.key]; best.rank = FIT_RANK[best.key];
+    best.fillsNeed = best.key !== 'none' && needs.pos[best.pos] && needs.pos[best.pos].status !== 'ok';
+    return best;
+  }
+
+  // The best free agents the team can afford, leaning to the position group it is thinnest at.
+  function rosterSuggestions(state, abbr, ctx, k) {
+    ctx = ctx || buildCtx(state);
+    var needs = teamNeeds(state, abbr), bonus = { great: 6, good: 3, depth: 1, none: 0 };
+    var pending = {};
+    if (state.fa) state.fa.offerSheets.forEach(function (s) { pending[s.id] = 1; });
+    var pool = freeAgents(state).filter(function (p) { return !pending[p.id] && !otherRfa(state, p, abbr); });
+    pool.sort(function (a, b) { return b.ovr - a.ovr; });
+    var out = [];
+    pool.slice(0, Math.max(45, (k || 3) * 3)).forEach(function (p) {
+      var o = userPrice(state, abbr, p, ctx);
+      if (!o) return;
+      var f = fitFor(needs, p);
+      o.fit = f.label; o.fitKey = f.key; o.fitPos = f.pos; o.thin = !!f.fillsNeed;
+      o.score = p.ovr + bonus[f.key] + (f.fillsNeed ? 2 : 0);
+      out.push(o);
+    });
+    out.sort(function (a, b) { return b.score - a.score || a.amount - b.amount; });
+    // lead with the positions the team is thinnest at: up to two players who fill a need, then the best of the rest
+    k = k || 3;
+    var fill = out.filter(function (o) { return o.thin; }).slice(0, Math.min(2, k));
+    return fill.concat(out.filter(function (o) { return fill.indexOf(o) < 0; })).slice(0, k).sort(function (a, b) { return b.score - a.score; });
+  }
+
+  // The user's players the front office would waive first: lowest overall with the least money left.
+  function waiveCandidates(state, abbr, k) {
+    var Y = contractYear(state);
+    var left = function (p) { return p.contract ? p.contract.salaries.reduce(function (s, x) { return s + (x.year >= Y ? x.amount : 0); }, 0) : 0; };
+    var list = standardOn(state, abbr).filter(function (p) { return !isStashed(p); });
+    list.sort(function (a, b) { return (a.ovr - b.ovr) + (left(a) - left(b)) / 5e5; });
+    return list.slice(0, k).map(function (p) {
+      var c = p.contract, yrs = c ? c.salaries.filter(function (x) { return x.year >= Y; }).length : 0;
+      return { id: p.id, name: p.name, pos: p.pos, age: p.age, ovr: p.ovr, salary: salaryFor(c, Y), owed: left(p), years: yrs };
+    });
+  }
+
+  function signSuggestion(state, abbr, s, ctx) {
+    var p = state.players[s.id];
+    if (!p || p.team !== 'FA' || p.retired) return null;
+    var chk = canSign(state, abbr, p.id, s.salaries, {});
+    if (!chk.ok) return null;
+    return sign(state, abbr, p, s.salaries, chk.via, {}, ctx || null);
+  }
+  function dealText(sal) { return yrsText(sal.length) + ', ' + money(sal.reduce(function (a, x) { return a + x.amount; }, 0)); }
+
+  // The front office brings the user's roster to 13 to 15 (simming past, or "Let the AI pick").
+  function autoFixUser(state, rng) {
+    var abbr = state.userTeam, Y = contractYear(state), guard = 0;
+    while (userCount(state) < MIN_ROSTER && guard++ < 20) {
+      var ctx = buildCtx(state), s = rosterSuggestions(state, abbr, ctx, 1)[0], rec = s ? signSuggestion(state, abbr, s, ctx) : null;
+      if (!rec) {
+        // nobody fits the cap: the best player who takes a minimum deal, or a camp invite
+        var pending = {};
+        state.fa.offerSheets.forEach(function (x) { pending[x.id] = 1; });
+        var pool = freeAgents(state).filter(function (p) { return !pending[p.id] && !otherRfa(state, p, abbr) && !isStar(p); });
+        pool.sort(function (a, b) { return b.ovr - a.ovr; });
+        var p = pool[0] || replacement(state, abbr);
+        rec = sign(state, abbr, p, [{ year: Y, amount: minSalary(state, p, Y) }], 'min', {}, ctx);
+      }
+      userLog(state, 'Signed ' + rec.name + ' (' + dealText(rec.salaries) + ')', [rec.id]);
+    }
+    while (userCount(state) > MAX_ROSTER && guard++ < 40) {
+      var w = waiveCandidates(state, abbr, 1)[0];
+      if (!w) break;
+      var r = release(state, abbr, w.id);
+      if (!r.ok) break;
+      userLog(state, 'Waived ' + w.name + (r.dead ? ' (' + money(r.dead) + ' still owed)' : ''), [w.id]);
+    }
+  }
+
+  // Can the team sign these suggested players together, in this order? Dry run on a light copy of the league
+  // (cap room and each exception get used up as it goes). -> { fits: [ids], misses: [ids], total, payroll, cap, tax }
+  function checkGroup(state, abbr, ids, suggestions, limit) {
+    var copy = {};
+    Object.keys(state).forEach(function (k) { copy[k] = state[k]; });
+    copy.players = JSON.parse(JSON.stringify(state.players));
+    copy.teams = JSON.parse(JSON.stringify(state.teams));
+    copy.fa = state.fa ? JSON.parse(JSON.stringify(state.fa)) : null;
+    copy.transactions = []; copy.news = []; copy.events = [];
+    var out = { fits: [], misses: [], total: 0 }, Y = contractYear(state), r = rules(Y);
+    (ids || []).forEach(function (id) {
+      if (limit != null && out.fits.length >= limit) return;
+      var sg = (suggestions || []).filter(function (x) { return x.id === id; })[0];
+      var rec = sg ? signSuggestion(copy, abbr, sg, null) : null;
+      if (rec) { out.fits.push(id); out.total += rec.salaries[0].amount; } else out.misses.push(id);
+    });
+    out.payroll = payroll(copy, abbr, Y); out.cap = r.cap; out.tax = r.tax;
+    return out;
+  }
+
+  // An open decision stops the sim. A roster question that went away without an answer (closed and
+  // cleared, or skipped by a script) gets the front office default: fix the roster, or pass on the player.
+  function userWaiting(state, rng, auto) {
+    if (auto || isAuto(state)) {
+      // simming past: open questions are dropped and the front office decides (offer sheets, the roster)
+      (state.events || []).forEach(function (e) { if (e && !e.resolved && e.stopSim) { e.resolved = true; e.answer = 'auto'; } });
+      if (state.fa) state.fa.ask = null;
+      return false;
+    }
+    if ((state.events || []).some(function (e) { return e && !e.resolved && e.stopSim; })) return true;
+    var fa = state.fa, ask = fa && fa.ask;
+    if (ask) {
+      fa.ask = null;
+      var ev = (state.events || []).filter(function (e) { return e && e.uid === ask.uid; })[0];
+      if (!(ev && ev.done) && (ask.kind === 'short' || ask.kind === 'cut')) autoFixUser(state, rng || seededRng(state));
+    }
+    return false;
+  }
+
+  function askRoster(state, cnt) {
+    var abbr = state.userTeam, e, ctx = buildCtx(state);
+    var choose = { value: 'choose', label: 'Choose myself' }, ai = { value: 'ai', label: 'Let the AI pick' };
+    if (cnt < MIN_ROSTER) {
+      // one popup for the whole gap: the best fits are pre-checked as a group that fits the cap together
+      var needN = MIN_ROSTER - cnt, all = rosterSuggestions(state, abbr, ctx, 40);
+      var group = checkGroup(state, abbr, all.map(function (x) { return x.id; }), all, needN);
+      // the group that fits together (best fits first, cheaper players filling the rest), plus a few alternates
+      var sug = all.filter(function (x) { return group.fits.indexOf(x.id) >= 0; })
+        .concat(all.filter(function (x) { return group.fits.indexOf(x.id) < 0; }).slice(0, 3));
+      e = { type: 'roster', kind: 'short', count: cnt, need: needN, min: MIN_ROSTER, suggestions: sug, preselect: group.fits.slice(0, needN),
+        text: 'You have ' + cnt + ' players. The league needs ' + MIN_ROSTER + '. Sign ' + needN + '?' + (sug.length ? '' : ' Nobody fits your cap right now, but your front office can find players on minimum deals.'),
+        options: [{ value: { sign: group.fits.slice(0, needN) }, label: 'Sign checked' }, choose, { value: 'ai', label: 'Let the AI fill it' }] };
+    } else {
+      var need = cnt - MAX_ROSTER, list = waiveCandidates(state, abbr, need + 3);
+      e = { type: 'roster', kind: 'cut', count: cnt, need: need, max: MAX_ROSTER, suggestions: list,
+        preselect: list.slice(0, need).map(function (x) { return x.id; }),
+        text: 'You have ' + cnt + ' players. The limit is ' + MAX_ROSTER + '. Waive ' + need + '?' };
+      e.options = [{ value: { waive: e.preselect }, label: need === 1 ? 'Waive him' : 'Waive them' }, choose, ai];
+    }
+    e.uid = nextUid(state); e.stopSim = true; e.team = abbr;
+    state.events = state.events || [];
+    state.events.push(e);
+    state.fa.ask = { uid: e.uid, kind: e.kind };
+    return e;
+  }
+
+  // The last free agency day: the user's roster has to be 13 to 15 before the market closes.
+  function userRosterGate(state, ctx, rng) {
+    if (!isTeam(state, state.userTeam)) return false;
+    var cnt = userCount(state);
+    if (cnt >= MIN_ROSTER && cnt <= MAX_ROSTER) return false;
+    if (aiRoster(state)) { autoFixUser(state, rng); return false; }
+    askRoster(state, cnt);
+    return true;
+  }
+
+  // Training camp, before the season starts: the same check (retirements or players back from overseas
+  // can change the count after free agency). Returns true when the sim has to wait for the user.
+  function preseasonCheck(state, opts) {
+    opts = opts || {};
+    if (!state.fa || !isTeam(state, state.userTeam)) return false;
+    var rng = seededRng(state);
+    if (userWaiting(state, rng, !!opts.auto)) return true;
+    var cnt = userCount(state);
+    if (cnt >= MIN_ROSTER && cnt <= MAX_ROSTER) return false;
+    if (aiRoster(state) || opts.auto) { autoFixUser(state, rng); return false; }
+    askRoster(state, cnt);
+    return true;
+  }
+
+  // A few times a summer (at most 3, days apart): a good free agent the user can afford, before the
+  // AI teams get to him. Never while simming past free agency.
+  function maybePitch(state) {
+    var fa = state.fa, abbr = state.userTeam;
+    if (aiRoster(state) || fa.stage !== 'open' || !isTeam(state, abbr)) return false;
+    fa.pitches = fa.pitches || [];
+    if (fa.pitches.length >= PITCH_MAX || fa.day > PITCH_LAST_DAY || (fa.nextPitch != null && fa.day < fa.nextPitch)) return false;
+    var ctx = buildCtx(state);
+    if (ctx.count[abbr] >= MAX_ROSTER) { fa.nextPitch = fa.day + 1; return false; }
+    var std = (ctx.rosters[abbr] || []).filter(function (x) { return !(x.contract && x.contract.twoWay); });
+    var bar = Math.max(72, std.length >= 8 ? std[7].ovr + 1 : 0);
+    var pending = {};
+    fa.offerSheets.forEach(function (s) { pending[s.id] = 1; });
+    var pool = freeAgents(state).filter(function (p) {
+      var r = fa.rights[p.id];
+      return !pending[p.id] && !p.generated && p.ovr >= bar && fa.pitches.indexOf(p.id) < 0 && !(r && r.team === abbr && (r.letGo || r.renounced));
+    });
+    pool.sort(function (a, b) { return b.ovr - a.ovr; });
+    var needs = teamNeeds(state, abbr);
+    for (var i = 0; i < Math.min(pool.length, 12); i++) {
+      var f = fitFor(needs, pool[i]);
+      if (f.rank < 2) continue;   // only players who would really help
+      var o = userPrice(state, abbr, pool[i], ctx);
+      if (!o) continue;
+      o.fit = f.label; o.fitKey = f.key; o.fitPos = f.pos;
+      var e = { type: 'roster', kind: 'pitch', uid: nextUid(state), stopSim: true, team: abbr, playerId: o.id, offer: o, day: fa.day,
+        text: o.name + ' wants ' + money(o.amount) + ' a year for ' + yrsText(o.years) + '. Make an offer?',
+        options: [{ value: { sign: o.id }, label: 'Sign him' }, { value: 'negotiate', label: 'Negotiate myself' }, { value: 'pass', label: 'No thanks' }] };
+      fa.pitches.push(o.id);
+      fa.nextPitch = fa.day + PITCH_GAP;
+      fa.ask = { uid: e.uid, kind: 'pitch' };
+      state.events = state.events || [];
+      state.events.push(e);
+      return true;
+    }
+    fa.nextPitch = fa.day + 1;
+    return false;
+  }
+
+  // Applies the user's answer to a roster popup: { sign: id } | { waive: [ids] } | 'choose' | 'negotiate' | 'ai' | 'pass'.
+  // Returns { ok, message, signed, waived, navigate }.
+  function resolveRosterEvent(state, e, answer) {
+    if (!e || e.type !== 'roster') return { ok: false, message: 'Not a roster decision' };
+    var abbr = e.team || state.userTeam, fa = state.fa, res = { ok: true, message: '', signed: [], waived: [] };
+    e.done = true;
+    if (fa && fa.ask && fa.ask.uid === e.uid) fa.ask = null;
+    var a = answer && typeof answer === 'object' ? answer : String(answer == null ? '' : answer);
+    if (a === 'choose' || a === 'negotiate') {
+      res.navigate = '#/fa';
+      res.message = e.kind === 'cut' ? 'Pick who to waive on the free agency page, then sim again.' : e.kind === 'pitch' ? 'Make him your own offer on the free agency page.' : 'Pick a player on the free agency page, then sim again.';
+    } else if (a === 'ai') {
+      var n0 = (state.simLog || []).length;
+      autoFixUser(state, seededRng(state));
+      var done = (state.simLog || []).splice(n0);   // shown right away, not again in the summary
+      done.forEach(function (x) { (/^Signed/.test(x.text) ? res.signed : res.waived).push(x.ids[0]); });
+      res.message = done.length ? done.map(function (x) { return x.text; }).join('. ') + '.' : 'Your roster is already set.';
+    } else if (a === 'pass') {
+      res.message = 'No offer made.';
+    } else if (a && Array.isArray(a.sign)) {
+      // several players at once (the short roster popup), signed in the order shown
+      var names = [], missed = [];
+      a.sign.forEach(function (sid) {
+        var sg = (e.suggestions || []).filter(function (x) { return x.id === sid; })[0], rc = sg ? signSuggestion(state, abbr, sg, null) : null;
+        if (rc) { res.signed.push(sid); names.push(rc.name + ' (' + dealText(rc.salaries) + ')'); } else missed.push(sg ? sg.name : sid);
+      });
+      res.ok = !missed.length;
+      res.message = (names.length ? 'Signed ' + names.join(', ') + '.' : 'Nobody signed.') + (missed.length ? ' Could not fit ' + missed.join(', ') + ' under the cap rules.' : '');
+    } else if (a && a.sign) {
+      var id = a.sign, p = state.players[id];
+      if (e.kind === 'pitch') {
+        var o = e.offer || {};
+        var r = offer(state, abbr, id, { salaries: o.salaries });
+        res.ok = !!r.accepted; res.message = r.message;
+        if (r.accepted && p && p.team === abbr) res.signed.push(id);
+      } else {
+        var s = (e.suggestions || []).filter(function (x) { return x.id === id; })[0];
+        var rec = s ? signSuggestion(state, abbr, s, null) : null;
+        if (rec) { res.signed.push(id); res.message = rec.name + ' signs: ' + dealText(rec.salaries) + '.'; }
+        else { res.ok = false; res.message = (p ? p.name : 'That player') + ' is no longer available. Sim again to see new options.'; }
+      }
+    } else if (a && Array.isArray(a.waive)) {
+      a.waive.forEach(function (wid) {
+        var q = state.players[wid];
+        if (!q || q.team !== abbr) return;
+        var r2 = release(state, abbr, wid);
+        if (r2.ok) res.waived.push(wid);
+      });
+      res.message = res.waived.length ? 'Waived ' + res.waived.map(function (x) { return state.players[x].name; }).join(', ') + '.' : 'Nobody was waived.';
+    } else res.message = 'No change.';
+    e.result = res;
+    return res;
+  }
+
   function release(state, abbr, id) {
     var p = state.players[id];
     if (!p || p.team !== abbr) return { ok: false, message: 'Not on ' + abbr };
@@ -1510,7 +1944,9 @@
     autoResign: autoResign, letGo: letGo, openMarket: openMarket, applyDecision: applyDecision, ROUTE_LABEL: ROUTE_LABEL,
     startOffseason: startOffseason, resignWindow: resignWindow, decideOption: decideOption,
     setQualifyingOffer: setQualifyingOffer, renounce: renounce, matchOfferSheet: matchOfferSheet,
-    offer: offer, simDay: simDay, finish: finishFreeAgency, release: release, freeAgents: freeAgents
+    offer: offer, simDay: simDay, finish: finishFreeAgency, release: release, freeAgents: freeAgents,
+    setSimMode: setSimMode, isAuto: isAuto, flushSummary: flushSummary, userLog: userLog, resolveRosterEvent: resolveRosterEvent,
+    preseasonCheck: preseasonCheck, checkGroup: checkGroup, teamNeeds: teamNeeds, fitFor: fitFor, positionsOf: positionsOf, rosterSuggestions: rosterSuggestions, waiveCandidates: waiveCandidates, userCount: userCount
   };
 
   if (typeof window !== 'undefined') window.FA = FA;

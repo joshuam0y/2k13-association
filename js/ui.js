@@ -57,9 +57,15 @@
     const user = UI.userTeam();
     if (user && UI.state.season) {
       const d = UI.currentDate ? UI.currentDate() : null;
-      const sub = UI.inOffseason && UI.inOffseason() ? (UI.PHASES[UI.state.game.phase] || '').toUpperCase() : d ? UI.dateLabel(d).toUpperCase() : 'DAY ' + (UI.currentDay() + 1);
+      let sub = UI.inOffseason && UI.inOffseason() ? (UI.PHASES[UI.state.game.phase] || '').toUpperCase() : d ? UI.dateLabel(d).toUpperCase() : 'DAY ' + (UI.currentDay() + 1);
+      let hot = false, when = d ? UI.dateLabel(d) : '';
+      // The current moment from the season calendar (js/ui-season.js): "TRADE DEADLINE IN 3 DAYS", "NBA DRAFT".
+      try {
+        const st = UI.seasonStatus ? UI.seasonStatus() : null;
+        if (st && st.text) { sub = st.text; hot = !!st.hot; when = st.title || when; }
+      } catch (e) { console.warn('Status chip failed', e); }
       const pend = UI.pendingEvents ? UI.pendingEvents() : 0;
-      chip.innerHTML = `<a href="#/season" title="Back to your season">${UI.logo(user, 30)}<span><b>${esc(user)} ${esc(UI.record(user))}</b><small>${esc(sub)}</small></span>${pend ? `<i class="chip-dot" title="${pend} decisions waiting">${pend}</i>` : ''}</a>`;
+      chip.innerHTML = `<a href="#/season" title="${esc(when ? when + ': ' : '')}${esc(sub)}. Back to your season.">${UI.logo(user, 30)}<span><b>${esc(user)} ${esc(UI.record(user))}</b><small class="chip-status${hot ? ' hot' : ''}">${esc(sub)}</small></span>${pend ? `<i class="chip-dot" title="${pend} decisions waiting">${pend}</i>` : ''}</a>`;
     } else chip.innerHTML = '';
   };
 

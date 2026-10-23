@@ -180,6 +180,7 @@
           const next = ot ? { year: clamp(Math.round(oy || last), state.year, last), type: ot } : null;
           if (JSON.stringify(old || null) !== JSON.stringify(next)) {
             p.contract.option = next;
+            p.contract.options = next ? [next] : [];
             changes.push('option ' + (old ? old.type + ' ' + old.year : 'none') + ' to ' + (next ? next.type + ' ' + next.year : 'none'));
           }
         }

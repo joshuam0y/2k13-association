@@ -88,12 +88,12 @@ ok(first && first.contract.rookie === true, "rookie flag");
 ok(s.fa && s.fa.stage === "resign", "re-signing window open during the resign phase");
 L.nextPhase(s);
 ok(s.phase === "freeAgency", "free agency next");
-L.nextPhase(s);
+L.nextPhase(s, { auto: true });   // the user chose to sim past free agency: no popups, the front office decides
 ok(s.phase === "training", "training camp after free agency");
 const rep = s.progressReport;
 ok(rep && rep.year === 2014 && Object.keys(rep.players).length > 300, "progression report stored");
 ok(rep && Object.values(rep.players).every(v => v.length === 3), "report holds old, new and age only (no potential)");
-L.nextPhase(s);
+L.nextPhase(s, { auto: true });
 ok(s.phase === "regular" && s.year === 2014, "new season starts");
 const rr = L.rosterRules(2014);
 const sizes = Object.keys(s.teams).map(a => L.rosterOf(s, a, 2014).std.length);

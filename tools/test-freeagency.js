@@ -91,6 +91,7 @@ function runOffseason(state, rng, label) {
   var Y = state.year + 1;
   fakeSeason(state, rng);
   var sum = FA.startOffseason(state);
+  FA.setSimMode(state, 'auto');   // AI behavior only here; the user's popups are tested below
   check(sum.year === Y, label + ': offseason year ' + Y);
   var rightsAtStart = JSON.parse(JSON.stringify(state.fa.rights));
   var ledger = payrollLedger(state, Y);
@@ -192,6 +193,7 @@ function printSignings(state, label) {
   check(r.cap === 58679000 && FA.rules(2013).cap === 58044000 && FA.rules(2013).tax === 70307000, 'fallback cap and tax numbers');
   check(FA.rules(2013).minSalary(0) === 473604 && FA.rules(2013).minSalary(10) === 1352181 && FA.rules(2013).mle === 5000000, 'fallback minimum and MLE numbers');
   FA.startOffseason(state);
+  FA.setSimMode(state, 'auto');
   check(state.fa.year === 2014, 'offseason opens for 2013-14 contracts');
   // LeBron opts out of his ETO when he is worth more
   check(state.players.jamesle01.team === 'FA', 'LeBron uses his early termination option to become a free agent');
@@ -367,6 +369,7 @@ function clone(x) { return JSON.parse(JSON.stringify(x)); }
   var rng = rngFrom(31);
   fakeSeason(state, rng);
   FA.startOffseason(state);
+  FA.setSimMode(state, 'auto');
   ['jamesle01', 'paulch01', 'howardw01'].forEach(function (id) { if (state.fa.rights[id]) FA.renounce(state, state.fa.rights[id].team, id); });
   var day = null;
   for (var d = 0; d < 30 && state.fa.stage !== 'done'; d++) {

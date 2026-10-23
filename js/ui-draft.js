@@ -8,8 +8,125 @@
   const F = UI.feat;
   const esc = UI.esc;
 
-  const view = { sort: 'ovr', dir: -1, pos: 'ALL' };
+  const view = { sort: 'ovr', dir: -1, pos: 'ALL', teamOpen: null };
   let last = null;    // text of the last pick made from this page
+  let lastId = null;  // the player the user just drafted (one click to trade him)
+
+  F.css && F.css('ftd-extra-css', `
+    .ftd-team { border: 1px solid var(--line); background: var(--bg2); margin: 0 0 16px; min-width: 0; }
+    .ftd-team > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 10px; padding: 10px 12px; font-family: var(--display); letter-spacing: .12em; font-size: 13px; color: var(--gold); }
+    .ftd-team > summary::-webkit-details-marker { display: none; }
+    .ftd-team > summary::after { content: '\\25BE'; margin-left: auto; color: var(--muted); }
+    .ftd-team:not([open]) > summary::after { content: '\\25B8'; }
+    .ftd-team-body { padding: 0 12px 12px; }
+    .ftd-needs { font-size: 13px; color: var(--text2); margin: 0 0 8px; }
+    .ftd-needs b { color: #ff9b9b; font-weight: 600; }
+    .ftd-needs i { font-style: normal; color: var(--gold2); }
+    .ftd-pos { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+    .ftd-grp { min-width: 0; border-top: 2px solid var(--line2); padding-top: 4px; }
+    .ftd-grp.need { border-top-color: #b24a4a; } .ftd-grp.thin { border-top-color: var(--gold-dim); }
+    .ftd-grp h4 { margin: 0 0 4px; font-family: var(--display); font-size: 12px; letter-spacing: .14em; display: flex; justify-content: space-between; gap: 4px; }
+    .ftd-grp h4 small { color: var(--muted); font-weight: 400; letter-spacing: .04em; }
+    .ftd-pl { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 0 6px; font-size: 12px; padding: 2px 0; line-height: 1.25; }
+    .ftd-pl a { color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ftd-pl small { grid-column: 2; color: var(--muted); font-size: 11px; }
+    .ftd-pl.new a { color: var(--gold2); }
+    .ftd-empty { font-size: 12px; color: #ff9b9b; }
+    .ftd-fit { display: inline-block; font-size: 10px; letter-spacing: .06em; padding: 2px 6px; border: 1px solid var(--line2); color: var(--muted); white-space: nowrap; }
+    .ftd-fit.great { border-color: var(--gold); color: #000; background: var(--gold); }
+    .ftd-fit.good { border-color: var(--gold-dim); color: var(--gold2); }
+    .ftd-tr { display: inline-block; margin-top: 3px; padding: 1px 6px; border: 1px solid var(--gold-dim); color: var(--gold2) !important; font-family: var(--display); font-size: 10px; letter-spacing: .1em; text-decoration: none; white-space: nowrap; align-self: flex-start; }
+    .ftd-tr:hover { background: var(--gold); color: #000 !important; }
+    .ftd-tr.mine { border-color: var(--line2); color: var(--text2) !important; }
+    @media (min-width: 1500px) {
+      .ft-draft.ftd3 { grid-template-columns: minmax(230px, .8fr) minmax(0, 1.7fr) minmax(0, 1fr); }
+      .ftd3 .ftd-pos { grid-template-columns: minmax(0, 1fr); }
+      .ftd3 .ftd-team { margin: 0; position: sticky; top: 8px; }
+    }
+    @media (max-width: 1499px) { .ft-draft.ftd3 .ftd-team { grid-column: 1 / -1; margin: 0; } }
+    @media (max-width: 700px) { .ftd-pos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  `);
+
+  // ---------- the user's team: positions, needs and fit ----------
+  const ORDER5 = ['PG', 'SG', 'SF', 'PF', 'C'];
+  function posOf(p) {
+    const PO = F.fn('POSITIONS', 'of');
+    const r = PO ? F.try('POSITIONS.of', () => PO.of(p), null) : null;
+    const raw = String((r && r.pos) || p.pos || 'SF').toUpperCase().split(/[-/ ,]/);
+    const pos = ORDER5.indexOf(raw[0]) >= 0 ? raw[0] : 'SF';
+    let pos2 = r && r.pos2 ? String(r.pos2).toUpperCase() : (raw[1] && ORDER5.indexOf(raw[1]) >= 0 ? raw[1] : null);
+    if (pos2 === pos) pos2 = null;
+    return { pos, pos2 };
+  }
+  // contract years left from next season on (offseason) or this one
+  function yearsLeft(st, p) {
+    const end = F.contractEnd(p), cy = F.capYear(st);
+    if (!end && p.draft && Number(p.draft.year) === st.year) return 'Rookie';
+    if (!end || end < cy) return OFFSEASON_PH.indexOf(st.phase) >= 0 ? 'FA' : 'Expiring';
+    const n = end - cy + 1;
+    return n + (n === 1 ? ' yr' : ' yrs');
+  }
+  const OFFSEASON_PH = ['draftLottery', 'draft', 'resign', 'freeAgency', 'training'];
+  // who the team will have next season: under contract (or a new rookie), not overseas
+  function teamCore(st, abbr) {
+    const cy = F.capYear(st);
+    return F.teamPlayers(st, abbr).filter(p => !(p.stashedUntil && p.stashedUntil > st.year))
+      .filter(p => { const end = F.contractEnd(p); return (end && end >= cy) || (p.draft && Number(p.draft.year) === st.year); });
+  }
+  // need per position, 0 (set) to 1.5 (nobody there): from the best two players who can play it
+  function teamNeeds(st, abbr) {
+    const core = teamCore(st, abbr), need = {}, groups = {};
+    ORDER5.forEach(k => { groups[k] = []; });
+    core.forEach(p => {
+      const o = posOf(p);
+      groups[o.pos].push({ p, eff: Number(p.ovr) || 0, main: true });
+      if (o.pos2) groups[o.pos2].push({ p, eff: (Number(p.ovr) || 0) - 4, main: false });
+    });
+    ORDER5.forEach(k => {
+      const g = groups[k].sort((a, b) => b.eff - a.eff);
+      const t1 = g[0] ? g[0].eff : 40, t2 = g[1] ? g[1].eff : 40;
+      need[k] = Math.max(0, Math.min(1.5, (76 - (0.65 * t1 + 0.35 * t2)) / 10));
+    });
+    return { need, core };
+  }
+  function needsText(nd) {
+    const big = ORDER5.filter(k => nd.need[k] >= 0.8), thin = ORDER5.filter(k => nd.need[k] >= 0.4 && nd.need[k] < 0.8);
+    const parts = [];
+    if (big.length) parts.push('<b>Need: ' + big.join(', ') + '</b>');
+    if (thin.length) parts.push('<i>thin at ' + thin.join(', ') + '</i>');
+    return parts.length ? parts.join(', ') : 'Balanced roster: take the best player available.';
+  }
+  function fitOf(nd, p, ovr, cut) {
+    const o = posOf(p);
+    const n = Math.max(nd.need[o.pos] || 0, o.pos2 ? (nd.need[o.pos2] || 0) * 0.6 : 0);
+    const score = ovr + 6 * n;
+    let label = 'Depth', cls = 'depth';
+    if (n >= 0.6 && ovr >= cut.q75) { label = 'Great fit'; cls = 'great'; }
+    else if ((n >= 0.3 && ovr >= cut.q50) || n >= 0.6) { label = 'Good fit'; cls = 'good'; }
+    return { score, label, cls, n };
+  }
+  function teamPanel(st, nd, open) {
+    const user = st.userTeam;
+    const byPos = {};
+    ORDER5.forEach(k => { byPos[k] = []; });
+    F.teamPlayers(st, user).filter(p => !(p.stashedUntil && p.stashedUntil > st.year)).forEach(p => byPos[posOf(p).pos].push(p));
+    const grp = k => {
+      const list = byPos[k];
+      const cls = nd.need[k] >= 0.8 ? ' need' : nd.need[k] >= 0.4 ? ' thin' : '';
+      return `<div class="ftd-grp${cls}"><h4>${k}<small>${nd.need[k] >= 0.8 ? 'NEED' : nd.need[k] >= 0.4 ? 'THIN' : ''}</small></h4>${list.length ? list.map(p => {
+        const isNew = p.draft && Number(p.draft.year) === st.year;
+        return `<div class="ftd-pl${isNew ? ' new' : ''}"><b class="${UI.ovrClass(p.ovr || 0)}">${p.ovr || '-'}</b><a href="#/player/${esc(p.id)}" title="${esc(p.name)}">${esc(p.name)}</a><small>${esc(p.age || '-')} yrs | ${esc(yearsLeft(st, p))}${isNew ? ' | new pick' : ''}</small></div>`;
+      }).join('') : '<div class="ftd-empty">Nobody</div>'}</div>`;
+    };
+    return `<details class="ftd-team" id="ftdTeam"${open ? ' open' : ''}><summary>${UI.logo(user, 22)} YOUR ${esc(UI.team(user).name.toUpperCase())}</summary>
+      <div class="ftd-team-body"><p class="ftd-needs" id="ftdNeeds">${needsText(nd)}</p><div class="ftd-pos">${ORDER5.map(grp).join('')}</div></div></details>`;
+  }
+  // the pick entry behind an order slot, for the trade links
+  function slotKey(st, s) {
+    const E = F.fn('TRADE', 'entryForSlot');
+    const e = E ? F.try('TRADE.entryForSlot', () => E.entryForSlot(st, s.raw), null) : null;
+    return e ? F.pickKey(e) : null;
+  }
 
   // ---------- data ----------
   function prospects(st, year) {
@@ -136,7 +253,11 @@
     const key = view.sort;
     const POSORD = { PG: 1, SG: 2, SF: 3, PF: 4, C: 5 };
     const so = new Map(pool.map(p => [p.id, scoutOvr(st, p)]));
-    const val = (p, k) => (k === 'ovr' ? so.get(p.id) : Number(p[k]) || 0);
+    const nd = teamNeeds(st, user);
+    const ovrs = pool.map(p => so.get(p.id)).sort((a, b) => b - a);
+    const cut = { q75: ovrs[Math.floor(ovrs.length * 0.25)] || 0, q50: ovrs[Math.floor(ovrs.length * 0.5)] || 0 };
+    const fit = new Map(pool.map(p => [p.id, fitOf(nd, p, so.get(p.id), cut)]));
+    const val = (p, k) => (k === 'ovr' ? so.get(p.id) : k === 'fit' ? fit.get(p.id).score : Number(p[k]) || 0);
     pool.sort((a, b) => {
       let x, y;
       if (key === 'pos') { x = POSORD[String(a.pos).split(/[-/]/)[0]] || 9; y = POSORD[String(b.pos).split(/[-/]/)[0]] || 9; return (x - y) * -view.dir || so.get(b.id) - so.get(a.id); }
@@ -153,6 +274,7 @@
         <td class="l"><span class="ft-cell-p"><span class="ft-hs ft-hs-sm">${UI.headshot(p)}</span><span><b>${esc(p.name)}</b>${arr ? `<small class="ft-stash">Playing overseas until ${arr}</small>` : p.college || p.school ? `<small>${esc(p.college || p.school)}</small>` : ''}</span></span></td>
         <td>${esc(p.pos || '-')}</td><td>${esc(p.age || '-')}</td><td class="hide-sm">${UI.fmtHt(p.ht)}</td>
         <td><b class="${UI.ovrClass(so.get(p.id))}">${so.get(p.id) || '-'}</b></td>
+        <td><span class="ftd-fit ${fit.get(p.id).cls}" title="${esc(posOf(p).pos)}${posOf(p).pos2 ? '/' + esc(posOf(p).pos2) : ''}: ${fit.get(p.id).n >= 0.8 ? 'a position you need' : fit.get(p.id).n >= 0.4 ? 'you are thin here' : 'you are set here'}">${esc(fit.get(p.id).label)}</span></td>
         <td>${onClock && canPick ? `<button type="button" class="btn btn-small btn-gold" data-act="pick" data-id="${esc(p.id)}">DRAFT</button>` : ''}</td>
       </tr>`;
     }).join('');
@@ -166,10 +288,16 @@
         return `<div class="ft-round"><div class="ft-group">ROUND ${rd}</div><ol class="ft-order">${list.map(s => {
           const cur = next && s === next && live;
           const p = s.player;
+          let tl = '';
+          if (live && !p) {
+            const key = slotKey(st, s);
+            if (key) tl = s.team === user ? `<a class="ftd-tr mine" href="#/trade/give/${esc(key)}" data-trade="give" data-n="${s.overall}">TRADE THIS PICK</a>`
+              : `<a class="ftd-tr" href="#/trade/pick/${esc(key)}" data-trade="for" data-n="${s.overall}">TRADE FOR THIS PICK</a>`;
+          } else if (p && st.teams[p.team] && (live || done)) tl = `<a class="ftd-tr${p.team === user ? ' mine' : ''}" href="#/trade/for/${esc(p.id)}">TRADE</a>`;
           return `<li class="${s.team === user ? 'mine' : ''}${cur ? ' cur' : ''}${p ? ' done' : ''}">
             <span class="ft-ord-n">${s.overall}</span>${UI.logo(s.team, 26)}
             <span class="ft-ord-t"><b>${esc(s.team)}</b>${s.original && s.original !== s.team ? `<small>via ${esc(s.original)}</small>` : ''} ${lotteryNote(st, year, s)}</span>
-            <span class="ft-ord-p">${p ? `<a href="#/player/${esc(p.id)}">${esc(p.name)}</a><small>${esc(p.pos || '')} | ${p.ovr || '-'} OVR${arrival(st, p, year) ? ' | Overseas until ' + arrival(st, p, year) : ''}</small>` : cur ? '<em>ON THE CLOCK</em>' : ''}</span>
+            <span class="ft-ord-p">${p ? `<a href="#/player/${esc(p.id)}">${esc(p.name)}</a><small>${esc(p.pos || '')} | ${p.ovr || '-'} OVR${arrival(st, p, year) ? ' | Overseas until ' + arrival(st, p, year) : ''}</small>` : cur ? '<em>ON THE CLOCK</em>' : ''}${tl}</span>
           </li>`;
         }).join('')}</ol></div>`;
       }).join('');
@@ -194,21 +322,27 @@
     if (live && next && !onClock && !canAi) actions = '<span class="muted">AI picks are still being built.</span>';
 
     const myPicks = slots ? slots.filter(s => s.team === user) : [];
+    const teamOpen = view.teamOpen != null ? view.teamOpen : !(window.matchMedia && window.matchMedia('(max-width: 700px)').matches);
     app.innerHTML = `${UI.header(year + ' NBA DRAFT', esc(F.phaseName(phase)) + (myPicks.length ? ' | Your picks: ' + myPicks.map(s => '#' + s.overall).join(', ') : ''))}
       <div class="ft-clock${onClock ? ' on' : ''}">${UI.logo(onClock ? user : next ? next.team : user, 48)}<div><div class="ft-k">${onClock ? 'ON THE CLOCK' : live ? 'DRAFT IN PROGRESS' : 'DRAFT CENTRAL'}</div><p>${status}</p></div>${actions ? `<div class="ft-clock-btns">${actions}</div>` : ''}</div>
-      ${last ? `<div class="note">${esc(last)}</div>` : ''}
+      ${last ? `<div class="note">${esc(last)}${lastId && st.players[lastId] && st.players[lastId].team === user && live ? ` <a class="ftd-tr mine" href="#/trade/for/${esc(lastId)}">TRADE HIM</a>` : ''}</div>` : ''}
       ${!F.mod('DRAFT') ? '<div class="note">The draft module (<code>js/draft.js</code>) is still being built: you can scout the class, but picks are not available yet.</div>' : ''}
-      <div class="ft-draft">
+      <div class="ft-draft ftd3">
+        ${teamPanel(st, nd, teamOpen)}
         <section class="ft-class">
           ${UI.header('THE CLASS', pool.length + ' prospects' + (view.pos !== 'ALL' ? ' at ' + view.pos : '') + ' available')}
           <nav class="tabs">${['ALL', 'PG', 'SG', 'SF', 'PF', 'C'].map(x => `<a href="#/draft" data-act="pos" data-pos="${x}" class="${view.pos === x ? 'on' : ''}">${x}</a>`).join('')}</nav>
-          ${pool.length ? `<div class="tscroll"><table class="stats ft-classt"><thead><tr><th>#</th>${head('name', 'PLAYER', 'l')}${head('pos', 'POS')}${head('age', 'AGE')}<th class="hide-sm">HT</th>${head('ovr', 'OVR')}<th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+          ${pool.length ? `<div class="tscroll"><table class="stats ft-classt"><thead><tr><th>#</th>${head('name', 'PLAYER', 'l')}${head('pos', 'POS')}${head('age', 'AGE')}<th class="hide-sm">HT</th>${head('ovr', 'OVR')}${head('fit', 'FIT')}<th></th></tr></thead><tbody>${rows}</tbody></table></div>`
             : `<p class="muted">${done ? 'Every prospect from this class has been drafted or signed.' : 'No prospects found for this draft year.'}</p>`}
         </section>
         <section class="ft-ordersec">${UI.header('DRAFT ORDER', phase === 'draftLottery' ? 'Before the lottery' : slots ? 'After the lottery' : '')}${orderHtml}</section>
       </div>
       ${stashHtml}`;
 
+    const det = UI.$('#ftdTeam', app);
+    // remember only what the user chose (the open attribute itself also fires a toggle event)
+    const sum = det && det.querySelector('summary');
+    if (sum) sum.addEventListener('click', () => { view.teamOpen = !det.open; });
     app.onclick = async ev => {
       const b = ev.target.closest('[data-act]');
       if (!b || b.disabled) return;
@@ -216,7 +350,7 @@
       if (act === 'pos') { ev.preventDefault(); view.pos = b.getAttribute('data-pos'); render(app, st); }
       else if (act === 'sort') {
         const k = b.getAttribute('data-k');
-        if (view.sort === k) view.dir = -view.dir; else { view.sort = k; view.dir = (k === 'age' || k === 'name' || k === 'pos') ? 1 : -1; }
+        if (view.sort === k) view.dir = -view.dir; else { view.sort = k; view.dir = (k === 'age' || k === 'name' || k === 'pos') ? 1 : -1; }   // fit: best first
         render(app, st);
       } else if (act === 'pick') {
         const D = F.fn('DRAFT', 'pick');
@@ -227,6 +361,7 @@
           const r = D.pick(st, user, id, next.raw);
           if (r && r.ok === false) throw new Error(r.reason || 'the pick was refused');
           last = 'With pick #' + next.overall + ', the ' + UI.teamName(user) + ' select ' + (p ? p.name : id) + '.';
+          lastId = id;
           await F.save();
           UI.toast('You drafted ' + (p ? p.name : id) + '. Saved.');
         } catch (e) { console.warn('DRAFT.pick', e); UI.toast('The pick failed: ' + (e && e.message ? e.message : e), 'error'); }
@@ -239,6 +374,7 @@
           if (r && r.ok === false) throw new Error(r.reason || 'no pick made');
           const p = r && r.id ? st.players[r.id] : null;
           last = 'With pick #' + next.overall + ', the AI took ' + (p ? p.name : 'a player') + ' for the ' + UI.teamName(user) + '.';
+          lastId = p ? p.id : null;
           await F.save();
         } catch (e) { console.warn('DRAFT.aiPick', e); UI.toast('The auto pick failed: ' + (e && e.message ? e.message : e), 'error'); }
         render(app, st);
@@ -261,7 +397,7 @@
           if (drafted(st, year).length === before && !(slotsWithPicks(st, year) || []).find(s => s.overall === nx.overall && s.player)) break;
           n++;
         }
-        last = n ? n + ' pick' + (n > 1 ? 's' : '') + ' made by the AI.' : last;
+        if (n) { last = n + ' pick' + (n > 1 ? 's' : '') + ' made by the AI.'; lastId = null; }
         await F.save();
         render(app, st);
       }

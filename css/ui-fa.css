@@ -182,3 +182,52 @@
   .fa-cap-btns .btn { flex: 1 1 100%; }
   .fa-search, .fa-sort { max-width: none; flex: 1 1 100%; }
 }
+
+/* ---------- team needs and fit (free agency page and the sign popups) ---------- */
+.fa-needs { background: var(--bg2); border: 1px solid var(--line); border-left: 3px solid var(--gold); padding: 12px 14px; margin-bottom: 14px; }
+.fa-needs-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 10px; }
+.fa-needs-h b { font-family: var(--display); letter-spacing: .16em; font-size: 13px; color: var(--gold); }
+.fa-needs-h span { color: var(--text2); font-size: 14px; }
+.fa-needs-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.fa-npos { background: var(--bg3); border: 1px solid var(--line); padding: 8px 10px; min-width: 0; }
+.fa-npos h4 { margin: 0 0 6px; font-family: var(--display); font-size: 15px; letter-spacing: .12em; display: flex; align-items: center; gap: 6px; }
+.fa-npos.fa-n-need { border-color: var(--loss); }
+.fa-npos.fa-n-thin { border-color: var(--gold-dim); }
+.fa-npos em { font-style: normal; font-size: 10px; letter-spacing: .12em; padding: 1px 5px; }
+.fa-need { background: var(--loss); color: #000; }
+.fa-thin { background: var(--gold-dim); color: #fff; }
+.fa-npos ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.fa-npos li { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; min-width: 0; }
+.fa-npos li a { color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.fa-npos li span { color: var(--muted); white-space: nowrap; }
+.fa-fitb { display: inline-block; font-family: var(--display); font-size: 11px; letter-spacing: .1em; padding: 2px 6px; margin: 0 6px 4px 0; border: 1px solid var(--line2); color: var(--muted); white-space: nowrap; }
+.fa-fitb small { font-size: 10px; opacity: .8; }
+.fa-fitb.fit-great { background: var(--fa-yes); border-color: var(--fa-yes); color: #fff; }
+.fa-fitb.fit-good { border-color: var(--gold-dim); color: var(--gold2); }
+.fa-fitb.fit-depth { color: var(--text2); }
+@media (max-width: 860px) { .fa-needs-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .fa-needs-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---------- decision popups (js/ui-sim.js): one decision, big buttons ---------- */
+.ev-actions.ev-stack { justify-content: stretch; }
+.ev-stack .ev-big { flex: 1 1 180px; min-height: 48px; font-size: 15px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.ev-big small { font-family: var(--body); font-size: 11px; letter-spacing: 0; text-transform: none; opacity: .75; font-weight: 400; }
+.ev-sub { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+.ev-check { display: flex; align-items: center; gap: 8px; margin-top: 6px; color: var(--text2); font-size: 14px; cursor: pointer; }
+.ev-check input, .ev-cut input { width: 20px; height: 20px; accent-color: var(--gold); flex: none; }
+.ev-card .ev-ask { color: var(--gold2); }
+.ev-card .ev-sign { min-height: 44px; min-width: 84px; flex: none; }
+.ev-cut label { display: flex; align-items: center; gap: 12px; width: 100%; cursor: pointer; padding: 6px 4px; }
+.ev-nm { font-family: var(--display); font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: #fff; }
+.ev-sum { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: var(--text2); font-size: 15px; }
+@media (max-width: 560px) {
+  .ev-modal { padding: 8px; align-items: flex-end; }
+  .ev-box { max-height: calc(100vh - 16px); }
+  .ev-stack .ev-big { flex: 1 1 100%; }
+  .ev-card { flex-wrap: wrap; }
+  .ev-card .ev-hs { width: 48px; }
+  .ev-card .ev-sign { flex: 1 1 100%; }
+}
+.ev-total { margin: 10px 0 0; color: var(--text2); font-size: 14px; }
+.ev-total b { color: var(--gold2); font-family: var(--display); font-size: 18px; }
+.ev-total.bad span, .ev-total span { color: var(--fa-bad); }
