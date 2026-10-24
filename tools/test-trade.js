@@ -299,6 +299,18 @@ ok(shopMs < 8000, "shop runs in under 8 seconds (" + shopMs + " ms)");
 var two = TRADE.shop(sb, "BOS", ["garneke01", "piercpa01"]);
 ok(two.every(function (o) { return o.trade.give.BOS.players.filter(function (id) { return id !== "garneke01" && id !== "piercpa01"; }).length === (o.extra && o.extra.kind === "player" ? 1 : 0); }), "two players on the block: offers take block players, plus the marked extra only (" + two.length + ")");
 ok(TRADE.shop(sb, "BOS", ["duranke01"]).length === 0, "a player not on the user's team gets no offers");
+// picks on the block: a first-round pick alone, and a player plus a pick
+var pickOnly = TRADE.shop(sb, "BOS", ["2014-1-BOS"]);
+pickOnly.slice(0, 3).forEach(function (o) { console.log("    [pick alone, " + o.from + "] " + o.text); });
+ok(pickOnly.length >= 2, "a 2014 1st alone on the block gets offers (" + pickOnly.length + ")");
+ok(pickOnly.every(function (o) { var g = o.trade.give.BOS; return TRADE.evaluate(sb, o.trade).accepts && TRADE.validate(sb, o.trade).ok && (!window.CBA || window.CBA.validateTrade(sb, o.trade).ok) &&
+  g.picks.some(function (k) { return k.year === 2014 && k.round === 1 && k.original === "BOS"; }) && g.players.length + g.picks.length === (o.extra ? 2 : 1) &&
+  o.trade.give[o.from].players.length + o.trade.give[o.from].picks.length >= 1; }), "every pick offer is legal, accepted, gives the pick (plus at most one marked extra) and sends something back");
+var mixed = TRADE.shop(sb, "BOS", ["bradlav01", "2015-1-BOS"]);
+var both = mixed.filter(function (o) { var g = o.trade.give.BOS; return g.players.indexOf("bradlav01") >= 0 && g.picks.some(function (k) { return k.year === 2015 && k.original === "BOS"; }); });
+ok(mixed.length >= 2 && both.length >= 1, "a player plus a pick on the block: offers for each and for both together (" + mixed.length + ", " + both.length + " for both)");
+ok(mixed.every(function (o) { return TRADE.evaluate(sb, o.trade).accepts; }), "every player-plus-pick offer is accepted");
+ok(TRADE.shop(sb, "BOS", ["2014-1-LAL"]).length === 0, "a pick the user does not own gets no offers");
 // accepting an offer: the player moves and a saved rotation keeps its shape
 if (shopped.length) {
   var sx = clone(sb), o1 = shopped.filter(function (o) { return !o.extra; })[0];

@@ -405,7 +405,7 @@
       (got.length ? 'Welcome ' + got.join(', ') + ' to the ' + UI.team(user).name + '.' : 'The deal is done.');
     // the block drops anyone who left
     const t = st.teams[user];
-    if (Array.isArray(t.tradeBlock)) t.tradeBlock = t.tradeBlock.filter(id => st.players[id] && st.players[id].team === user);
+    if (Array.isArray(t.tradeBlock)) t.tradeBlock = t.tradeBlock.filter(id => onBlockStill(st, id));   // players and picks that left drop off
     shopRes = null; take = null;
     await F.save();
     UI.toast('Trade complete. Saved.');
@@ -598,11 +598,18 @@
   }
 
   // ---------- trading block ----------
+  // the block: player ids and pick keys ("2014-1-CLE") the user still holds (older saves hold only players)
   function blockIds(st) {
     const t = st.teams[st.userTeam];
     if (!t || !Array.isArray(t.tradeBlock)) return [];
-    return t.tradeBlock.filter(id => st.players[id] && st.players[id].team === st.userTeam);
+    return t.tradeBlock.filter(id => onBlockStill(st, id));
   }
+  function onBlockStill(st, id) {
+    const user = st.userTeam;
+    if (st.players[id]) return st.players[id].team === user && !st.players[id].retired;
+    return !!pickObj(st, user, id);   // teamPicks: held, not yet made, not in a past draft
+  }
+  const blockName = (st, id) => st.players[id] ? st.players[id].name : (pickObj(st, st.userTeam, id) ? F.pickLabel(pickObj(st, st.userTeam, id), st.userTeam) + ' pick' : id);
 
   function renderBlock(app, st) {
     const user = st.userTeam, team = st.teams[user];
@@ -615,9 +622,18 @@
     const roster = F.teamPlayers(st, user).map(p => {
       const on = block.indexOf(p.id) >= 0;
       const meta = `${esc(p.pos || '')} | ${esc(p.age || '-')} YRS | ${F.money(F.salary(p, yr))} | ${esc(F.contractText(p, st))} ${UI.injuryBadge(p)}`;
-      return `<button type="button" class="ft-item ftx-blk${on ? ' on' : ''}" data-act="block" data-id="${esc(p.id)}" aria-pressed="${on}">${F.mini(p, { meta })}<span class="ftx-tag">${on ? 'ON THE BLOCK' : 'ADD'}</span></button>`;
+      return `<button type="button" class="ft-item ftx-blk${on ? ' on' : ''}" data-act="block" data-id="${esc(p.id)}" aria-pressed="${on}">${F.mini(p, { meta })}<span class="ftx-tag">${on ? 'ON THE BLOCK' : 'ADD TO BLOCK'}</span></button>`;
     }).join('');
-    const names = block.map(id => st.players[id].name);
+    const pickRows = teamPicks(st, user).map(pk => {
+      const k = F.pickKey(pk), on = block.indexOf(k) >= 0, pr = F.protText(pk), ls = liveSlot(st, pk, user);
+      const meta = ls ? `Round ${ls.round}, pick ${ls.overall} tonight${ls.original && ls.original !== user ? ' | From ' + esc(UI.teamName(ls.original)) : ''}`
+        : `${pk.original && pk.original !== user ? 'From ' + esc(UI.teamName(pk.original)) : 'Own pick'} | ${pr ? esc(pr) : 'Unprotected'}`;
+      return `<button type="button" class="ft-item ft-pick ftx-blk${on ? ' on' : ''}" data-act="block" data-id="${esc(k)}" aria-pressed="${on}">
+        <span class="ft-pick-yr">${ls ? '#' + esc(ls.overall) : esc(pk.year)}<small>${ls ? esc(pk.year) : pk.round === 1 ? '1ST' : '2ND'}</small></span>
+        <span class="ft-main"><b class="ft-name">${esc(F.pickLabel(pk, user))}</b><span class="ft-meta">${meta}</span></span>
+        <span class="ftx-tag">${on ? 'ON THE BLOCK' : 'ADD TO BLOCK'}</span></button>`;
+    }).join('');
+    const names = block.map(id => blockName(st, id));
     let results = '';
     if (shopRes && shopRes.error) results = `<div class="ft-answer bad"><div class="ft-k">FIND TRADES</div><p>${esc(shopRes.error)}</p></div>`;
     else if (shopRes && !shopRes.list.length) results = `<div class="ft-answer bad"><div class="ft-k">NO OFFERS</div><p>No team wants to give anything for ${esc(names.join(' and '))} that fits the salary rules. Try a different player.</p></div>`;
@@ -638,7 +654,9 @@
       </section>
       <div id="ftxResults">${results}</div>
       ${UI.header('YOUR ROSTER', 'Click a player to put him on the block or take him off.')}
-      <div class="ft-list ftx-blocklist">${roster}</div>`;
+      <div class="ft-list ftx-blocklist">${roster}</div>
+      ${UI.header('YOUR DRAFT PICKS', 'Picks can go on the block too, alone or with players.')}
+      <div class="ft-list ftx-blocklist" id="ftxBlockPicks">${pickRows || '<p class="muted">You hold no tradable picks.</p>'}</div>`;
     app.onchange = null;
     app.onclick = async ev => {
       const b = ev.target.closest('[data-act]');

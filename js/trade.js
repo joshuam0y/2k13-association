@@ -918,7 +918,8 @@
       .sort(function (a, b) { return b.vR - a.vR; });
     var seconds = picks.filter(function (c) { return c.pick.round === 2; });
     var pickC = picks.slice(0, opts.pickN || 5);
-    if (seconds.length && pickC.indexOf(seconds[seconds.length - 1]) < 0) pickC.push(seconds[seconds.length - 1]);
+    // second-rounders too, so a pick can bring back a couple of seconds or a later first
+    seconds.slice(0, 2).concat(seconds.slice(-1)).forEach(function (c) { if (pickC.indexOf(c) < 0) pickC.push(c); });
     var cands = top.concat(fillers, pickC);
 
     function make(sel) {
@@ -996,7 +997,7 @@
   //   youth: a young player plus picks (what rebuilders offer)
   //   value: anything (often a lesser player plus picks)
   // ---------------------------------------------------------------------------
-  var KIND_LABEL = { star: "Star for star", pair: "Two starters", youth: "Youth and picks", value: "Players and picks" };
+  var KIND_LABEL = { star: "Star for star", pair: "Two starters", youth: "Youth and picks", value: "Players and picks", picks: "Picks" };
   function kindSpec(ctx, kind, ref) {
     var st = ctx.state;
     function P(c) { return c.kind === "p" ? st.players[c.id] : null; }
@@ -1019,6 +1020,7 @@
     if (ps.some(function (p) { return p.ovr >= ref - 3; })) return "star";
     if (ps.filter(function (p) { return p.ovr >= ref - 12; }).length >= 2) return "pair";
     if (picks && ps.some(function (p) { return (p.age || 30) <= 23; })) return "youth";
+    if (picks && !ps.length) return "picks";
     return "value";
   }
   function sumOf(sel, key) { var v = 0; sel.forEach(function (c) { v += c[key]; }); return v; }
@@ -1117,18 +1119,20 @@
   // ---------------------------------------------------------------------------
   // the user's assets a team might ask for on top of a block player: the one it likes most, one that
   // matches the salary it would send back, and the user's pick it likes most
-  function extraAssets(ctx, T, user, bid, block) {
+  function extraAssets(ctx, T, user, be, block) {
     var st = ctx.state, out = [], seen = {};
     var ps = ctx.rosters[user].filter(function (id) {
       var p = st.players[id];
-      return id !== bid && block.indexOf(id) < 0 && countsOnRoster(st, p) && !recentlyTraded(st, p);
+      return block.indexOf(id) < 0 && countsOnRoster(st, p) && !recentlyTraded(st, p);
     }).map(function (id) { return { kind: "p", id: id, vT: parts(ctx, id, T).total, s: salaryOf(st.players[id], ctx.year) }; });
     ps.filter(function (c) { return c.vT > 0.5; }).sort(function (a, b) { return b.vT - a.vT; }).slice(0, 1)
       .forEach(function (c) { seen[c.id] = 1; out.push(c); });
-    var sal = salaryOf(st.players[bid], ctx.year);
-    var match = ps.filter(function (c) { return !seen[c.id] && c.s >= sal * 0.5 && c.vT > 0; }).sort(function (a, b) { return b.s - a.s; })[0];
-    if (match) out.push(match);
-    var pk = ((st.teams[user].picks) || []).filter(function (k) { return k.year >= ctx.draftYear && !pickUsed(st, k, user); })
+    if (be.kind === "p") {   // one that matches the salary of the block player
+      var sal = salaryOf(st.players[be.id], ctx.year);
+      var match = ps.filter(function (c) { return !seen[c.id] && c.s >= sal * 0.5 && c.vT > 0; }).sort(function (a, b) { return b.s - a.s; })[0];
+      if (match) out.push(match);
+    }
+    var pk = ((st.teams[user].picks) || []).filter(function (k) { return k.year >= ctx.draftYear && !pickUsed(st, k, user) && block.indexOf(pickId(k)) < 0; })
       .map(function (k) { return { kind: "k", pick: k, vT: pickVal(ctx, k, T) }; }).sort(function (a, b) { return b.vT - a.vT; })[0];
     if (pk) out.push(pk);
     return out;
@@ -1139,21 +1143,31 @@
     opts = opts || {};
     userAbbr = userAbbr || state.userTeam;
     if (!state.teams[userAbbr] || !windowOpen(state)) return [];
-    var ids = [];
+    // the block holds player ids and pick keys ("2014-1-CLE"); picks must still be the user's and unused
+    var ids = [], pks = [];
     (playerIds || []).forEach(function (id) {
       var p = state.players[id];
-      if (p && p.team === userAbbr && !p.retired && ids.indexOf(id) < 0) ids.push(id);
+      if (p) { if (p.team === userAbbr && !p.retired && ids.indexOf(id) < 0) ids.push(id); return; }
+      var k = findPick(state, userAbbr, id);
+      if (k && !pickUsed(state, k, userAbbr) && k.year >= draftYear(state) && !pks.some(function (q) { return q === k; })) pks.push(k);
     });
-    if (!ids.length) return [];
+    if (!ids.length && !pks.length) return [];
     ensureDirections(state);
     var ctx = makeCtx(state), rule = difficulty(state);
-    var sets = ids.map(function (id) { return [id]; });
-    if (ids.length > 1 && ids.length <= 3) sets.push(ids.slice());
+    var ents = ids.map(function (id) { return { kind: "p", id: id }; }).concat(pks.map(function (k) { return { kind: "k", pick: k, id: pickId(k) }; }));
+    var sets = ents.map(function (e) { return [e]; });
+    if (ents.length > 1 && ents.length <= 3) sets.push(ents.slice());
+    function entVal(e, T) { return e.kind === "p" ? parts(ctx, e.id, T).total : pickVal(ctx, e.pick, T); }
+    // a pick's "OVR" for the package kinds: the player worth about the same to that team
+    function entRef(e, T) { return e.kind === "p" ? state.players[e.id].ovr : Math.round(60 + CURVE * Math.log(Math.max(0.05, pickVal(ctx, e.pick, T)) + REPLACEMENT)); }
+    function setPlayers(set) { return set.filter(function (e) { return e.kind === "p"; }).map(function (e) { return e.id; }); }
+    function setPicks(set) { return set.filter(function (e) { return e.kind === "k"; }).map(function (e) { return { year: e.pick.year, round: e.pick.round, original: e.pick.original }; }); }
+    var blockKeys = ents.map(function (e) { return e.id; });
     var noFiller = {}; noFiller[userAbbr] = 1;
     var found = [];
-    // bigger deals are asked of the ten teams that want the block players most (keeps the search quick)
+    // bigger deals are asked of the ten teams that want the block most (keeps the search quick)
     var interest = Object.keys(state.teams).filter(function (T) { return T !== userAbbr; }).map(function (T) {
-      var v = 0; ids.forEach(function (id) { v = Math.max(v, parts(ctx, id, T).total - parts(ctx, id, userAbbr).total * 0.5); }); return { T: T, v: v };
+      var v = 0; ents.forEach(function (e) { v = Math.max(v, entVal(e, T) - entVal(e, userAbbr) * 0.5); }); return { T: T, v: v };
     }).sort(function (a, b) { return b.v - a.v; });
     var bigTeams = {};
     interest.slice(0, 10).forEach(function (x) { bigTeams[x.T] = 1; });
@@ -1161,14 +1175,14 @@
       if (T === userAbbr || (opts.teams && opts.teams.indexOf(T) < 0)) return;
       sets.forEach(function (set) {
         var want = 0, ref = 0;
-        set.forEach(function (id) { want += parts(ctx, id, T).total; ref = Math.max(ref, state.players[id].ovr); });
+        set.forEach(function (e) { want += entVal(e, T); ref = Math.max(ref, entRef(e, T)); });
         if (want <= 0.3) return;     // this team has no use for them
         // several kinds of offers per team: star for star, two starters, youth and picks, anything
         var res = [];
         ["star", "pair", "youth", "value"].forEach(function (kind) {
           var spec = kindSpec(ctx, kind, ref);
-          buildPackages(ctx, T, userAbbr, set, {
-            limit: 1, maxAssets: 3, maxTries: spec ? 12 : 25, topN: spec ? 6 : 8, pickN: 4, spec: spec,
+          buildPackages(ctx, T, userAbbr, setPlayers(set), {
+            limit: 1, maxAssets: 3, maxTries: spec ? 12 : 25, topN: spec ? 6 : 8, pickN: 4, spec: spec, wantPicks: setPicks(set),
             gRule: rule, rRule: { base: 0, pct: 0 }, noFiller: noFiller,
             prune: function (sel) { return sumOf(sel, "vG") > 1.4 * want + 2; },   // more than they think he is worth
             rOk: function (e) { return e.inValue > 0.2 || e.gain > 0; },
@@ -1199,15 +1213,21 @@
       // bigger deals: the team asks for one more asset of the user's (a player it likes or one that
       // matches salary, or a pick) and sends back a better player or a bigger package
       if (opts.bigger === false || !bigTeams[T]) return;
-      ids.forEach(function (bid) {
-        if (parts(ctx, bid, T).total <= 0.3) return;
+      ents.forEach(function (be) {
+        if (entVal(be, T) <= 0.3) return;
         var plainBest = -Infinity;
-        found.forEach(function (o) { if (o.from === T && !o.extra && o.trade.give[userAbbr].players.length === 1 && o.trade.give[userAbbr].players[0] === bid) plainBest = Math.max(plainBest, marketNet(ctx, flows(state, o.trade, userAbbr))); });
-        extraAssets(ctx, T, userAbbr, bid, ids).forEach(function (x) {
-          var want = [bid].concat(x.kind === "p" ? [x.id] : []), wantPicks = x.kind === "k" ? [{ year: x.pick.year, round: x.pick.round, original: x.pick.original }] : [];
-          var ref = 0, wantV = 0;
-          want.forEach(function (id) { ref = Math.max(ref, state.players[id].ovr); wantV += parts(ctx, id, T).total; });
-          wantPicks.forEach(function (k) { wantV += pickVal(ctx, k, T); });
+        found.forEach(function (o) {
+          var g = o.trade.give[userAbbr];
+          if (o.from !== T || o.extra || g.players.length + g.picks.length !== 1) return;
+          var only = g.players.length ? g.players[0] : pickId(parsePickRef(g.picks[0]));
+          if (only === be.id) plainBest = Math.max(plainBest, marketNet(ctx, flows(state, o.trade, userAbbr)));
+        });
+        extraAssets(ctx, T, userAbbr, be, blockKeys).forEach(function (x) {
+          var want = (be.kind === "p" ? [be.id] : []).concat(x.kind === "p" ? [x.id] : []);
+          var wantPicks = (be.kind === "k" ? setPicks([be]) : []).concat(x.kind === "k" ? [{ year: x.pick.year, round: x.pick.round, original: x.pick.original }] : []);
+          var ref = entRef(be, T), wantV = entVal(be, T);
+          if (x.kind === "p") { ref = Math.max(ref, state.players[x.id].ovr); wantV += parts(ctx, x.id, T).total; }
+          else wantV += pickVal(ctx, x.pick, T);
           (x.kind === "k" ? ["star"] : ["star", "value"]).forEach(function (kind) {
             var spec = kindSpec(ctx, kind, ref);
             buildPackages(ctx, T, userAbbr, want, {
@@ -1226,7 +1246,7 @@
               // the return must be better (a better player) or bigger (more coming back) than the plain offers
               var backBest = 0;
               tr.give[T].players.forEach(function (id) { backBest = Math.max(backBest, state.players[id].ovr); });
-              if (backBest < state.players[bid].ovr && marketNet(ctx, flows(state, tr, userAbbr)) + rawGive(ctx, x) <= plainBest) return;
+              if (backBest < entRef(be, T) && marketNet(ctx, flows(state, tr, userAbbr)) + rawGive(ctx, x) <= plainBest) return;
               var ev = evaluate(state, tr, { ctx: ctx });
               if (!ev.accepts) return;
               var C = cba();
