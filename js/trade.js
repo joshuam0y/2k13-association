@@ -1115,6 +1115,26 @@
   // Public: shop (the trading block). Every AI team says what it would give for the
   // user's block players. Each offer is legal and accepted by evaluate. Best for the user first.
   // ---------------------------------------------------------------------------
+  // the user's assets a team might ask for on top of a block player: the one it likes most, one that
+  // matches the salary it would send back, and the user's pick it likes most
+  function extraAssets(ctx, T, user, bid, block) {
+    var st = ctx.state, out = [], seen = {};
+    var ps = ctx.rosters[user].filter(function (id) {
+      var p = st.players[id];
+      return id !== bid && block.indexOf(id) < 0 && countsOnRoster(st, p) && !recentlyTraded(st, p);
+    }).map(function (id) { return { kind: "p", id: id, vT: parts(ctx, id, T).total, s: salaryOf(st.players[id], ctx.year) }; });
+    ps.filter(function (c) { return c.vT > 0.5; }).sort(function (a, b) { return b.vT - a.vT; }).slice(0, 1)
+      .forEach(function (c) { seen[c.id] = 1; out.push(c); });
+    var sal = salaryOf(st.players[bid], ctx.year);
+    var match = ps.filter(function (c) { return !seen[c.id] && c.s >= sal * 0.5 && c.vT > 0; }).sort(function (a, b) { return b.s - a.s; })[0];
+    if (match) out.push(match);
+    var pk = ((st.teams[user].picks) || []).filter(function (k) { return k.year >= ctx.draftYear && !pickUsed(st, k, user); })
+      .map(function (k) { return { kind: "k", pick: k, vT: pickVal(ctx, k, T) }; }).sort(function (a, b) { return b.vT - a.vT; })[0];
+    if (pk) out.push(pk);
+    return out;
+  }
+  function rawGive(ctx, x) { return x.kind === "p" ? marketVal(ctx, x.id) : rawPick(ctx, x.pick, 0); }
+
   function shop(state, userAbbr, playerIds, opts) {
     opts = opts || {};
     userAbbr = userAbbr || state.userTeam;
@@ -1131,6 +1151,12 @@
     if (ids.length > 1 && ids.length <= 3) sets.push(ids.slice());
     var noFiller = {}; noFiller[userAbbr] = 1;
     var found = [];
+    // bigger deals are asked of the ten teams that want the block players most (keeps the search quick)
+    var interest = Object.keys(state.teams).filter(function (T) { return T !== userAbbr; }).map(function (T) {
+      var v = 0; ids.forEach(function (id) { v = Math.max(v, parts(ctx, id, T).total - parts(ctx, id, userAbbr).total * 0.5); }); return { T: T, v: v };
+    }).sort(function (a, b) { return b.v - a.v; });
+    var bigTeams = {};
+    interest.slice(0, 10).forEach(function (x) { bigTeams[x.T] = 1; });
     Object.keys(state.teams).forEach(function (T) {
       if (T === userAbbr || (opts.teams && opts.teams.indexOf(T) < 0)) return;
       sets.forEach(function (set) {
@@ -1165,8 +1191,60 @@
           var fair = fairnessOf(ctx, tr);
           if (fair && fair.score < -0.5) return;   // not a serious offer
           found.push({ from: T, trade: tr, accepts: true, value: round2(r.eR.gain), margin: ev.margin,
-            kind: r.kind, kindLabel: KIND_LABEL[r.kind], fair: fair,
-            text: describe(state, tr), message: "The " + shortName(state, T) + " would do this deal." });
+            kind: r.kind, kindLabel: KIND_LABEL[r.kind], fair: fair, extra: r.extra || null,
+            text: describe(state, tr), message: r.extra ? "The " + shortName(state, T) + " would do a bigger deal if you add " + r.extra.name + "."
+              : "The " + shortName(state, T) + " would do this deal." });
+        });
+      });
+      // bigger deals: the team asks for one more asset of the user's (a player it likes or one that
+      // matches salary, or a pick) and sends back a better player or a bigger package
+      if (opts.bigger === false || !bigTeams[T]) return;
+      ids.forEach(function (bid) {
+        if (parts(ctx, bid, T).total <= 0.3) return;
+        var plainBest = -Infinity;
+        found.forEach(function (o) { if (o.from === T && !o.extra && o.trade.give[userAbbr].players.length === 1 && o.trade.give[userAbbr].players[0] === bid) plainBest = Math.max(plainBest, marketNet(ctx, flows(state, o.trade, userAbbr))); });
+        extraAssets(ctx, T, userAbbr, bid, ids).forEach(function (x) {
+          var want = [bid].concat(x.kind === "p" ? [x.id] : []), wantPicks = x.kind === "k" ? [{ year: x.pick.year, round: x.pick.round, original: x.pick.original }] : [];
+          var ref = 0, wantV = 0;
+          want.forEach(function (id) { ref = Math.max(ref, state.players[id].ovr); wantV += parts(ctx, id, T).total; });
+          wantPicks.forEach(function (k) { wantV += pickVal(ctx, k, T); });
+          (x.kind === "k" ? ["star"] : ["star", "value"]).forEach(function (kind) {
+            var spec = kindSpec(ctx, kind, ref);
+            buildPackages(ctx, T, userAbbr, want, {
+              limit: 1, maxAssets: 3, maxTries: 8, topN: 5, pickN: 3, spec: spec, wantPicks: wantPicks,
+              gRule: rule, rRule: { base: 0, pct: 0 }, noFiller: noFiller,
+              prune: function (sel) { return sumOf(sel, "vG") > 1.4 * wantV + 2; },
+              rOk: function (e) { return e.inValue > 0.2 || e.gain > 0; },
+              gOk: function (e) { return e.margin >= 0; },
+              score: function (eR) { return marketNet(ctx, eR.flows) + 0.5 * eR.gain; }
+            }).forEach(function (r) {
+              var tr = { teams: [userAbbr, T], give: {} };
+              tr.give[userAbbr] = r.trade.give[userAbbr];
+              tr.give[T] = r.trade.give[T];
+              var mine = tr.give[userAbbr];
+              if (mine.players.length + mine.picks.length !== 2) return;          // exactly one extra asset
+              // the return must be better (a better player) or bigger (more coming back) than the plain offers
+              var backBest = 0;
+              tr.give[T].players.forEach(function (id) { backBest = Math.max(backBest, state.players[id].ovr); });
+              if (backBest < state.players[bid].ovr && marketNet(ctx, flows(state, tr, userAbbr)) + rawGive(ctx, x) <= plainBest) return;
+              var ev = evaluate(state, tr, { ctx: ctx });
+              if (!ev.accepts) return;
+              var C = cba();
+              if (C && typeof C.validateTrade === "function") {
+                var cv = null;
+                try { cv = C.validateTrade(state, tr); } catch (e) { cv = { ok: false }; }
+                if (!cv || !cv.ok) return;
+              }
+              var fair = fairnessOf(ctx, tr);
+              if (fair && fair.score < -0.5) return;
+              var kd = kindOf(state, tr, T, ref);
+              var extra = x.kind === "p" ? { kind: "player", id: x.id, name: state.players[x.id].name }
+                : { kind: "pick", pick: wantPicks[0], name: pickLabel(state, x.pick, userAbbr) };
+              found.push({ from: T, trade: tr, accepts: true, value: round2(r.eR.gain), margin: ev.margin,
+                kind: kd, kindLabel: KIND_LABEL[kd], fair: fair, extra: extra,
+                text: describe(state, tr), message: "The " + shortName(state, T) + " would do a bigger deal if you add " + extra.name + "." });
+            });
+          });
         });
       });
     });
@@ -1174,17 +1252,19 @@
     // one offer per team, kind and block set; the best few of every kind make the list, then the best of the rest
     var seen = {}, uniq = [];
     found.forEach(function (o) {
-      var key = o.from + "|" + o.kind + "|" + o.trade.give[userAbbr].players.slice().sort().join(",");
+      var key = o.from + "|" + o.kind + "|" + o.trade.give[userAbbr].players.slice().sort().join(",") + "|" + o.trade.give[userAbbr].picks.map(function (k) { return pickId(parsePickRef(k)); }).join(",");
       var same = o.from + "|" + describe(state, o.trade);
       if (seen[key] || seen[same]) return;
       seen[key] = seen[same] = 1; uniq.push(o);
     });
-    // at most two offers per team (of different kinds), so many teams get a say
-    var limit = opts.limit || 15, out = [], taken = {}, perKind = {}, perTeam = {};
-    function take(o, i) { taken[i] = 1; perTeam[o.from] = (perTeam[o.from] || 0) + 1; out.push(o); }
-    uniq.forEach(function (o, i) { if ((perKind[o.kind] || 0) < 3 && (perTeam[o.from] || 0) < 2) { perKind[o.kind] = (perKind[o.kind] || 0) + 1; take(o, i); } });
-    uniq.forEach(function (o, i) { if (!taken[i] && (perTeam[o.from] || 0) < 1) take(o, i); });
-    uniq.forEach(function (o, i) { if (!taken[i] && (perTeam[o.from] || 0) < 2) take(o, i); });
+    // at most two offers per team (of different kinds), so many teams get a say; offers that ask for
+    // a player or pick the user did not put on the block are at most a third of the list
+    var limit = opts.limit || 15, out = [], taken = {}, perKind = {}, perTeam = {}, extras = 0, maxExtra = Math.floor(limit / 3);
+    function take(o, i) { taken[i] = 1; perTeam[o.from] = (perTeam[o.from] || 0) + 1; if (o.extra) extras++; out.push(o); }
+    function room(o) { return !o.extra || extras < maxExtra; }
+    uniq.forEach(function (o, i) { var k = o.extra ? "x" + (o.extra.kind) : o.kind; if ((perKind[k] || 0) < 3 && (perTeam[o.from] || 0) < 2 && room(o)) { perKind[k] = (perKind[k] || 0) + 1; take(o, i); } });
+    uniq.forEach(function (o, i) { if (!taken[i] && (perTeam[o.from] || 0) < 1 && room(o)) take(o, i); });
+    uniq.forEach(function (o, i) { if (!taken[i] && (perTeam[o.from] || 0) < 2 && room(o)) take(o, i); });
     out = out.slice(0, limit);
     out.sort(function (a, b) { return b.value - a.value; });
     return out;

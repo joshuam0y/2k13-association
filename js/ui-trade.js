@@ -188,12 +188,9 @@
     .ftx-pkrow { display: flex; gap: 6px; align-items: stretch; }
     .ftx-pkrow > .ft-item { flex: 1 1 auto; min-width: 0; }
     .ftx-more { margin-top: 6px; font-size: 13px; }
-    .ftx-fair { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 10px 0 0; font-size: 12px; }
-    .ftx-fair-l { font-family: var(--display); letter-spacing: .14em; color: var(--muted); font-size: 11px; }
-    .ftx-fair-bar { position: relative; flex: 0 1 160px; min-width: 90px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #8a2f2f 0, #8a2f2f 38%, var(--gold-dim) 38%, var(--gold-dim) 62%, #2f7a45 62%, #2f7a45 100%); }
-    .ftx-fair-bar i { position: absolute; top: -3px; width: 4px; height: 14px; margin-left: -2px; background: #fff; border-radius: 2px; box-shadow: 0 0 0 1px #000; }
-    .ftx-fair b { font-family: var(--display); letter-spacing: .08em; }
-    .ftx-fair.win b { color: #7fd99a; } .ftx-fair.even b { color: var(--gold2); } .ftx-fair.lose b { color: #ff9b9b; }
+    .ftx-also { margin: 10px 0 0; padding: 6px 10px; border-left: 3px solid var(--gold); background: rgba(212, 175, 55, .08); font-size: 13px; color: var(--text2); }
+    .ftx-also b { color: #fff; }
+    .ftx-addtag { display: inline-block; margin-left: 6px; padding: 0 5px; background: var(--gold); color: #000; font-family: var(--display); font-size: 10px; letter-spacing: .1em; white-space: nowrap; }
     .ftx-kind { display: inline-block; margin-left: 8px; padding: 1px 6px; border: 1px solid var(--line2); color: var(--text2); font-size: 10px; letter-spacing: .1em; font-family: var(--display); vertical-align: middle; }
     @media (max-width: 700px) { .ftx-ba { grid-template-columns: minmax(0, 1fr); } }
   `);
@@ -344,18 +341,19 @@
     }).join('')}</div>`;
   }
 
-  function assetList(st, tr, abbr, removable) {
+  function assetList(st, tr, abbr, removable, mark) {
     const g = tr.give[abbr] || { players: [], picks: [] };
     const items = [];
     (g.players || []).forEach(id => {
       const p = st.players[id];
       const x = removable ? `<button type="button" class="ftx-x" data-act="toggle" data-side="${esc(abbr)}" data-kind="player" data-id="${esc(id)}" aria-label="Remove">&times;</button>` : '';
       const tb = !removable && !noTradeLink && p && p.team !== st.userTeam && st.teams[p.team] ? `<a class="ftx-tradebtn" href="#/trade/for/${esc(p.id)}" title="Build a new trade for him">TRADE</a>` : '';
-      items.push(p ? `<li><b class="${UI.ovrClass(p.ovr || 0)}">${p.ovr || '-'}</b> <a href="#/player/${esc(p.id)}">${esc(p.name)}</a> <small>${esc(p.pos || '')} | ${esc(p.age || '-')} yrs | ${F.money(F.salary(p, F.capYear(st)))} | ${esc(F.contractText(p, st))}</small>${tb}${x}</li>` : `<li>${esc(id)}</li>`);
+      const add = mark && mark === id ? '<span class="ftx-addtag">THEY ALSO WANT</span>' : '';
+      items.push(p ? `<li><b class="${UI.ovrClass(p.ovr || 0)}">${p.ovr || '-'}</b> <a href="#/player/${esc(p.id)}">${esc(p.name)}</a>${add} <small>${esc(p.pos || '')} | ${esc(p.age || '-')} yrs | ${F.money(F.salary(p, F.capYear(st)))} | ${esc(F.contractText(p, st))}</small>${tb}${x}</li>` : `<li>${esc(id)}</li>`);
     });
     (g.picks || []).forEach(pk => {
       const x = removable ? `<button type="button" class="ftx-x" data-act="toggle" data-side="${esc(abbr)}" data-kind="pick" data-id="${esc(F.pickKey(pk))}" aria-label="Remove">&times;</button>` : '';
-      items.push(`<li><b class="ft-pk">PICK</b> ${esc(F.pickLabel(pk, abbr))}${x}</li>`);
+      items.push(`<li><b class="ft-pk">PICK</b> ${esc(F.pickLabel(pk, abbr))}${mark && mark === F.pickKey(pk) ? '<span class="ftx-addtag">THEY ALSO WANT</span>' : ''}${x}</li>`);
     });
     return items.length ? `<ul class="ft-assets">${items.join('')}</ul>` : '<p class="muted ft-nothing">Nothing yet</p>';
   }
@@ -461,7 +459,7 @@
     noTradeLink = true;
     const cards = take.list.map((t, i) => offerCard(st, t, deal.partner, [`<button type="button" class="btn btn-gold btn-small" data-act="takeDo" data-i="${i}">MAKE THIS TRADE</button>`, `<button type="button" class="btn btn-small" data-act="takeLoad" data-i="${i}">EDIT IT</button>`], 'PACKAGE ' + (i + 1), (take.meta && take.meta[i]) || {})).join('');
     noTradeLink = false;
-    return `<div class="ftx-finds">${UI.header('WHAT WOULD IT TAKE: ' + esc(nm.toUpperCase()), 'Packages the ' + esc(UI.team(deal.partner).name) + ' would accept, cheapest for you first')}
+    return `<div class="ftx-finds">${UI.header('WHAT WOULD IT TAKE: ' + esc(nm.toUpperCase()), 'Packages the ' + esc(UI.team(deal.partner).name) + ' would accept')}
       ${cards}</div>`;
   }
 
@@ -518,7 +516,7 @@
       </div>
       <section class="ft-deal">
         <div class="ft-deal-cols"><div><div class="ft-k">YOU GIVE</div>${assetList(st, tr, user, true)}</div><div><div class="ft-k">YOU GET</div>${assetList(st, tr, partner, true)}</div></div>
-        ${dealSize(tr) ? fairHtml(st, tr) + beforeAfterHtml(st, tr, chk, yr) + salaryHtml(st, tr, chk, yr) : ''}
+        ${dealSize(tr) ? beforeAfterHtml(st, tr, chk, yr) + salaryHtml(st, tr, chk, yr) : ''}
         ${cbaHtml}
         ${verdict}
       </section>
@@ -580,16 +578,6 @@
     };
   }
 
-  // fairness for the user by market value (TRADE.fairness): "Fair", "You win", "They win"
-  function fairHtml(st, tr, fair) {
-    const Fz = F.fn('TRADE', 'fairness');
-    const f = fair || (Fz ? F.try('TRADE.fairness', () => Fz.fairness(st, tr), null) : null);
-    if (!f || !f.label) return '';
-    const pct = Math.max(4, Math.min(96, 50 + (Number(f.score) || 0) * 100));
-    const cls = f.label === 'You win' ? 'win' : f.label === 'They win' ? 'lose' : 'even';
-    return `<div class="ftx-fair ${cls}" title="By market value: what a typical team would pay for each side"><span class="ftx-fair-l">FAIRNESS</span><span class="ftx-fair-bar"><i style="left:${pct}%"></i></span><b>${esc(f.label.toUpperCase())}</b></div>`;
-  }
-
   // ---------- offer cards (trading block results, finder results, AI offers) ----------
   function offerCard(st, tr, from, buttons, note, meta) {
     meta = meta || {};
@@ -598,10 +586,13 @@
     const yr = F.capYear(st);
     const sumOf = a => ((tr.give[a] && tr.give[a].players) || []).reduce((s, id) => s + F.salary(st.players[id], yr), 0);
     const out = sumOf(user), inn = sumOf(from);
-    return `<article class="ft-offer">
+    const ex = meta.extra || null;
+    const mark = ex ? (ex.kind === 'player' ? ex.id : F.pickKey(ex.pick)) : null;
+    const also = ex ? `<p class="ftx-also">They also want: <b>${esc(ex.name)}</b>. This bigger deal needs one more of your assets, not only the block.</p>` : '';
+    return `<article class="ft-offer${ex ? ' ftx-bigger' : ''}">
       <div class="ft-offer-head">${UI.logo(from, 44)}<div><div class="ft-k">${note ? esc(note) : 'OFFER FROM'}${meta.kindLabel ? `<span class="ftx-kind">${esc(String(meta.kindLabel).toUpperCase())}</span>` : ''}</div><div class="ft-t">${esc(UI.teamName(from))}</div></div></div>
-      <div class="ft-find-cols"><div><div class="ft-k">YOU GIVE</div>${assetList(st, tr, user)}</div><div><div class="ft-k">YOU GET</div>${assetList(st, tr, from)}</div></div>
-      ${fairHtml(st, tr, meta.fair)}
+      <div class="ft-find-cols"><div><div class="ft-k">YOU GIVE</div>${assetList(st, tr, user, false, mark)}</div><div><div class="ft-k">YOU GET</div>${assetList(st, tr, from)}</div></div>
+      ${also}
       <p class="ftx-offer-sal">Salary: you send ${F.money(out)}, take back ${F.money(inn)}${chk ? (chk.ok ? ' | <span class="win">CBA OK</span>' : ' | <span class="loss">' + esc(chk.reasons[0] || 'breaks the rules') + '</span>') : ''}</p>
       <div class="row-btns">${buttons.join('')}</div></article>`;
   }
@@ -630,10 +621,10 @@
     let results = '';
     if (shopRes && shopRes.error) results = `<div class="ft-answer bad"><div class="ft-k">FIND TRADES</div><p>${esc(shopRes.error)}</p></div>`;
     else if (shopRes && !shopRes.list.length) results = `<div class="ft-answer bad"><div class="ft-k">NO OFFERS</div><p>No team wants to give anything for ${esc(names.join(' and '))} that fits the salary rules. Try a different player.</p></div>`;
-    else if (shopRes) results = `${UI.header('OFFERS FOR ' + esc(names.join(', ').toUpperCase()), shopRes.list.length + ' offers from ' + new Set(shopRes.list.map(o => o.from)).size + ' teams: star swaps, two-for-ones, youth and picks. Each is legal, the other team will say yes, and the meter shows how fair it is.')}
+    else if (shopRes) results = `${UI.header('OFFERS FOR ' + esc(names.join(', ').toUpperCase()), shopRes.list.length + ' offers from ' + new Set(shopRes.list.map(o => o.from)).size + ' teams, by team. Some build a bigger deal and ask for one more of your players or picks. Each is legal and the other team will say yes: the rest is up to you.')}
       <div class="ft-offers">${shopRes.list.map((o, i) => offerCard(st, o.trade, o.from, [
         `<button type="button" class="btn btn-gold" data-act="shopDo" data-i="${i}">ACCEPT</button>`,
-        `<button type="button" class="btn" data-act="shopEdit" data-i="${i}">EDIT IN TRADE SCREEN</button>`], i === 0 ? 'BEST OFFER' : 'OFFER ' + (i + 1), { kindLabel: o.kindLabel })).join('')}</div>`;
+        `<button type="button" class="btn" data-act="shopEdit" data-i="${i}">EDIT IN TRADE SCREEN</button>`], o.extra ? 'BIGGER DEAL' : 'OFFER FROM', { kindLabel: o.kindLabel, extra: o.extra })).join('')}</div>`;
 
     app.innerHTML = `${UI.header('TRADES', 'Put players on the block, then ask every team what they would give.')}
       ${tabs(st, 'block')}
@@ -666,7 +657,9 @@
         await new Promise(r => setTimeout(r, 30));
         try {
           const list = window.TRADE.shop(st, user, blockIds(st)) || [];
-          shopRes = { key, list: list.filter(o => o && o.trade && o.from) };
+          // shown by team (no ranking, so the offers keep their suspense), plain offers before bigger deals
+          const nm = a => UI.teamName(a);
+          shopRes = { key, list: list.filter(o => o && o.trade && o.from).sort((a, b) => nm(a.from).localeCompare(nm(b.from)) || (!!a.extra - !!b.extra)) };
         } catch (e) { console.warn('TRADE.shop', e); shopRes = { key, list: [], error: 'Could not ask the other teams: ' + (e && e.message ? e.message : e) }; }
         renderBlock(app, st);
         const el = UI.$('#ftxResults', app); if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });

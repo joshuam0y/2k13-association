@@ -285,19 +285,23 @@ ok(shopped.length >= 3, "several teams make offers for Garnett (" + shopped.leng
 ok(shopped.every(function (o) { return TRADE.evaluate(sb, o.trade).accepts; }), "every block offer is accepted by evaluate");
 ok(!usingCBA || shopped.every(function (o) { return window.CBA.validateTrade(sb, o.trade).ok; }), "every block offer passes CBA.validateTrade");
 ok(shopped.every(function (o) { return TRADE.validate(sb, o.trade).ok; }), "every block offer passes the trade rules (rosters, Stepien)");
-ok(shopped.every(function (o) { var g = o.trade.give.BOS; return g.players.length === 1 && g.players[0] === "garneke01" && !g.picks.length; }), "BOS only gives the player on the block");
+ok(shopped.every(function (o) { var g = o.trade.give.BOS; return o.extra ? g.players.indexOf("garneke01") >= 0 && g.players.length + g.picks.length === 2 : g.players.length === 1 && g.players[0] === "garneke01" && !g.picks.length; }), "BOS gives the block player, plus exactly one marked extra asset in bigger deals");
+var bigger = shopped.filter(function (o) { return o.extra; });
+ok(bigger.length >= 1 && bigger.length <= Math.floor(15 / 3), "some bigger deals ask for one more asset, at most a third of the list (" + bigger.length + ")");
+ok(bigger.every(function (o) { var g = o.trade.give.BOS; return o.extra.kind === "player" ? g.players.indexOf(o.extra.id) >= 0 : g.picks.some(function (k) { return k.year === o.extra.pick.year && k.round === o.extra.pick.round && k.original === o.extra.pick.original; }); }), "the extra asset is the one marked in the offer");
+bigger.slice(0, 3).forEach(function (o) { console.log("    [" + o.from + ", also wants " + o.extra.name + "] " + o.text); });
 ok(shopped.every(function (o) { var g = o.trade.give[o.from]; return g.players.length + g.picks.length >= 1; }), "every offer gives something back");
 ok(shopped.every(function (o, i) { return i === 0 || shopped[i - 1].value >= o.value; }), "offers come best first");
-ok(shopped.every(function (o) { var same = shopped.filter(function (x) { return x.from === o.from; }); return same.length <= 2 && (same.length < 2 || same[0].kind !== same[1].kind); }), "at most two offers per team, of different kinds");
+ok(shopped.every(function (o) { var same = shopped.filter(function (x) { return x.from === o.from; }); return same.length <= 2 && (same.length < 2 || same[0].kind !== same[1].kind || (same[0].extra && same[0].extra.name) !== (same[1].extra && same[1].extra.name)); }), "at most two offers per team, different from each other");
 ok(new Set(shopped.map(function (o) { return o.from; })).size >= Math.min(8, shopped.length / 2), "many different teams make offers (" + new Set(shopped.map(function (o) { return o.from; })).size + ")");
 ok(shopped.every(function (o) { return o.fair && /^(Fair|You win|They win)$/.test(o.fair.label) && o.kindLabel; }), "every offer has a fairness label and a kind");
 ok(shopMs < 8000, "shop runs in under 8 seconds (" + shopMs + " ms)");
 var two = TRADE.shop(sb, "BOS", ["garneke01", "piercpa01"]);
-ok(two.every(function (o) { return o.trade.give.BOS.players.every(function (id) { return id === "garneke01" || id === "piercpa01"; }); }), "two players on the block: offers only take block players (" + two.length + ")");
+ok(two.every(function (o) { return o.trade.give.BOS.players.filter(function (id) { return id !== "garneke01" && id !== "piercpa01"; }).length === (o.extra && o.extra.kind === "player" ? 1 : 0); }), "two players on the block: offers take block players, plus the marked extra only (" + two.length + ")");
 ok(TRADE.shop(sb, "BOS", ["duranke01"]).length === 0, "a player not on the user's team gets no offers");
 // accepting an offer: the player moves and a saved rotation keeps its shape
 if (shopped.length) {
-  var sx = clone(sb), o1 = shopped[0];
+  var sx = clone(sb), o1 = shopped.filter(function (o) { return !o.extra; })[0];
   var bos = playersOf(sx, "BOS").sort(function (a, b) { return b.ovr - a.ovr; }).map(function (p) { return p.id; });
   var kgSlot = bos.indexOf("garneke01");
   sx.teams.BOS.rotation = bos.slice(); sx.teams.BOS.minutes = {}; bos.forEach(function (id, i) { sx.teams.BOS.minutes[id] = i < 5 ? 32 : i < 10 ? 16 : 0; });
