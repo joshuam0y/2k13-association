@@ -513,7 +513,9 @@
   // ---------------------------------------------------------------------------
   function careerTotals(p) {
     var t = { g: 0, pts: 0, reb: 0, ast: 0, seasons: 0, byTeam: {} };
-    (p.careerStats || []).forEach(function (x) {
+    // his real NBA seasons before 2012-13 (data/career-prior.js) count too, then the seasons in this save
+    var prior = (typeof window !== 'undefined' && window.CAREER_PRIOR && window.CAREER_PRIOR[p.id]) || [];
+    prior.concat(p.careerStats || []).forEach(function (x) {
       var g = x.g || 0;
       if (!g) return;
       var totals = x.min != null && x.min / g > 4;
@@ -539,9 +541,14 @@
     (list || []).forEach(function (a) { s += AWARD_POINTS[a.award] || 0; });
     return s;
   }
+  // Whole career: real stats and awards before 2012-13 plus everything in this save.
+  // Calibrated on real careers: Ray Allen, Pierce, Vince Carter, Bosh and Pau clear it; Joe Johnson,
+  // Jason Terry, Antawn Jamison and Andre Miller fall short.
+  var HOF_LINE = 85;
   function hofScore(p) {
     var t = careerTotals(p);
-    return t.pts / 1000 * 2.2 + t.reb / 1000 * 1.1 + t.ast / 1000 * 1.6 + awardPoints(p.awards);
+    var prior = (typeof window !== 'undefined' && window.AWARDS_PRIOR && window.AWARDS_PRIOR[p.id]) || [];
+    return t.pts / 1000 * 2.2 + t.reb / 1000 * 1.1 + t.ast / 1000 * 1.6 + awardPoints(prior) + awardPoints(p.awards);
   }
   function retiredYear(p) {
     if (p.retiredYear) return p.retiredYear;
@@ -560,7 +567,7 @@
       var ry = retiredYear(p);
       if (!ry || year - ry < 4) return;
       var s = hofScore(p);
-      if (s >= 55) { p.hof = true; p.hofYear = year; inducted.push({ id: id, name: p.name, score: r1(s) }); }
+      if (s >= HOF_LINE) { p.hof = true; p.hofYear = year; inducted.push({ id: id, name: p.name, score: r1(s) }); }
     });
     if (state.history) {
       state.history.hallOfFame = state.history.hallOfFame || [];

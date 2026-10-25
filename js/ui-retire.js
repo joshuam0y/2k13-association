@@ -108,9 +108,10 @@
   }
   function outlook(score, p) {
     if (p.hof) return { key: 'in', text: 'Hall of Famer' };
-    if (score >= 85) return { key: 'first', text: 'First-ballot Hall of Famer' };
-    if (score >= 65) return { key: 'cand', text: 'Hall of Fame candidate' };
-    if (score >= 45) return { key: 'long', text: 'Hall of Fame long shot' };
+    // AWARDS inducts at 85, four full seasons after retirement
+    if (score >= 120) return { key: 'first', text: 'First-ballot Hall of Famer' };
+    if (score >= 85) return { key: 'first', text: 'Future Hall of Famer' };
+    if (score >= 65) return { key: 'cand', text: 'Hall of Fame long shot' };
     return null;
   }
   const LEGEND = 85;

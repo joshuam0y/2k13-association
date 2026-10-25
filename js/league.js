@@ -560,6 +560,13 @@
     var phase = state.phase;
     if (phase === "draftLottery") {
       if (mod("DRAFT")) safe("lottery", function () { W.DRAFT.lottery(state, rng); if (W.DRAFT.startDraft) W.DRAFT.startDraft(state, state.year); });
+      // this summer's Hall of Fame class (retired four full seasons or more)
+      if (mod("AWARDS") && W.AWARDS.hallOfFame && state.hofYear !== state.year) {
+        state.hofYear = state.year;
+        safe("hallOfFame", function () {
+          (W.AWARDS.hallOfFame(state, state.year) || []).forEach(function (x) { news(state, x.name + " Elected To The Hall Of Fame", x.name + " headlines the " + state.year + " Hall of Fame class.", [x.id]); });
+        });
+      }
       state.phase = "draft";
     } else if (phase === "draft") {
       var D = mod("DRAFT");
