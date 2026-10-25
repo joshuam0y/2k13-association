@@ -216,6 +216,10 @@
     return S ? F.try('TRADE.slotForEntry', () => S.slotForEntry(st, pk, abbr), null) : null;
   }
   function teamPicks(st, abbr) {
+    // draft night: every slot this team picks with tonight gets its pick entry first (protected picks that stayed home)
+    const E = F.fn('TRADE', 'entryForSlot');
+    if (E && st.phase === 'draft' && st.draft && Array.isArray(st.draft.order) && !st.draft.done)
+      st.draft.order.forEach(sl => { if (sl && sl.team === abbr && !sl.player) F.try('TRADE.entryForSlot', () => E.entryForSlot(st, sl), null); });
     const t = st.teams[abbr];
     const from = ['resign', 'freeAgency', 'training'].indexOf(st.phase) >= 0 ? st.year + 1 : st.year;   // the next draft
     const U = F.fn('TRADE', 'pickUsed');
@@ -455,7 +459,11 @@
     const pk = take.pick ? pickObj(st, deal.partner, take.pick) : null;
     const nm = p ? p.name : pk ? 'the ' + F.pickLabel(pk, deal.partner) + ' pick' : take.pick ? 'that pick' : 'him';
     if (take.error) return `<div class="ft-answer bad"><div class="ft-k">WHAT WOULD IT TAKE</div><p>${esc(take.error)}</p></div>`;
-    if (!take.list.length) return `<div class="ft-answer bad"><div class="ft-k">WHAT WOULD IT TAKE: ${esc(nm.toUpperCase())}</div><p>The ${esc(UI.team(deal.partner).name)} would not trade ${esc(nm)} for anything you have that fits the salary rules.</p></div>`;
+    if (!take.list.length) {
+      const X = F.fn('TRADE', 'explain');
+      const why = X ? F.try('TRADE.explain', () => X.explain(st, { mode: 'finder', user: st.userTeam, partner: deal.partner, ids: take.pid ? [take.pid] : [], picks: pk ? [pk] : [] }), '') : '';
+      return `<div class="ft-answer bad" id="ftxNoDeal"><div class="ft-k">NO TRADE POSSIBLE: ${esc(nm.toUpperCase())}</div><p>${esc(why || 'The ' + UI.team(deal.partner).name + ' would not trade ' + nm + ' for anything you have that fits the salary rules.')}</p></div>`;
+    }
     noTradeLink = true;
     const cards = take.list.map((t, i) => offerCard(st, t, deal.partner, [`<button type="button" class="btn btn-gold btn-small" data-act="takeDo" data-i="${i}">MAKE THIS TRADE</button>`, `<button type="button" class="btn btn-small" data-act="takeLoad" data-i="${i}">EDIT IT</button>`], 'PACKAGE ' + (i + 1), (take.meta && take.meta[i]) || {})).join('');
     noTradeLink = false;
@@ -636,7 +644,11 @@
     const names = block.map(id => blockName(st, id));
     let results = '';
     if (shopRes && shopRes.error) results = `<div class="ft-answer bad"><div class="ft-k">FIND TRADES</div><p>${esc(shopRes.error)}</p></div>`;
-    else if (shopRes && !shopRes.list.length) results = `<div class="ft-answer bad"><div class="ft-k">NO OFFERS</div><p>No team wants to give anything for ${esc(names.join(' and '))} that fits the salary rules. Try a different player.</p></div>`;
+    else if (shopRes && !shopRes.list.length) {
+      const X = F.fn('TRADE', 'explain');
+      const why = X ? F.try('TRADE.explain', () => X.explain(st, { mode: 'shop', user, ids: block }), '') : '';
+      results = `<div class="ft-answer bad" id="ftxNoDeal"><div class="ft-k">NO TRADE POSSIBLE</div><p>${esc(why || 'No team wants to give anything for ' + names.join(' and ') + ' that fits the salary rules. Try a different player.')}</p></div>`;
+    }
     else if (shopRes) results = `${UI.header('OFFERS FOR ' + esc(names.join(', ').toUpperCase()), shopRes.list.length + ' offers from ' + new Set(shopRes.list.map(o => o.from)).size + ' teams, by team. Some build a bigger deal and ask for one more of your players or picks. Each is legal and the other team will say yes: the rest is up to you.')}
       <div class="ft-offers">${shopRes.list.map((o, i) => offerCard(st, o.trade, o.from, [
         `<button type="button" class="btn btn-gold" data-act="shopDo" data-i="${i}">ACCEPT</button>`,
@@ -839,6 +851,19 @@
     const user = st.userTeam;
     if (deal.user !== user) resetDeal(user, null);
     if (arg === 'block') { renderBlock(app, st); return; }
+    if (String(arg || '').indexOf('blockadd/') === 0) {
+      const key = String(arg).slice(9), t = st.teams[user];
+      if (onBlockStill(st, key)) {
+        t.tradeBlock = blockIds(st).filter(x => x !== key).concat([key]);
+        shopRes = null;
+        F.save();
+      } else UI.toast('That pick or player is no longer yours to trade.', 'error');
+      try { history.replaceState(null, '', location.pathname + location.search + '#/trade/block'); } catch (e) { /* ignore */ }
+      renderBlock(app, st);
+      const b = UI.$('[data-act="shop"]', app);
+      if (b && !b.disabled && onBlockStill(st, key)) b.click();   // find trades right away
+      return;
+    }
     if (arg === 'offers') { renderOffers(app, st); return; }
     const link = deepLink(st, String(arg || ''));
     if (link) {

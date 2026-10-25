@@ -664,10 +664,21 @@
     return out;
   }
 
+  // How much need counts at this pick: teams take the best player available early (need only breaks
+  // ties in the top 10), lean on it more from 11 to 30 and most in the second round. Contenders weigh
+  // need a bit more than rebuilders.
+  function needWeight(state, abbr) {
+    var d = state.draft, slot = d && d.order ? d.order[d.index || 0] : null, n = slot ? slot.overall : 15;
+    var w = n <= 10 ? 0.3 : n <= 30 ? 1 : 1.8;
+    var dir = teams(state)[abbr] && teams(state)[abbr].direction;
+    return w * (dir === 'contend' ? 1.25 : dir === 'rebuild' ? 0.8 : 1);
+  }
+  var lastReason = null;   // why the last AI pick was made, for the draft log
   function aiChoice(state, abbr, year) {
     var ids = pool(state, year);
     var isUser = abbr === state.userTeam;
-    var need = needBonus(state, abbr);
+    var need = needBonus(state, abbr), nw = needWeight(state, abbr);
+    Object.keys(need).forEach(function (g) { need[g] *= nw; });
     var rng = seeded(state, 'aipick' + year + ':' + (state.draft ? state.draft.index : 0) + ':' + abbr);
     var best = null, bestV = -1e9;
     ids.forEach(function (id) {
@@ -685,6 +696,8 @@
       if (val > bestV) { bestV = val; best = id; }
     });
     if (!best && ids.length) best = ids[0];
+    var bp = best && state.players[best];
+    lastReason = bp && need[posGroup(bp.pos)] >= 0.9 ? { id: best, text: 'fills a need at ' + primaryPos(bp.pos) } : null;
     return best;
   }
 
@@ -743,8 +756,11 @@
       p.injury = { type: 'Playing overseas', games: 999 };
     }
     slot.player = prospectId;
+    var why = lastReason && lastReason.id === prospectId && abbr !== state.userTeam ? lastReason.text : null;
+    lastReason = null;
+    if (why) slot.reason = why.charAt(0).toUpperCase() + why.slice(1);
     addTx(state, d.year, 'draft', teamName(state, abbr) + ' select ' + p.name + ' (' + p.pos + ') with pick ' + slot.overall +
-      (slot.via ? ' (from ' + slot.via + ')' : '') + (p.stashedUntil ? '; he stays overseas until ' + p.stashedUntil : '') + '.', [prospectId]);
+      (slot.via ? ' (from ' + slot.via + ')' : '') + (p.stashedUntil ? '; he stays overseas until ' + p.stashedUntil : '') + (why ? '. ' + slot.reason : '') + '.', [prospectId]);
     if (slot.overall === 1) addNews(state, d.year, p.name + ' goes first overall', 'The ' + teamName(state, abbr) + ' took ' + p.name + ' with the first pick of the ' + d.year + ' draft.', [prospectId]);
     d.index++;
     if (d.index >= d.order.length) finish(state);

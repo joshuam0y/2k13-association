@@ -38,6 +38,7 @@
     .ftd-tr { display: inline-block; margin-top: 3px; padding: 1px 6px; border: 1px solid var(--gold-dim); color: var(--gold2) !important; font-family: var(--display); font-size: 10px; letter-spacing: .1em; text-decoration: none; white-space: nowrap; align-self: flex-start; }
     .ftd-tr:hover { background: var(--gold); color: #000 !important; }
     .ftd-tr.mine { border-color: var(--line2); color: var(--text2) !important; }
+    .ftd-trs { display: flex; flex-wrap: wrap; gap: 4px; }
     @media (min-width: 1500px) {
       .ft-draft.ftd3 { grid-template-columns: minmax(230px, .8fr) minmax(0, 1.7fr) minmax(0, 1fr); }
       .ftd3 .ftd-pos { grid-template-columns: minmax(0, 1fr); }
@@ -291,13 +292,14 @@
           let tl = '';
           if (live && !p) {
             const key = slotKey(st, s);
-            if (key) tl = s.team === user ? `<a class="ftd-tr mine" href="#/trade/give/${esc(key)}" data-trade="give" data-n="${s.overall}">TRADE THIS PICK</a>`
+            // your own pick: build a deal in the trade screen, or put it on the block and ask every team
+            if (key) tl = s.team === user ? `<span class="ftd-trs"><a class="ftd-tr mine" href="#/trade/give/${esc(key)}" data-trade="give" data-n="${s.overall}" title="Open the trade screen with this pick">TRADE THIS PICK</a><a class="ftd-tr" href="#/trade/blockadd/${esc(key)}" data-trade="block" data-n="${s.overall}" title="Put it on the trading block and ask all 29 teams">FIND TRADES</a></span>`
               : `<a class="ftd-tr" href="#/trade/pick/${esc(key)}" data-trade="for" data-n="${s.overall}">TRADE FOR THIS PICK</a>`;
           } else if (p && st.teams[p.team] && (live || done)) tl = `<a class="ftd-tr${p.team === user ? ' mine' : ''}" href="#/trade/for/${esc(p.id)}">TRADE</a>`;
           return `<li class="${s.team === user ? 'mine' : ''}${cur ? ' cur' : ''}${p ? ' done' : ''}">
             <span class="ft-ord-n">${s.overall}</span>${UI.logo(s.team, 26)}
             <span class="ft-ord-t"><b>${esc(s.team)}</b>${s.original && s.original !== s.team ? `<small>via ${esc(s.original)}</small>` : ''} ${lotteryNote(st, year, s)}</span>
-            <span class="ft-ord-p">${p ? `<a href="#/player/${esc(p.id)}">${esc(p.name)}</a><small>${esc(p.pos || '')} | ${p.ovr || '-'} OVR${arrival(st, p, year) ? ' | Overseas until ' + arrival(st, p, year) : ''}</small>` : cur ? '<em>ON THE CLOCK</em>' : ''}${tl}</span>
+            <span class="ft-ord-p">${p ? `<a href="#/player/${esc(p.id)}">${esc(p.name)}</a><small>${esc(p.pos || '')} | ${p.ovr || '-'} OVR${arrival(st, p, year) ? ' | Overseas until ' + arrival(st, p, year) : ''}${s.raw && s.raw.reason ? ' | ' + esc(s.raw.reason) : ''}</small>` : cur ? '<em>ON THE CLOCK</em>' : ''}${tl}</span>
           </li>`;
         }).join('')}</ol></div>`;
       }).join('');

@@ -508,6 +508,15 @@ console.log("\nDraft night: live pick values and draft-day trades");
   ok(rv.ok, "a rookie can be traded right after the pick" + (rv.ok ? "" : ": " + rv.reasons.join(" ")));
   ok(TRADE.value(s, best.id, T) > 0, "the new rookie has trade value (" + TRADE.value(s, best.id, T) + ")");
 
+  // tonight's picks on the trading block, second round too; an empty search always explains itself
+  var sb2 = draftState("OKC"), mine2 = sb2.draft.order.filter(function (x) { return x.team === "OKC" && x.round === 2 && !x.player; })[0];
+  if (mine2) {
+    var key2 = TRADE.pickId(TRADE.entryForSlot(sb2, mine2)), offs2 = TRADE.shop(sb2, "OKC", [key2]);
+    var why2 = TRADE.explain(sb2, { mode: "shop", user: "OKC", ids: [key2] });
+    ok(offs2.length > 0 || /#\d+ pick/.test(why2), "OKC's #" + mine2.overall + " (second round, tonight) on the block: " + (offs2.length ? offs2.length + " offers, e.g. " + offs2[0].text : why2));
+    ok(offs2.every(function (o) { return TRADE.evaluate(sb2, o.trade).accepts; }), "every offer for tonight's pick is accepted");
+    ok(/^No team wants to trade for the #\d+ pick right now\. Second-round picks rarely bring back players/.test(why2), "the empty-search message for a second-rounder: " + why2);
+  }
   // AI teams trade picks among themselves on draft night
   var n = draftState("OKC"), got = null;
   for (var k = 0; k < 20 && !got && DRAFT.current(n); k++) {
@@ -542,6 +551,10 @@ console.log("\nTrade deadline, closed window and asking for more");
   var t = { teams: ["OKC", "HOU"], give: { OKC: { players: ["collini01"], picks: [] }, HOU: { players: [], picks: [{ year: 2014, round: 2, original: "HOU" }] } } };
   var e = TRADE.evaluate(s, t);
   ok(!e.accepts && /reopen after the playoffs/.test(e.message), "trades are blocked after the deadline: " + e.message);
+  ok(/closed until after the playoffs/.test(TRADE.explain(s, { mode: "shop", user: "OKC", ids: ["collini01"] })), "an empty search after the deadline says trades are closed");
+  var sF = buildState("OKC"), heat = TRADE.finder(sF, "OKC", "MIA", ["jamesle01"]);
+  var whyF = TRADE.explain(sF, { mode: "finder", user: "OKC", partner: "MIA", ids: ["jamesle01"] });
+  ok(heat.length > 0 || /will not move LeBron James/.test(whyF), "What would it take for LeBron: offers or a clear reason (" + (heat.length ? heat.length + " offers" : whyF) + ")");
   s.phase = "draftLottery";
   ok(TRADE.deadline(s).open && TRADE.deadline(s).status === "offseason", "the offseason reopens trades: " + TRADE.deadline(s).text);
   // ask for more

@@ -417,7 +417,21 @@
       var s2 = slotForEntry(state, q, slot.team);
       if (s2 === slot) return q;
     }
-    return null;
+    return homeEntry(state, slot);
+  }
+  // A protected pick that stayed home (even one whose protection ended it) is still the original
+  // team's selection tonight. It has no pick entry (js/draft.js keeps the books that way), so one is
+  // made the moment the pick is traded or shown in a trade list; finish() clears it after the draft.
+  function homeEntry(state, slot) {
+    var d = liveDraft(state);
+    if (!d || !slot || slot.player || slot.team !== slot.original || +slot.year !== +d.year || !state.teams[slot.team]) return null;
+    var held = Object.keys(state.teams).some(function (a) {
+      return (state.teams[a].picks || []).some(function (k) { return +k.year === +slot.year && +k.round === +slot.round && k.original === slot.original; });
+    });
+    if (held) return null;
+    var e = { year: slot.year, round: slot.round, original: slot.original, protection: null, draftNight: true };
+    (state.teams[slot.team].picks = state.teams[slot.team].picks || []).push(e);
+    return e;
   }
   function pickUsed(state, entry, holder) {
     var s = slotForEntry(state, entry, holder);
@@ -498,6 +512,14 @@
     for (var i = 0; i < t.picks.length; i++) {
       var p = t.picks[i];
       if (p.year === r.year && p.round === r.round && p.original === r.original) return p;
+    }
+    // tonight's pick of a protected selection that stayed home
+    if (r.original === abbr && liveDraft(state)) {
+      var d = state.draft;
+      for (var j = 0; j < d.order.length; j++) {
+        var sl = d.order[j];
+        if (+sl.year === +r.year && +sl.round === +r.round && sl.original === abbr && sl.team === abbr) return homeEntry(state, sl);
+      }
     }
     return null;
   }
@@ -1718,6 +1740,79 @@
     return null;
   }
 
+  // ---------------------------------------------------------------------------
+  // Why a search came back empty, in plain words (never a blank list in the UI).
+  //   mode "shop":   explain(state, { mode: "shop", user, ids })          (the trading block)
+  //   mode "finder": explain(state, { mode: "finder", user, partner, ids, picks })  (What would it take)
+  // ---------------------------------------------------------------------------
+  function fmtMoney(x) { return "$" + (x / 1e6).toFixed(1) + "M"; }
+  function explain(state, o) {
+    o = o || {};
+    var user = o.user || state.userTeam;
+    if (!windowOpen(state)) {
+      if (state.phase === "playoffs" || (state.season && state.season.phase === "playoffs")) return "Trades are closed until after the playoffs.";
+      return "The trade deadline has passed. Trades are closed until after the playoffs.";
+    }
+    ensureDirections(state);
+    var ctx = makeCtx(state), rules = ctx.rules;
+    function pkName(k, holder) { return "the " + pickLabel(state, k, holder) + " pick"; }
+    if (o.mode === "finder") {
+      var T = o.partner, ids = (o.ids || []).filter(function (id) { return state.players[id]; });
+      var picks = (o.picks || []).map(function (k) { return findPick(state, T, k); }).filter(Boolean);
+      var what = ids.length ? state.players[ids[0]].name : picks.length ? pkName(picks[0], T) : "that";
+      var tn = "The " + shortName(state, T);
+      if (ids.length) {
+        var p = state.players[ids[0]], sal = salaryOf(p, ctx.year), t = parts(ctx, p.id, T).talent;
+        var best = 0; ctx.rosters[T].forEach(function (id) { best = Math.max(best, parts(ctx, id, T).talent); });
+        if (t >= 25 && t >= best - 0.01) return tn + " will not move " + p.name + ", their franchise player, for anything on your roster that fits the rules.";
+        var after = ctx.pay[user] + sal;
+        if (sal > 0 && after > rules.cap) {
+          var needOut = Math.max(0, (sal - 100000) / 1.25);
+          var C = cba();
+          if (C && typeof C.maxIncoming === "function") {
+            // smallest outgoing salary that lets the user take him back
+            var lo = 0, hi = sal * 1.5 + 1e6;
+            for (var i = 0; i < 30; i++) { var mid = (lo + hi) / 2, ok = false; try { ok = C.maxIncoming(ctx.year, mid, { overTax: after - mid > rules.tax }) >= sal; } catch (e) { ok = mid >= needOut; } if (ok) hi = mid; else lo = mid; }
+            needOut = hi;
+          }
+          return tn + " would not trade " + p.name + " for anything you have that fits. You are over the cap, so to take back his " + fmtMoney(sal) +
+            " salary you must send out at least " + fmtMoney(needOut) + " in salary, and they want real value for him too. Try a bigger package in the trade screen.";
+        }
+        return tn + " would not trade " + p.name + " for anything you have that fits the salary and roster rules. Try adding players or picks in the trade screen.";
+      }
+      return tn + " would not trade " + what + " for anything you have that fits the rules right now.";
+    }
+    // shop: the user's block
+    var list = (o.ids || []).map(function (id) {
+      var p = state.players[id];
+      if (p) return { kind: "p", id: id, name: p.name, p: p };
+      var k = findPick(state, user, id);
+      return k ? { kind: "k", id: id, k: k, name: pkName(k, user) } : null;
+    }).filter(Boolean);
+    if (!list.length) return "Put players or picks on the block first.";
+    var others = Object.keys(state.teams).filter(function (a) { return a !== user; });
+    var msgs = list.map(function (e) {
+      var wanted = others.filter(function (T) { return (e.kind === "p" ? parts(ctx, e.id, T).total : pickVal(ctx, e.k, T)) > 0.3; }).length;
+      if (e.kind === "k") {
+        var slot = slotForEntry(state, e.k, user);
+        var nm = slot ? "the #" + slot.overall + " pick" : e.name;
+        if (e.k.round === 2) return "No team wants to trade for " + nm + " right now. Second-round picks rarely bring back players; try adding it to a bigger deal with a player.";
+        if (!wanted) return "No team wants to give anything for " + nm + " right now. Try adding it to a bigger deal with a player.";
+        return "Teams like " + nm + ", but none has a deal that fits the rules. Add a player to the block or build the deal in the trade screen.";
+      }
+      var p = e.p, sal = salaryOf(p, ctx.year), inj = injuryGames(state, p);
+      if (!wanted) {
+        if (inj >= 30) return "No team wants " + p.name + " while he is hurt (out about " + inj + " games).";
+        if (sal > marketSalary(p.ovr, ctx.capRatio) * 1.4 && sal > 6e6) return "No team wants " + p.name + "'s " + fmtMoney(sal) + " contract at his level of play. Attach a pick or a young player to move him.";
+        if ((p.age || 0) >= 33) return "No team sees enough value in " + p.name + " at age " + p.age + " to give something back.";
+        return "No team sees enough value in " + p.name + " to give something back right now.";
+      }
+      if (sal >= 6e6) return "No team can take " + p.name + "'s " + fmtMoney(sal) + " salary under the cap rules and still send back value. Teams over the cap must match salaries: try the trade screen with a player of theirs.";
+      return "Teams are interested in " + p.name + ", but no offer fits the salary and roster rules right now. Try again later or build the deal in the trade screen.";
+    });
+    return msgs.join(" ");
+  }
+
   var API = {
     value: value, pickValue: pickValue, evaluate: evaluate, finder: finder,
     aiOffers: aiOffers, aiTrades: aiTrades, execute: execute,
@@ -1727,7 +1822,7 @@
     shop: shop, pickText: pickText, protectionText: protectionText,
     // draft night and trade screen helpers
     pickLabel: pickLabel, slotForEntry: slotForEntry, entryForSlot: entryForSlot, pickUsed: pickUsed,
-    deadline: deadline, deadlineMD: deadlineMD, fairness: fairness, KIND_LABEL: KIND_LABEL, askForMore: askForMore, draftNightTrade: draftNightTrade, liveDraft: liveDraft
+    deadline: deadline, deadlineMD: deadlineMD, explain: explain, fairness: fairness, KIND_LABEL: KIND_LABEL, askForMore: askForMore, draftNightTrade: draftNightTrade, liveDraft: liveDraft
   };
   W.TRADE = API;
   if (typeof module !== "undefined" && module.exports) module.exports = API;

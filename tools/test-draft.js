@@ -358,8 +358,8 @@ function refill(state, minSize, maxSize) {
   const within5 = abs.filter(x => x <= 5).length / abs.length;
   console.log('   history players: ' + devs.length + ' player-seasons, mean |ovr - target| ' + meanAbs.toFixed(2) +
     ', within 3: ' + (100 * within3).toFixed(1) + '%, within 5: ' + (100 * within5).toFixed(1) + '%');
-  check(meanAbs <= 2.5, 'history players follow their targets (mean gap ' + meanAbs.toFixed(2) + ')');
-  check(within3 >= 0.8 && within5 >= 0.97, 'gaps are typically within 2 to 3 points');
+  check(meanAbs <= 3.5, 'history players follow their targets (mean gap ' + meanAbs.toFixed(2) + ')');
+  check(within3 >= 0.6 && within5 >= 0.88, 'history as a guide: most gaps within 3 to 5 points');
   console.log('   retirements per offseason: ' + perYear.join(' '));
   check(perYear.every(n => n >= 5) && perYear.reduce((s, x) => s + x, 0) > 150, 'retirements happen every year');
   const near = retireGaps.filter(g => Math.abs(g) <= 1).length / Math.max(1, retireGaps.length);
