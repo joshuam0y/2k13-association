@@ -702,8 +702,10 @@
       // Real classes: teams only know what scouts knew on draft night, so the real draft order is the
       // big board (Bennett goes high, Giannis around the middle of the first round). Hindsight counts a
       // little, plus noise, so the order is close to history but never exactly the same.
-      if (p.realPick) {
-        var stock = 95 - 14 * Math.log(Math.max(1, +p.realPick));
+      // The stock comes from the pre-draft consensus board (boardRank) when known, else the real pick.
+      var rank = p.boardRank || p.realPick;
+      if (rank) {
+        var stock = 95 - 14 * Math.log(Math.max(1, +rank));
         val = 0.75 * stock + 0.25 * (0.62 * v.pot + 0.38 * v.ovr) + fitBonus(p, v) + gauss(rng) * 2.5;
       }
       if (val > bestV) { bestV = val; best = id; }
