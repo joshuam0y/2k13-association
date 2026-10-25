@@ -167,7 +167,7 @@
     exumda01: { from: 2016, note: 'torn ACL in August 2015' },
     embiijo01: { from: 2015, note: 'foot injuries, missed 2014-15 and 2015-16' },
     // a number 1 pick whose shoulder condition derailed him: the healthy path grows toward his projection
-    fultzma01: { from: 2018, note: 'thoracic outlet syndrome in 2017-18', grow: [84, 88], quiet: true },
+    fultzma01: { from: 2018, note: 'thoracic outlet syndrome in 2017-18', grow: [82, 86], quiet: true },
     // career fate (not an injury): left the NBA in 2015; the other path keeps him playing
     sandela01: { from: 2015, note: 'left the NBA in 2015', type: 'career', chance: 0.4, quiet: true }
   };
@@ -196,12 +196,14 @@
     var years = Object.keys(t).filter(function (k) { return /^\d{4}$/.test(k); }).map(Number);
     var lastReal = years.length ? Math.max.apply(null, years) : from;
     var end = Math.max(lastReal, Math.min(2026, retireH - 1));
+    var young = ageAt(from) <= 22;
     var v = L, goal = fate.grow ? fate.grow[0] + rng() * (fate.grow[1] - fate.grow[0]) : null;
     for (var y = from; y <= end; y++) {
       var a = ageAt(y);
       if (y > from && goal != null && a <= 25) v += Math.max(0, (goal - v) * 0.4);   // develops like a top pick
-      else if (y > from) v += a <= 26 ? 1 : a <= 29 ? 0 : a === 30 ? -1 : a <= 32 ? -1.5 : a <= 34 ? -2.5 : -3.5;
-      v = Math.min(v, goal != null ? goal : L + 3);
+      // hold the pre-injury level (only a very young player still grows a little), then age normally
+      else if (y > from) v += a <= 25 && young ? 1 : a <= 29 ? 0 : a === 30 ? -1 : a <= 32 ? -1.5 : a <= 34 ? -2.5 : -3.5;
+      v = Math.min(v, goal != null ? goal : young ? L + 4 : L);
       var real = t[y] != null ? +t[y] : null;
       out[y] = Math.round(Math.max(real != null ? real : 0, Math.min(99, v)));
     }
@@ -256,7 +258,7 @@
   // Playing time (25 and under) and major injuries move drift for everyone (fictional players too).
   // ---------------------------------------------------------------------------
   var SETTINGS = { variety: true };   // PROG.settings.variety = false: careers follow history with tiny noise
-  var DRIFT_SD = 1.5, DRIFT_PULL = 0.75, DRIFT_MAX = 6, BOOST_KEEP = 0.93, BOOST_MAX = 10;
+  var DRIFT_SD = 1.2, DRIFT_MEAN = 0.2, DRIFT_PULL = 0.7, DRIFT_PULL_UP = 0.7, DRIFT_MAX = 6, BOOST_KEEP = 0.9, BOOST_MAX = 8, STAR = 90, STAR_CAP = 2;
   var MAJOR_INJURY = /ACL|Achilles|Patellar/i;
   function seasonContext(state, done) {
     var season = state.season && (state.season.year == null || +state.season.year === done) ? state.season : null;
@@ -462,16 +464,23 @@
       } else if (tgt != null) {
         // History as a guide, with real variety: real target + personal drift + breakouts + small noise
         var pr = p.prog = p.prog || { drift: 0, boost: 0 };
-        pr.drift = clamp((pr.drift || 0) * DRIFT_PULL + gauss(rng) * DRIFT_SD + eff.pt + eff.inj, -DRIFT_MAX, DRIFT_MAX);
+        var d0 = pr.drift || 0;
+        pr.drift = clamp(d0 * (d0 > 0 ? DRIFT_PULL_UP : DRIFT_PULL) + DRIFT_MEAN + gauss(rng) * DRIFT_SD + eff.pt + eff.inj, -DRIFT_MAX, DRIFT_MAX);   // the small mean offsets injuries and the star cap
+        var star = tgt >= STAR, capped = star || p.fate === 'healthy';
+        // stars and healthy-fate players: positive drift pulled back hard
+        if (capped && pr.drift > STAR_CAP) pr.drift = STAR_CAP + (pr.drift - STAR_CAP) * 0.3;
         pr.boost = (pr.boost || 0) * BOOST_KEEP;
         var py = peakYear(info);
-        var young = p.age <= 25 && (py == null || next <= py + 1);
-        if (young && rng() < 0.03) pr.boost += 4 + rng() * 3;                                    // breakout
+        var young = p.age <= 25 && !star && (py == null || next <= py + 1);
+        if (young && rng() < 0.025) pr.boost += 4 + rng() * 3;                                   // breakout
         else if (young && (p.pot || 0) >= 82 && (p.pot - p.ovr) >= 4 && rng() < 0.03) pr.boost -= 4 + rng() * 3; // stall
         pr.boost = clamp(pr.boost, -BOOST_MAX, BOOST_MAX);
+        if (star && pr.boost > 0) pr.boost = 0;
         var off = pr.drift + pr.boost;
-        if (off < 0 && tgt >= 90) off *= 0.6;   // stars stay stars
+        if (off < 0 && star) off *= 0.6;   // stars stay stars
         newOvr = tgt + off + gauss(rng) * 0.6;
+        // never more than 2 above the real rating once he is a 90+ player, or on a healthy-fate path
+        if (capped) newOvr = Math.min(newOvr, tgt + STAR_CAP);
       } else {
         newOvr = p.ovr + ageCurveDelta(p.age, p.ovr, p.pot, rng) + eff.pt + eff.inj;
       }
