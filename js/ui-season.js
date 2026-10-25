@@ -554,7 +554,7 @@
     if (!g || !g.season || UI.inOffseason()) return false;
     if (myGames().some(x => !x.played)) return true;
     const sp = g.season.phase;
-    if (sp === 'playoffs') { const x = userSeries(); return !!x && !x.winner; }
+    if (sp === 'playoffs') { const x = userSeries(); return (!!x && !x.winner) || waitsOnPlayIn(); }
     if (sp === 'regular') {
       const t = UI.team(g.userTeam);
       const r = t && UI.confTable(t.conf).find(z => z.abbr === g.userTeam);
@@ -562,6 +562,72 @@
     }
     return false;
   }
+  // A top 6 seed while the Play-In is on: his first round series is not drawn yet.
+  function waitsOnPlayIn() {
+    const s = UI.state.season, u = UI.userTeam();
+    const b = s && s.playoffs;
+    if (!b || b.stage !== 'playIn' || !u || !b.seeds) return false;
+    const t = UI.team(u);
+    return Array.isArray(b.seeds[t.conf]) && b.seeds[t.conf].indexOf(u) >= 0;
+  }
+
+  // =====================================================================
+  // NEXT: the one button (top bar, phone bottom bar, key N) that does the obvious next step
+  // =====================================================================
+  // -> { label, title, kind, run } or null. Every sim goes through UI.sim, so its questions and stops still apply.
+  const SHORT_PHASE = { draft: 'DRAFT', resign: 'RE-SIGNING', freeAgency: 'FREE AGENCY', training: 'TRAINING CAMP' };
+  const poSeen = {};   // years whose playoffs page the user has opened this session
+  function goTo(h) { if (location.hash !== h) location.hash = h; else UI.route(); window.scrollTo(0, 0); }
+  function vsLabel(x, u) { const home = x.home === u; return (home ? 'vs ' : '@ ') + (home ? x.away : x.home); }
+  UI.nextAction = function () {
+    const st = UI.state, g = st.game, L = st.L;
+    if (!g || !L || !g.season || !UI.canPlay()) return null;
+    const u = g.userTeam;
+    const pend = UI.pendingEvents();
+    if (pend) return { label: 'DECIDE NOW', title: pend + ' decision' + (pend > 1 ? 's are' : ' is') + ' waiting', kind: 'decide', run: () => UI.showEvents() };
+    if (UI.inOffseason()) {
+      const ph = g.phase, phases = UI.OFFSEASON(), idx = phases.indexOf(ph);
+      const nx = idx >= 0 && idx < phases.length - 1 ? phases[idx + 1] : null;
+      if (ph === 'draft') {
+        let left = [], cur = null;
+        try { left = L.userPicksLeft ? L.userPicksLeft(g) : []; } catch (e) { left = []; }
+        try { cur = window.DRAFT && window.DRAFT.current ? window.DRAFT.current(g) : null; } catch (e) { cur = null; }
+        const onClock = left.length && (cur ? cur.team === u : !!(g.draft && g.draft.userOnClock));
+        if (onClock) {
+          const n = (cur && cur.overall) || left[0].overall;
+          return { label: 'MAKE YOUR PICK', title: 'You are on the clock with pick #' + n + '. Go to the draft room.', kind: 'go',
+            run: () => { if (/^#\/draft/.test(location.hash)) { const t = document.querySelector('#app table'); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); UI.toast('You are on the clock with pick #' + n + '. Pick a player from the class.'); } else goTo('#/draft'); } };
+        }
+        if (left.length) return { label: 'SIM TO YOUR PICK', title: 'The draft runs to your pick #' + left[0].overall, kind: 'sim', run: () => UI.sim('nextPhase') };
+      }
+      if (!nx) return { label: 'START SEASON', title: 'Opening night of the ' + UI.seasonLabel(g.year + 1) + ' season', kind: 'sim', run: () => UI.sim('nextPhase') };
+      return { label: 'NEXT: ' + (SHORT_PHASE[nx] || String(UI.PHASES[nx] || nx).toUpperCase()), title: 'Finish ' + (UI.PHASES[ph] || ph) + ' and move on to ' + (UI.PHASES[nx] || nx), kind: 'sim', run: () => UI.sim('nextPhase') };
+    }
+    const s = g.season, sp = s.phase, yr = s.year || g.year;
+    if (sp === 'done' || (s.playoffs && s.playoffs.champion)) {
+      if (!(g.champShown && g.champShown[yr])) return { label: 'SEE THE CHAMPIONS', title: 'The ' + yr + ' NBA Finals are over', kind: 'go', run: () => goTo('#/playoffs') };
+      return { label: 'CONTINUE TO OFFSEASON', title: 'Close the season and start the offseason', kind: 'sim', run: () => continueToOffseason() };
+    }
+    const next = myGames().find(x => !x.played);
+    if (sp === 'regular') {
+      if (next) return { label: 'NEXT GAME ' + vsLabel(next, u), title: 'Sim to your next game: ' + UI.gameDay(next), kind: 'sim', run: () => simNextGame() };
+      return { label: 'NEXT DAY', title: 'Your team has no game left. Sim one day of the regular season.', kind: 'sim', run: () => { markSim(); return UI.sim({ days: 1 }); } };
+    }
+    // the regular season is over: the awards show (once), then the playoffs page, then the games
+    if (UI.awardShowDue && UI.awardShowDue()) return { label: 'AWARDS SHOW', title: 'The ' + UI.seasonLabel(yr) + ' awards, one at a time', kind: 'go', run: () => goTo('#/awardshow') };
+    const started = UI.games().some(x => x.playoff && x.played);
+    if (!started && !poSeen[yr] && !/^#\/playoffs/.test(location.hash)) return { label: 'TO THE PLAYOFFS', title: 'See the ' + (s.playoffs && s.playoffs.stage === 'playIn' ? 'Play-In and the ' : '') + 'playoff picture', kind: 'go', run: () => goTo('#/playoffs') };
+    if (next) {
+      const pi = (s.days[next.day] || {}).playIn;
+      return { label: (pi ? 'PLAY-IN ' : 'NEXT GAME ') + vsLabel(next, u), title: 'Sim to your next game: ' + UI.gameDay(next), kind: 'sim', run: () => simNextGame() };
+    }
+    if (canSimNext()) {
+      const ser = userSeries();
+      if (ser && !ser.winner) return { label: 'NEXT GAME vs ' + (ser.a === u ? ser.b : ser.a), title: seriesText(ser), kind: 'sim', run: () => simNextGame() };
+      return { label: 'TO PLAYOFF GAME 1', title: 'Sim the Play-In and your first playoff game', kind: 'sim', run: () => simNextGame() };
+    }
+    return { label: 'NEXT PLAYOFF DAY', title: 'Your team is out. Sim one day of the playoffs.', kind: 'sim', run: () => { markSim(); return UI.sim({ days: 1 }); } };
+  };
   // Marks the state before a sim so the hub can say what happened in it.
   let simMark = null;
   const markSim = () => { simMark = { year: UI.year(), n: myPlayed().length }; };
@@ -1079,7 +1145,8 @@
     else ['West', 'East'].forEach(c => {
       const x = pi[c];
       if (Array.isArray(x)) x.forEach(g => g && list.push(Object.assign({ conf: c }, g)));
-      else if (x && typeof x === 'object') Object.keys(x).forEach(k => { if (x[k] && typeof x[k] === 'object' && (x[k].hi || x[k].home || x[k].a || x[k].lo || x[k].away)) list.push(Object.assign({ conf: c, slot: k }, x[k])); });
+      // a game whose teams are not known yet (the 8 seed game) still comes through, for its date
+      else if (x && typeof x === 'object') Object.keys(x).forEach(k => { const v = x[k]; if (v && typeof v === 'object' && ['hi', 'home', 'a', 'lo', 'away'].some(f => f in v)) list.push(Object.assign({ conf: c, slot: k }, v)); });
     });
     const out = { West: {}, East: {} };
     list.forEach(g => {
@@ -1097,41 +1164,157 @@
       if (!winner && as != null && bs != null && (gm ? gm.played : g.played !== false)) winner = as > bs ? a : bs > as ? b : null;
       const key = String(g.slot || g.kind || g.type || g.key || g.id || '');
       const seeds = [Number(aSeed), Number(bSeed)].sort((m, n) => m - n).join('-');
-      const slot = /9\D{0,3}10|910/.test(key) ? '910' : /7\D{0,3}8|78/.test(key) ? '78' : /final|last|elim|second|8th/i.test(key) ? 'final'
+      const slot = /9\D{0,3}10|910/.test(key) ? '910' : /7\D{0,3}8|78/.test(key) ? '78' : /^game ?1$/i.test(key) ? 'b1' : /^game ?2$/i.test(key) ? 'b2' : /final|last|elim|second|8th/i.test(key) ? 'final'
         : seeds === '7-8' ? '78' : seeds === '9-10' ? '910' : 'final';
       const conf = g.conf === 'East' || g.conf === 'West' ? g.conf : a && UI.team(a).conf === 'East' ? 'East' : 'West';
       out[conf][slot] = { a, b, aSeed, bSeed, as, bs, winner, gameId: gm ? gm.id : gid, date: (gm && gm.date) || g.date || null, slot };
     });
+    // the 2019-20 bubble series: { game1, game2 }, seeds 8 and 9
+    if (pi && !Array.isArray(pi)) ['West', 'East'].forEach(c => { if (pi[c] && pi[c].seed8) out[c].seed8 = UI.abbrOf(pi[c].seed8); });
     return Object.keys(out.West).length || Object.keys(out.East).length ? out : null;
   }
-  function piCard(g, label, u) {
-    if (!g) return `<div class="pi-g tbd"><div class="pi-l">${esc(label)}</div><div class="pb-t tbd"><span class="pb-n"><b>TBD</b></span></div><div class="pb-t tbd"><span class="pb-n"><b>TBD</b></span></div></div>`;
-    const row = (abbr, seed, pts) => {
-      if (!abbr) return '<div class="pb-t tbd"><span class="pb-seed"></span><span class="pb-n"><b>TBD</b></span></div>';
-      const won = g.winner === abbr, lost = !!g.winner && !won;
-      return `<div class="pb-t${won ? ' win' : ''}${lost ? ' out' : ''}${abbr === u ? ' you' : ''}" style="--tc:${esc(UI.teamColor(abbr))}"><span class="pb-seed">${seed != null ? esc(seed) : ''}</span>${UI.logo(abbr, 24)}<span class="pb-n"><b>${esc(abbr)}</b><small>${esc(UI.team(abbr).name || '')}</small></span><span class="pb-w">${pts != null ? esc(pts) : ''}</span></div>`;
+  // Each conference reads top to bottom as a short flow of games: 7 vs 8, 9 vs 10, then the game
+  // for the 8 seed (the 2019-20 bubble: one or two 8 vs 9 games). Plain status lines under each game.
+  const nick = a => (a ? UI.team(a).name || a : '');
+  const piList = x => ['78', '910', 'final', 'b1', 'b2'].map(k => x && x[k]).filter(Boolean);
+  const loserOf = g => (g && g.winner ? (g.winner === g.a ? g.b : g.a) : null);
+  // 'pre' (nothing played yet), 'live', 'done' (every 8 seed known, or the bracket is drawn)
+  function piStage(pi) {
+    const s = UI.state.season, b = s && s.playoffs;
+    const confDone = c => {
+      const x = pi[c] || {};
+      if (x.seed8) return true;
+      if (x.b1) return !!x.b1.winner && (x.b1.winner === x.b1.a || !!(x.b2 && x.b2.winner));
+      if (x['78'] || x['910']) return !!(x.final && x.final.winner);
+      return true;
     };
-    const st = g.winner ? g.winner + ' wins' + (g.as != null && g.bs != null ? ' ' + Math.max(g.as, g.bs) + '-' + Math.min(g.as, g.bs) : '') : g.date ? shortDate(g.date) : 'Not played yet';
-    const mine = !!u && (g.a === u || g.b === u);
-    const inner = `<div class="pi-l">${esc(label)}</div>${row(g.a, g.aSeed, g.as)}${row(g.b, g.bSeed, g.bs)}<div class="pb-st">${esc(st)}${g.winner && g.gameId ? ' <span class="pi-box">BOX SCORE</span>' : ''}</div>`;
-    return g.gameId && g.winner ? `<a class="pi-g${mine ? ' mine' : ''}" href="#/game/${encodeURIComponent(g.gameId)}">${inner}</a>` : `<div class="pi-g${mine ? ' mine' : ''}">${inner}</div>`;
+    if ((b && b.stage !== 'playIn' && Array.isArray(b.rounds) && b.rounds.length) || (confDone('West') && confDone('East'))) return 'done';
+    return ['West', 'East'].some(c => piList(pi[c]).some(g => g.winner)) ? 'live' : 'pre';
   }
-  function playInHtml(pi) {
+  function pinTeam(g, side, u, ph) {
+    const abbr = g ? (side ? g.b : g.a) : null, seed = g ? (side ? g.bSeed : g.aSeed) : null, pts = g ? (side ? g.bs : g.as) : null;
+    if (!abbr) return `<div class="pin-t tbd"><span class="pin-seed">${seed != null ? esc(seed) : ''}</span><span class="pin-ph" aria-hidden="true"></span><span class="pin-n"><b>${esc(ph || 'TBD')}</b></span><span class="pin-pts"></span></div>`;
+    const won = g.winner === abbr, lost = !!g.winner && !won;
+    return `<div class="pin-t${won ? ' win' : ''}${lost ? ' out' : ''}${abbr === u ? ' you' : ''}" style="--tc:${esc(UI.teamColor(abbr))}">
+      <span class="pin-seed">${seed != null ? esc(seed) : ''}</span>${UI.logo(abbr, 30)}<span class="pin-n"><b>${esc(nick(abbr))}</b><small>${esc(abbr)}${abbr === u ? ' | YOUR TEAM' : ''}</small></span><span class="pin-pts">${g.winner && pts != null ? esc(pts) : ''}</span></div>`;
+  }
+  // o: { g, n, match, rule, ph: [top, bottom], status }
+  function pinCard(o, u) {
+    const g = o.g;
+    const mine = !!g && !!u && (g.a === u || g.b === u);
+    const host = g && g.a ? nick(g.a).toUpperCase() : '';
+    const when = g && g.winner ? 'FINAL' : g && g.date ? shortDate(g.date) + (host ? ' | AT ' + host : '') : 'DATE TBD';
+    const box = g && g.winner && g.gameId ? `<a class="pin-box" href="#/game/${encodeURIComponent(g.gameId)}">BOX SCORE</a>` : '';
+    return `<li class="pin-g${mine ? ' mine' : ''}${g && g.winner ? ' done' : ''}">
+      <div class="pin-h"><b>GAME ${o.n}</b><span>${esc(o.match)}</span><small>${esc(when)}</small></div>
+      <div class="pin-rule">${esc(o.rule)}</div>
+      <div class="pin-teams">${pinTeam(g, 0, u, o.ph[0])}${pinTeam(g, 1, u, o.ph[1])}</div>
+      <div class="pin-st${g && g.winner ? ' on' : ''}"><span>${esc(o.status)}</span>${box}</div></li>`;
+  }
+  function pinCards(x) {
+    if (x.b1) {
+      const g1 = x.b1, g2 = x.b2;
+      const out = [{ g: g1, n: 1, match: '8 VS 9', rule: 'The 8 seed needs one win, the 9 seed needs two.', ph: ['8 seed', '9 seed'],
+        status: !g1.winner ? 'Not played yet' : g1.winner === g1.a ? nick(g1.a) + ' clinch the 8 seed. ' + nick(g1.b) + ' eliminated.' : nick(g1.b) + ' win. Game 2 decides the 8 seed.' }];
+      if (g2) out.push({ g: g2, n: 2, match: '8 VS 9', rule: 'Winner is the 8 seed.', ph: ['8 seed', '9 seed'],
+        status: g2.winner ? nick(g2.winner) + ' clinch the 8 seed. ' + nick(loserOf(g2)) + ' eliminated.' : 'Not played yet' });
+      return out;
+    }
+    const g78 = x['78'], g910 = x['910'], fin = x.final;
+    const wait = !(g78 && g78.winner) && !(g910 && g910.winner) ? 'Waiting on Games 1 and 2' : !(g78 && g78.winner) ? 'Waiting on Game 1' : 'Waiting on Game 2';
+    return [
+      { g: g78, n: 1, match: '7 VS 8', rule: 'Winner is the 7 seed. Loser goes to Game 3.', ph: ['7 seed', '8 seed'],
+        status: g78 && g78.winner ? nick(g78.winner) + ' clinch the 7 seed. ' + nick(loserOf(g78)) + ' go to Game 3.' : 'Not played yet' },
+      { g: g910, n: 2, match: '9 VS 10', rule: 'Loser is out. Winner goes to Game 3.', ph: ['9 seed', '10 seed'],
+        status: g910 && g910.winner ? nick(loserOf(g910)) + ' eliminated. ' + nick(g910.winner) + ' go to Game 3.' : 'Not played yet' },
+      { g: fin, n: 3, match: 'LOSER OF GAME 1 VS WINNER OF GAME 2', rule: 'Winner is the 8 seed. Loser is out.', ph: ['Loser of Game 1', 'Winner of Game 2'],
+        status: fin && fin.winner ? nick(fin.winner) + ' clinch the 8 seed. ' + nick(loserOf(fin)) + ' eliminated.' : fin && fin.a && fin.b ? 'Not played yet' : wait }
+    ];
+  }
+  function pinConf(pi, c, u) {
+    const x = pi[c] || {};
+    const head = `<div class="pin-ch">${esc(CONF_FULL[c])}</div>`;
+    if (!x.b1 && !x['78'] && !x['910']) return `<div class="pin-conf">${head}<p class="pin-none">No Play-In in the ${esc(c)} this year. The top 8 are in.</p></div>`;
+    return `<div class="pin-conf">${head}<ol class="pin-flow">${pinCards(x).map(o => pinCard(o, u)).join('')}</ol></div>`;
+  }
+  // One sentence about the user's team: "You play the Pelicans in the 9 vs 10 game."
+  function piYou(pi, u, projected) {
+    if (!u) return '';
+    const t = UI.team(u), x = pi[t.conf] || {};
+    const inG = g => !!g && (g.a === u || g.b === u);
+    const opp = g => 'the ' + nick(g.a === u ? g.b : g.a);
+    if (projected) {
+      const g = [x['78'], x['910']].find(inG);
+      return g ? 'If the season ended today, you would play ' + opp(g) + ' in the ' + (g === x['78'] ? '7 vs 8' : '9 vs 10') + ' game.' : '';
+    }
+    if (x.b1) {
+      const g = inG(x.b2) ? x.b2 : inG(x.b1) ? x.b1 : null;
+      if (!g) return '';
+      if (!g.winner) return 'You play ' + opp(g) + ' for the 8 seed' + (g === x.b1 && g.b === u ? ': you need to win twice.' : '.');
+      if (g.winner === u) return g === x.b1 && g.b === u ? 'You beat ' + opp(g) + '. One more win and you are the 8 seed.' : 'You beat ' + opp(g) + ' and clinch the 8 seed.';
+      return opp(g).replace(/^t/, 'T') + ' eliminated you.';
+    }
+    const g78 = x['78'], g910 = x['910'], fin = x.final;
+    if (inG(fin)) {
+      if (!fin.winner) return 'You play ' + opp(fin) + ' in Game 3. Win and you are the 8 seed.';
+      return fin.winner === u ? 'You beat ' + opp(fin) + ' and clinch the 8 seed.' : opp(fin).replace(/^t/, 'T') + ' eliminated you in Game 3.';
+    }
+    if (inG(g78)) {
+      if (!g78.winner) return 'You play ' + opp(g78) + ' in the 7 vs 8 game. Win and you are the 7 seed.';
+      return g78.winner === u ? 'You beat ' + opp(g78) + ' and clinch the 7 seed.' : 'You lost to ' + opp(g78) + '. One more chance in Game 3 for the 8 seed.';
+    }
+    if (inG(g910)) {
+      if (!g910.winner) return 'You play ' + opp(g910) + ' in the 9 vs 10 game. Lose and your season is over.';
+      return g910.winner === u ? 'You beat ' + opp(g910) + '. Next: Game 3 for the 8 seed.' : opp(g910).replace(/^t/, 'T') + ' eliminated you in the 9 vs 10 game.';
+    }
+    const b = UI.state.season && UI.state.season.playoffs;
+    const seeds = b && b.seeds && b.seeds[t.conf];
+    const i = Array.isArray(seeds) ? seeds.indexOf(u) : -1;
+    if (i >= 0 && i < 6) return 'You are the ' + (i + 1) + ' seed. Your first round opponent comes out of the Play-In.';
+    return 'Your team is not in the Play-In.';
+  }
+  // The 7 and 8 seeds each conference got out of the Play-In.
+  function piSeeds(x) {
+    if (!x) return null;
+    const s8 = x.seed8 || (x.final && x.final.winner) || (x.b2 && x.b2.winner) || (x.b1 && x.b1.winner && x.b1.winner === x.b1.a ? x.b1.a : null);
+    const s7 = x['78'] && x['78'].winner;
+    return s7 || s8 ? { s7, s8 } : null;
+  }
+  // opts.projected: built from the standings during the regular season.
+  function playInHtml(pi, opts) {
     if (!pi) return '';
+    opts = opts || {};
     const u = UI.userTeam();
-    const conf = c => `<div class="pi-conf"><div class="pi-ch">${CONF_FULL[c]}</div><div class="pi-br">
-        <div class="pi-c1">${piCard(pi[c]['78'], '7 VS 8 | WINNER IS THE 7 SEED', u)}${piCard(pi[c]['910'], '9 VS 10 | LOSER IS OUT', u)}</div>
-        <div class="pi-c2">${piCard(pi[c].final, 'FOR THE 8 SEED', u)}</div></div></div>`;
-    return `<section class="pi" aria-label="Play-In Tournament"><div class="pi-head"><b>PLAY-IN TOURNAMENT</b><small>Seeds 7 to 10 play for the last two spots in each conference</small></div>
-      <div class="pi-grid">${conf('West')}${conf('East')}</div></section>`;
+    const stage = opts.projected ? 'pre' : piStage(pi);
+    const you = piYou(pi, u, opts.projected);
+    const youHtml = you ? `<div class="pin-you">${UI.logo(u, 34)}<span>${esc(you)}</span></div>` : '';
+    const grid = `<div class="pin-grid">${pinConf(pi, 'West', u)}${pinConf(pi, 'East', u)}</div>`;
+    if (stage === 'done') {
+      const bit = (n, a) => (a ? `<span class="pin-sd"><i>${n}</i>${UI.logo(a, 22)}<b>${esc(a)}</b></span>` : '');
+      const confs = ['West', 'East'].map(c => { const z = piSeeds(pi[c]); return z ? `<span class="pin-sc"><small>${c.toUpperCase()}</small>${bit(7, z.s7)}${bit(8, z.s8)}</span>` : ''; }).join('');
+      return `<details class="pin pin-sum"><summary><b class="pin-k">PLAY-IN</b>${confs}<em>SHOW GAMES</em></summary><div class="pin-body">${youHtml}${grid}</div></details>`;
+    }
+    return `<section class="pin" aria-label="Play-In Tournament">
+      <div class="pin-head">${opts.noTitle ? '' : '<b>PLAY-IN TOURNAMENT</b>'}${opts.projected ? '<span class="pin-tag">PROJECTED</span>' : ''}<small>Seeds 7 to 10 in each conference play for the last two playoff spots.</small></div>
+      ${youHtml}${grid}</section>`;
+  }
+  // Play-In matchups from the standings, for the regular season of a Play-In year.
+  function projectedPlayIn() {
+    const out = { West: {}, East: {} };
+    ['West', 'East'].forEach(c => {
+      const r = UI.confTable(c).map(z => z.abbr);
+      if (r.length < 10) return;
+      out[c]['78'] = { a: r[6], b: r[7], aSeed: 7, bSeed: 8 };
+      out[c]['910'] = { a: r[8], b: r[9], aSeed: 9, bSeed: 10 };
+    });
+    return Object.keys(out.West).length || Object.keys(out.East).length ? out : null;
   }
   // The user's Play-In result, when he lost there.
   function playInOut(pi, u) {
     if (!pi || !u) return null;
     const t = UI.team(u), c = pi[t.conf] || {};
-    const fin = c.final, nine = c['910'];
     const lostIn = g => g && g.winner && (g.a === u || g.b === u) && g.winner !== u ? g : null;
-    const g = lostIn(fin) || lostIn(nine);
+    const g = lostIn(c.final) || lostIn(c['910']) || lostIn(c.b2) || (c.b1 && c.b1.winner === c.b1.a ? lostIn(c.b1) : null);
     if (!g) return null;
     const opp = g.a === u ? g.b : g.a, us = g.a === u ? g.as : g.bs, them = g.a === u ? g.bs : g.as;
     return 'Eliminated in the Play-In by ' + opp + ' ' + them + '-' + us;
@@ -1352,12 +1535,16 @@
     const canSim = UI.canPlay() && !!g && !off;
     let hero, controls = '';
     const btn = (id, label, on, gold, title) => `<button type="button" class="btn po-b${gold ? ' btn-gold' : ''}" id="${id}"${on ? '' : ' disabled'}${title ? ` title="${esc(title)}"` : ''}>${label}</button>`;
+    if (live && s.phase !== 'regular') poSeen[yr] = true;
+    const pi = live ? playInGames() : null;
     if (live) {
       const me = mySeries(live, u);
-      const st = youStatus(live, u);
       const out = !!me && !!me.x.winner && me.x.winner !== u;
       const won = live.champion && live.champion === u;
-      hero = poHero(yr + ' NBA PLAYOFFS', live.champion ? 'NBA FINALS: ' + live.champion + ' WIN THE TITLE' : roundTitle(live, u), st, u, won ? 'gold' : out || !me ? 'dim' : '');
+      // while the Play-In is on, the Play-In section right below says where the user stands
+      const piOn = !live.drawn && !!pi && piStage(pi) !== 'done';
+      const st = piOn ? '' : youStatus(live, u);
+      hero = poHero(yr + ' NBA PLAYOFFS', live.champion ? 'NBA FINALS: ' + live.champion + ' WIN THE TITLE' : piOn ? 'PLAY-IN TOURNAMENT' : roundTitle(live, u), st, u, won ? 'gold' : out || (!me && !piOn) ? 'dim' : '');
       if (canSim && !live.champion) {
         const nextOk = canSimNext();
         const active = !!me && !me.x.winner;
@@ -1383,7 +1570,9 @@
       return `<a class="po-cb" href="#/playoffs" id="poShowChamp" style="--tc:${esc(UI.teamColor(live.champion))}">${UI.logo(live.champion, 40)}<span><small>${esc(yr)} NBA CHAMPIONS</small><b>${esc(UI.teamName(live.champion).toUpperCase())}</b></span>${mvp ? `<span class="po-cb-mvp"><small>FINALS MVP</small><b>${esc(mvp.name)}</b></span>` : ''}</a>`;
     })() : '';
     const found = live && sel ? findSeriesById(live, sel) : null;
-    app.innerHTML = `<div class="po-page">${hero}${controls}${champBanner}${live ? playInHtml(playInGames()) : ''}${bracket2k(br, found ? sel : null)}</div>${found ? panelHtml(found.x, found.ri) : ''}`;
+    // the Play-In: the live one, or the matchups the standings point to during a Play-In regular season
+    const piHtml = pi ? playInHtml(pi, { noTitle: !live.drawn && piStage(pi) !== 'done' }) : !live && g && s && cbaRules(yr).playIn ? playInHtml(projectedPlayIn(), { projected: true }) : '';
+    app.innerHTML = `<div class="po-page">${hero}${controls}${champBanner}${piHtml}${bracket2k(br, found ? sel : null)}</div>${found ? panelHtml(found.x, found.ri) : ''}`;
 
     // wiring
     const on = (id, fn) => { const b = UI.$('#' + id, app); if (b) b.addEventListener('click', fn); };

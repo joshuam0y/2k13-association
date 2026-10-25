@@ -1048,3 +1048,66 @@ a.pi-g:hover { border-color: var(--gold-dim); }
   .as-dk .as-judges { grid-column: 1; }
   .as-draft { columns: 1; }
 }
+/* ---------- Play-In: each conference is a simple top to bottom flow of three games ---------- */
+.pin { margin: 0 0 18px; padding: 14px 16px 16px; border: 1px solid var(--line2); background: #070708; }
+.pin-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-bottom: 12px; }
+.pin-head b { font-family: var(--display); font-size: 19px; letter-spacing: .14em; color: var(--gold2); }
+.pin-head small { flex-basis: 100%; color: var(--muted); font-size: 14px; }
+.pin-tag { font-family: var(--display); font-size: 11px; letter-spacing: .14em; padding: 2px 6px; border: 1px solid var(--gold-dim); color: var(--gold); }
+.pin-you { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; padding: 10px 14px; border: 1px solid var(--gold-dim); border-left: 4px solid var(--gold); background: rgba(212, 175, 55, .08); font-size: 16px; font-weight: 600; color: #fff; }
+.pin-you .logo { flex: none; }
+.pin-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.pin-conf { min-width: 0; }
+.pin-ch { font-family: var(--display); font-size: 13px; letter-spacing: .2em; color: var(--gold); margin-bottom: 8px; }
+.pin-none { margin: 0; color: var(--muted); font-size: 14px; }
+.pin-flow { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 18px; }
+.pin-g { position: relative; min-width: 0; background: var(--bg2); border: 1px solid var(--line2); }
+.pin-g + .pin-g::before { content: ''; position: absolute; left: 50%; top: -14px; transform: translateX(-50%); border-style: solid; border-color: var(--gold-dim) transparent transparent; border-width: 8px 7px 0; }
+.pin-g.mine { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+.pin-h { display: flex; align-items: baseline; gap: 4px 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); font-family: var(--display); letter-spacing: .1em; }
+.pin-h b { flex: none; font-size: 15px; color: #fff; }
+.pin-h span { min-width: 0; font-size: 13px; color: var(--gold2); }
+.pin-h small { flex: none; margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.pin-rule { padding: 7px 12px 0; font-size: 14px; color: var(--text2); }
+.pin-teams { padding: 6px 0 4px; }
+.pin-t { display: flex; align-items: center; gap: 10px; min-height: 46px; padding: 4px 12px 4px 9px; border-left: 3px solid var(--tc, transparent); }
+.pin-t + .pin-t { border-top: 1px solid var(--line); }
+.pin-t .logo { flex: none; }
+.pin-seed { flex: none; width: 22px; text-align: center; font-family: var(--display); font-size: 15px; color: var(--muted); }
+.pin-ph { flex: none; width: 30px; height: 30px; border-radius: 50%; border: 1px dashed var(--line2); }
+.pin-n { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
+.pin-n b { font-family: var(--display); font-weight: 600; font-size: 17px; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pin-n small { color: var(--muted); font-size: 11px; letter-spacing: .1em; }
+.pin-t.tbd .pin-n b { font-family: var(--body); font-weight: 500; font-size: 15px; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.pin-pts { flex: none; min-width: 36px; text-align: right; font-family: var(--display); font-weight: 700; font-size: 22px; font-variant-numeric: tabular-nums; }
+.pin-t.win { background: rgba(212, 175, 55, .12); }
+.pin-t.win .pin-n b, .pin-t.win .pin-pts { color: var(--gold2); }
+.pin-t.out { opacity: .45; }
+.pin-t.you .pin-n small { color: var(--gold); }
+.pin-st { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+.pin-st.on { color: #fff; font-weight: 600; }
+.pin-box { flex: none; padding: 6px 0; font-family: var(--display); font-size: 12px; letter-spacing: .12em; color: var(--gold2); }
+/* after the Play-In: one line above the bracket, the games one tap away */
+.pin-sum { padding: 0; }
+.pin-sum > summary { list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; min-height: 48px; padding: 8px 14px; cursor: pointer; }
+.pin-sum > summary::-webkit-details-marker { display: none; }
+.pin-sum > summary:hover .pin-k { color: #fff; }
+.pin-k { font-family: var(--display); font-size: 15px; letter-spacing: .16em; color: var(--gold2); }
+.pin-sc { display: inline-flex; align-items: center; gap: 8px; }
+.pin-sc small { font-family: var(--display); font-size: 12px; letter-spacing: .16em; color: var(--muted); }
+.pin-sd { display: inline-flex; align-items: center; gap: 4px; }
+.pin-sd i { font-style: normal; font-family: var(--display); font-size: 12px; color: var(--muted); }
+.pin-sd b { font-family: var(--display); font-size: 15px; letter-spacing: .05em; }
+.pin-sum em { margin-left: auto; font-style: normal; font-family: var(--display); font-size: 12px; letter-spacing: .14em; color: var(--gold); white-space: nowrap; }
+.pin-sum em::after { content: ''; display: inline-block; margin-left: 6px; border-style: solid; border-color: currentColor transparent transparent; border-width: 5px 4px 0; vertical-align: middle; }
+.pin-sum[open] em::after { transform: rotate(180deg); }
+.pin-body { padding: 12px 14px 16px; border-top: 1px solid var(--line); }
+@media (max-width: 760px) { .pin-grid { grid-template-columns: minmax(0, 1fr); gap: 22px; } }
+@media (max-width: 560px) {
+  .pin { padding: 12px; }
+  .pin-h { flex-wrap: wrap; }
+  .pin-h small { flex-basis: 100%; margin-left: 0; }
+  .pin-you { font-size: 15px; padding: 10px 12px; gap: 10px; }
+  .pin-sum > summary { gap: 6px 14px; padding: 8px 12px; }
+  .pin-sum em { margin-left: 0; }
+}

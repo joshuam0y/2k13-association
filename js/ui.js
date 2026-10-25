@@ -67,7 +67,84 @@
       const pend = UI.pendingEvents ? UI.pendingEvents() : 0;
       chip.innerHTML = `<a href="#/season" title="${esc(when ? when + ': ' : '')}${esc(sub)}. Back to your season.">${UI.logo(user, 30)}<span><b>${esc(user)} ${esc(UI.record(user))}</b><small class="chip-status${hot ? ' hot' : ''}">${esc(sub)}</small></span>${pend ? `<i class="chip-dot" title="${pend} decisions waiting">${pend}</i>` : ''}</a>`;
     } else chip.innerHTML = '';
+    UI.updateNext();
   };
+
+  // ---------- NEXT ----------
+  // One gold button that always does the obvious next step (UI.nextAction in js/ui-season.js): the next
+  // game, the awards show, the playoffs, the next offseason step. In the top bar on wide screens, a
+  // sticky bar above the music bar on phones. N on the keyboard presses it.
+  const NEXT_HIDDEN = ['new', 'live', 'fantasy'];   // pages with their own flow
+  function nextBtn() {
+    let b = document.getElementById('nextBtn');
+    if (b) return b;
+    const bar = document.querySelector('.topbar');
+    if (!bar) return null;
+    b = document.createElement('button');
+    b.type = 'button';
+    b.id = 'nextBtn';
+    b.className = 'next-btn';
+    b.hidden = true;
+    b.innerHTML = '<b class="nx-l"></b><i class="nx-ar" aria-hidden="true"></i>';
+    b.addEventListener('click', () => UI.next());
+    bar.insertBefore(b, document.getElementById('userchip'));
+    return b;
+  }
+  UI.updateNext = function () {
+    const b = nextBtn();
+    if (!b) return;
+    const page = (location.hash || '#/home').replace(/^#\/?/, '').split('/')[0] || 'home';
+    let a = null;
+    if (!NEXT_HIDDEN.includes(page)) {
+      try { a = typeof UI.nextAction === 'function' ? UI.nextAction() : null; } catch (e) { console.warn('NEXT button failed', e); a = null; }
+    }
+    b.hidden = !a;
+    document.body.classList.toggle('has-next', !!a);
+    if (a) {
+      b.querySelector('.nx-l').textContent = a.label;
+      b.title = a.title + ' (N)';
+      b.setAttribute('aria-label', a.label + '. ' + a.title + '. Shortcut N.');
+      b.setAttribute('data-kind', a.kind || 'sim');
+      b.disabled = !!UI.simming;
+    }
+    fitTopbar();
+  };
+  // Wide screens: when the nav, NEXT and the team chip do not fit on one row, the nav gets a row of its own.
+  function fitTopbar() {
+    const body = document.body, nav = document.getElementById('mainnav');
+    if (!nav) return;
+    body.classList.remove('tb-tight');
+    if (window.innerWidth > 900 && nav.scrollWidth > nav.clientWidth + 1) body.classList.add('tb-tight');
+  }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTopbar).catch(() => {});
+  let fitQueued = false;
+  window.addEventListener('resize', () => { if (fitQueued) return; fitQueued = true; requestAnimationFrame(() => { fitQueued = false; fitTopbar(); }); });
+  UI.next = async function () {
+    if (UI.simming || UI._nextBusy) return;
+    let a = null;
+    try { a = UI.nextAction ? UI.nextAction() : null; } catch (e) { console.warn('NEXT failed', e); }
+    if (!a) return;
+    UI._nextBusy = true;
+    try { await a.run(); } catch (e) { console.warn('NEXT failed', e); UI.toast('That step failed: ' + (e && e.message ? e.message : e), 'error'); }
+    finally { UI._nextBusy = false; }
+    UI.updateNext();
+  };
+  // N presses NEXT on every page. This runs before js/ui-guide.js's keys, which skip a handled key.
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'n' && e.key !== 'N') return;
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.repeat || e.isComposing) return;
+    const t = e.target;
+    if (t && t.closest && t.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]')) return;
+    if (document.querySelector('.gd-layer, .gd-sheet') || document.body.classList.contains('ts-lock')) return;   // the guide's tour or help, a trade confirm
+    const m = document.getElementById('eventModal');
+    if (m && !m.hidden) return;
+    const b = document.getElementById('nextBtn');
+    if (!b || b.hidden) return;
+    e.preventDefault();
+    UI.next();
+  });
+  // Pages that change the state without a new route (a draft pick, a signing) refresh the label after a click.
+  document.addEventListener('click', () => setTimeout(() => { if (!UI.simming) UI.updateNext(); }, 0));
 
   function setBanner() {
     const b = document.getElementById('banner');
@@ -108,6 +185,7 @@
       console.warn('Page failed', page, e);
       app.innerHTML = UI.empty('SOMETHING WENT WRONG', 'This page could not be drawn: ' + esc(e && e.message ? e.message : e), '<a class="btn" href="#/home">HOME</a>');
     }
+    UI.updateNext();
   };
 
   async function continueLatest() {
