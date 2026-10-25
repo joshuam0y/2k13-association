@@ -410,6 +410,20 @@
     }
     return null;
   }
+  // A rookie class only holds players with no NBA service when it began (yearsPro 0 in that season):
+  // never a returning NBA veteran, a player with real seasons before 2012-13 or a season in this save
+  // before the class year. Service is credited each summer when free agency opens, so the years he has
+  // now can be at most the seasons completed since the class year.
+  function firstSeasonRookie(p, cls) {
+    if (!p || p.returning) return false;
+    if (initialRookie(p)) return cls === startYear();
+    const CP = window.CAREER_PRIOR;
+    if (CP && (CP[p.id] || []).length) return false;
+    if ((p.careerStats || []).some(r => r && r.year < cls && r.g > 0)) return false;
+    const g = game(), cur = curYear();
+    const credited = cur - cls + (g && g.fa && +g.fa.year === cur + 1 ? 1 : 0);
+    return (Number(p.yearsPro) || 0) <= Math.max(0, credited);
+  }
   function draftInfo(p) {
     if (p.draft && p.draft.year != null && p.draft.pick) {
       const d = p.draft;
@@ -443,7 +457,7 @@
       const p = g.players[id];
       if (p.team === 'DRAFT') return;
       const ry = rookieYear(p);
-      if (ry != null && ry <= last) set.add(ry);
+      if (ry != null && ry <= last && firstSeasonRookie(p, ry)) set.add(ry);
     });
     return Array.from(set).sort((a, b) => b - a);
   }
@@ -454,7 +468,7 @@
     const out = [];
     Object.keys(g.players).forEach(id => {
       const p = g.players[id];
-      if (p.team === 'DRAFT' || rookieYear(p) !== cls) return;
+      if (p.team === 'DRAFT' || rookieYear(p) !== cls || !firstSeasonRookie(p, cls)) return;
       const d = draftInfo(p);
       if (V.rk.round === '1' && d.round !== 1) return;
       if (V.rk.round === '2' && d.round !== 2) return;

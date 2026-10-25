@@ -472,7 +472,12 @@ console.log("\nDraft night: live pick values and draft-day trades");
   ok(v[0] >= 2.5 * v[2], "the top pick is worth far more than #15 (" + v[0] + " vs " + v[2] + ")");
   // the prospects still on the board change a pick's value
   var a = draftState("OKC"), b = draftState("OKC");
-  DRAFT.simPicks(a, { count: 3, stopAtUser: false });
+  // a: the three best prospects go first; b: the three weakest go first (AI teams now draft from the
+  // pre-draft big board, so simPicks no longer takes the best by talent)
+  var poolA = Object.keys(a.players).map(function (id) { return a.players[id]; })
+    .filter(function (p) { return p.team === "DRAFT" && p.draftYear === 2013 && !p.undrafted; })
+    .sort(function (x, y) { return (0.62 * y.pot + 0.38 * y.ovr) - (0.62 * x.pot + 0.38 * x.ovr); });
+  for (var ia = 0; ia < 3; ia++) DRAFT.pick(a, DRAFT.current(a).team, poolA[ia].id);
   var pool = Object.keys(b.players).map(function (id) { return b.players[id]; })
     .filter(function (p) { return p.team === "DRAFT" && p.draftYear === 2013 && !p.undrafted; })
     .sort(function (x, y) { return (0.62 * x.pot + 0.38 * x.ovr) - (0.62 * y.pot + 0.38 * y.ovr); });

@@ -158,6 +158,39 @@
     return teams;
   }
 
+  // Puts an award winner on the first team of a selection (MVP on All-NBA, DPOY on All-Defensive, ROY on
+  // All-Rookie). If he is missing there, he goes in his position slot (2 G, 2 F, 1 C until 2022-23) and the
+  // lowest ranked player at his position (any player when positionless) moves down a team, down to the team
+  // he left (or off the last team). Works on ids only, so it also repairs a stored vote. Returns true if changed.
+  function placeOnFirstTeam(state, teams, id, positional) {
+    if (!id || !Array.isArray(teams) || !teams.length) return false;
+    if (teams[0].indexOf(id) >= 0) return false;
+    var ps = players(state);
+    var groupOf = function (x) { return posGroup(ps[x] && ps[x].pos); };
+    var g = groupOf(id), from = -1;
+    teams.forEach(function (t, i) { var k = t.indexOf(id); if (k >= 0) { t.splice(k, 1); from = i; } });
+    var carry = id;
+    for (var t = 0; t < teams.length && carry; t++) {
+      var team = teams[t];
+      team.unshift(carry);
+      if (t === from || team.length <= 5) { carry = null; break; }
+      // bump the lowest ranked player at the same position (not the winner himself)
+      var k = -1;
+      for (var i = team.length - 1; i > 0; i--) { if (!positional || groupOf(team[i]) === g) { k = i; break; } }
+      if (k < 0) k = team.length - 1;
+      carry = team.splice(k, 1)[0];
+    }
+    return true;
+  }
+  function makeConsistent(state, res) {
+    if (!res) return false;
+    var positional = (res.year || yearOf(state)) < 2024, changed = false;
+    if (placeOnFirstTeam(state, res.allNba, res.mvp, positional)) changed = true;
+    if (placeOnFirstTeam(state, res.allDefense, res.dpoy, positional)) changed = true;
+    if (placeOnFirstTeam(state, res.allRookie, res.roy, false)) changed = true;
+    return changed;
+  }
+
   function lastSeasonLine(state, p) {
     var year = yearOf(state);
     var cs = (p.careerStats || []).filter(function (x) { return x.year === year - 1; });
@@ -280,6 +313,7 @@
       res.ballots.clutch = ballot(clutchList, 'clutch', 5);
     }
     res.ballots.rules = { minGames: minG, teamGames: G, positionless: !positional, clutch: year >= 2023 };
+    makeConsistent(state, res);
     votes(res);
     // Ballots are due when the regular season ends: from then on every call returns the same result
     if (lockable(state)) state.season.awardVote = JSON.parse(JSON.stringify(res));
@@ -288,7 +322,10 @@
   function lockable(state) { return !!(state && state.season && state.season.phase && state.season.phase !== 'regular'); }
   function locked(state) {
     var v = lockable(state) && state.season.awardVote;
-    return v && v.year === yearOf(state) ? JSON.parse(JSON.stringify(v)) : null;
+    if (!v || v.year !== yearOf(state)) return null;
+    // votes stored before the first team rule: repair them once (and redo the team point totals)
+    if (makeConsistent(state, v) && v.ballots) { delete v.ballots.teamVotes; votes(v); }
+    return JSON.parse(JSON.stringify(v));
   }
 
   // ---------------------------------------------------------------------------

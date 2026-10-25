@@ -79,9 +79,11 @@ ok(s.phase === "resign" && s.draft.done, "auto finishes the draft after confirma
 ok(Object.values(s.players).filter(p => p.draft && p.draft.year === 2013 && p.team === "TOR").length === 2, "TOR drafted two players");
 
 // Rookie contracts at 120% of the scale
-const first = Object.values(s.players).find(p => p.draft && p.draft.year === 2013 && p.draft.pick === 1);
-const sc = C.rookieScale(1, 2014);
-ok(first && first.contract.salaries[0].year === 2014 && first.contract.salaries[0].amount === Math.round(sc.salaries[0] * 1.2), "number 1 pick gets 120% of the scale");
+// the highest pick who signs now (a pick who sits out his first season, like Nerlens Noel, signs later)
+const first = Object.values(s.players).filter(p => p.draft && p.draft.year === 2013 && p.draft.round === 1 && !p.stashedUntil)
+  .sort((a, b) => a.draft.pick - b.draft.pick)[0];
+const sc = C.rookieScale(first ? first.draft.pick : 1, 2014);
+ok(first && first.contract.salaries[0].year === 2014 && first.contract.salaries[0].amount === Math.round(sc.salaries[0] * 1.2), "top signed pick (#" + (first && first.draft.pick) + ") gets 120% of the scale");
 ok(first && first.contract.rookie === true, "rookie flag");
 
 // Re-signing window opens in the resign phase

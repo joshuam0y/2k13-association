@@ -45,7 +45,7 @@
     foulShot: { close: 0.22, post: 0.165, mid: 0.048, three: 0.014 },
     andOneFactor: 0.62,
     blockGivenMiss: { close: 0.256, post: 0.176, mid: 0.062, three: 0.029 },
-    astChance: { close: 0.57, post: 0.37, mid: 0.65, three: 0.85 },
+    astChance: { close: 0.575, post: 0.373, mid: 0.656, three: 0.858 },
     toBase: 0.134,
     stealShare: 0.535,
     offFoulShare: 0.10,
@@ -58,7 +58,15 @@
     homeMake: 0.009,
     fatigueZ: 2.2,            // z lost per unit of energy below 1
     rebK: 0.42,
-    astK: 0.55,
+    // Who gets the assist on a made shot: weight exp(astPass * z.pass + astHandle * z.handle + astOiq * z.oiq + astOvr * z.ovr + astPos[pos]).
+    // Fitted so a 2012-13 sim matches real per-36 assist rates by passing rating and position (PG, SG, SF, PF, C).
+    astPass: 1.03,
+    astHandle: -0.67,         // at equal passing, ball-dominant scorers (high handle) set up fewer baskets
+    astOiq: 0.16,
+    astOvr: 0.12,
+    astPos: [0.5, 0, -0.17, -0.11, 0.06],
+    astLift: 0.35,            // assisted share of made shots per unit of the best passer's log weight above astRef
+    astRef: 0.85,
     stlK: 0.55,
     blkK: 0.8
   };
@@ -289,6 +297,17 @@
       injuryAt: -1, injury: null, need: 0,
       box: emptyLine()
     };
+  }
+
+  // Assist share of a teammate on the floor: passing first, then handle and feel, then the
+  // position (point guards run the offense). Hybrid positions (G, GF, F, FC) sit between.
+  function posLog(table, rank) {
+    var r = clamp(rank, 1, 5) - 1, i = Math.min(3, Math.floor(r)), f = r - i;
+    return table[i] * (1 - f) + table[i + 1] * f;
+  }
+  function assistWeight(s) {
+    if (s.astW == null) s.astW = Math.exp(T.astPass * s.z.pass + T.astHandle * s.z.handle + T.astOiq * s.z.oiq + T.astOvr * s.ovrZ + posLog(T.astPos, s.rank));
+    return s.astW;
   }
 
   function isInjured(p, injuries) {
@@ -573,13 +592,15 @@
     function addTeamFoul(def) { def.teamFouls++; if (clock <= 120) def.late2++; }
 
     function creditAssist(off, shooter, type) {
-      var pa = T.astChance[type] * Math.exp(-0.08 * shooter.z.handle - 0.25 * (shooter.usage - 1));
-      if (rng() >= pa) return null;
-      var mates = off.lineup.filter(function (s) { return s !== shooter; });
+      var mates = off.lineup.filter(function (s) { return s !== shooter && !s.injury; });
       if (!mates.length) return null;
-      var a = pickBy(mates, function (s) {
-        return Math.exp(T.astK * s.z.pass + 0.25 * s.z.handle) * (s.group === 'G' ? 1.7 : (s.group === 'W' ? 1 : 0.7));
-      });
+      // a real playmaker on the floor sets up more baskets (and gets most of the extra ones)
+      var best = -9;
+      mates.forEach(function (s) { best = Math.max(best, Math.log(assistWeight(s))); });
+      var pa = T.astChance[type] * Math.exp(-0.08 * shooter.z.handle - 0.25 * (shooter.usage - 1) +
+        T.astLift * clamp(best - T.astRef, -1.5, 1.5));
+      if (rng() >= pa) return null;
+      var a = pickBy(mates, assistWeight);
       a.box.ast++;
       return a;
     }

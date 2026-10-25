@@ -220,6 +220,7 @@
   // by record; second round by record. Each slot carries the owner after trades and protections.
   function order(state, year) {
     year = year != null ? year : state.year;
+    cleanClasses(state); // the draft page lists the class right after the order: no duplicates or NBA veterans in it
     var all = teamList(state);
     var lot;
     if (state.draft && state.draft.year === year && state.draft.lottery) lot = state.draft.lottery.order.slice();
@@ -505,6 +506,7 @@
     state.players = state.players || {};
     state.draftClasses = state.draftClasses || {};
     migrateRights(state);
+    cleanClasses(state);
     if (state.draftClasses[year]) return state.draftClasses[year].slice();
     var rng = seeded(state, 'prospects' + year);
     var D = root && root.DRAFTS, real = year < FICTIONAL_FROM && D && D[year] && D[year].length ? D[year] : null;
@@ -520,10 +522,13 @@
       if (!gen || !gen.length) gen = generateClass(state, year, rng);
       list = gen.map(function (x) { return normalizeProspect(x, year, rng); });
     }
-    var ids = [];
+    var ids = [], idx = leagueIndex(state);
     list.forEach(function (p) {
       var ex = state.players[p.id];
       if (ex && ex.team !== 'DRAFT') return; // already in the league
+      var dup = ex ? null : alreadyInLeague(state, p, idx);
+      if (dup === true) { returnToFreeAgency(state, p); state.players[p.id] = p; return; } // a former NBA player: free agency
+      if (dup) return; // the same person under another id
       if (ex) {
         // Loaded earlier (for example by LEAGUE.newLeague): keep it, fill what is missing
         Object.keys(p).forEach(function (k) { if (ex[k] === undefined || ex[k] === null && p[k] !== null && k !== 'contract' && k !== 'draft' && k !== 'stashedUntil') ex[k] = p[k]; });
@@ -537,7 +542,100 @@
   }
   function pool(state, year) {
     var ids = loadClass(state, year);
-    return ids.filter(function (id) { var p = state.players[id]; return p && p.team === 'DRAFT' && !p.rights; });
+    var idx = leagueIndex(state);
+    return ids.filter(function (id) { var p = state.players[id]; return p && p.team === 'DRAFT' && !p.rights && !alreadyInLeague(state, p, idx); });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Nobody already in the league can be drafted: a prospect is skipped when a player who is not a
+  // prospect (on a roster, a free agent, stashed or retired) has his id, his NBA.com id, or his exact
+  // name and birth year, or when he already played in the NBA (data flag returning, or real seasons
+  // before 2012-13).
+  // ---------------------------------------------------------------------------
+  function foldName(s) {
+    s = String(s || '');
+    if (s.normalize) s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return s.toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+  function birthYear(state, p) {
+    if (!p || p.age == null) return null;
+    if (p.team === 'DRAFT' && p.draftYear != null) return +p.draftYear - p.age;
+    if (p.retired && p.retiredYear) return +p.retiredYear - p.age;
+    return (state.year || 2013) - p.age;
+  }
+  // { names: { foldedName: [{ id, by }] }, nba: { nbaId: id } } of every player who is not a prospect
+  function leagueIndex(state) {
+    var idx = { names: {}, nba: {} }, ps = state.players || {};
+    Object.keys(ps).forEach(function (id) {
+      var q = ps[id];
+      if (!q || q.team === 'DRAFT' || !q.name) return;
+      var k = foldName(q.name);
+      (idx.names[k] = idx.names[k] || []).push({ id: id, by: birthYear(state, q) });
+      if (q.nbaId) idx.nba[q.nbaId] = id;
+    });
+    return idx;
+  }
+  function playedBefore(p) {
+    if (!p) return false;
+    if (p.returning) return true;
+    var CP = root && root.CAREER_PRIOR;
+    return !!(CP && CP[p.id] && CP[p.id].length);
+  }
+  // The player already in the league that this prospect duplicates, true when he played in the NBA
+  // before his class, or null when he is a genuine prospect.
+  function alreadyInLeague(state, p, idx) {
+    if (!p) return null;
+    if (playedBefore(p)) return true;
+    var ex = state.players && state.players[p.id];
+    if (ex && ex !== p && ex.team !== 'DRAFT') return ex;
+    idx = idx || leagueIndex(state);
+    if (p.nbaId && idx.nba[p.nbaId] && idx.nba[p.nbaId] !== p.id) return state.players[idx.nba[p.nbaId]];
+    var by = birthYear(state, p), list = idx.names[foldName(p.name)] || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id !== p.id && by != null && list[i].by === by) return state.players[list[i].id];
+    }
+    return null;
+  }
+  // A former NBA player listed with a class (back from overseas): a free agent with his real NBA past
+  // (data priorNba: { yearsPro, draft }), overseas until his return season.
+  function returnToFreeAgency(state, p) {
+    var pr = p.priorNba || {};
+    p.team = 'FA';
+    p.contract = emptyContract();
+    p.undrafted = !pr.draft;
+    p.draft = pr.draft ? JSON.parse(JSON.stringify(pr.draft)) : null;
+    if (pr.draft) { p.draftYear = pr.draft.year; p.realPick = pr.draft.pick; }
+    p.yearsPro = pr.yearsPro != null ? +pr.yearsPro : Math.max(1, p.yearsPro || 0);
+    p.yearsWithTeam = 0;
+    var now = state.year || 2013;
+    if (p.arrivalYear != null && +p.arrivalYear > now) {
+      p.stashedUntil = +p.arrivalYear;
+      p.injury = { type: 'Playing overseas', games: 999 };
+    }
+  }
+  // Takes duplicates and former NBA players out of every class in the save (the prospects that
+  // LEAGUE.newLeague loaded included). Cheap to call again: it reruns only when the player count changes.
+  var cleaned = typeof WeakMap === 'function' ? new WeakMap() : null;
+  function cleanClasses(state) {
+    if (!state || !state.players) return [];
+    var sig = Object.keys(state.players).length + ':' + (state.year || 0);
+    if (cleaned && cleaned.get(state) === sig) return [];
+    var idx = leagueIndex(state), out = [];
+    Object.keys(state.players).forEach(function (id) {
+      var p = state.players[id];
+      if (!p || p.team !== 'DRAFT') return;
+      var dup = alreadyInLeague(state, p, idx);
+      if (!dup) return;
+      if (dup === true) returnToFreeAgency(state, p);
+      else if (!(p.careerStats && p.careerStats.length)) delete state.players[id];
+      else return;
+      out.push({ id: id, name: p.name, reason: dup === true ? 'played in the NBA before' : 'same player as ' + dup.id });
+      Object.keys(state.draftClasses || {}).forEach(function (y) {
+        state.draftClasses[y] = state.draftClasses[y].filter(function (x) { return x !== id; });
+      });
+    });
+    if (cleaned) cleaned.set(state, Object.keys(state.players).length + ':' + (state.year || 0));
+    return out;
   }
 
   // ---------------------------------------------------------------------------
@@ -944,6 +1042,9 @@
     simPicks: simPicks,
     finish: finish,
     loadClass: loadClass,
+    pool: pool,
+    cleanClasses: cleanClasses,
+    alreadyInLeague: alreadyInLeague,
     generateClass: generateClass,
     view: view,
     protectedNow: protectedNow,
