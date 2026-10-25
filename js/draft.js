@@ -669,7 +669,7 @@
   // need a bit more than rebuilders.
   function needWeight(state, abbr) {
     var d = state.draft, slot = d && d.order ? d.order[d.index || 0] : null, n = slot ? slot.overall : 15;
-    var w = n <= 10 ? 0.3 : n <= 30 ? 1 : 1.8;
+    var w = n <= 10 ? 1 : n <= 30 ? 1.3 : 1.8;
     var dir = teams(state)[abbr] && teams(state)[abbr].direction;
     return w * (dir === 'contend' ? 1.25 : dir === 'rebuild' ? 0.8 : 1);
   }
@@ -681,23 +681,37 @@
     Object.keys(need).forEach(function (g) { need[g] *= nw; });
     var rng = seeded(state, 'aipick' + year + ':' + (state.draft ? state.draft.index : 0) + ':' + abbr);
     var best = null, bestV = -1e9;
+    // Team profile: rebuilding or aging teams chase young upside, contenders want players who help now
+    var tdir = teams(state)[abbr] && teams(state)[abbr].direction;
+    var core = Object.keys(state.players).map(function (k) { return state.players[k]; })
+      .filter(function (q) { return q && q.team === abbr && !q.retired && !isStashed(q); })
+      .sort(function (a, b) { return (b.ovr || 0) - (a.ovr || 0); }).slice(0, 8);
+    var coreAge = core.length ? core.reduce(function (t, q) { return t + (q.age || 26); }, 0) / core.length : 26;
+    var youthWant = (tdir === 'rebuild' ? 1 : tdir === 'contend' ? 0.2 : 0.5) + (coreAge >= 29 ? 0.4 : coreAge >= 27.5 ? 0.2 : 0);
+    var nowWant = tdir === 'contend' ? 1 : tdir === 'rebuild' ? 0 : 0.4;
+    function fitBonus(q, v) {
+      var youth = Math.max(0, 21 - (q.age || 21)) * 1.6 + Math.max(0, (v.pot || 0) - 80) * 0.12;
+      var ready = Math.max(0, (v.ovr || 0) - 70) * 0.25;
+      return youthWant * youth + nowWant * ready + need[posGroup(q.pos)] * 2.5;
+    }
     ids.forEach(function (id) {
       var p = state.players[id];
       if (p.undrafted && !isUser) return; // real undrafted players go undrafted unless the user takes them
       var v = view(state, abbr, id);
-      var val = 0.62 * v.pot + 0.38 * v.ovr + need[posGroup(p.pos)] + gauss(rng) * 0.8;
+      var val = 0.62 * v.pot + 0.38 * v.ovr + fitBonus(p, v) * 0.5 + gauss(rng) * 0.8;
       // Real classes: teams only know what scouts knew on draft night, so the real draft order is the
       // big board (Bennett goes high, Giannis around the middle of the first round). Hindsight counts a
       // little, plus noise, so the order is close to history but never exactly the same.
       if (p.realPick) {
         var stock = 95 - 14 * Math.log(Math.max(1, +p.realPick));
-        val = 0.75 * stock + 0.25 * (0.62 * v.pot + 0.38 * v.ovr) + need[posGroup(p.pos)] + gauss(rng) * 2.5;
+        val = 0.75 * stock + 0.25 * (0.62 * v.pot + 0.38 * v.ovr) + fitBonus(p, v) + gauss(rng) * 2.5;
       }
       if (val > bestV) { bestV = val; best = id; }
     });
     if (!best && ids.length) best = ids[0];
     var bp = best && state.players[best];
-    lastReason = bp && need[posGroup(bp.pos)] >= 0.9 ? { id: best, text: 'fills a need at ' + primaryPos(bp.pos) } : null;
+    lastReason = bp && need[posGroup(bp.pos)] >= 0.9 ? { id: best, text: 'fills a need at ' + primaryPos(bp.pos) }
+      : bp && youthWant >= 0.9 && (bp.age || 21) <= 19 ? { id: best, text: 'a young prospect for the rebuild' } : null;
     return best;
   }
 
