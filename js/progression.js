@@ -285,6 +285,14 @@
       var played = (st && st.g) || (g2 && g2.g) || isNbaTeam(state, p.team);
       if (played && mpg >= 24) out.pt = 0.5 + Math.min(0.5, (mpg - 24) / 20);
       else if (played && mpg < 10 && !out.major) out.pt = -(0.75 + Math.min(0.75, (10 - mpg) / 13));
+    } else if (age <= 29) {
+      // role in his prime (26 to 29): a real starter's role keeps him a little above his real path,
+      // being buried on a bench pushes him a little below it (Harden-type role changes)
+      var st2 = C.stats[id], lg2 = C.inj[id];
+      var miss2 = lg2 ? Math.min(C.teamGames, lg2.total || lg2.games || 0) : 0;
+      var mpg2 = st2 ? (+st2.min || 0) / Math.max(10, C.teamGames - miss2) : 0;
+      if (st2 && st2.g && mpg2 >= 30) out.pt = 0.3 + Math.min(0.3, (mpg2 - 30) / 20);
+      else if (isNbaTeam(state, p.team) && mpg2 < 12 && !out.major) out.pt = -(0.4 + Math.min(0.4, (12 - mpg2) / 15));
     }
     return out;
   }
@@ -314,8 +322,23 @@
     if (age <= 25 && rng() < 0.05) d += (rng() < 0.55 ? 1 : -1) * (3 + rng() * 3);
     return d;
   }
-  function adjustPot(p, age, rng, isHistory) {
-    if (isHistory) { if (p.pot == null || p.pot < p.ovr) p.pot = p.ovr; return; }
+  function adjustPot(p, age, rng, isHistory, info, next) {
+    if (isHistory) {
+      // Potential follows what happens in this save: the best real rating still ahead of him (his
+      // healthy path for healthy-fate players) plus his personal drift and breakouts or stalls
+      if (SETTINGS.variety && info && info.years && info.years.length) {
+        var rem = null;
+        info.years.forEach(function (y) { if (y >= next) { var v = +info.t[y]; if (rem == null || v > rem) rem = v; } });
+        if (rem == null) rem = p.ovr;
+        var pr = p.prog || {}, off = (pr.drift || 0) + (pr.boost || 0);
+        if (rem >= STAR || p.fate === 'healthy') off = Math.min(off, STAR_CAP);
+        var pot = rem + off * (age <= 27 ? 1 : 0.5);
+        p.pot = clamp(Math.max(Math.round(pot), p.ovr), OVR_MIN, OVR_MAX);
+        return;
+      }
+      if (p.pot == null || p.pot < p.ovr) p.pot = p.ovr;
+      return;
+    }
     var pot = p.pot != null ? p.pot : p.ovr;
     if (age <= 25) pot += Math.round(gauss(rng) * 1.2);
     if (age >= 30) pot = p.ovr;
@@ -485,7 +508,7 @@
         newOvr = p.ovr + ageCurveDelta(p.age, p.ovr, p.pot, rng) + eff.pt + eff.inj;
       }
       setOvr(p, newOvr, { keepPot: true });
-      adjustPot(p, p.age, rng, !!info);
+      adjustPot(p, p.age, rng, !!info, info, next);
       p.formBase = p.ovr;
       if (p.ovr !== before) out.changes.push({ id: id, from: before, to: p.ovr });
       if (p.team !== 'DRAFT') report.players[id] = [shown, p.ovr, p.age];
