@@ -126,6 +126,8 @@
       state.teams[t.abbr] = t;
     });
     assignPicks(state, W.PICKS_2012);
+    // injury and career fates: once per save, real story or the healthy path (never shown in the UI)
+    if (mod("PROG") && W.PROG.rollFates) safe("fates", function () { W.PROG.rollFates(state); });
     // coaches are cosmetic: names and records for display
     if (mod("COACH") && W.COACH.init) safe("coaches", function () { W.COACH.init(state); });
     startSeason(state);
@@ -214,7 +216,8 @@
     // The offseason heals last season's injuries (overseas stash players stay away until they arrive)
     var newYear = state.history && state.history.seasons && state.history.seasons.length > 0;
     for (var oid in state.players) {
-      var op = state.players[oid], otg = W.TARGETS && W.TARGETS[oid];
+      var op = state.players[oid];
+      var otg = mod("PROG") && W.PROG.targetsOf ? W.PROG.targetsOf(state, oid) : (W.TARGETS && W.TARGETS[oid]);
       if (newYear && op && op.injury && op.injury.type !== "Playing overseas" && op.injury.season !== state.year) op.injury = null;
       // Real lost seasons (TARGETS out list): the player sits out the whole year, like he did in real life
       if (!op || op.retired || !otg || !Array.isArray(otg.out) || otg.out.indexOf(state.year) < 0) continue;
@@ -464,6 +467,7 @@
     if (champ) news(state, (state.teams[champ] ? state.teams[champ].city + " " + state.teams[champ].name : champ) + " win the " + state.year + " title", "", []);
     // coaching changes are cosmetic (names and records only)
     if (mod("COACH") && W.COACH.aiChanges) { var crng = rngFor(state); safe("coachChanges", function () { W.COACH.aiChanges(state, crng); }); }
+    if (mod("PROG") && W.PROG.fateNews) safe("fateNews", function () { (W.PROG.fateNews(state, state.year) || []).forEach(function (n) { news(state, n.headline, n.body, n.ids); }); });
     state.phase = "draftLottery";
   }
 

@@ -118,9 +118,12 @@
   // ---------------------------------------------------------------------------
   // Targets
   // ---------------------------------------------------------------------------
-  function targetInfo(id) {
+  // state (optional): a save where an injury-fate player stayed healthy carries his own targets
+  // in state.prog.fateTargets[id]; everyone else follows window.TARGETS.
+  function targetInfo(id, state) {
     var T = targets();
-    var t = T && T[id];
+    var ft = state && state.prog && state.prog.fateTargets;
+    var t = (ft && ft[id]) || (T && T[id]);
     if (!t) return null;
     var years = Object.keys(t).filter(function (k) { return /^\d{4}$/.test(k) && t[k] != null; })
       .map(Number).sort(function (a, b) { return a - b; });
@@ -136,6 +139,157 @@
     var a = info.first, b = info.last;
     info.years.forEach(function (y) { if (y < year && y > a) a = y; if (y > year && y < b) b = y; });
     return +t[a] + (+t[b] - +t[a]) * (year - a) / (b - a);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Injury fates: careers real injuries derailed. Once per save (deterministic from the seed) each one
+  // either follows the real story or stays healthy from the injury season on: his targets hold near the
+  // pre-injury level, then age normally, and he retires at a normal age. Never shown in the UI.
+  // from = the season (season-ending year) the injury hit.
+  // ---------------------------------------------------------------------------
+  var INJURY_FATES = {
+    bynuman01: { from: 2013, note: 'knees, missed all of 2012-13 and was done after 2013-14' },
+    roybr01: { from: 2013, note: 'degenerative knees, retired in 2011, five games for Minnesota in 2012-13' },
+    rosede01: { from: 2013, note: 'torn ACL in April 2012, then torn meniscus in 2013-14 and more knee trouble' },
+    grangda01: { from: 2013, note: 'knee tendinosis in 2012-13, never the same' },
+    thomais02: { from: 2018, note: 'hip injury in 2017-18' },
+    walljo01: { from: 2019, note: 'heel surgery and a ruptured Achilles in 2019' },
+    couside01: { from: 2018, note: 'ruptured Achilles in January 2018, torn ACL in 2019' },
+    thompkl01: { from: 2020, note: 'torn ACL in the 2019 Finals, ruptured Achilles in 2020' },
+    duranke01: { from: 2020, note: 'ruptured Achilles in the 2019 Finals, recovered', small: true },
+    haywago01: { from: 2018, note: 'broken leg in the 2017-18 opener' },
+    parsoch01: { from: 2017, note: 'knee surgeries from 2016 on' },
+    georgpa01: { from: 2015, note: 'broken leg in August 2014, recovered', small: true },
+    leonaka01: { from: 2018, note: 'quad injury in 2017-18, torn ACL in 2021' },
+    willizi01: { from: 2020, note: 'knee and foot injuries from his rookie season on' },
+    balllo01: { from: 2022, note: 'knee injury in January 2022, out two full seasons' },
+    parkeja01: { from: 2015, note: 'torn ACL in December 2014 and again in 2017' },
+    exumda01: { from: 2016, note: 'torn ACL in August 2015' },
+    embiijo01: { from: 2015, note: 'foot injuries, missed 2014-15 and 2015-16' },
+    // a number 1 pick whose shoulder condition derailed him: the healthy path grows toward his projection
+    fultzma01: { from: 2018, note: 'thoracic outlet syndrome in 2017-18', grow: [84, 88], quiet: true },
+    // career fate (not an injury): left the NBA in 2015; the other path keeps him playing
+    sandela01: { from: 2015, note: 'left the NBA in 2015', type: 'career', chance: 0.4, quiet: true }
+  };
+  function hashStr(str) {
+    var h = 2166136261 >>> 0;
+    str = String(str);
+    for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+    return h >>> 0;
+  }
+  // Healthy projection: hold the pre-injury level (young players grow a little), then age normally.
+  // Never below what he really did (players who recovered, like Durant, change little).
+  function healthyTargets(id, p, fate, rng) {
+    var T = targets(), t = T && T[id];
+    if (!t || !p) return null;
+    var from = fate.from;
+    var base = p.draftYear && p.team === 'DRAFT' ? +p.draftYear : 2013;
+    var ageAt = function (y) { return (p.age || 22) + (y - base); };
+    var before = t[from - 1] != null ? +t[from - 1] : null, at = t[from] != null ? +t[from] : null;
+    var L = Math.max(before != null ? before : -1, at != null ? at : -1);
+    if (L < 0) L = p.ovr || 70;
+    var star = L >= 85;
+    var retireAge = (star ? 34 : 33) + Math.floor(rng() * 3);   // last season played at this age
+    var retireH = from + Math.max(1, retireAge - ageAt(from) + 1);
+    var out = {};
+    Object.keys(t).forEach(function (k) { out[k] = Array.isArray(t[k]) ? t[k].slice() : t[k]; });
+    var years = Object.keys(t).filter(function (k) { return /^\d{4}$/.test(k); }).map(Number);
+    var lastReal = years.length ? Math.max.apply(null, years) : from;
+    var end = Math.max(lastReal, Math.min(2026, retireH - 1));
+    var v = L, goal = fate.grow ? fate.grow[0] + rng() * (fate.grow[1] - fate.grow[0]) : null;
+    for (var y = from; y <= end; y++) {
+      var a = ageAt(y);
+      if (y > from && goal != null && a <= 25) v += Math.max(0, (goal - v) * 0.4);   // develops like a top pick
+      else if (y > from) v += a <= 26 ? 1 : a <= 29 ? 0 : a === 30 ? -1 : a <= 32 ? -1.5 : a <= 34 ? -2.5 : -3.5;
+      v = Math.min(v, goal != null ? goal : L + 3);
+      var real = t[y] != null ? +t[y] : null;
+      out[y] = Math.round(Math.max(real != null ? real : 0, Math.min(99, v)));
+    }
+    if (Array.isArray(out.out)) { out.out = out.out.filter(function (y) { return y < from; }); if (!out.out.length) delete out.out; }
+    if (t.retire != null) out.retire = Math.max(+t.retire, retireH);
+    return out;
+  }
+  // Rolls every injury fate once for a new save. Sets p.fate = "healthy" | "real" and, for healthy ones,
+  // state.prog.fateTargets[id]. Clears a real 2012-13 injury and an injury redshirt for healthy players.
+  function rollFates(state) {
+    state.prog = state.prog || {};
+    if (state.prog.fatesRolled) return state.prog.fateTargets || {};
+    state.prog.fatesRolled = true;
+    state.prog.fateTargets = state.prog.fateTargets || {};
+    var players = state.players || {};
+    Object.keys(INJURY_FATES).forEach(function (id) {
+      var p = players[id], fate = INJURY_FATES[id];
+      if (!p || p.retired) return;
+      var r = mulberry32(hashStr((state.rngSeed || 1) + ':fate:' + id));
+      if (r() >= (fate.chance != null ? fate.chance : 0.5)) { p.fate = 'real'; return; }
+      var ht = healthyTargets(id, p, fate, r);
+      if (!ht) { p.fate = 'real'; return; }
+      p.fate = 'healthy';
+      state.prog.fateTargets[id] = ht;
+      var peak = 0;
+      Object.keys(ht).forEach(function (k) { if (/^\d{4}$/.test(k)) peak = Math.max(peak, +ht[k]); });
+      if (peak && (p.pot == null || p.pot < peak)) p.pot = Math.min(99, peak);
+      if (fate.from <= (state.year || 2013) && p.injury && p.injury.type !== 'Playing overseas') p.injury = null;
+      // a prospect who really sat out his first seasons hurt arrives on time
+      if (p.team === 'DRAFT' && p.arrivalYear != null && p.draftYear != null && fate.from <= +p.draftYear + 1) p.arrivalYear = +p.draftYear + 1;
+    });
+    return state.prog.fateTargets;
+  }
+  // News when a healthy fate matters: he played the season his real injury took away.
+  function fateNews(state, year) {
+    var out = [], ps = (state.season && state.season.playerStats) || {};
+    Object.keys(INJURY_FATES).forEach(function (id) {
+      var p = state.players && state.players[id], fate = INJURY_FATES[id], T = targets();
+      if (!p || p.fate !== 'healthy' || p.retired || fate.small || fate.quiet) return;
+      var real = T && T[id], st = ps[id];
+      var hurtYear = year === fate.from || (real && Array.isArray(real.out) && real.out.indexOf(year) >= 0);
+      if (!hurtYear || !st || st.g < 60) return;
+      out.push({ headline: p.name + ' plays ' + st.g + ' games', body: p.name + ' stayed healthy all season and played ' + st.g + ' games.', ids: [id] });
+    });
+    return out;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Variety for history players: a persistent personal offset p.prog = { drift, boost }.
+  // drift: a random walk each offseason, pulled back toward 0, clamped to +-6.
+  // boost: breakouts and stalls, which fade slowly, clamped to +-10.
+  // Playing time (25 and under) and major injuries move drift for everyone (fictional players too).
+  // ---------------------------------------------------------------------------
+  var SETTINGS = { variety: true };   // PROG.settings.variety = false: careers follow history with tiny noise
+  var DRIFT_SD = 1.5, DRIFT_PULL = 0.75, DRIFT_MAX = 6, BOOST_KEEP = 0.93, BOOST_MAX = 10;
+  var MAJOR_INJURY = /ACL|Achilles|Patellar/i;
+  function seasonContext(state, done) {
+    var season = state.season && (state.season.year == null || +state.season.year === done) ? state.season : null;
+    var teamGames = 0;
+    if (season && season.standings) Object.keys(season.standings).forEach(function (a) { var s = season.standings[a]; teamGames = Math.max(teamGames, (s.w || 0) + (s.l || 0)); });
+    var gl = state.gleague && +state.gleague.year === done ? state.gleague.stats || {} : {};
+    return { stats: (season && season.playerStats) || {}, gl: gl, inj: (season && season.injuryLog) || {}, teamGames: teamGames || 82, has: !!(season && season.playerStats && Object.keys(season.playerStats).length) };
+  }
+  // Drift change from last season's minutes (25 and under) and injuries. age = his age during that season.
+  function seasonEffects(state, p, id, age, C, rng) {
+    var out = { pt: 0, inj: 0, major: false };
+    if (!C.has) return out;
+    var lg = C.inj[id];
+    if (lg && (lg.games >= 40 || lg.total >= 40 || MAJOR_INJURY.test(lg.type || ''))) {
+      out.major = true;
+      out.inj = -((age >= 30 ? 2 : 1) + rng() * 2);
+    }
+    if (age <= 25 && !(p.stashedUntil && +p.stashedUntil > (state.year || 0))) {
+      var st = C.stats[id], g2 = C.gl[id];
+      var nbaMin = st ? +st.min || 0 : 0, glMin = g2 ? +g2.min || 0 : 0;
+      var missed = lg ? Math.min(C.teamGames, lg.total || lg.games || 0) : 0;
+      var avail = Math.max(10, C.teamGames - missed);
+      var mpg = (nbaMin + 0.5 * glMin) / avail;
+      var played = (st && st.g) || (g2 && g2.g) || isNbaTeam(state, p.team);
+      if (played && mpg >= 24) out.pt = 0.5 + Math.min(0.5, (mpg - 24) / 20);
+      else if (played && mpg < 10 && !out.major) out.pt = -(0.75 + Math.min(0.75, (10 - mpg) / 13));
+    }
+    return out;
+  }
+  function peakYear(info) {
+    var best = null, by = null;
+    info.years.forEach(function (y) { var v = +info.t[y]; if (best == null || v > best) { best = v; by = y; } });
+    return by;
   }
 
   // ---------------------------------------------------------------------------
@@ -200,6 +354,10 @@
     else if (d === 0) ch = 0.96;
     else ch = 1;
     if (d >= 0 && better >= 6) ch = d === 0 ? 0.45 : d === 1 ? 0.75 : 1;
+    // his personal arc: well below his real self may retire a year early, well above a year late
+    var off = p.prog ? (p.prog.drift || 0) + (p.prog.boost || 0) : 0;
+    if (off <= -4 && d === -1) ch = Math.max(ch, 0.2);
+    if (off >= 4 && d === 0 && better < 6) ch = Math.min(ch, 0.75);
     if (d < 0 && better > 2) ch *= 0.5;
     // The sim made him much worse than he really was: he leaves earlier
     if (real != null && better < -8 && (p.age || 0) >= 30) ch = Math.max(ch, 0.25);
@@ -236,7 +394,7 @@
   }
 
   function retireRoll(state, p, seasonDone, rng) {
-    var info = targetInfo(p.id);
+    var info = targetInfo(p.id, state);
     var age = (p.age || 22) + 1; // his age next season
     var ch = info ? historyRetireChance(info, seasonDone, p) : null;
     if (ch == null) ch = ageRetireChance(age, p.ovr - (p.form || 0), !isNbaTeam(state, p.team));
@@ -275,6 +433,8 @@
     state.prog.lastOffseason = next;
     out.retired = retirements(state, rng, { seasonDone: done, force: opts.force });
     var players = state.players || {};
+    if (!state.prog.fatesRolled) rollFates(state);
+    var C = seasonContext(state, done);
     // Before and after numbers for the progression page: { id: [old, new, age] } (no potential)
     var report = { year: next, players: {}, rookies: [] };
     Object.keys(players).forEach(function (id) {
@@ -289,20 +449,31 @@
       if (p.form) { setOvr(p, p.ovr - p.form, { keepPot: true }); }
       p.form = 0;
       var before = p.ovr;
-      p.age = (p.age || 22) + 1;
-      var info = targetInfo(id);
+      var seasonAge = p.age || 22;
+      p.age = seasonAge + 1;
+      var info = targetInfo(id, state);
       var tgt = info ? targetFor(info, next) : null;
+      var eff = SETTINGS.variety ? seasonEffects(state, p, id, seasonAge, C, rng) : { pt: 0, inj: 0 };
       var newOvr;
-      if (tgt != null) {
-        var prevT = targetFor(info, done);
-        var prevDev = prevT != null ? before - prevT : 0;
-        // History players stay close to their real arc: a little carry-over from last year plus small noise
-        var dev = 0.3 * prevDev + gauss(rng) * 0.8;
-        var cap = 2.5 + 0.3 * Math.max(0, Math.abs(prevDev) - 4);
-        dev = clamp(dev, -cap, cap);
-        newOvr = tgt + dev;
+      if (tgt != null && !SETTINGS.variety) {
+        // no-variance mode (tests and comparisons): stay close to the real arc
+        var prevT = targetFor(info, done), prevDev = prevT != null ? before - prevT : 0;
+        newOvr = tgt + clamp(0.3 * prevDev + gauss(rng) * 0.8, -2.5, 2.5);
+      } else if (tgt != null) {
+        // History as a guide, with real variety: real target + personal drift + breakouts + small noise
+        var pr = p.prog = p.prog || { drift: 0, boost: 0 };
+        pr.drift = clamp((pr.drift || 0) * DRIFT_PULL + gauss(rng) * DRIFT_SD + eff.pt + eff.inj, -DRIFT_MAX, DRIFT_MAX);
+        pr.boost = (pr.boost || 0) * BOOST_KEEP;
+        var py = peakYear(info);
+        var young = p.age <= 25 && (py == null || next <= py + 1);
+        if (young && rng() < 0.03) pr.boost += 4 + rng() * 3;                                    // breakout
+        else if (young && (p.pot || 0) >= 82 && (p.pot - p.ovr) >= 4 && rng() < 0.03) pr.boost -= 4 + rng() * 3; // stall
+        pr.boost = clamp(pr.boost, -BOOST_MAX, BOOST_MAX);
+        var off = pr.drift + pr.boost;
+        if (off < 0 && tgt >= 90) off *= 0.6;   // stars stay stars
+        newOvr = tgt + off + gauss(rng) * 0.6;
       } else {
-        newOvr = p.ovr + ageCurveDelta(p.age, p.ovr, p.pot, rng);
+        newOvr = p.ovr + ageCurveDelta(p.age, p.ovr, p.pot, rng) + eff.pt + eff.inj;
       }
       setOvr(p, newOvr, { keepPot: true });
       adjustPot(p, p.age, rng, !!info);
@@ -350,10 +521,15 @@
     retirements: retirements,
     setOvr: setOvr,
     weightedOvr: weightedOvr,
-    targetFor: function (id, year) { return targetFor(targetInfo(id), year); },
+    targetFor: function (id, year, state) { return targetFor(targetInfo(id, state), year); },
+    targetsOf: function (state, id) { var i = targetInfo(id, state); return i ? i.t : null; },
+    settings: SETTINGS,
+    rollFates: rollFates,
+    fateNews: fateNews,
+    INJURY_FATES: INJURY_FATES,
     ageCurveDelta: ageCurveDelta,
-    retireChance: function (p, seasonDone, unsigned) {
-      var info = targetInfo(p.id);
+    retireChance: function (p, seasonDone, unsigned, state) {
+      var info = targetInfo(p.id, state);
       var ch = info ? historyRetireChance(info, seasonDone, p) : null;
       return ch == null ? ageRetireChance((p.age || 22) + 1, p.ovr, unsigned) : ch;
     },

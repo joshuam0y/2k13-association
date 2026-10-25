@@ -137,5 +137,33 @@ for (let y = 2013; y < 2022; y++) {
 }
 ok(maxGap <= 3, "LeBron within 3 of his real rating every year, max gap " + maxGap);
 
+
+// Injury fates: once per save, about half healthy; healthy Bynum keeps playing as an 80+ center, healthy Rose stays 85+
+let healthyBy = 0, healthyRose = 0, okBy = true, okRose = true;
+for (let seed = 1; seed <= 10; seed++) {
+  const sx = L.newLeague("OKC", { seed: 1000 + seed });
+  const again = L.newLeague("OKC", { seed: 1000 + seed });
+  ok(sx.players.rosede01.fate === again.players.rosede01.fate, "fate is fixed by the seed");
+  if (sx.players.bynuman01.fate === "healthy") {
+    healthyBy++;
+    const t = P.targetsOf(sx, "bynuman01");
+    if (!(t.retire > 2016 && t[2016] >= 80 && t[2017] >= 80)) okBy = false;
+    if (sx.players.bynuman01.injury) okBy = false;
+  }
+  if (sx.players.rosede01.fate === "healthy") {
+    healthyRose++;
+    const t = P.targetsOf(sx, "rosede01");
+    if (![2013, 2014, 2015, 2016, 2017].every(y => t[y] >= 85) || (t.out && t.out.indexOf(2013) >= 0)) okRose = false;
+  }
+}
+ok(healthyBy >= 2 && healthyBy <= 8, "Bynum healthy in about half the saves (" + healthyBy + "/10)");
+ok(healthyRose >= 2 && healthyRose <= 8, "Rose healthy in about half the saves (" + healthyRose + "/10)");
+ok(okBy, "healthy Bynum: 80+ after 2015 and no early retirement");
+ok(okRose, "healthy Rose: 85+ through 2017 and plays 2012-13");
+// variety: drift is stored on the player, never in the progression report
+const sv = L.newLeague("OKC", { seed: 4242 });
+sv.phase = "freeAgency"; P.offseason(sv);
+ok(sv.players.jamesle01.prog && typeof sv.players.jamesle01.prog.drift === "number", "history players carry a personal drift");
+ok(Object.values(sv.progressReport.players).every(v => v.length === 3), "report still old, new and age only");
 console.log(pass + " passed, " + fail + " failed");
 process.exitCode = fail ? 1 : 0;

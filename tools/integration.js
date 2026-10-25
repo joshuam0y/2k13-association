@@ -56,7 +56,8 @@ for (let n = 0; n < seasons; n++) {
   const late = Object.values(s.players).filter(p => !p.retired && p.team !== "DRAFT" && T[p.id] && T[p.id].retire != null && T[p.id].retire + 1 < s.year);
   if (late.length) problems.push(`${late.length} players still active two or more seasons past their real retirement: ${late.slice(0, 5).map(p => p.name).join(", ")}`);
   const lb = s.players.jamesle01, lbT = window.PROG && window.PROG.targetFor ? window.PROG.targetFor("jamesle01", s.year) : null;
-  if (lb && lbT != null && Math.abs(lb.ovr - lbT) > 4) problems.push(`LeBron ${lb.ovr} vs real ${lbT} in ${s.year}`);
+  // history as a guide with variety: LeBron moves around his real arc but stays a star
+  if (lb && !lb.retired && lbT != null && (lb.ovr < Math.min(90, lbT - 5) || lb.ovr > lbT + 8)) problems.push(`LeBron ${lb.ovr} vs real ${lbT} in ${s.year}`);
 }
 console.log("time", ((Date.now() - t0) / 1000).toFixed(1), "s; save", Math.round(JSON.stringify(s).length / 1024), "KB; news", s.news.length, "; transactions", s.transactions.length);
 const uniq = [...new Set(warnings.map(w => w.replace(/\d+/g, "#")))];

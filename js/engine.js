@@ -1186,6 +1186,11 @@
       }
       var cur = season.injuries[inj.id];
       if (!cur || cur.games < inj.games) season.injuries[inj.id] = { type: inj.type, games: inj.games };
+      // the season's injury log (offseason progression reads it): longest injury and total games
+      var log = season.injuryLog || (season.injuryLog = {}), lg = log[inj.id];
+      if (!lg) lg = log[inj.id] = { type: inj.type, games: 0, total: 0 };
+      if (inj.games > lg.games) { lg.games = inj.games; lg.type = inj.type; }
+      lg.total += inj.games;
     });
     storeResult(season, g, res);
     if (isPI) applyPlayInResult(season, g, res);
