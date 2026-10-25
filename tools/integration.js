@@ -53,7 +53,9 @@ for (let n = 0; n < seasons; n++) {
   if (bad.length) problems.push(`after ${s.year - 1} offseason, roster sizes off: ${bad.join(", ")}`);
   // real retirements: nobody plays past his real last season (TARGETS retire = first season not played)
   const T = window.TARGETS || {};
-  const late = Object.values(s.players).filter(p => !p.retired && p.team !== "DRAFT" && T[p.id] && T[p.id].retire != null && T[p.id].retire + 1 < s.year);
+  // (players under 31 at their real exit may keep playing if a team signs them)
+  const late = Object.values(s.players).filter(p => !p.retired && p.team !== "DRAFT" && T[p.id] && T[p.id].retire != null && T[p.id].retire + 1 < s.year
+    && (p.age || 0) - (s.year - T[p.id].retire) >= 31);
   if (late.length) problems.push(`${late.length} players still active two or more seasons past their real retirement: ${late.slice(0, 5).map(p => p.name).join(", ")}`);
   const lb = s.players.jamesle01, lbT = window.PROG && window.PROG.targetFor ? window.PROG.targetFor("jamesle01", s.year) : null;
   // history as a guide with variety: LeBron moves around his real arc but stays a star

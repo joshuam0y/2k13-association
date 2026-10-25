@@ -123,12 +123,12 @@ s2.phase = "freeAgency"; P.offseason(s2); s2.year = 2014; s2.phase = "regular";
 const by = s2.players.bynuman01;
 let retiredIn = null;
 for (let seed = 1; seed <= 20; seed++) {
-  const p = Object.assign({}, by, { retired: false, team: "IND", ovr: P.targetFor("bynuman01", 2014) });
+  const p = Object.assign({}, by, { retired: false, team: "IND", fate: "real", ovr: P.targetFor("bynuman01", 2014) });
   const ch = P.retireChance(p, 2014, false);
   if (seed === 1) retiredIn = ch;
 }
 ok(retiredIn >= 0.9, "Bynum retires after 2013-14 with chance " + retiredIn);
-ok(P.retireChance(Object.assign({}, by, { ovr: 86 }), 2015, false) === 1, "nobody plays two seasons past his real retirement");
+ok(P.retireChance(Object.assign({}, by, { fate: "real", ovr: 86 }), 2015, false) === 1, "nobody plays two seasons past his real retirement (injury-ended career)");
 
 // LeBron follows his real arc closely
 let maxGap = 0;

@@ -365,7 +365,7 @@
   // Real retirements happen in the real summer: TARGETS retire is the first season he did not play,
   // so retire - 1 is his last real season. Nobody keeps playing past it unless the sim has made him
   // clearly better than he really was, and even then only for a season or two.
-  function historyRetireChance(info, seasonDone, p) {
+  function historyRetireChance(info, seasonDone, p, unsigned) {
     var r = info.retire != null ? info.retire - 1 : null;
     if (r == null) {
       if (info.last != null && seasonDone >= info.last) return null; // past the data: use the age model
@@ -386,6 +386,12 @@
     if (d < 0 && better > 2) ch *= 0.5;
     // The sim made him much worse than he really was: he leaves earlier
     if (real != null && better < -8 && (p.age || 0) >= 30) ch = Math.max(ch, 0.25);
+    // Young players whose real careers ended early (MKG at 26, Bennett at 25) did not really retire:
+    // they went unsigned. Here they stay in free agency, keep playing if a team wants them, and only
+    // retire after going unsigned for a season or two.
+    // Careers that injuries really ended (Bynum's knees on his real-fate path) still end on time.
+    var injuryEnded = INJURY_FATES[p.id] && p.fate !== 'healthy';
+    if (d >= 0 && (p.age || 0) < 31 && !injuryEnded) ch = unsigned ? (d === 0 ? 0.35 : d === 1 ? 0.6 : 1) : 0;
     return clamp(ch, 0, 1);
   }
   function retire(state, p, year) {
@@ -421,7 +427,7 @@
   function retireRoll(state, p, seasonDone, rng) {
     var info = targetInfo(p.id, state);
     var age = (p.age || 22) + 1; // his age next season
-    var ch = info ? historyRetireChance(info, seasonDone, p) : null;
+    var ch = info ? historyRetireChance(info, seasonDone, p, !isNbaTeam(state, p.team)) : null;
     if (ch == null) ch = ageRetireChance(age, p.ovr - (p.form || 0), !isNbaTeam(state, p.team));
     if (p.stashedUntil) ch *= 0.2; // rights held, still overseas
     return ch > 0 && rng() < ch;
@@ -562,7 +568,7 @@
     ageCurveDelta: ageCurveDelta,
     retireChance: function (p, seasonDone, unsigned, state) {
       var info = targetInfo(p.id, state);
-      var ch = info ? historyRetireChance(info, seasonDone, p) : null;
+      var ch = info ? historyRetireChance(info, seasonDone, p, !isNbaTeam(state, p.team)) : null;
       return ch == null ? ageRetireChance((p.age || 22) + 1, p.ovr, unsigned) : ch;
     },
     primaryPos: primaryPos,
