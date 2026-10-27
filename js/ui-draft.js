@@ -320,7 +320,7 @@
     else status = 'The ' + year + ' draft is held after the ' + esc(UI.fmtSeasonEnd(year)) + ' season. Scout the class now.';
     if (live && next && !onClock && canAi) actions = `<button type="button" class="btn btn-gold" data-act="sim">${myNext ? 'SIM TO MY PICK' : 'SIM REST OF DRAFT'}</button>`;
     if (live && onClock && canAi) actions = `<button type="button" class="btn" data-act="autopick">AUTO PICK</button>`;
-    if (live && !next && UI.sim) actions = `<button type="button" class="btn btn-gold" data-act="finish">NEXT: RE-SIGNING</button>`;
+    if (live && !next && UI.sim) actions = `<button type="button" class="btn btn-gold" data-act="finish">CONTINUE TO RE-SIGNING</button>`;
     if (live && next && !onClock && !canAi) actions = '<span class="muted">AI picks are still being built.</span>';
 
     const myPicks = slots ? slots.filter(s => s.team === user) : [];
@@ -381,7 +381,10 @@
         } catch (e) { console.warn('DRAFT.aiPick', e); UI.toast('The auto pick failed: ' + (e && e.message ? e.message : e), 'error'); }
         render(app, st);
       } else if (act === 'finish') {
-        UI.sim('nextPhase');
+        // straight on to the next offseason screen (re-signing), no stop back on the draft board
+        await UI.sim('nextPhase');
+        const g = (UI.state && UI.state.game) || st;
+        location.hash = g && g.phase === 'resign' ? '#/fa' : '#/';
       } else if (act === 'sim') {
         const A = F.fn('DRAFT', 'aiPick');
         if (!A) return;
