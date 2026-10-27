@@ -32,8 +32,10 @@ for (let n = 0; n < seasons; n++) {
       userStops++;
       const D = window.DRAFT, slot = D.current(s);
       if (!slot || slot.team !== s.userTeam) { problems.push(`draft stopped for the user but pick ${slot && slot.overall} is ${slot && slot.team}'s`); break; }
-      const pool = Object.values(s.players).filter(p => p.team === "DRAFT" && +p.draftYear === s.year && !p.undrafted);
-      pool.sort((a, b) => b.ovr - a.ovr);
+      // (real classes with forfeited picks, like 2022, run out of drafted prospects; the user may take a real undrafted one)
+      const pool = Object.values(s.players).filter(p => p.team === "DRAFT" && +p.draftYear === s.year);
+      pool.sort((a, b) => (a.undrafted - b.undrafted) || (b.ovr - a.ovr));
+      if (!pool.length) { problems.push(`no prospects left for the user's pick ${slot.overall} in ${s.year}`); break; }
       const res = D.pick(s, s.userTeam, pool[0].id);
       if (!res.ok) { problems.push("user pick failed: " + res.reason); break; }
     }
@@ -53,9 +55,10 @@ for (let n = 0; n < seasons; n++) {
   if (bad.length) problems.push(`after ${s.year - 1} offseason, roster sizes off: ${bad.join(", ")}`);
   // real retirements: nobody plays past his real last season (TARGETS retire = first season not played)
   const T = window.TARGETS || {};
-  // (players under 31 at their real exit may keep playing if a team signs them)
+  // (players under 31 at their real exit may keep playing if a team signs them, and so may healthy-fate
+  // players whose real careers injuries cut short, like Granger)
   const late = Object.values(s.players).filter(p => !p.retired && p.team !== "DRAFT" && T[p.id] && T[p.id].retire != null && T[p.id].retire + 1 < s.year
-    && (p.age || 0) - (s.year - T[p.id].retire) >= 31);
+    && (p.age || 0) - (s.year - T[p.id].retire) >= 31 && p.fate !== "healthy");
   if (late.length) problems.push(`${late.length} players still active two or more seasons past their real retirement: ${late.slice(0, 5).map(p => p.name).join(", ")}`);
   // tendencies age each offseason (player.tend): every active player has them, in range, threes trending up
   if (window.ENGINE && window.ENGINE.tendencyOf) {

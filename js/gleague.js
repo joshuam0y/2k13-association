@@ -140,6 +140,10 @@
 
   function txn(state, text, ids) {
     if (!state.transactions) return;
+    // AI teams move players up and down every week; only the user's moves go in the log (it would
+    // otherwise be hundreds of lines a season and bury the trades and signings)
+    var ps = state.players || {};
+    if (state.userTeam && !(ids || []).some(function (id) { return ps[id] && ps[id].team === state.userTeam; })) return;
     state.transactions.push({ year: yearOf(state), day: state.day || 0, type: 'assign', text: text, ids: ids || [] });
   }
   function isTwoWay(p) { return !!(p && p.contract && p.contract.twoWay); }

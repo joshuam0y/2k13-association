@@ -258,7 +258,7 @@
   // Playing time (25 and under) and major injuries move drift for everyone (fictional players too).
   // ---------------------------------------------------------------------------
   var SETTINGS = { variety: true };   // PROG.settings.variety = false: careers follow history with tiny noise
-  var DRIFT_SD = 1.2, DRIFT_MEAN = 0.2, DRIFT_PULL = 0.7, DRIFT_PULL_UP = 0.7, DRIFT_MAX = 6, BOOST_KEEP = 0.9, BOOST_MAX = 8, STAR = 90, STAR_CAP = 2;
+  var DRIFT_SD = 1.2, DRIFT_MEAN = 0.2, DRIFT_PULL = 0.7, DRIFT_PULL_UP = 0.7, DRIFT_MAX = 6, BOOST_KEEP = 0.9, BOOST_MAX = 8, STAR = 90, STAR_CAP = 2, OFF_MAX = 7;
   var MAJOR_INJURY = /ACL|Achilles|Patellar/i;
   function seasonContext(state, done) {
     var season = state.season && (state.season.year == null || +state.season.year === done) ? state.season : null;
@@ -507,7 +507,11 @@
         if (star && pr.boost > 0) pr.boost = 0;
         var off = pr.drift + pr.boost;
         if (off < 0 && star) off *= 0.6;   // stars stay stars
+        if (off > OFF_MAX) off = OFF_MAX;   // breakouts make a role player a starter, not an 87 into a 99
         newOvr = tgt + off + gauss(rng) * 0.6;
+        // a player who was never really a 90 only gets half of anything above 90
+        var soft = Math.max(STAR, tgt + STAR_CAP);
+        if (!capped && newOvr > soft) newOvr = soft + (newOvr - soft) * 0.5;
         // never more than 2 above the real rating once he is a 90+ player, or on a healthy-fate path
         if (capped) newOvr = Math.min(newOvr, tgt + STAR_CAP);
       } else {
