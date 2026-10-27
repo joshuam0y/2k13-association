@@ -521,9 +521,49 @@
       // Stashed players keep their overseas status until they arrive
       if (p.stashedUntil && p.stashedUntil > next) p.injury = { type: 'Playing overseas', games: 999 };
     });
+    ageTendencies(state, next, done);
     state.progressReport = report;
     out.report = report;
     return out;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Tendencies (ENGINE.tendencyOf) age slowly each offseason, kept per save as player.tend:
+  // threes rise like the real league did from 2013 to 2026 (about +2 a season), usage follows role
+  // (last season's minutes) and overall, and players past 30 attack the rim a bit less.
+  // ---------------------------------------------------------------------------
+  var TEND_KEYS = ['usage', 'three', 'mid', 'rim', 'post', 'pass', 'drawFoul'];
+  function ageTendencies(state, next, done) {
+    var E = root && root.ENGINE;
+    if (!E || typeof E.tendencyOf !== 'function') return 0;
+    var players = state.players || {}, ps = (state.season && state.season.playerStats) || {}, n = 0;
+    Object.keys(players).forEach(function (id) {
+      var p = players[id];
+      if (!p || p.retired || p.team === 'RET' || p.team === 'DRAFT') return;
+      if (p.tendYear != null && p.tendYear >= next) return;
+      var t = E.tendencyOf(p), cur = {};
+      if (!t) return;
+      TEND_KEYS.forEach(function (k) { cur[k] = +t[k] || 0; });
+      if (t.generated && !p.tend) {
+        // first time for a made-up player: rating-based style, shooting threes like the era he arrives in
+        cur.three += Math.min(20, 1.5 * Math.max(0, next - 2013));
+      } else if (!draftedThisSummer(p, done)) {
+        cur.three += cur.three < 8 ? 0.5 : (next <= 2026 ? 2 : 0.5);
+        var line = ps[id], mpg = line && line.g ? line.min / line.g : 0;
+        var role = line && line.g >= 10 ? clamp((mpg - 24) / 12, -1, 1) : 0;
+        var dOvr = p.tendOvr != null ? p.ovr - p.tendOvr : 0;
+        // a little toward what his overall and role call for (his rating-based usage, more for starters)
+        var gen = E.generateTendencies(p), want = clamp(gen.usage + 10 * role, 0, 100);
+        cur.usage += 1.2 * dOvr + 0.12 * (want - cur.usage);
+        var age = p.age || 25;
+        if (age >= 30) { var drop = age >= 33 ? 2.5 : 1.5; cur.rim -= drop; cur.mid += drop * 0.6; }
+      }
+      var o = {};
+      TEND_KEYS.forEach(function (k) { o[k] = clamp(Math.round(cur[k]), 0, 100); });
+      if (t.generated) o.generated = true;
+      p.tend = o; p.tendYear = next; p.tendOvr = p.ovr; n++;
+    });
+    return n;
   }
 
   // ---------------------------------------------------------------------------
@@ -572,6 +612,7 @@
       return ch == null ? ageRetireChance((p.age || 22) + 1, p.ovr, unsigned) : ch;
     },
     primaryPos: primaryPos,
+    ageTendencies: ageTendencies,
     mulberry32: mulberry32,
     gauss: gauss
   };

@@ -6,6 +6,7 @@ const path = require('path');
 const zlib = require('zlib');
 
 global.window = global;
+try { require('../data/tendencies.js'); } catch (e) { /* tendencies are optional */ }
 const ENGINE = require('../js/engine.js');
 
 const args = process.argv.slice(2);

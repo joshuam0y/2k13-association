@@ -76,6 +76,22 @@ a.pk-team:hover { color: var(--gold2); }
 .pk-track i.ovr-low { background: #5d5d66; }
 .pk-av { font-family: var(--display); font-size: 17px; font-weight: 600; text-align: right; }
 
+/* tendencies: bars with words, the notch marks the league average */
+.pk-tends { max-width: 760px; }
+.pk-tends .pk-ghead small { font-size: 11px; letter-spacing: .14em; color: var(--muted); font-weight: 500; }
+.pk-tend { display: grid; grid-template-columns: 112px minmax(0, 1fr) minmax(0, 220px); align-items: center; gap: 12px; font-size: 13.5px; padding: 6px 0; }
+.pk-ttrack { position: relative; height: 10px; }
+.pk-ttrack b { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: rgba(255, 255, 255, .55); }
+.pk-track i.pk-t-hi { background: linear-gradient(90deg, var(--gold), var(--gold2)); }
+.pk-track i.pk-t-up { background: var(--gold); }
+.pk-track i.pk-t-mid { background: #a9a9b1; }
+.pk-track i.pk-t-lo { background: #5d5d66; }
+.pk-tw { color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 640px) {
+  .pk-tend { grid-template-columns: 92px minmax(0, 1fr); row-gap: 2px; }
+  .pk-tw { grid-column: 2; font-size: 12.5px; }
+}
+
 /* career */
 .pk-career td.pk-hi, .pk-career td.pk-hi b { color: var(--gold2); }
 .pk-career tr.pk-live td { background: rgba(212, 175, 55, .05); }

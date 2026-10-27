@@ -6,7 +6,7 @@ const warnings = [];
 const origWarn = console.warn;
 console.warn = (...a) => { warnings.push(a.join(" ")); };
 const files = ["data/league2012.js", "data/drafts.js", "data/targets.js", "data/cap-history.js", "data/coaches.js", "data/coach-history.js", "data/gleague.js",
-  "data/history.js", "data/personalities.js", "data/logos.js", "data/world-events.js", "data/career-prior.js", "data/picks-2012.js", "data/awards-prior.js", "data/schedules.js", "js/engine.js", "js/cba.js", "js/trade.js", "js/freeagency.js", "js/mood.js",
+  "data/history.js", "data/personalities.js", "data/logos.js", "data/world-events.js", "data/career-prior.js", "data/picks-2012.js", "data/awards-prior.js", "data/schedules.js", "data/tendencies.js", "js/engine.js", "js/cba.js", "js/trade.js", "js/freeagency.js", "js/mood.js",
   "js/draft.js", "js/draft-gen.js", "js/progression.js", "js/coaches.js", "js/gleague.js", "js/awards.js", "js/news.js", "js/league.js", "js/allstar.js", "js/positions.js"];
 const loaded = [];
 for (const f of files) if (fs.existsSync(f)) { try { require("../" + f); loaded.push(f); } catch (e) { console.log("LOAD FAIL", f, e.message); } }
@@ -57,6 +57,14 @@ for (let n = 0; n < seasons; n++) {
   const late = Object.values(s.players).filter(p => !p.retired && p.team !== "DRAFT" && T[p.id] && T[p.id].retire != null && T[p.id].retire + 1 < s.year
     && (p.age || 0) - (s.year - T[p.id].retire) >= 31);
   if (late.length) problems.push(`${late.length} players still active two or more seasons past their real retirement: ${late.slice(0, 5).map(p => p.name).join(", ")}`);
+  // tendencies age each offseason (player.tend): every active player has them, in range, threes trending up
+  if (window.ENGINE && window.ENGINE.tendencyOf) {
+    const act = Object.values(s.players).filter(p => !p.retired && s.teams[p.team]);
+    const noTend = act.filter(p => !p.tend || window.ENGINE.TEND_KEYS.some(k => !(p.tend[k] >= 0 && p.tend[k] <= 100)));
+    if (noTend.length) problems.push(`${noTend.length} active players without aged tendencies after the ${s.year - 1} offseason: ${noTend.slice(0, 3).map(p => p.name).join(", ")}`);
+    const avg3 = act.reduce((t, p) => t + (p.tend ? p.tend.three : 0), 0) / Math.max(1, act.length);
+    console.log(`  tendencies: league three tendency average ${avg3.toFixed(1)}`);
+  }
   const lb = s.players.jamesle01, lbT = window.PROG && window.PROG.targetFor ? window.PROG.targetFor("jamesle01", s.year) : null;
   // history as a guide with variety: LeBron moves around his real arc but stays a star
   if (lb && !lb.retired && lbT != null && (lb.ovr < Math.min(90, lbT - 5) || lb.ovr > lbT + 8)) problems.push(`LeBron ${lb.ovr} vs real ${lbT} in ${s.year}`);

@@ -7,6 +7,8 @@ const path = require('path');
 global.window = global;
 const ENGINE = require(path.join(__dirname, '..', 'js', 'engine.js'));
 require(path.join(__dirname, '..', 'data', 'league2012.js'));
+if (!args0().includes('--ratings-only')) require(path.join(__dirname, '..', 'data', 'tendencies.js'));
+function args0() { return process.argv.slice(2); }
 const args = process.argv.slice(2);
 const seed = +(args[args.indexOf('--seed') + 1] || 0) || 2013;
 const league = window.LEAGUE_2012;

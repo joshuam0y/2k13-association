@@ -25,9 +25,9 @@
   var T = {
     playMean: 14.2,           // seconds for the first play of a possession
     secondMean: 7.5,          // seconds for a play after an offensive rebound or a non-bonus foul
-    typeBase: { close: 0.38, post: 0.08, mid: 0.35, three: 0.155 },
+    typeBase: { close: 0.38, post: 0.08, mid: 0.35, three: 0.14 },
     typeK: { close: 0.9, post: 1.1, mid: 0.8, three: 1.5 },
-    makeBase: { close: 0.545, post: 0.41, mid: 0.358, three: 0.36 },
+    makeBase: { close: 0.55, post: 0.415, mid: 0.362, three: 0.36 },
     makeOff: { close: 0.018, post: 0.015, mid: 0.013, three: 0.013 },
     makeDef: { close: 0.009, post: 0.009, mid: 0.0056, three: 0.0056 },
     makeOvr: 0.0028,           // per (softened) z of shooter overall vs his defender
@@ -42,10 +42,10 @@
     stratTrans: 0.03,         // opponent make bonus on the next play after a defensive rebound, per unit of crash
     minorK: 0.3,              // scale of the secondary team rating effects (turnovers, rebounding, blocks)
     usageK: 0.34,
-    foulShot: { close: 0.22, post: 0.165, mid: 0.048, three: 0.014 },
+    foulShot: { close: 0.231, post: 0.173, mid: 0.0504, three: 0.0147 },
     andOneFactor: 0.62,
     blockGivenMiss: { close: 0.256, post: 0.176, mid: 0.062, three: 0.029 },
-    astChance: { close: 0.575, post: 0.373, mid: 0.656, three: 0.858 },
+    astChance: { close: 0.61, post: 0.394, mid: 0.70, three: 0.912 },
     toBase: 0.134,
     stealShare: 0.535,
     offFoulShare: 0.10,
@@ -68,7 +68,16 @@
     astLift: 0.35,            // assisted share of made shots per unit of the best passer's log weight above astRef
     astRef: 0.85,
     stlK: 0.55,
-    blkK: 0.8
+    blkK: 0.8,
+    tendBlend: 0.7,           // weight of the tendencies against the rating-based style
+    tendUsageExp: 1.7,        // usage weight = (usage rate / league average) ^ this (the sim spreads shots less than real teams)
+    tendPassExp: 1.3,         // assist weight from the pass tendency = (assists per 36 / league average) ^ this
+    tendFoulExp: 1.2,         // foul drawing beyond the shot mix = (relative FTA per FGA) ^ this
+    genThree: 1.08,           // generated (rating-based) style: small corrections so a league of made-up players
+    genFoul: 0.937,           //   keeps the 2012-13 calibration too (three share, shooting fouls, assisted shots)
+    genAst: 0.965,
+    tendAstMean: -0.074,      // league mean of the rating-based assist log weight (so both scales line up)
+    tendFoulMix: 0.1166       // league mean of the shooting foul chance by shot mix
   };
 
   var INJURIES = [
@@ -286,17 +295,105 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Tendencies (like NBA 2K13): playing style, separate from skill. 0 to 100, 50 = the 2012-13 league
+  // average, piecewise linear: 0 = never, 50 = average, 100 = the top of the league (TEND_SCALE [avg, top]).
+  //   usage: (FGA + 0.44 FTA) per 36   three, rim, mid, post: share of his FGA by shot type
+  //   pass: assists per 36             drawFoul: FTA per FGA
+  // Real ones come from data/tendencies.js (window.TENDENCIES, built from real stats) and are carried
+  // and aged per save as player.tend; anyone else gets tendencies generated from his ratings.
+  // ---------------------------------------------------------------------------
+  var TEND_KEYS = ['usage', 'three', 'mid', 'rim', 'post', 'pass', 'drawFoul'];
+  var TEND_SCALE = {
+    usage: [13.76, 26], three: [0.244, 0.8], rim: [0.333, 0.75], mid: [0.314, 0.65], post: [0.109, 0.42],
+    pass: [3.34, 11], drawFoul: [0.271, 0.8]
+  };
+  var TYPE_TEND = { close: 'rim', post: 'post', mid: 'mid', three: 'three' };
+  function tEncode(k, v) {
+    var s = TEND_SCALE[k], a = s[0], m = s[1];
+    v = Math.max(0, +v || 0);
+    return clamp(Math.round(v <= a ? 50 * v / a : 50 + 50 * (v - a) / (m - a)), 0, 100);
+  }
+  function tDecode(k, t) {
+    var s = TEND_SCALE[k], a = s[0], m = s[1];
+    t = clamp(+t || 0, 0, 100);
+    return t <= 50 ? a * t / 50 : a + (m - a) * (t - 50) / 50;
+  }
+  function tendencyTable() {
+    if (typeof window !== 'undefined' && window.TENDENCIES) return window.TENDENCIES;
+    if (typeof global !== 'undefined' && global.TENDENCIES) return global.TENDENCIES;
+    return null;
+  }
+  // Rating-based style: shot mix from the ratings with position and size priors (bigs post up, guards
+  // pull up), usage from overall and scoring skill, passing from the assist model, foul drawing from
+  // the shot mix, strength and usage. Raw values on the stat scales above.
+  var POST_PRIOR = [0.35, 0.45, 0.8, 1.5, 2.1], RIM_PRIOR = [0.95, 0.95, 1, 1.05, 1.15], MID_PRIOR = [1.1, 1.1, 1, 0.95, 0.75];
+  function ratingStyle(p, n) {
+    n = n || getNorms();
+    var rp = rawProfile(p), zp = zProfile(rp, n), rank = posRank(p.pos), sh = {}, sum = 0;
+    var ht = +p.ht || 79, big = clamp((ht - 80) / 4, -1, 1);
+    sh.three = zp.shares.three;
+    sh.close = zp.shares.close * posLog(RIM_PRIOR, rank) * (1 + 0.08 * big);
+    sh.post = zp.shares.post * posLog(POST_PRIOR, rank) * (1 + 0.25 * big);
+    sh.mid = zp.shares.mid * posLog(MID_PRIOR, rank);
+    var two = sh.close + sh.post + sh.mid;
+    ['close', 'post', 'mid'].forEach(function (t) { sh[t] *= (1 - sh.three) / two; });
+    SHOT_TYPES.forEach(function (t) { sum += sh[t]; });
+    var u = usageOf(zp, n);
+    var astLog = T.astPass * zp.z.pass + T.astHandle * zp.z.handle + T.astOiq * zp.z.oiq + T.astOvr * zp.ovrZ + posLog(T.astPos, rank);
+    var foulMix = 0;
+    SHOT_TYPES.forEach(function (t) { foulMix += sh[t] * T.foulShot[t]; });
+    var ftr = TEND_SCALE.drawFoul[0] * (foulMix / T.tendFoulMix) * Math.exp(0.15 * zp.z.strength + 0.6 * (u - 1));
+    return { shares: sh, usage: u, usageRate: TEND_SCALE.usage[0] * u, ast36: TEND_SCALE.pass[0] * Math.exp(astLog - T.tendAstMean), ftr: ftr };
+  }
+  function generateTendencies(p, n) {
+    var r = ratingStyle(p, n);
+    return { usage: tEncode('usage', r.usageRate), three: tEncode('three', r.shares.three), mid: tEncode('mid', r.shares.mid),
+      rim: tEncode('rim', r.shares.close), post: tEncode('post', r.shares.post), pass: tEncode('pass', r.ast36), drawFoul: tEncode('drawFoul', r.ftr),
+      generated: true };
+  }
+  // The player's tendencies: his save copy (aged each offseason), the real ones, else from his ratings.
+  function tendencyOf(p, n) {
+    if (!p) return null;
+    if (p.tend && typeof p.tend === 'object') return p.tend;
+    var tab = tendencyTable(), real = tab && p.id != null ? tab[p.id] : null;
+    if (real) return real;
+    return generateTendencies(p, n);
+  }
+
+  // ---------------------------------------------------------------------------
   // Game engine
   // ---------------------------------------------------------------------------
   function makeState(p, n) {
     var rp = rawProfile(p), zp = zProfile(rp, n);
-    return {
+    var s = {
       p: p, id: p.id, name: p.name || String(p.id), ovr: rp.ovr, group: posGroup(p.pos), rank: posRank(p.pos),
       a: rp.a, z: zp.z, offZ: zp.offZ, makeZ: zp.makeZ, ovrZ: zp.ovrZ, ovrSoft: zp.ovrSoft, shares: zp.shares, usage: usageOf(zp, n),
       target: 0, sec: 0, energy: 1, fouls: 0, out: false, onCourt: false, starter: false,
-      injuryAt: -1, injury: null, need: 0,
+      injuryAt: -1, injury: null, need: 0, astTend: null, foulTend: 1, gen: true,
       box: emptyLine()
     };
+    // Style: tendencies blended with the rating-based shot mix and usage (T.tendBlend on the tendency)
+    var td = tendencyOf(p, n), B = T.tendBlend;
+    // real tendencies are spread out to match real stats; generated ones already sit on the rating scale
+    var gen = !!(td && td.generated), xU = gen ? 1 : T.tendUsageExp, xP = gen ? 1 : T.tendPassExp, xF = gen ? 1 : T.tendFoulExp;
+    if (td) {
+      var sh = {}, sum = 0, mix = 0;
+      SHOT_TYPES.forEach(function (t) { sh[t] = tDecode(TYPE_TEND[t], td[TYPE_TEND[t]]) * (gen && t === 'three' ? T.genThree : 1); sum += sh[t]; });
+      if (sum > 0) {
+        var out = {}, tot = 0;
+        SHOT_TYPES.forEach(function (t) { out[t] = B * sh[t] / sum + (1 - B) * zp.shares[t]; tot += out[t]; });
+        SHOT_TYPES.forEach(function (t) { out[t] /= tot; mix += out[t] * T.foulShot[t]; });
+        s.shares = out;
+      }
+      var uRel = Math.pow(tDecode('usage', td.usage) / TEND_SCALE.usage[0], xU);
+      s.usage = clamp(B * uRel + (1 - B) * s.usage, 0.3, 2.3);
+      s.astTend = xP * Math.log(Math.max(0.15, tDecode('pass', td.pass)) / TEND_SCALE.pass[0]) + T.tendAstMean;
+      // foul drawing beyond what his shot mix explains
+      var ftr = tDecode('drawFoul', td.drawFoul) / TEND_SCALE.drawFoul[0];
+      s.foulTend = clamp(Math.pow(ftr / Math.max(0.2, (mix || T.tendFoulMix) / T.tendFoulMix), xF), 0.25, 3.5);
+      s.gen = gen;
+    }
+    return s;
   }
 
   // Assist share of a teammate on the floor: passing first, then handle and feel, then the
@@ -306,7 +403,11 @@
     return table[i] * (1 - f) + table[i + 1] * f;
   }
   function assistWeight(s) {
-    if (s.astW == null) s.astW = Math.exp(T.astPass * s.z.pass + T.astHandle * s.z.handle + T.astOiq * s.z.oiq + T.astOvr * s.ovrZ + posLog(T.astPos, s.rank));
+    if (s.astW == null) {
+      var lg = T.astPass * s.z.pass + T.astHandle * s.z.handle + T.astOiq * s.z.oiq + T.astOvr * s.ovrZ + posLog(T.astPos, s.rank);
+      if (s.astTend != null) lg = (1 - T.tendBlend) * lg + T.tendBlend * s.astTend;   // his passing tendency
+      s.astW = Math.exp(lg);
+    }
     return s.astW;
   }
 
@@ -598,7 +699,7 @@
       var best = -9;
       mates.forEach(function (s) { best = Math.max(best, Math.log(assistWeight(s))); });
       var pa = T.astChance[type] * Math.exp(-0.08 * shooter.z.handle - 0.25 * (shooter.usage - 1) +
-        T.astLift * clamp(best - T.astRef, -1.5, 1.5));
+        T.astLift * clamp(best - T.astRef, -1.5, 1.5)) * (shooter.gen ? T.genAst : 1);
       if (rng() >= pa) return null;
       var a = pickBy(mates, assistWeight);
       a.box.ast++;
@@ -679,7 +780,8 @@
       if (clock < 2 && rng() < 0.5) pMake *= 0.4; // end of quarter heave
       pMake = clamp(pMake, 0.12, 0.85);
       var is3 = type === 'three';
-      var pFoul = T.foulShot[type] * Math.exp(0.15 * shooter.z.strength + 0.6 * (shooter.usage - 1) - 0.1 * dfd.z.diq);
+      var pFoul = T.foulShot[type] * ((1 - T.tendBlend) * Math.exp(0.15 * shooter.z.strength + 0.6 * (shooter.usage - 1)) +
+        T.tendBlend * shooter.foulTend) * Math.exp(-0.1 * dfd.z.diq) * (shooter.gen ? T.genFoul : 1);
       var desc = shotDesc(type, shooter, rng);
       if (rng() < pFoul) {
         var fouler = (type === 'close' || type === 'post') && rng() < 0.45 ?
@@ -1659,7 +1761,14 @@
     rng: mulberry32,
     STAT_KEYS: STAT_KEYS,
     ATTR_KEYS: ATTR_KEYS,
-    tuning: T
+    tuning: T,
+    TEND_KEYS: TEND_KEYS,
+    TEND_SCALE: TEND_SCALE,
+    tendencyOf: function (p) { return tendencyOf(p); },
+    generateTendencies: function (p) { return generateTendencies(p); },
+    ratingStyle: function (p) { return ratingStyle(p); },
+    tEncode: tEncode,
+    tDecode: tDecode
   };
 
   if (typeof window !== 'undefined') window.ENGINE = ENGINE;

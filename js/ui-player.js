@@ -40,6 +40,30 @@
     return `<div class="pk-gstrip">${strip}</div><div class="pk-groups">${cards}</div>`;
   }
 
+  // ---------- tendencies (style, not skill: bars and words, no numbers) ----------
+  const TEND_ROWS = [
+    ['usage', 'USAGE', [[80, 'Takes over the offense'], [62, 'Looks for his shot'], [39, 'Balanced scorer'], [0, 'Rarely looks for his own shot']]],
+    ['three', 'THREE', [[80, 'Lives behind the arc'], [62, 'Shoots a lot of threes'], [39, 'Takes some threes'], [11, 'Rarely shoots threes'], [0, 'Never shoots threes']]],
+    ['mid', 'MID-RANGE', [[75, 'Loves the pull-up jumper'], [60, 'Takes plenty of mid-range shots'], [36, 'Some mid-range jumpers'], [0, 'Avoids the mid-range']]],
+    ['rim', 'AT THE RIM', [[75, 'Attacks the rim'], [60, 'Gets to the basket often'], [36, 'Finishes inside now and then'], [0, 'Rarely goes to the rim']]],
+    ['post', 'POST-UP', [[70, 'Posts up a lot'], [55, 'Works in the post'], [31, 'Some post-ups'], [0, 'Almost never posts up']]],
+    ['pass', 'PASSING', [[80, 'Pass-first playmaker'], [62, 'Looks to set up teammates'], [36, 'Moves the ball'], [0, 'Rarely sets up teammates']]],
+    ['drawFoul', 'DRAWS FOULS', [[75, 'Lives at the free throw line'], [60, 'Draws a lot of fouls'], [36, 'Gets to the line sometimes'], [0, 'Rarely draws fouls']]]
+  ];
+  function tendencyHtml(p) {
+    const E = window.ENGINE, t = E && typeof E.tendencyOf === 'function' ? E.tendencyOf(p) : null;
+    if (!t) return UI.empty('NO TENDENCIES', 'Tendencies are not available for ' + esc(p.name) + '.');
+    const rows = TEND_ROWS.map(([k, label, words]) => {
+      const v = Math.max(0, Math.min(100, Number(t[k]) || 0));
+      const word = (words.find(w => v >= w[0]) || words[words.length - 1])[1];
+      const lvl = v >= 75 ? 'hi' : v >= 58 ? 'up' : v >= 36 ? 'mid' : 'lo';
+      return `<div class="pk-tend"><span class="pk-al">${esc(label)}</span><span class="pk-track pk-ttrack" role="img" aria-label="${esc(word)}"><i class="pk-t-${lvl}" style="width:${Math.max(3, v)}%"></i><b></b></span><span class="pk-tw">${esc(word)}</span></div>`;
+    }).join('');
+    const src = t.generated ? 'from his ratings, since he has no NBA track record yet' : 'from his real stats' + (p.tend ? ', and they shift a little each season as his game and role change' : '');
+    return `<div class="pk-group pk-tends"><div class="pk-ghead"><span>TENDENCIES</span><small>HOW HE PLAYS</small></div>${rows}</div>
+      <p class="pk-note">Style, not skill: what he likes to do with the ball, ${esc(src)}. The mark is the league average.</p>`;
+  }
+
   // ---------- career ----------
   const priorOf = id => (window.CAREER_PRIOR && Array.isArray(window.CAREER_PRIOR[id]) ? window.CAREER_PRIOR[id] : []);
   const pct = v => (v == null || isNaN(v) ? null : Number(v) > 1 ? Number(v) / 100 : Number(v));
@@ -308,7 +332,7 @@
       <p class="pk-note">Per game. Gold marks the better number. Group scores average the attributes in each group.</p>`;
   }
 
-  const TABS = [['ratings', 'RATINGS'], ['career', 'CAREER STATS'], ['awards', 'AWARDS'], ['log', 'GAME LOG'], ['compare', 'COMPARE']];
+  const TABS = [['ratings', 'RATINGS'], ['tendencies', 'TENDENCIES'], ['career', 'CAREER STATS'], ['awards', 'AWARDS'], ['log', 'GAME LOG'], ['compare', 'COMPARE']];
 
   P.player = function (app, arg) {
     const parts = String(arg || '').split('/');
@@ -395,6 +419,7 @@
     };
     const draw = (k, focus) => {
       if (k === 'career') panel.innerHTML = careerHtml(p);
+      else if (k === 'tendencies') panel.innerHTML = tendencyHtml(p);
       else if (k === 'awards') panel.innerHTML = awardsHtml(p, awards);
       else if (k === 'log') panel.innerHTML = gameLogHtml(p);
       else if (k === 'compare') drawCompare(focus);
