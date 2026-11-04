@@ -506,9 +506,42 @@
   }
 
   // Shot type weights and make adjustments for an offense against a defensive scheme
-  function shotPlan(offStrat, defStrat) {
-    var mult = { close: 1, post: 1, mid: 1, three: Math.exp(T.stratThree * offStrat.three) };
-    var make = { close: 0, post: 0, mid: 0, three: 0 };
+  // ---------------------------------------------------------------------------
+  // Era: the league changes like the real NBA did. Per season [pace, three, make2, ast]: play length
+  // divided by pace, three-point weight times three, two-point make chance plus make2, assist chance
+  // times ast. Fitted (scratchpad era fit) so a save tracks the real league averages each season
+  // (Basketball-Reference: pace 92 to 99, 20 to 37 threes, 98 to 115 points, 22 to 27 assists),
+  // together with the real season-by-season tendencies (data/tendency-history.js). After 2026 the
+  // league stays in the 2026 style. opts.year picks the season; without it, 2012-13.
+  // ---------------------------------------------------------------------------
+  var ERA = {
+    2013: [1, 1, 0, 1],
+    2014: [1.003, 1.096, 0.0052, 1.002],
+    2015: [1.011, 1.167, 0.0015, 1.015],
+    2016: [1.02, 1.238, 0.0111, 1.026],
+    2017: [1.031, 1.351, 0.0158, 1.017],
+    2018: [1.031, 1.376, 0.026, 1.01],
+    2019: [1.074, 1.466, 0.0329, 1.031],
+    2020: [1.063, 1.548, 0.0388, 1.034],
+    2021: [1.058, 1.598, 0.0398, 1.031],
+    2022: [1.052, 1.595, 0.0471, 1.031],
+    2023: [1.061, 1.524, 0.0611, 1.022],
+    2024: [1.062, 1.568, 0.058, 1.08],
+    2025: [1.066, 1.722, 0.0591, 1.091],
+    2026: [1.07, 1.681, 0.0606, 1.087]
+  };
+  function eraFor(year) {
+    year = +year || 2013;
+    var ys = Object.keys(ERA).map(Number).sort(function (a, b) { return a - b; }), best = ys[0];
+    ys.forEach(function (y) { if (y <= year) best = y; });
+    var e = ERA[best];
+    return { pace: e[0], three: e[1], make2: e[2], ast: e[3] };
+  }
+
+  function shotPlan(offStrat, defStrat, era) {
+    era = era || eraFor(2013);
+    var mult = { close: 1, post: 1, mid: 1, three: Math.exp(T.stratThree * offStrat.three) * era.three };
+    var make = { close: era.make2, post: era.make2, mid: era.make2, three: 0 };
     if (defStrat.defense === 'zone') {
       mult.close *= 0.86; mult.post *= 0.92; mult.mid *= 1.04; mult.three *= 1.17;
     } else if (defStrat.defense === 'switch') {
@@ -535,8 +568,9 @@
     var qStart = [0, 0];
     var injuriesOut = [];
     var homeEdge = opts.neutral ? 0 : T.homeMake;
-    H.plan = shotPlan(H.strat, A.strat);
-    A.plan = shotPlan(A.strat, H.strat);
+    var era = eraFor(opts.year);
+    H.plan = shotPlan(H.strat, A.strat, era);
+    A.plan = shotPlan(A.strat, H.strat, era);
     var paceF = 1 - clamp(T.stratPace * (H.strat.pace + A.strat.pace), -0.1, 0.1);
     H.form = (rng() + rng() + rng() - 1.5) * 2 * T.formSd;
     A.form = (rng() + rng() + rng() - 1.5) * 2 * T.formSd;
@@ -699,7 +733,7 @@
       var best = -9;
       mates.forEach(function (s) { best = Math.max(best, Math.log(assistWeight(s))); });
       var pa = T.astChance[type] * Math.exp(-0.08 * shooter.z.handle - 0.25 * (shooter.usage - 1) +
-        T.astLift * clamp(best - T.astRef, -1.5, 1.5)) * (shooter.gen ? T.genAst : 1);
+        T.astLift * clamp(best - T.astRef, -1.5, 1.5)) * (shooter.gen ? T.genAst : 1) * era.ast;
       if (rng() >= pa) return null;
       var a = pickBy(mates, assistWeight);
       a.box.ast++;
@@ -871,7 +905,7 @@
       else if (second) dur = 3 + rng() * 2 * (T.secondMean - 3);
       else {
         var pace = 1 - ((lineupZ(poss, 'speed') + lineupZ(def, 'speed')) / 2) * 0.03;
-        dur = 4 + (rng() + rng()) * (T.playMean * pace * paceF - 4);
+        dur = 4 + (rng() + rng()) * (T.playMean * pace * paceF / era.pace - 4);
         if (trans > 0) dur *= 1 - 0.15 * trans;
       }
       dur = Math.min(dur, 24);
@@ -1241,6 +1275,21 @@
     return o;
   }
 
+  // Big scoring nights (regular season and playoffs): season.highs = { n40, n50, n60, top: the 10 best
+  // [points, player id, game id, date] }, kept after the box scores are slimmed
+  function trackHighs(season, res) {
+    var h = season.highs || (season.highs = { n40: 0, n50: 0, n60: 0, top: [] });
+    [res.home, res.away].forEach(function (side) {
+      (side.box || []).forEach(function (r) {
+        var pts = r.pts || 0;
+        if (pts < 40) return;
+        h.n40++; if (pts >= 50) h.n50++; if (pts >= 60) h.n60++;
+        h.top.push([pts, r.id, res.id, res.date]);
+      });
+    });
+    if (h.top.length > 10) { h.top.sort(function (a, b) { return b[0] - a[0]; }); h.top.length = 10; }
+  }
+
   function storeResult(season, g, res) {
     var stored = {
       id: res.id, date: res.date,
@@ -1253,6 +1302,7 @@
     if (res.injuries && res.injuries.length) stored.injuries = res.injuries;
     season.boxScores[g.id] = stored;
     season.order.push(g.id);
+    trackHighs(season, res);
     var len = season.order.length;
     var oldP = season.order[len - 1 - KEEP_PBP];
     if (oldP && season.boxScores[oldP]) delete season.boxScores[oldP].pbp;
@@ -1279,7 +1329,7 @@
 
   function playGame(season, league, by, g, rng, isPlayoff, dayDate) {
     var res = simGame(teamObj(season, league, by, g.home), teamObj(season, league, by, g.away), rng,
-      { injuries: season.injuries, norms: season.norms });
+      { injuries: season.injuries, norms: season.norms, year: season.year });
     return recordResult(season, by, g, res, isPlayoff, dayDate);
   }
 
@@ -1764,6 +1814,8 @@
     tuning: T,
     TEND_KEYS: TEND_KEYS,
     TEND_SCALE: TEND_SCALE,
+    ERA: ERA,
+    eraFor: eraFor,
     tendencyOf: function (p) { return tendencyOf(p); },
     generateTendencies: function (p) { return generateTendencies(p); },
     ratingStyle: function (p) { return ratingStyle(p); },

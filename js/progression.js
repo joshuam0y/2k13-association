@@ -537,6 +537,16 @@
   // (last season's minutes) and overall, and players past 30 attack the rim a bit less.
   // ---------------------------------------------------------------------------
   var TEND_KEYS = ['usage', 'three', 'mid', 'rim', 'post', 'pass', 'drawFoul'];
+  var REAL_TEND_KEYS = ['usage', 'three', 'pass', 'drawFoul'];
+  // His real season (2013 to 2026): { usage, three, pass, drawFoul, min } or null
+  function realTendency(id, year) {
+    var H = root && root.TENDENCY_HISTORY, v = H && H[id];
+    if (!v) return null;
+    for (var i = 0; i + 5 < v.length; i += 6) {
+      if (v[i] === year) return { usage: v[i + 1], three: v[i + 2], pass: v[i + 3], drawFoul: v[i + 4], min: v[i + 5] * 10 };
+    }
+    return null;
+  }
   function ageTendencies(state, next, done) {
     var E = root && root.ENGINE;
     if (!E || typeof E.tendencyOf !== 'function') return 0;
@@ -562,9 +572,21 @@
         var age = p.age || 25;
         if (age >= 30) { var drop = age >= 33 ? 2.5 : 1.5; cur.rim -= drop; cur.mid += drop * 0.6; }
       }
+      // History players: toward how he really played that season (data/tendency-history.js), so Jokic
+      // becomes a passer, Harden runs the point and the league follows the real three-point era
+      var real = realTendency(id, next), gen0 = !!t.generated;
+      if (real) {
+        var w = clamp(real.min / 1500, 0.25, 1) * 0.85;
+        var oldThree = E.tDecode('three', cur.three);
+        REAL_TEND_KEYS.forEach(function (k) { cur[k] += w * (real[k] - cur[k]); });
+        // rim, mid and post are shares of all his shots: they make room for the new three share
+        var f = (1 - E.tDecode('three', cur.three)) / Math.max(0.05, 1 - oldThree);
+        ['rim', 'mid', 'post'].forEach(function (k) { cur[k] = E.tEncode(k, E.tDecode(k, cur[k]) * f); });
+        gen0 = false;
+      }
       var o = {};
       TEND_KEYS.forEach(function (k) { o[k] = clamp(Math.round(cur[k]), 0, 100); });
-      if (t.generated) o.generated = true;
+      if (gen0) o.generated = true;
       p.tend = o; p.tendYear = next; p.tendOvr = p.ovr; n++;
     });
     return n;
