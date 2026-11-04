@@ -71,7 +71,8 @@
     blkK: 0.8,
     tendBlend: 0.7,           // weight of the tendencies against the rating-based style
     tendUsageExp: 1.7,        // usage weight = (usage rate / league average) ^ this (the sim spreads shots less than real teams)
-    tendPassExp: 1.3,         // assist weight from the pass tendency = (assists per 36 / league average) ^ this
+    tendPassExp: 1.45,         // assist weight from the pass tendency = (assists per 36 / league average) ^ this
+    tendPassBlend: 0.88,      // real passing tendencies count more than the rating and position model (Jokic, Trae)
     tendFoulExp: 1.2,         // foul drawing beyond the shot mix = (relative FTA per FGA) ^ this
     genThree: 1.08,           // generated (rating-based) style: small corrections so a league of made-up players
     genFoul: 0.937,           //   keeps the 2012-13 calibration too (three share, shooting fouls, assisted shots)
@@ -405,7 +406,8 @@
   function assistWeight(s) {
     if (s.astW == null) {
       var lg = T.astPass * s.z.pass + T.astHandle * s.z.handle + T.astOiq * s.z.oiq + T.astOvr * s.ovrZ + posLog(T.astPos, s.rank);
-      if (s.astTend != null) lg = (1 - T.tendBlend) * lg + T.tendBlend * s.astTend;   // his passing tendency
+      var pb = s.gen ? T.tendBlend : T.tendPassBlend;
+      if (s.astTend != null) lg = (1 - pb) * lg + pb * s.astTend;   // his passing tendency
       s.astW = Math.exp(lg);
     }
     return s.astW;
@@ -516,19 +518,19 @@
   // ---------------------------------------------------------------------------
   var ERA = {
     2013: [1, 1, 0, 1],
-    2014: [1.003, 1.096, 0.0052, 1.002],
-    2015: [1.011, 1.167, 0.0015, 1.015],
-    2016: [1.02, 1.238, 0.0111, 1.026],
-    2017: [1.031, 1.351, 0.0158, 1.017],
+    2014: [1.003, 1.096, 0.0052, 0.99],
+    2015: [1.011, 1.167, 0.0015, 0.999],
+    2016: [1.02, 1.238, 0.0111, 1.002],
+    2017: [1.031, 1.351, 0.0158, 0.997],
     2018: [1.031, 1.376, 0.026, 1.01],
-    2019: [1.074, 1.466, 0.0329, 1.031],
-    2020: [1.063, 1.548, 0.0388, 1.034],
-    2021: [1.058, 1.598, 0.0398, 1.031],
-    2022: [1.052, 1.595, 0.0471, 1.031],
-    2023: [1.061, 1.524, 0.0611, 1.022],
-    2024: [1.062, 1.568, 0.058, 1.08],
-    2025: [1.066, 1.722, 0.0591, 1.091],
-    2026: [1.07, 1.681, 0.0606, 1.087]
+    2019: [1.074, 1.466, 0.0329, 1.002],
+    2020: [1.063, 1.548, 0.0388, 0.994],
+    2021: [1.058, 1.598, 0.0398, 1.005],
+    2022: [1.052, 1.595, 0.0471, 1.009],
+    2023: [1.061, 1.524, 0.0611, 1.015],
+    2024: [1.062, 1.568, 0.058, 1.069],
+    2025: [1.066, 1.722, 0.0591, 1.059],
+    2026: [1.07, 1.681, 0.0606, 1.062]
   };
   function eraFor(year) {
     year = +year || 2013;
