@@ -247,13 +247,14 @@
       away: { abbr: res.away.abbr, pts: res.away.pts, box: res.away.box.map(compactRow) },
       quarters: res.quarters, ot: res.ot, pbp: res.pbp
     };
+    if (res.pbp && res.pbx) { stored.pbx = res.pbx; stored.pbl = res.pbl; }
     if (res.playoff) stored.playoff = true;
     if (res.injuries && res.injuries.length) stored.injuries = res.injuries;
     season.boxScores[g.id] = stored;
     season.order.push(g.id);
     const len = season.order.length;
     const oldP = season.order[len - 1 - KEEP_PBP];
-    if (oldP && season.boxScores[oldP]) delete season.boxScores[oldP].pbp;
+    if (oldP && season.boxScores[oldP]) { delete season.boxScores[oldP].pbp; delete season.boxScores[oldP].pbx; delete season.boxScores[oldP].pbl; }
     const oldF = season.order[len - 1 - KEEP_FULL];
     const r = oldF && season.boxScores[oldF];
     if (r && r.home && typeof r.home === 'object') {
@@ -554,6 +555,41 @@
 
   function stopTimer() { if (live && live.timer) { clearTimeout(live.timer); live.timer = null; } }
 
+  // Text play-by-play or the court view (js/ui-court.js); the choice is remembered on this device.
+  const VIEW_KEY = 'a13-live-view';
+  const courtReady = () => !!(window.COURT && typeof window.COURT.mount === 'function' && live && window.COURT.available(live.res));
+  function savedView() { try { return localStorage.getItem(VIEW_KEY) === 'court' ? 'court' : 'text'; } catch (e) { return 'text'; } }
+  function stopCourt() { if (live && live.court) { live.court.destroy(); live.court = null; } }
+  function setView(mode, remember) {
+    if (!live) return;
+    if (mode === 'court' && !courtReady()) mode = 'text';
+    live.mode = mode;
+    if (remember) { try { localStorage.setItem(VIEW_KEY, mode); } catch (e) { /* private mode */ } }
+    const $ = id => document.getElementById(id);
+    if (!$('lvBoard')) return;
+    const court = mode === 'court';
+    document.querySelectorAll('.lv-view').forEach(b => { const on = b.getAttribute('data-view') === mode; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+    $('lvGrid').hidden = court;
+    $('lvControls').hidden = court && !live.recorded;
+    $('lvCourt').hidden = !court;
+    stopCourt();
+    stopTimer();
+    if (court) {
+      // the court plays the events and hands each one to the box score as it happens
+      live.court = window.COURT.mount($('lvCourt'), {
+        game: live.res, start: live.recorded ? live.events.length : live.i, autoplay: true,
+        onStep: i => {
+          if (!live || live.recorded) return;
+          while (live.i <= i && live.i < live.events.length) { const ev = live.events[live.i++]; apply(ev); update(ev); }
+          if (live.i >= live.events.length) finish(false);
+        },
+        onEnd: () => { if (live && !live.recorded) finish(false); }
+      });
+    } else if (!live.recorded) {
+      live.timer = setTimeout(tick, live.i ? SPEEDS[live.speed] || 900 : 0);
+    }
+  }
+
   P.live = function (app, arg) {
     if (X.need(app, 'engine season')) return;
     const season = X.season();
@@ -654,15 +690,15 @@
     ['home', 'away'].forEach(side => res[side].box.forEach(r => { stats[side][r.id] = { pts: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, oreb: 0, dreb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pf: 0 }; }));
     const totalSec = 2880 + Math.max(0, (res.quarters || []).length - 4) * 300;
     live = { game: g, dayIndex: again.dayIndex, day: again.day, res, events, i: 0, speed: 1, stats, totalSec, view,
-      as: 0, hs: 0, period: 'Q1', clock: '12:00', elapsed: 0, recorded: false, timer: null, quarters: [] };
+      as: 0, hs: 0, period: 'Q1', clock: '12:00', elapsed: 0, recorded: false, timer: null, quarters: [], mode: savedView(), court: null };
     X.onLeave(leaveLive);
     drawLive(app);
-    tick();
   }
 
   // Leaving mid-game still counts the game, so a result cannot be re-rolled.
   function leaveLive() {
     stopTimer();
+    stopCourt();
     if (live && !live.recorded) {
       finish(true);
       UI.toast('Game recorded: ' + live.game.away + ' ' + live.res.away.pts + ', ' + live.game.home + ' ' + live.res.home.pts + '.');
@@ -709,7 +745,7 @@
   }
 
   function tick() {
-    if (!live || live.recorded) return;
+    if (!live || live.recorded || live.mode === 'court') return;
     if (live.i >= live.events.length) { finish(false); return; }
     const ev = live.events[live.i++];
     apply(ev);
@@ -780,12 +816,17 @@
         </div>
         <div class="lv-team">${UI.logo(g.home, 76)}<b>${esc(X.teamName(g.home))}</b><small>${esc(recordOf(season, g.home))}</small></div>
       </section>
+      ${courtReady() ? `<div class="lv-views" role="group" aria-label="How to watch">
+        <button type="button" class="lv-view" data-view="text" aria-pressed="false">PLAY-BY-PLAY</button>
+        <button type="button" class="lv-view" data-view="court" aria-pressed="false">COURT VIEW</button>
+      </div>` : ''}
+      <div class="ct-host" id="lvCourt" hidden></div>
       <div class="lv-controls" id="lvControls">
         <span class="lv-ck">SPEED</span>
         ${[1, 4, 16].map(s => `<button type="button" class="btn btn-small lv-speed${live.speed === s ? ' on' : ''}" data-speed="${s}">${s}X</button>`).join('')}
         <button type="button" class="btn btn-small" id="lvSkip">SKIP TO END</button>
       </div>
-      <div class="lv-grid">
+      <div class="lv-grid" id="lvGrid">
         <section class="lv-feed-wrap">${UI.header('PLAY-BY-PLAY')}<ol class="pbp lv-feed" id="lvFeed"></ol></section>
         <section>${UI.header('SCORING')}<div id="lvQ"></div><div class="lv-last" id="lvLast"></div></section>
       </div>
@@ -797,11 +838,16 @@
       if (live.timer) { clearTimeout(live.timer); live.timer = setTimeout(tick, SPEEDS[live.speed]); }
     }));
     UI.$('#lvSkip').addEventListener('click', () => finish(false));
+    app.querySelectorAll('.lv-view').forEach(b => b.addEventListener('click', () => {
+      const mode = b.getAttribute('data-view');
+      if (mode !== live.mode || (mode === 'court' && !live.court)) setView(mode, true);
+    }));
     // replay what has already happened (redraws)
     const feed = UI.$('#lvFeed');
     feed.innerHTML = live.events.slice(Math.max(0, live.i - 80), live.i).reverse().map(feedItem).join('');
     update(null);
     if (live.recorded) drawFinal();
+    setView(live.recorded ? 'text' : live.mode || 'text', false);
   }
 
   function feedItem(ev) {
@@ -848,6 +894,7 @@
     const ot = Math.max(0, (live.res.quarters || []).length - 4);
     $('lvPer').textContent = 'FINAL' + (ot ? (ot > 1 ? '/' + ot + 'OT' : '/OT') : '');
     $('lvControls').innerHTML = '<span class="lv-ck">GAME OVER</span>';
+    $('lvControls').hidden = false;
     const g = live.game;
     const user = X.userTeam();
     const won = (g.home === user && g.hs > g.as) || (g.away === user && g.as > g.hs);
