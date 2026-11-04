@@ -374,18 +374,33 @@
     var d = seasonDone - r, ch;
     var real = targetFor(info, Math.min(seasonDone, r));   // how good he really was at that point
     var better = real != null ? p.ovr - real : 0;           // positive: the sim made him better
-    if (d < -1) ch = 0;
-    else if (d === -1) ch = (p.age || 0) >= 34 ? 0.08 : 0.02;
-    else if (d === 0) ch = 0.96;
+    // History as a guide, not a script: around his real last season he may stay a year or two
+    // longer when he is still playing well, or leave early when he is old and slipping
+    var age = p.age || 0, good = (p.ovr || 0) >= 82;
+    // careers that injuries really ended (Bynum's knees on his real-fate path) end on time
+    if (INJURY_FATES[p.id] && p.fate !== 'healthy' && d >= 0) return d === 0 ? 0.96 : 1;
+    if (d < -2) ch = 0;
+    else if (d === -2) ch = age >= 35 && better <= -4 ? 0.12 : 0;
+    else if (d === -1) ch = age >= 34 ? 0.1 : 0.03;
+    else if (d === 0) ch = 0.75;
+    else if (d === 1) ch = 0.7;
+    else if (d === 2) ch = 0.85;
     else ch = 1;
-    if (d >= 0 && better >= 6) ch = d === 0 ? 0.45 : d === 1 ? 0.75 : 1;
-    // his personal arc: well below his real self may retire a year early, well above a year late
+    if (d >= 0 && d <= 2) {
+      if (better >= 6) ch = d === 0 ? 0.3 : d === 1 ? 0.5 : 0.75;        // much better than he really was
+      else if (better >= 3) ch = d === 0 ? 0.45 : d === 1 ? 0.6 : 0.8;
+      else if (better <= -3) ch = Math.max(ch, d === 0 ? 0.95 : 1);     // already worse: on time
+      if (good) ch *= 0.7;                                              // still a starter-level player
+    }
+    // his personal arc: well below his real self may retire a year early
     var off = p.prog ? (p.prog.drift || 0) + (p.prog.boost || 0) : 0;
-    if (off <= -4 && d === -1) ch = Math.max(ch, 0.2);
-    if (off >= 4 && d === 0 && better < 6) ch = Math.min(ch, 0.75);
+    if (off <= -4 && d === -1) ch = Math.max(ch, 0.25);
+    if (d === -1 && better <= -4 && age >= 33) ch = Math.max(ch, 0.3);
     if (d < 0 && better > 2) ch *= 0.5;
     // The sim made him much worse than he really was: he leaves earlier
-    if (real != null && better < -8 && (p.age || 0) >= 30) ch = Math.max(ch, 0.25);
+    if (real != null && better < -8 && age >= 30) ch = Math.max(ch, 0.25);
+    // nobody signed him: veterans past their real exit mostly call it a career
+    if (unsigned && d >= 0) ch = Math.max(ch, 0.85);
     // Young players whose real careers ended early (MKG at 26, Bennett at 25) did not really retire:
     // they went unsigned. Here they stay in free agency, keep playing if a team wants them, and only
     // retire after going unsigned for a season or two.

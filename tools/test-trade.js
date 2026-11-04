@@ -576,5 +576,25 @@ console.log("\nTrade deadline, closed window and asking for more");
   }
 })();
 
+// Offseason: expiring contracts cannot be traded until re-signed, just drafted rookies (draft rights) can
+(function () {
+  var s = buildState("OKC");
+  s.phase = "draft";
+  var exp = Object.values(s.players).filter(function (p) { return s.teams[p.team] && p.team !== "OKC" && TRADE.expired(s, p); })[0];
+  var mine = Object.values(s.players).filter(function (p) { return p.team === "OKC" && !TRADE.expired(s, p); }).sort(function (a, b) { return a.ovr - b.ovr; })[0];
+  ok(!!exp && !!mine, "the draft phase has expiring players (" + (exp && exp.name) + ")");
+  if (exp && mine) {
+    var v = TRADE.validate(s, { teams: ["OKC", exp.team], give: { OKC: { players: [mine.id], picks: [] }, [exp.team]: { players: [exp.id], picks: [] } } });
+    ok(!v.ok && v.reasons.some(function (r) { return /contract is up/.test(r); }), "an expired contract cannot be traded: " + v.reasons.join(" "));
+    var offers = TRADE.shop(s, "OKC", [mine.id]) || [];
+    ok(!offers.some(function (o) { return Object.keys(o.trade.give).some(function (a) { return o.trade.give[a].players.some(function (id) { return TRADE.expired(s, s.players[id]); }); }); }), "trade block offers never include expiring players");
+  }
+  var rookie = { id: "testrook01", name: "Test Rookie", team: "OKC", pos: "SG", age: 19, ovr: 70, pot: 80, contract: null, draft: { year: s.year, round: 1, pick: 10, team: "OKC" } };
+  s.players[rookie.id] = rookie;
+  ok(!TRADE.expired(s, rookie), "a just drafted, unsigned rookie can be traded (draft rights)");
+  s.phase = "regular";
+  ok(!exp || !TRADE.expired(s, exp), "during the season expiring contracts trade normally");
+})();
+
 console.log("\n" + passes + " passed, " + fails + " failed");
 process.exit(fails ? 1 : 0);

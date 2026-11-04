@@ -666,6 +666,7 @@
         any++;
         var p = state.players[id];
         if (!p || p.team !== a || p.retired) { res.ok = false; reasons.push((p ? p.name : id) + " is not on " + a + "."); }
+        else if (expired(state, p)) { res.ok = false; reasons.push(p.name + "'s contract is up. He has to re-sign before he can be traded."); }
       });
       s.picks.forEach(function (pk) {
         any++;
@@ -838,6 +839,15 @@
   // ---------------------------------------------------------------------------
   // Package builder (finder, AI offers, AI to AI)
   // ---------------------------------------------------------------------------
+  // Offseason: a player whose contract ran out (no salary next season) is a free agent to be and
+  // cannot be traded until he re-signs. Draft rights still move: picks just made, stashed players.
+  function expired(state, p) {
+    if (!p || OFFSEASON.indexOf(state.phase) < 0) return false;
+    if (salaryOf(p, salaryYear(state)) > 0) return false;
+    if (isStashed(state, p) || p.rights) return false;
+    if (p.draft && +p.draft.year >= state.year) return false;   // this year's picks, signed or not
+    return true;
+  }
   function recentlyTraded(state, p) {
     var t = p.lastTrade;
     return !!(t && t.year === state.year && (state.day || 0) - (t.day || 0) < 30 && t.phase === state.phase);
@@ -926,7 +936,7 @@
     // candidate assets from G, ranked by what R thinks of them
     var pl = ctx.rosters[G].filter(function (id) {
       var p = st.players[id];
-      return !protect[id] && !(opts.skipRecent && recentlyTraded(st, p)) && !(opts.keep && opts.keep[id]);
+      return !protect[id] && !expired(st, p) && !(opts.skipRecent && recentlyTraded(st, p)) && !(opts.keep && opts.keep[id]);
     }).map(function (id) { return { kind: "p", id: id, vR: parts(ctx, id, R).total, vG: parts(ctx, id, G).total, s: salaryOf(st.players[id], ctx.year) }; });
     var spec = opts.spec || null;
     var top = pl.filter(function (c) { return c.vR > 0.2 && (!spec || !spec.cand || spec.cand(c)); })
@@ -1145,7 +1155,7 @@
     var st = ctx.state, out = [], seen = {};
     var ps = ctx.rosters[user].filter(function (id) {
       var p = st.players[id];
-      return block.indexOf(id) < 0 && countsOnRoster(st, p) && !recentlyTraded(st, p);
+      return block.indexOf(id) < 0 && countsOnRoster(st, p) && !recentlyTraded(st, p) && !expired(st, p);
     }).map(function (id) { return { kind: "p", id: id, vT: parts(ctx, id, T).total, s: salaryOf(st.players[id], ctx.year) }; });
     ps.filter(function (c) { return c.vT > 0.5; }).sort(function (a, b) { return b.vT - a.vT; }).slice(0, 1)
       .forEach(function (c) { seen[c.id] = 1; out.push(c); });
@@ -1353,7 +1363,7 @@
       if (!buyer || !seller) continue;
       var targets = ctx.rosters[seller].filter(function (id) {
         var p = state.players[id];
-        return countsOnRoster(state, p) && !recentlyTraded(state, p) && parts(ctx, id, buyer).talent >= 1.5;
+        return countsOnRoster(state, p) && !recentlyTraded(state, p) && !expired(state, p) && parts(ctx, id, buyer).talent >= 1.5;
       }).map(function (id) {
         return { id: id, diff: parts(ctx, id, buyer).total - parts(ctx, id, seller).total };
       }).filter(function (t) { return t.diff > 0; })
@@ -1818,6 +1828,7 @@
     aiOffers: aiOffers, aiTrades: aiTrades, execute: execute,
     // extras
     validate: function (state, trade) { return validate(state, trade); },
+    expired: function (state, p) { return expired(state, p); },
     describe: describe, updateDirections: updateDirections, windowOpen: windowOpen, pickId: pickId,
     shop: shop, pickText: pickText, protectionText: protectionText,
     // draft night and trade screen helpers
