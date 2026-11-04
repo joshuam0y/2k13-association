@@ -551,22 +551,44 @@
     state.draftClasses[year] = ids;
     return padClass(state, year).slice();
   }
-  // Real classes with forfeited picks or thin data (2022 had 58 picks) get fringe generated prospects,
-  // so every class has at least PAD_TO players to draft and the late second round never runs dry.
-  var PAD_TO = 66;
+  // A real class always has enough players: the real draftees plus the real undrafted players (the
+  // last picks can take one of those, as in 2022 with 58 real picks). Only a class with fewer than
+  // PAD_TO real players in all gets fringe generated prospects. Generated filler left undrafted from
+  // older saves is removed when the real class is big enough.
+  var PAD_TO = 60;
   function padClass(state, year) {
     var ids = state.draftClasses[year] || [];
-    var ok = ids.filter(function (id) { var p = state.players[id]; return p && p.team === 'DRAFT' && !p.undrafted && !p.rights; }).length;
+    var inPool = function (id) { var p = state.players[id]; return p && p.team === 'DRAFT' && !p.rights; };
+    var real = ids.filter(function (id) { return !/^pad/.test(id) && inPool(id); }).length;
+    if (real >= PAD_TO) {
+      var kept = ids.filter(function (id) {
+        if (!/^pad/.test(id)) return true;
+        var p = state.players[id];
+        if (p && p.team === 'DRAFT') { delete state.players[id]; return false; }
+        return true;
+      });
+      if (kept.length !== ids.length) state.draftClasses[year] = kept;
+      return state.draftClasses[year];
+    }
+    var ok = ids.filter(inPool).length;
     if (ok >= PAD_TO) return ids;
     var G = (root && root.DRAFTGEN) || null;
     if (!G && typeof require === 'function') { try { G = require('./draft-gen.js'); } catch (e) { G = null; } }
     if (!G || typeof G.generate !== 'function') return ids;
     var extra = null;
     try { extra = G.generate(year, seeded(state, 'pad' + year), { size: PAD_TO - ok, fringe: true, idPrefix: 'pad', used: state }); } catch (e) { extra = null; }
+    // filler is worse than every real player in the class (rating and potential), so it only goes last
+    var realP = ids.map(function (id) { return state.players[id]; }).filter(function (p) { return p && !/^pad/.test(p.id); });
+    var floorO = realP.length ? Math.min.apply(null, realP.map(function (p) { return p.ovr || 0; })) - 2 : 55;
+    var floorP = realP.length ? Math.min.apply(null, realP.map(function (p) { return p.pot != null ? p.pot : p.ovr || 0; })) - 2 : 58;
+    var P = root && root.PROG;
     (extra || []).forEach(function (x) {
       x.arrivalYear = year + 1;   // fringe late picks come over right away (no overseas stash)
       var p = normalizeProspect(x, year, seeded(state, 'padp' + x.id));
       p.arrivalYear = year + 1; p.stashedUntil = null;
+      var o = Math.min(p.ovr, floorO);
+      if (o !== p.ovr) { if (P && typeof P.setOvr === 'function' && p.attrs) P.setOvr(p, o, { keepPot: true }); p.ovr = o; }
+      p.pot = Math.max(p.ovr, Math.min(p.pot != null ? p.pot : p.ovr, floorP));
       if (state.players[p.id]) return;
       state.players[p.id] = p; ids.push(p.id);
     });
