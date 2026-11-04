@@ -310,9 +310,11 @@
     const stashHtml = stash.length ? `${UI.header('YOUR DRAFT RIGHTS', 'Players you hold who are still overseas. Their contracts start when they arrive.')}
       <div class="ft-falist">${stash.map(p => `<a class="ft-item ft-static" href="#/player/${esc(p.id)}">${F.mini(p, { meta: `${esc(p.pos || '')} | ${esc(p.age || '-')} YRS | <span class="ft-stash">Playing overseas until ${p.stashedUntil}</span>`, pot: false })}</a>`).join('')}</div>` : '';
 
+    // the user's picks from this draft go through rookie signing (js/ui-rookies.js) before re-signing
+    const toRookies = !!(UI.rookiesDue && slots && slots.some(s => s.team === user && s.player));
     let status, actions = '';
     if (phase === 'draftLottery') status = 'The lottery has not been drawn yet. The order below is before the lottery.';
-    else if (live && !next) status = 'All picks are in. The draft is complete: move on to re-signing.';
+    else if (live && !next) status = toRookies ? 'All picks are in. The draft is complete: sign your rookies, then move on to re-signing.' : 'All picks are in. The draft is complete: move on to re-signing.';
     else if (onClock) status = `You are on the clock with pick #${next.overall}${next.original && next.original !== user ? ' (from ' + esc(next.original) + ')' : ''}. Pick a player from the class, or let the AI pick for you.`;
     else if (live && myNext) status = `Pick #${next.overall} belongs to ${esc(UI.teamName(next.team))}. Your next pick is #${myNext.overall}.`;
     else if (live) status = 'You have no picks left in this draft.';
@@ -320,7 +322,8 @@
     else status = 'The ' + year + ' draft is held after the ' + esc(UI.fmtSeasonEnd(year)) + ' season. Scout the class now.';
     if (live && next && !onClock && canAi) actions = `<button type="button" class="btn btn-gold" data-act="sim">${myNext ? 'SIM TO MY PICK' : 'SIM REST OF DRAFT'}</button>`;
     if (live && onClock && canAi) actions = `<button type="button" class="btn" data-act="autopick">AUTO PICK</button>`;
-    if (live && !next && UI.sim) actions = `<button type="button" class="btn btn-gold" data-act="finish">CONTINUE TO RE-SIGNING</button>`;
+    if (live && !next && UI.sim) actions = `<button type="button" class="btn btn-gold" data-act="finish">${toRookies ? 'CONTINUE TO ROOKIE SIGNING' : 'CONTINUE TO RE-SIGNING'}</button>`;
+    if (done && UI.rookiesDue && UI.rookiesDue(st, true)) actions = `<a class="btn btn-gold" href="#/rookies">ROOKIE SIGNING</a>`;
     if (live && next && !onClock && !canAi) actions = '<span class="muted">AI picks are still being built.</span>';
 
     const myPicks = slots ? slots.filter(s => s.team === user) : [];
@@ -381,10 +384,12 @@
         } catch (e) { console.warn('DRAFT.aiPick', e); UI.toast('The auto pick failed: ' + (e && e.message ? e.message : e), 'error'); }
         render(app, st);
       } else if (act === 'finish') {
-        // straight on to the next offseason screen (re-signing), no stop back on the draft board
+        // straight on to the next offseason screen (rookie signing when he drafted anyone, else
+        // re-signing), no stop back on the draft board
         await UI.sim('nextPhase');
         const g = (UI.state && UI.state.game) || st;
-        location.hash = g && g.phase === 'resign' ? '#/fa' : '#/';
+        const rk = g && g.phase === 'resign' && UI.rookiesDue && UI.rookiesDue(g);
+        location.hash = g && g.phase === 'resign' ? (rk ? '#/rookies' : '#/fa') : '#/';
       } else if (act === 'sim') {
         const A = F.fn('DRAFT', 'aiPick');
         if (!A) return;

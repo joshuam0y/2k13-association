@@ -81,6 +81,7 @@
     stlK: 0.55,
     blkK: 0.8,
     tendBlend: 0.7,           // weight of the tendencies against the rating-based style
+    astKnee: 1.3,             // assist weight (log) where the top passers start to flatten
     usageKnee: 1.55,          // usage weight where the top end starts to flatten
     usageTop: 0.62,           //   and how much of the rest still counts
     tendUsageExp: 1.7,        // usage weight = (usage rate / league average) ^ this (the sim spreads shots less than real teams)
@@ -405,6 +406,7 @@
       // nobody averages 40 for years (real scoring leaders sit around 30 to 36)
       if (s.usage > T.usageKnee) s.usage = T.usageKnee + (s.usage - T.usageKnee) * T.usageTop;
       s.astTend = xP * Math.log(Math.max(0.15, tDecode('pass', td.pass)) / TEND_SCALE.pass[0]) + T.tendAstMean;
+      if (s.astTend > T.astKnee) s.astTend = T.astKnee + (s.astTend - T.astKnee) * 0.6;   // no 14 assist seasons
       // foul drawing beyond what his shot mix explains
       var ftr = tDecode('drawFoul', td.drawFoul) / TEND_SCALE.drawFoul[0];
       s.foulTend = clamp(Math.pow(ftr / Math.max(0.2, (mix || T.tendFoulMix) / T.tendFoulMix), xF), 0.25, 3.5);
@@ -599,13 +601,24 @@
     H.form = (rng() + rng() + rng() - 1.5) * 2 * T.formSd;
     A.form = (rng() + rng() + rng() - 1.5) * 2 * T.formSd;
 
+    // Each pbp line also gets a structured twin in pbx (kind, side and the players involved, packed into
+    // one number at the end, see packPbx) and pbl notes every lineup change, for the court view.
+    // Bookkeeping only: nothing here draws a random number or changes the game.
+    var pbx = [], pbl = [];
     var lastScore = '0-0';
-    function log(team, text) {
+    function log(team, text, k, a, b, c, x) {
       if (!wantPbp) return;
       var sc = A.pts + '-' + H.pts;
       pbp.push((q <= 4 ? 'Q' + q : 'OT' + (q - 4)) + ' ' + fmtClock(clock) + ' ' + (team ? team.abbr + ' ' : '') + text +
         (sc !== lastScore ? ' (' + sc + ')' : ''));
+      pbx.push([k || 0, team === A ? 1 : 0, a || null, b || null, c || null, x || 0]);
       lastScore = sc;
+    }
+    function noteLineups() {
+      if (!wantPbp) return;
+      var last = pbl[pbl.length - 1];
+      var row = [pbp.length, H.lineup.slice(), A.lineup.slice()];
+      if (last && last[0] === row[0]) pbl[pbl.length - 1] = row; else pbl.push(row);
     }
     function fz(s) { return (1 - s.energy) * T.fatigueZ; }
     function lineupZ(t, key) {
@@ -665,9 +678,10 @@
       pick.forEach(function (s) { if (!s.onCourt) { s.onCourt = true; ins.push(s.name); } });
       if (ins.length) {
         t.lastSub = elapsed;
-        if (wantSubs && elapsed > 0 && !forceStarters) log(t, 'substitution: ' + ins.join(', ') + ' in for ' + outs.join(', '));
+        if (wantSubs && elapsed > 0 && !forceStarters) log(t, 'substitution: ' + ins.join(', ') + ' in for ' + outs.join(', '), PBX.SUB);
       }
       t.lineup = pick.sort(function (a, b) { return a.rank - b.rank; });
+      if (ins.length || !pbl.length) noteLineups();
     }
 
     function runClock(sec) {
@@ -694,7 +708,7 @@
             var inj = rollInjury(rng);
             s.out = true; s.injury = inj; s.injuryAt = -1;
             injuriesOut.push({ id: s.id, name: s.name, team: t.abbr, type: inj.type, games: inj.games });
-            log(t, s.name + ' leaves the game with an injury (' + inj.type + ')');
+            log(t, s.name + ' leaves the game with an injury (' + inj.type + ')', PBX.INJ, s);
             if (hit.indexOf(t) < 0) hit.push(t);
           }
         });
@@ -710,7 +724,7 @@
     }
 
     function foulOutCheck(team, s) {
-      if (s.fouls >= 6 && !s.out) { s.out = true; log(team, s.name + ' fouls out'); }
+      if (s.fouls >= 6 && !s.out) { s.out = true; log(team, s.name + ' fouls out', PBX.FOULOUT, s); }
     }
 
     function shootFT(off, shooter, count) {
@@ -721,7 +735,7 @@
         last = rng() < pct;
         if (last) { made++; shooter.box.ftm++; shooter.box.pts++; off.pts++; }
       }
-      log(off, shooter.name + ' makes ' + made + ' of ' + count + ' free throws');
+      log(off, shooter.name + ' makes ' + made + ' of ' + count + ' free throws', PBX.FT, shooter, null, null, made * 4 + count);
       return { made: made, lastMissed: !last };
     }
 
@@ -736,14 +750,14 @@
           return Math.exp(T.rebK * (s.z.oreb - fz(s))) * (s.group === 'B' ? 1.2 : (s.group === 'W' ? 1 : 0.85));
         });
         r.box.oreb++;
-        log(off, r.name + ' offensive rebound');
+        log(off, r.name + ' offensive rebound', PBX.OREB, r);
         return { team: off, player: r };
       }
       var d = pickBy(def.lineup, function (s) {
         return Math.exp(T.rebK * (s.z.dreb - fz(s))) * (s.group === 'B' ? 1.2 : (s.group === 'W' ? 1 : 0.85));
       });
       d.box.dreb++;
-      log(def, d.name + ' defensive rebound');
+      log(def, d.name + ' defensive rebound', PBX.DREB, d);
       return { team: def, player: d };
     }
 
@@ -788,15 +802,15 @@
           if (rng() < ps) {
             var st = pickBy(def.lineup, function (s) { return Math.exp(T.stlK * s.z.steal); });
             st.box.stl++;
-            log(off, tp.name + ' turnover, stolen by ' + st.name);
+            log(off, tp.name + ' turnover, stolen by ' + st.name, PBX.TOV, tp, st, null, 1);
             return { next: def, dead: false };
           }
           if (rng() < T.offFoulShare / (1 - T.stealShare)) {
             tp.box.pf++; tp.fouls++;
-            log(off, tp.name + ' offensive foul');
+            log(off, tp.name + ' offensive foul', PBX.TOV, tp, null, null, 2);
             foulOutCheck(off, tp);
           } else {
-            log(off, tp.name + ' turnover');
+            log(off, tp.name + ' turnover', PBX.TOV, tp);
           }
           return { next: def, dead: true };
         }
@@ -806,7 +820,7 @@
           fd.box.pf++; fd.fouls++;
           var bonus = inBonus(def);
           addTeamFoul(def);
-          log(def, fd.name + ' personal foul');
+          log(def, fd.name + ' personal foul', PBX.PF, fd);
           foulOutCheck(def, fd);
           if (bonus) {
             var fs = pickBy(off.lineup, function (s) { return s.usage * (0.6 + s.shares.close); });
@@ -852,11 +866,12 @@
           var pts = is3 ? 3 : 2;
           shooter.box.pts += pts; off.pts += pts;
           var a1 = putbackBy ? null : creditAssist(off, shooter, type);
-          log(off, shooter.name + ' makes ' + desc + (a1 ? ' (' + a1.name + ' assists)' : '') + ', fouled by ' + fouler.name);
+          log(off, shooter.name + ' makes ' + desc + (a1 ? ' (' + a1.name + ' assists)' : '') + ', fouled by ' + fouler.name,
+            PBX.MAKE, shooter, a1, fouler, SHOT_TYPES.indexOf(type));
           foulOutCheck(def, fouler);
           return afterFT(off, def, shootFT(off, shooter, 1));
         }
-        log(off, shooter.name + ' fouled by ' + fouler.name + ' on ' + desc);
+        log(off, shooter.name + ' fouled by ' + fouler.name + ' on ' + desc, PBX.SFOUL, shooter, fouler, null, SHOT_TYPES.indexOf(type));
         foulOutCheck(def, fouler);
         return afterFT(off, def, shootFT(off, shooter, is3 ? 3 : 2));
       }
@@ -868,7 +883,7 @@
         var p2 = is3 ? 3 : 2;
         shooter.box.pts += p2; off.pts += p2;
         var ast = putbackBy ? null : creditAssist(off, shooter, type);
-        log(off, shooter.name + ' makes ' + desc + (ast ? ' (' + ast.name + ' assists)' : ''));
+        log(off, shooter.name + ' makes ' + desc + (ast ? ' (' + ast.name + ' assists)' : ''), PBX.MAKE, shooter, ast, null, SHOT_TYPES.indexOf(type));
         return { next: def, dead: true };
       }
       // miss: blocked?
@@ -881,9 +896,9 @@
           return Math.exp(T.blkK * s.z.block) * (s === dfd ? 1.6 : 1) * (type === 'three' || type === 'mid' ? 1 : (s.group === 'B' ? 1.5 : 0.8));
         });
         bl.box.blk++;
-        log(off, shooter.name + ' misses ' + desc + ', blocked by ' + bl.name);
+        log(off, shooter.name + ' misses ' + desc + ', blocked by ' + bl.name, PBX.MISS, shooter, bl, null, SHOT_TYPES.indexOf(type));
       } else {
-        log(off, shooter.name + ' misses ' + desc);
+        log(off, shooter.name + ' misses ' + desc, PBX.MISS, shooter, null, null, SHOT_TYPES.indexOf(type));
       }
       var rb = rebound(off, def, type, blocked);
       if (rb.team === off && rb.player && !rb.player.out && rng() < T.putback) return { next: off, dead: false, second: true, putback: rb.player };
@@ -893,7 +908,8 @@
     // ---- main loop ----
     var poss = rng() < 0.5 ? H : A;
     var tipWinner = poss;
-    log(null, 'Tip-off: ' + A.abbr + ' at ' + H.abbr + ', ' + poss.abbr + ' wins the tip');
+    log(null, 'Tip-off: ' + A.abbr + ' at ' + H.abbr + ', ' + poss.abbr + ' wins the tip', PBX.TIP);
+    if (pbx.length) pbx[pbx.length - 1][1] = poss === A ? 1 : 0;
     chooseLineup(H, true); chooseLineup(A, true);
     var second = false, putback = null, dead = true, trans = 0;
     var guard = 0;
@@ -901,7 +917,7 @@
       if (clock <= 0.01) {
         quarters.push([H.pts - qStart[0], A.pts - qStart[1]]);
         qStart = [H.pts, A.pts];
-        log(null, 'End of ' + (q <= 4 ? 'Q' + q : 'OT' + (q - 4)));
+        log(null, 'End of ' + (q <= 4 ? 'Q' + q : 'OT' + (q - 4)), PBX.END);
         if (q >= 4 && H.pts !== A.pts) break;
         q++;
         clock = q <= 4 ? 720 : 300;
@@ -952,7 +968,8 @@
       injuries: injuriesOut,
       winner: H.pts > A.pts ? H.abbr : A.abbr
     };
-    log(null, 'Final: ' + A.abbr + ' ' + A.pts + ', ' + H.abbr + ' ' + H.pts + (result.ot ? ' (' + (result.ot > 1 ? result.ot : '') + 'OT)' : ''));
+    log(null, 'Final: ' + A.abbr + ' ' + A.pts + ', ' + H.abbr + ' ' + H.pts + (result.ot ? ' (' + (result.ot > 1 ? result.ot : '') + 'OT)' : ''), PBX.FINAL);
+    if (wantPbp) packPbx(result, H, A, pbx, pbl);
     return result;
   }
 
@@ -965,6 +982,29 @@
         starter: s.starter
       };
     });
+  }
+
+  // Structured play-by-play for the court view. res.pbx has one number per pbp line:
+  //   kind + 16*side + 32*a + 1024*b + 32768*c + 1048576*x
+  // side 0 = the home team logged the line, 1 = away. a, b, c are box row index + 1 (0 = nobody):
+  // a is always on the logging side; MAKE: b assister (same side), c and-one fouler (other side);
+  // MISS: b blocker (other); SFOUL: b fouler (other); TOV: b stealer (other).
+  // x: shot type (0 close, 1 post, 2 mid, 3 three) for MAKE, MISS and SFOUL; made * 4 + attempts for FT;
+  // 0 plain, 1 stolen, 2 offensive foul for TOV. TIP: side = the team that wins the tip.
+  // res.pbl lists lineup changes: [pbp index the five applies from, home mask, away mask], mask bit i = box row i.
+  var PBX = { NOTE: 0, TIP: 1, END: 2, FINAL: 3, MAKE: 4, MISS: 5, SFOUL: 6, FT: 7, OREB: 8, DREB: 9, TOV: 10,
+    PF: 11, FOULOUT: 12, INJ: 13, SUB: 14 };
+  function packPbx(result, H, A, raw, lineups) {
+    [H, A].forEach(function (t) { t.roster.filter(function (s) { return s.sec > 0; }).forEach(function (s, i) { s.bx = i + 1; }); });
+    var ix = function (s) { return s && s.bx ? s.bx : 0; };
+    var mask = function (list) { var m = 0; list.forEach(function (s) { if (s.bx) m += Math.pow(2, s.bx - 1); }); return m; };
+    result.pbx = raw.map(function (e) { return e[0] + 16 * e[1] + 32 * ix(e[2]) + 1024 * ix(e[3]) + 32768 * ix(e[4]) + 1048576 * e[5]; });
+    result.pbl = lineups.map(function (l) { return [l[0], mask(l[1]), mask(l[2])]; });
+  }
+  function unpackPbx(code) {
+    code = +code || 0;
+    var d = function (div, mod) { return Math.floor(code / div) % mod; };
+    return { k: code % 16, side: d(16, 2), a: d(32, 32) - 1, b: d(1024, 32) - 1, c: d(32768, 32) - 1, x: Math.floor(code / 1048576) };
   }
 
   function shotDesc(type, s, rng) {
@@ -1322,6 +1362,7 @@
       away: { abbr: res.away.abbr, pts: res.away.pts, box: res.away.box.map(compactRow) },
       quarters: res.quarters, ot: res.ot, pbp: res.pbp
     };
+    if (res.pbp && res.pbx) { stored.pbx = res.pbx; stored.pbl = res.pbl; }
     if (res.playoff) stored.playoff = true;
     if (res.playIn) stored.playIn = true;
     if (res.injuries && res.injuries.length) stored.injuries = res.injuries;
@@ -1330,7 +1371,7 @@
     trackHighs(season, res);
     var len = season.order.length;
     var oldP = season.order[len - 1 - KEEP_PBP];
-    if (oldP && season.boxScores[oldP]) delete season.boxScores[oldP].pbp;
+    if (oldP && season.boxScores[oldP]) { delete season.boxScores[oldP].pbp; delete season.boxScores[oldP].pbx; delete season.boxScores[oldP].pbl; }
     var oldF = season.order[len - 1 - KEEP_FULL];
     var r = oldF && season.boxScores[oldF];
     if (r && r.home && typeof r.home === 'object') {
@@ -1848,7 +1889,9 @@
     generateTendencies: function (p) { return generateTendencies(p); },
     ratingStyle: function (p) { return ratingStyle(p); },
     tEncode: tEncode,
-    tDecode: tDecode
+    tDecode: tDecode,
+    PBX: PBX,
+    unpackPbx: unpackPbx
   };
 
   if (typeof window !== 'undefined') window.ENGINE = ENGINE;

@@ -488,6 +488,17 @@
     p.draftYear = year;
     if (p.arrivalYear == null) p.arrivalYear = year + 1;
     p.undrafted = !!p.undrafted;
+    // on the 2K13 scale: real classes carry the rating from the 2K game of their first season
+    var P = root && root.PROG;
+    if (!p.scaled && P && typeof P.scaleRating === 'function' && (p.arrivalYear || year + 1) > 2013) {
+      var ay = Math.max(year + 1, +p.arrivalYear || year + 1);
+      var o = Math.round(P.scaleRating(ay, p.ovr)), pt = p.pot != null ? Math.round(P.scaleRating(ay, p.pot)) : null;
+      if (typeof P.setOvr === 'function' && p.attrs) P.setOvr(p, o, { keepPot: true }); else p.ovr = o;
+      p.ovr = o; if (pt != null) p.pot = pt;
+      p.scaled = true;
+      // undrafted rookies come in below the first round (their real rating was earned later)
+      if (p.undrafted && p.ovr > 70) { if (typeof P.setOvr === 'function' && p.attrs) P.setOvr(p, 70, { keepPot: true }); p.ovr = 70; }
+    }
     if (p.pot == null || p.pot < p.ovr) p.pot = p.ovr;
     p.contract = null;
     p.yearsPro = 0; p.yearsWithTeam = 0; p.draft = null;
@@ -697,7 +708,8 @@
   // team holds his rights. 3 years (2 for older or minimum players), 4.5% raises.
   function rightsSalaries(state, p, start) {
     var T = root && root.TARGETS && root.TARGETS[p.id];
-    var lvl = T && T[start] != null ? +T[start] : p.ovr;
+    var P = root && root.PROG;
+    var lvl = T && T[start] != null ? (P && P.scaleRating ? P.scaleRating(start, +T[start]) : +T[start]) : p.ovr;
     var min = minSalary(0, start), r = cbaRules(start);
     var cap = (r && r.cap) || Math.round(58044000 * capRatio(start));
     var F = root && root.FA, amount = null;

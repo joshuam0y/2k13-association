@@ -1,0 +1,78 @@
+/* Rookie signing page (#/rookies): this draft's picks, the deal each one gets, sign / stash / release.
+   Phone first: one card per rookie, the choice buttons full width; wider screens put each rookie on one row. */
+.rk-head { background: linear-gradient(180deg, #17171a, #0e0e10); border: 1px solid var(--line); border-bottom: 3px solid var(--gold); padding: 14px; margin-bottom: 14px; }
+.rk-team { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.rk-team > div { min-width: 0; }
+.rk-team p { margin: 4px 0 0; font-size: 14px; color: var(--text2); }
+
+/* after the choices: roster, payroll, cap room */
+.rk-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 14px 0 0; }
+.rk-sum > div { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; background: var(--bg2); border: 1px solid var(--line); min-width: 0; }
+.rk-sum small { font-family: var(--display); font-size: 10px; letter-spacing: .14em; color: var(--muted); }
+.rk-sum b { font-family: var(--display); font-weight: 700; font-size: 20px; line-height: 1.1; overflow-wrap: anywhere; }
+.rk-sum .good b { color: var(--fa-good, #7fd99a); }
+.rk-sum .bad b { color: var(--fa-bad, #ff9b9b); }
+.rk-line { margin: 10px 0 0; font-size: 14px; color: var(--text2); overflow-wrap: anywhere; }
+.rk-line b { color: var(--gold2); font-family: var(--display); letter-spacing: .04em; font-weight: 600; }
+.rk-btns { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.rk-btns .btn { min-height: 48px; width: 100%; }
+
+/* one rookie */
+.rk-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.rk-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: 'who who' 'deal hit' 'act act' 'note note';
+  gap: 10px 12px; padding: 0 12px 12px 0; background: var(--bg2); border: 1px solid var(--line); border-left: 3px solid var(--gold-dim); min-width: 0;
+}
+.rk-row.c-decline { border-left-color: var(--loss); background: #120b0b; }
+.rk-row.c-stash { border-left-color: #34506e; }
+.rk-who { grid-area: who; display: flex; align-items: center; gap: 10px; color: #fff; min-width: 0; min-height: 58px; }
+.rk-who:hover { color: #fff; }
+.rk-who:hover .ft-name { color: var(--gold2); }
+.rk-who .ft-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.rk-pk { display: inline-block; font-family: var(--display); font-size: 11px; font-weight: 600; letter-spacing: .1em; padding: 2px 6px; margin-right: 6px; border: 1px solid var(--gold-dim); color: var(--gold2); white-space: nowrap; }
+.rk-pk.r1 { background: var(--gold); border-color: var(--gold); color: #000; }
+.rk-deal, .rk-hit { display: flex; flex-direction: column; gap: 1px; line-height: 1.2; min-width: 0; padding-left: 12px; }
+.rk-deal { grid-area: deal; }
+.rk-hit { grid-area: hit; }
+.rk-deal small, .rk-hit small { font-family: var(--display); font-size: 10px; letter-spacing: .14em; color: var(--muted); }
+.rk-deal b, .rk-hit b { font-family: var(--display); font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
+.rk-deal span, .rk-hit span { font-size: 12px; color: var(--text2); overflow-wrap: anywhere; }
+.rk-row.c-decline .rk-deal b, .rk-row.c-decline .rk-hit b, .rk-row.c-stash .rk-hit b { text-decoration: line-through; text-decoration-color: var(--muted); color: var(--muted); }
+.rk-away { color: #bcdcff; }
+
+/* the choice: a segmented control, each part a 44px+ tap target */
+.rk-act { grid-area: act; display: flex; gap: 0; padding-left: 12px; min-width: 0; }
+.rk-act button {
+  flex: 1 1 0; min-width: 0; min-height: 44px; padding: 8px 6px; border: 1px solid var(--line2); background: var(--bg3); color: var(--text2);
+  font-family: var(--display); font-weight: 600; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; cursor: pointer;
+}
+.rk-act button + button { border-left: 0; }
+.rk-act button:hover { color: var(--gold2); }
+.rk-act button:focus-visible { outline: 2px solid var(--gold2); outline-offset: -2px; }
+.rk-act button[aria-pressed="true"].k-sign { background: var(--gold); border-color: var(--gold); color: #000; }
+.rk-act button[aria-pressed="true"].k-stash { background: #1d2a3a; border-color: #34506e; color: #bcdcff; }
+.rk-act button[aria-pressed="true"].k-decline { background: #5a2424; border-color: var(--loss); color: #fff; }
+.rk-note { grid-area: note; margin: 0; padding-left: 12px; font-size: 13px; color: var(--text2); overflow-wrap: anywhere; }
+.rk-note.warn { color: #ff9b9b; }
+.rk-note:empty { display: none; }
+
+.rk-done { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); background: var(--bg2); }
+.rk-done li { padding: 10px 14px; border-bottom: 1px solid #1f1f24; font-size: 14px; color: var(--text2); overflow-wrap: anywhere; }
+.rk-done li:last-child { border-bottom: 0; }
+.rk-done a { color: #fff; font-family: var(--display); letter-spacing: .03em; text-transform: uppercase; }
+
+@media (min-width: 561px) {
+  .rk-head { padding: 18px 22px 16px; }
+  .rk-sum { grid-template-columns: repeat(3, minmax(0, 200px)); }
+  .rk-sum b { font-size: 24px; }
+  .rk-btns { flex-direction: row; flex-wrap: wrap; }
+  .rk-btns .btn { width: auto; }
+}
+@media (min-width: 900px) {
+  .rk-row {
+    grid-template-columns: minmax(0, 1fr) 200px 120px 300px; grid-template-areas: 'who deal hit act' 'note note note note';
+    align-items: center; padding: 0 14px 0 0; row-gap: 0;
+  }
+  .rk-act { padding-left: 0; }
+  .rk-note { padding: 0 0 10px 12px; }
+}

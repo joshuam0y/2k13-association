@@ -345,7 +345,7 @@ function refill(state, minSize, maxSize) {
     state.year++;
     Object.values(state.players).forEach(p => {
       if (p.retired || !T[p.id] || T[p.id][state.year] == null) return;
-      devs.push(p.ovr - T[p.id][state.year]);
+      devs.push(p.ovr - PROG.scaleRating(state.year, T[p.id][state.year]));   // targets on the 2K13 scale
     });
     let mn = 99;
     Object.keys(state.teams).forEach(a => { mn = Math.min(mn, DRAFT.rosterCount(state, a)); });
@@ -402,7 +402,7 @@ if (REAL_TARGETS) {
     state.year++;
     Object.values(state.players).forEach(p => {
       const t = REAL_TARGETS[p.id];
-      if (!p.retired && t && t[state.year] != null) devs.push(Math.abs(p.ovr - t[state.year]));
+      if (!p.retired && t && t[state.year] != null) devs.push(Math.abs(p.ovr - PROG.scaleRating(state.year, t[state.year])));
     });
   }
   const m = devs.reduce((s, x) => s + x, 0) / Math.max(1, devs.length);

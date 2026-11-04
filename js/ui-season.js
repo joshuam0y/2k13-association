@@ -522,6 +522,7 @@
       <div class="play-btns">
         <button type="button" class="btn btn-gold btn-big" id="nextPhase">NEXT: ${esc(nextName.toUpperCase())}</button>
         ${link && UI.pages[link[0]] ? `<a class="btn btn-big" href="#/${link[0]}">${link[1]}</a>` : ''}
+        ${UI.rookieLink ? UI.rookieLink(g) : ''}
       </div>`;
   }
 
@@ -889,9 +890,12 @@
       : `${UI.header('PLAY-BY-PLAY')}<p class="muted">Play-by-play is kept for the most recent games only.</p>`;
     const awayWon = g.as > g.hs;
     const ot = q.length > 4 ? (q.length > 5 ? '/' + (q.length - 4) + 'OT' : '/OT') : '';
+    // the court view (js/ui-court.js) replays games whose play-by-play is still kept
+    const watch = window.COURT && UI.pages.watch && window.COURT.available(r)
+      ? `<div class="row-btns center"><a class="btn btn-gold" href="#/watch/${esc(g.id)}">WATCH</a></div>` : '';
     app.innerHTML = head(`<div class="sb-k">FINAL${ot}</div>
         <div class="sb-score"><span class="${awayWon ? 'win' : ''}">${g.as}</span><i>-</i><span class="${awayWon ? '' : 'win'}">${g.hs}</span></div><div class="sb-k">${dayLbl}</div>`) +
-      qtable + boxTable(g.away, r.away && r.away.box) + boxTable(g.home, r.home && r.home.box) + pbpHtml;
+      watch + qtable + boxTable(g.away, r.away && r.away.box) + boxTable(g.home, r.home && r.home.box) + pbpHtml;
     // Sorting redraws only the head and body rows, so a table scrolled sideways on a phone stays put.
     const boxes = [(r.away && r.away.box) || [], (r.home && r.home.box) || []].map(b => b.filter(Boolean));
     const tables = Array.from(app.querySelectorAll('table.box'));

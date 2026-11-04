@@ -131,14 +131,67 @@
     return { t: t, years: years, first: years[0], last: years[years.length - 1], retire: t.retire != null ? +t.retire : null };
   }
   // Target overall for a season (season-ending year). Interpolates gaps; null outside the known range.
+  // Always on the 2K13 scale (scaleRating), whatever 2K game the real rating came from.
   function targetFor(info, year) {
     if (!info || !info.years.length) return null;
     var t = info.t;
-    if (t[year] != null) return +t[year];
+    if (t[year] != null) return scaleRating(year, +t[year]);
     if (year < info.first || year > info.last) return null;
     var a = info.first, b = info.last;
     info.years.forEach(function (y) { if (y < year && y > a) a = y; if (y > year && y < b) b = y; });
-    return +t[a] + (+t[b] - +t[a]) * (year - a) / (b - a);
+    return scaleRating(year, +t[a] + (+t[b] - +t[a]) * (year - a) / (b - a));
+  }
+
+  // ---------------------------------------------------------------------------
+  // One rating scale for every era. The real ratings come from each year's 2K game, and later games
+  // rate everyone higher (2K13: median 68, bottom tenth 56, top 3% 87; 2K26: 76, 70 and 92), so an
+  // undrafted rookie in 2021 came in at 77. scaleRating(year, v) maps a rating to the 2K13 rating at
+  // the same league percentile (from the real ratings of that season, data/targets.js), so a role
+  // player looks like a 2K13 role player in every season. 2013 and earlier stay as they are; years
+  // after the data use its last season.
+  // ---------------------------------------------------------------------------
+  var BASE_YEAR = 2013, scaleCache = null;
+  function scaleTables() {
+    if (scaleCache) return scaleCache;
+    var T = targets(), by = {};
+    if (T) Object.keys(T).forEach(function (id) {
+      var t = T[id];
+      for (var k in t) if (/^\d{4}$/.test(k) && typeof t[k] === 'number') (by[k] = by[k] || []).push(t[k]);
+    });
+    Object.keys(by).forEach(function (k) { by[k].sort(function (a, b) { return a - b; }); });
+    var years = Object.keys(by).map(Number).filter(function (y) { return by[y].length >= 200; }).sort(function (a, b) { return a - b; });
+    scaleCache = { by: by, years: years, last: years.length ? years[years.length - 1] : BASE_YEAR };
+    return scaleCache;
+  }
+  function midRank(a, v) {
+    var lo = 0, hi = a.length;
+    while (lo < hi) { var m = (lo + hi) >> 1; if (a[m] < v) lo = m + 1; else hi = m; }
+    var below = lo, eq = 0;
+    while (below + eq < a.length && a[below + eq] === v) eq++;
+    if (eq) return (below + eq / 2) / a.length;
+    // between two values: interpolate the rank
+    if (below === 0 || below === a.length) return below / a.length;
+    var x0 = a[below - 1], x1 = a[below];
+    return (below - 0.5 + (v - x0) / (x1 - x0)) / a.length;
+  }
+  function quantileOf(a, r) {
+    var x = r * a.length - 0.5, i = Math.floor(x), f = x - i;
+    if (i < 0) return a[0];
+    if (i >= a.length - 1) return a[a.length - 1];
+    return a[i] + (a[i + 1] - a[i]) * f;
+  }
+  function scaleRating(year, v) {
+    if (v == null || !isFinite(v)) return v;
+    year = +year;
+    if (!(year > BASE_YEAR)) return v;
+    var S = scaleTables(), base = S.by[BASE_YEAR];
+    if (!base || !S.years.length) return v;
+    var y = Math.min(year, S.last), A = S.by[y];
+    if (!A) { S.years.forEach(function (k) { if (k <= year) y = k; }); A = S.by[y]; }
+    if (!A || A === base) return v;
+    if (v >= A[A.length - 1]) return Math.min(99, base[base.length - 1] - (A[A.length - 1] - v));
+    if (v <= A[0]) return base[0] - (A[0] - v);
+    return Math.round(quantileOf(base, midRank(A, v)) * 10) / 10;
   }
 
   // ---------------------------------------------------------------------------
@@ -229,7 +282,7 @@
       p.fate = 'healthy';
       state.prog.fateTargets[id] = ht;
       var peak = 0;
-      Object.keys(ht).forEach(function (k) { if (/^\d{4}$/.test(k)) peak = Math.max(peak, +ht[k]); });
+      Object.keys(ht).forEach(function (k) { if (/^\d{4}$/.test(k)) peak = Math.max(peak, scaleRating(+k, +ht[k])); });
       if (peak && (p.pot == null || p.pot < peak)) p.pot = Math.min(99, peak);
       if (fate.from <= (state.year || 2013) && p.injury && p.injury.type !== 'Playing overseas') p.injury = null;
       // a prospect who really sat out his first seasons hurt arrives on time
@@ -298,7 +351,7 @@
   }
   function peakYear(info) {
     var best = null, by = null;
-    info.years.forEach(function (y) { var v = +info.t[y]; if (best == null || v > best) { best = v; by = y; } });
+    info.years.forEach(function (y) { var v = scaleRating(y, +info.t[y]); if (best == null || v > best) { best = v; by = y; } });
     return by;
   }
 
@@ -328,7 +381,7 @@
       // healthy path for healthy-fate players) plus his personal drift and breakouts or stalls
       if (SETTINGS.variety && info && info.years && info.years.length) {
         var rem = null;
-        info.years.forEach(function (y) { if (y >= next) { var v = +info.t[y]; if (rem == null || v > rem) rem = v; } });
+        info.years.forEach(function (y) { if (y >= next) { var v = scaleRating(y, +info.t[y]); if (rem == null || v > rem) rem = v; } });
         if (rem == null) rem = p.ovr;
         var pr = p.prog || {}, off = (pr.drift || 0) + (pr.boost || 0);
         if (rem >= STAR || p.fate === 'healthy') off = Math.min(off, STAR_CAP);
@@ -553,6 +606,10 @@
   // ---------------------------------------------------------------------------
   var TEND_KEYS = ['usage', 'three', 'mid', 'rim', 'post', 'pass', 'drawFoul'];
   var REAL_TEND_KEYS = ['usage', 'three', 'pass', 'drawFoul'];
+  var REAL_PULL = { usage: 0.75, three: 0.75, drawFoul: 0.6, pass: 0.4 };
+  // sim assists per 36 run about this much above the pass tendency's real per-36 scale (fitted), so
+  // last season's sim line maps back onto the tendency without inflating it year after year
+  var ENGINE_PASS_CAL = 0.96;
   // His real season (2013 to 2026): { usage, three, pass, drawFoul, min } or null
   function realTendency(id, year) {
     var H = root && root.TENDENCY_HISTORY, v = H && H[id];
@@ -584,6 +641,15 @@
         // a little toward what his overall and role call for (his rating-based usage, more for starters)
         var gen = E.generateTendencies(p), want = clamp(gen.usage + 10 * role, 0, 100);
         cur.usage += 1.2 * dOvr + 0.12 * (want - cur.usage);
+        // passing develops in the save: toward what his ratings now say (a passing rating that grew
+        // in this save makes a passer) and toward the role he really had last season on his team
+        // (running the offense on a thin team keeps the assists up, a stacked team spreads them)
+        cur.pass += 0.15 * (gen.pass - cur.pass);
+        if (line && line.g >= 20 && line.min >= 400) {
+          var ast36 = 36 * (line.ast || 0) / line.min;
+          var eraAst = E.eraFor ? E.eraFor(done).ast : 1;
+          cur.pass += 0.15 * (E.tEncode('pass', ast36 / (ENGINE_PASS_CAL * eraAst)) - cur.pass);
+        }
         var age = p.age || 25;
         if (age >= 30) { var drop = age >= 33 ? 2.5 : 1.5; cur.rim -= drop; cur.mid += drop * 0.6; }
       }
@@ -591,9 +657,11 @@
       // becomes a passer, Harden runs the point and the league follows the real three-point era
       var real = realTendency(id, next), gen0 = !!t.generated;
       if (real) {
-        var w = clamp(real.min / 1500, 0.25, 1) * 0.85;
+        // a guide, not a script: scoring role and shot mix follow his real career closely, passing
+        // only loosely (it develops with his ratings and his role in this save)
+        var w = clamp(real.min / 1500, 0.25, 1);
         var oldThree = E.tDecode('three', cur.three);
-        REAL_TEND_KEYS.forEach(function (k) { cur[k] += w * (real[k] - cur[k]); });
+        REAL_TEND_KEYS.forEach(function (k) { cur[k] += w * REAL_PULL[k] * (real[k] - cur[k]); });
         // rim, mid and post are shares of all his shots: they make room for the new three share
         var f = (1 - E.tDecode('three', cur.three)) / Math.max(0.05, 1 - oldThree);
         ['rim', 'mid', 'post'].forEach(function (k) { cur[k] = E.tEncode(k, E.tDecode(k, cur[k]) * f); });
@@ -641,6 +709,7 @@
     setOvr: setOvr,
     weightedOvr: weightedOvr,
     targetFor: function (id, year, state) { return targetFor(targetInfo(id, state), year); },
+    scaleRating: scaleRating,
     targetsOf: function (state, id) { var i = targetInfo(id, state); return i ? i.t : null; },
     settings: SETTINGS,
     rollFates: rollFates,

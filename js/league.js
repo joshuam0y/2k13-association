@@ -78,7 +78,7 @@
       p.stashedUntil = null; p.gleague = false; p.careerStats = []; p.awards = []; p.retired = false; p.hof = false;
       // potential = the real career peak from the history targets, when known
       var tg = W.TARGETS && W.TARGETS[p.id];
-      if (tg) { var peak = p.ovr; for (var ty in tg) if (ty !== "retire" && typeof tg[ty] === "number") peak = Math.max(peak, tg[ty]); p.pot = Math.min(99, peak); }
+      if (tg) { var peak = p.ovr, P = mod("PROG") ? W.PROG : null; for (var ty in tg) if (/^\d{4}$/.test(ty) && typeof tg[ty] === "number") peak = Math.max(peak, P && P.scaleRating ? P.scaleRating(+ty, tg[ty]) : tg[ty]); p.pot = Math.min(99, Math.round(peak)); }
       state.players[p.id] = p;
     });
     // Players drafted before 2013 whose rights a team held in October 2012 (data/drafts.js DRAFT_RIGHTS):
@@ -98,6 +98,7 @@
       p.yearsPro = 0; p.yearsWithTeam = 0;
       p.personality = personalityFor(p.id, rng); p.mood = 60;
       p.gleague = false; p.careerStats = []; p.awards = []; p.retired = false; p.hof = false;
+      scaleProspect(p, +pr.arrivalYear || state.year + 1);
       if (pr.arrivalYear != null && +pr.arrivalYear > state.year) {
         p.stashedUntil = +pr.arrivalYear;
         p.injury = { type: "Playing overseas", games: 999 };
@@ -113,9 +114,11 @@
         if (state.players[pr.id] || pr.rights) return;
         var p = clone(pr); p.team = "DRAFT"; p.contract = null; p.yearsPro = 0; p.yearsWithTeam = 0;
         p.personality = personalityFor(p.id, rng); p.mood = 60; p.careerStats = []; p.awards = []; p.retired = false;
+        scaleProspect(p, Math.max(+yr + 1, +p.arrivalYear || +yr + 1));
         state.players[p.id] = p;
       });
     });
+    state.ratingScale = 1;
     base.teams.forEach(function (t0) {
       var t = clone(t0);
       t.picks = []; t.direction = "neutral"; t.strategy = { pace: 50, three: 50, defense: "man", crash: 50 };
@@ -650,8 +653,32 @@
 
   // Brings a loaded save up to date: current logos and names, world news without duplicates,
   // coaches without stored ratings (coaches are cosmetic). Safe to call on every load.
+  // Ratings from later 2K games on the 2K13 scale (js/progression.js scaleRating), by the season
+  // the rating is from. Once per player (p.scaled).
+  function scaleProspect(p, year) {
+    var P = mod("PROG") ? W.PROG : null;
+    if (!p || p.scaled || !P || !P.scaleRating || !(year > 2013)) return;
+    var o = Math.round(P.scaleRating(year, p.ovr)), pt = p.pot != null ? Math.round(P.scaleRating(year, p.pot)) : null;
+    if (P.setOvr && p.attrs) P.setOvr(p, o, { keepPot: true });
+    p.ovr = o; if (pt != null) p.pot = Math.max(o, pt);
+    p.scaled = true;
+    // undrafted rookies come in below the first round (their real rating was earned later)
+    if (p.undrafted && p.team === "DRAFT" && p.ovr > UNDRAFTED_MAX) { if (P.setOvr && p.attrs) P.setOvr(p, UNDRAFTED_MAX, { keepPot: true }); p.ovr = UNDRAFTED_MAX; }
+  }
+  var UNDRAFTED_MAX = 70;
   function migrate(state) {
     if (!state || !state.teams) return state;
+    // saves from before the 2K13 rating scale: every rating once onto it (players by the current
+    // season, prospects by their arrival season)
+    if (!state.ratingScale) safe("migrate rating scale", function () {
+      for (var id in state.players) {
+        var p = state.players[id];
+        if (!p || p.scaled) continue;
+        if (p.team === "DRAFT") scaleProspect(p, Math.max((+p.draftYear || state.year) + 1, +p.arrivalYear || 0));
+        else if (!p.retired && state.year > 2013) scaleProspect(p, state.year);
+      }
+      state.ratingScale = 1;
+    });
     state.news = state.news || []; state.events = state.events || []; state.transactions = state.transactions || [];
     safe("migrate brands", function () { applyBrands(state); });
     safe("migrate news", function () { worldSeen(state); });
