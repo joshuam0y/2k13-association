@@ -138,9 +138,14 @@
 
   // The lineup the engine picks on its own: the best five of the top eight healthy players,
   // with at least one guard and one big, then the bench by overall. Injured players sit.
+  // Auto rotation styles from the engine (team.autoStyle): BEST FIT, STAR HEAVY, 8-MAN, 7-MAN, DEPTH, YOUNG PLAYERS
+  const autoStyles = () => (window.ENGINE && window.ENGINE.AUTO_STYLES) || {};
+  const styleOf = s => { const t = s.teams[s.userTeam] || {}; return autoStyles()[t.autoStyle] || null; };
   function autoLineup(s) {
-    const roster = userRoster(s);
-    const healthy = roster.filter(p => !injuryOf(s, p)).sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+    const roster = userRoster(s), style = styleOf(s);
+    const yb = window.ENGINE && window.ENGINE.youthBonus;
+    const rv = p => (p.ovr || 0) + (style && style.young && yb ? yb(p) : 0);
+    const healthy = roster.filter(p => !injuryOf(s, p)).sort((a, b) => rv(b) - rv(a));
     const hurt = roster.filter(p => injuryOf(s, p)).sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
     const top = healthy.slice(0, Math.min(8, healthy.length));
     let best = top.slice(0, 5), bestScore = -1e9;
@@ -150,7 +155,7 @@
         for (let d = c + 1; d < k; d++) for (let e = d + 1; e < k; e++) {
           const set = [top[a], top[b], top[c], top[d], top[e]];
           let g = 0, bg = 0, score = 0;
-          set.forEach(p => { score += p.ovr || 0; const gr = posGroup(p.pos); if (gr === 'G') g++; if (gr === 'B') bg++; });
+          set.forEach(p => { score += rv(p); const gr = posGroup(p.pos); if (gr === 'G') g++; if (gr === 'B') bg++; });
           if (g === 0) score -= 14;
           if (bg === 0) score -= 14;
           if (g > 2) score -= 4 * (g - 2);
@@ -161,8 +166,12 @@
     const starters = slotOrder(best);
     const bench = healthy.filter(p => best.indexOf(p) < 0);
     const minutes = {};
-    best.slice().sort((a, b) => (b.ovr || 0) - (a.ovr || 0)).forEach((p, i) => { minutes[p.id] = STARTER_MIN[i]; });
-    bench.forEach((p, i) => { minutes[p.id] = benchMinutes(i, bench); });
+    const startMin = (style && style.starters) || STARTER_MIN;
+    best.slice().sort((a, b) => rv(b) - rv(a)).forEach((p, i) => { minutes[p.id] = startMin[i]; });
+    bench.forEach((p, i) => { minutes[p.id] = style && style.bench ? style.bench[i] || 0 : benchMinutes(i, bench); });
+    // what the engine does: the same total of 240 spread over the players who play
+    const tot = Object.values(minutes).reduce((a, m) => a + m, 0);
+    if (tot > 0) Object.keys(minutes).forEach(id => { minutes[id] = Math.round(Math.min(42, minutes[id] * 240 / tot)); });
     hurt.forEach(p => { minutes[p.id] = 0; });
     return { active: starters.concat(bench).map(p => p.id), inactive: hurt.map(p => p.id), minutes };
   }
@@ -405,6 +414,10 @@
             <button type="button" role="radio" aria-checked="${rot.auto}" class="${rot.auto ? 'on' : ''}" data-mode="auto"><b>AUTO</b><small>Best lineup every game</small></button>
             <button type="button" role="radio" aria-checked="${!rot.auto}" class="${!rot.auto ? 'on' : ''}" data-mode="manual"><b>MANUAL</b><small>You set it</small></button>
           </div>
+          <div class="frr-styles" role="radiogroup" aria-label="Auto rotation style">${Object.keys(autoStyles()).map(k => {
+            const st = autoStyles()[k], on = rot.auto && (team.autoStyle || 'best') === k;
+            return `<button type="button" role="radio" aria-checked="${on}" class="${on ? 'on' : ''}" data-style="${k}"><b>${esc(st.label)}</b><small>${esc(st.note)}</small></button>`;
+          }).join('')}</div>
           <div class="frr-state">${rot.auto
             ? '<b>AUTO ROTATION IS ON.</b> Your coach starts the best healthy five and sets the minutes before every game. This is what he would play right now. Change anything and you switch to manual.'
             : '<b>MANUAL ROTATION.</b> Your starters and minutes are used every game. Hurt starters are replaced by the best healthy player.'}</div>
@@ -491,6 +504,13 @@
     guard.check = () => (!rot.auto && body.isConnected ? sumMin(rot) : null);
     guard.autoFill = autoFill;
     function bind() {
+      UI.$$('[data-style]', body).forEach(b => b.addEventListener('click', () => {
+        const k = b.getAttribute('data-style'), st = autoStyles()[k];
+        picked = null;
+        team.autoStyle = k === 'best' ? null : k;
+        applyRotation(s, null); rot = currentRotation(s, team); render();
+        UI.toast && UI.toast('Auto rotation: ' + (st ? st.label.toLowerCase() : 'best fit') + '. Your coach sets the lineup before every game.');
+      }));
       UI.$$('[data-mode]', body).forEach(b => b.addEventListener('click', () => {
         const mode = b.getAttribute('data-mode');
         picked = null;

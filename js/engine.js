@@ -18,6 +18,17 @@
   var STARTER_MIN = [36, 34, 32, 30, 30];
   var BENCH_MIN5 = [22, 18, 16, 12, 10];
   var BENCH_MIN4 = [24, 22, 18, 14];
+  // Auto rotation styles (team.autoStyle; the coach still starts the best healthy five for the style):
+  // starters' and bench minutes by rank, and young = a youth bonus when ranking players
+  var AUTO_STYLES = {
+    best: { label: 'BEST FIT', note: 'Best players, normal minutes' },
+    stars: { label: 'STAR HEAVY', note: 'Starters play 35 to 38', starters: [38, 37, 35, 33, 31], bench: [20, 16, 10] },
+    eight: { label: '8-MAN', note: 'Tight playoff rotation', starters: [36, 35, 34, 33, 32], bench: [26, 24, 20] },
+    seven: { label: '7-MAN', note: 'Shortest rotation', starters: [38, 37, 36, 35, 34], bench: [32, 28] },
+    depth: { label: 'DEPTH', note: '10 men, fresh legs', starters: [32, 31, 30, 29, 28], bench: [22, 20, 18, 16, 14] },
+    young: { label: 'YOUNG PLAYERS', note: 'Develop the kids', young: true, starters: [34, 33, 32, 30, 29], bench: [24, 22, 18, 12, 6] }
+  };
+  function youthBonus(p) { return clamp((26 - (+p.age || 26)) * 1.5, 0, 9); }
 
   // Tuning knobs (calibrated against 2012-13 league averages by tools/engine-test.js).
   // Rating effects are in z-scores against league norms, so the engine stays calibrated
@@ -70,6 +81,8 @@
     stlK: 0.55,
     blkK: 0.8,
     tendBlend: 0.7,           // weight of the tendencies against the rating-based style
+    usageKnee: 1.55,          // usage weight where the top end starts to flatten
+    usageTop: 0.62,           //   and how much of the rest still counts
     tendUsageExp: 1.7,        // usage weight = (usage rate / league average) ^ this (the sim spreads shots less than real teams)
     tendPassExp: 1.45,         // assist weight from the pass tendency = (assists per 36 / league average) ^ this
     tendPassBlend: 0.88,      // real passing tendencies count more than the rating and position model (Jokic, Trae)
@@ -388,6 +401,9 @@
       }
       var uRel = Math.pow(tDecode('usage', td.usage) / TEND_SCALE.usage[0], xU);
       s.usage = clamp(B * uRel + (1 - B) * s.usage, 0.3, 2.3);
+      // the very top of the usage scale flattens out: a star takes a big share of the shots, but
+      // nobody averages 40 for years (real scoring leaders sit around 30 to 36)
+      if (s.usage > T.usageKnee) s.usage = T.usageKnee + (s.usage - T.usageKnee) * T.usageTop;
       s.astTend = xP * Math.log(Math.max(0.15, tDecode('pass', td.pass)) / TEND_SCALE.pass[0]) + T.tendAstMean;
       // foul drawing beyond what his shot mix explains
       var ftr = tDecode('drawFoul', td.drawFoul) / TEND_SCALE.drawFoul[0];
@@ -436,7 +452,7 @@
       for (var d = c + 1; d < k; d++) for (var e = d + 1; e < k; e++) {
         var set = [top[a], top[b], top[c], top[d], top[e]];
         var g = 0, bg = 0, score = 0;
-        set.forEach(function (s) { score += s.ovr; if (s.group === 'G') g++; if (s.group === 'B') bg++; });
+        set.forEach(function (s) { score += s.rv != null ? s.rv : s.ovr; if (s.group === 'G') g++; if (s.group === 'B') bg++; });
         if (g === 0) score -= 14;
         if (bg === 0) score -= 14;
         if (g > 2) score -= 4 * (g - 2);
@@ -462,12 +478,18 @@
         avail.push(makeState(rp, n));
       }
     }
-    avail.sort(function (a, b) { return b.ovr - a.ovr; });
+    // auto style (ignored once the user saved his own minutes)
+    var style = !team.minutes && AUTO_STYLES[team.autoStyle] || null;
+    if (style && style.young) avail.forEach(function (s) { s.rv = s.ovr + youthBonus(s.p); });
+    var rank = function (s) { return s.rv != null ? s.rv : s.ovr; };
+    avail.sort(function (a, b) { return rank(b) - rank(a); });
     var starters = pickStarters(avail, team.starters);
     var bench = avail.filter(function (s) { return starters.indexOf(s) < 0; });
-    starters.sort(function (a, b) { return b.ovr - a.ovr; });
-    starters.forEach(function (s, i) { s.starter = true; s.target = STARTER_MIN[i]; });
-    var benchTargets = bench.length >= 5 && bench[4].ovr >= bench[0].ovr - 12 ? BENCH_MIN5 : BENCH_MIN4;
+    starters.sort(function (a, b) { return rank(b) - rank(a); });
+    var startMin = style && style.starters || STARTER_MIN;
+    starters.forEach(function (s, i) { s.starter = true; s.target = startMin[i]; });
+    var benchTargets = style && style.bench ? style.bench.concat(bench.slice(style.bench.length).map(function () { return 0; }))
+      : bench.length >= 5 && bench[4].ovr >= bench[0].ovr - 12 ? BENCH_MIN5 : BENCH_MIN4;
     if (bench.length < benchTargets.length) {
       var missing = 0;
       for (var i = bench.length; i < benchTargets.length; i++) missing += benchTargets[i];
@@ -1222,7 +1244,8 @@
       players: by[abbr] || [],
       starters: (lineups && lineups.starters) || (lt && lt.starters) || null,
       minutes: (lineups && lineups.minutes) || null,
-      strategy: (lt && lt.strategy) || (season.strategies && season.strategies[abbr]) || null
+      strategy: (lt && lt.strategy) || (season.strategies && season.strategies[abbr]) || null,
+      autoStyle: (lt && lt.autoStyle) || null
     };
   }
 
@@ -1817,6 +1840,9 @@
     TEND_KEYS: TEND_KEYS,
     TEND_SCALE: TEND_SCALE,
     ERA: ERA,
+    AUTO_STYLES: AUTO_STYLES,
+    STARTER_MIN: STARTER_MIN, BENCH_MIN5: BENCH_MIN5, BENCH_MIN4: BENCH_MIN4,
+    youthBonus: youthBonus,
     eraFor: eraFor,
     tendencyOf: function (p) { return tendencyOf(p); },
     generateTendencies: function (p) { return generateTendencies(p); },

@@ -445,7 +445,7 @@
     for (var i = 0; i < target; i++) {
       var r = drawRatings(rng);
       // Past the real class size, the extra prospects are fringe players from the bottom of the pool
-      if (i >= core) { for (var t = 0; t < 80 && r.pot > FRINGE_POT; t++) r = drawRatings(rng, r.age); }
+      if (i >= core || opts.fringe) { for (var t = 0; t < 80 && r.pot > FRINGE_POT; t++) r = drawRatings(rng, r.age); }
       var pos = pickWeighted(rng, posPairs);
       var country = pickWeighted(rng, COUNTRIES);
       var name = makeName(country, rng, taken);
@@ -465,7 +465,7 @@
     }
     // Shuffle so the ids do not reveal the fringe prospects
     for (var j = out.length - 1; j > 0; j--) { var k = Math.floor(rng() * (j + 1)), tmp = out[j]; out[j] = out[k]; out[k] = tmp; }
-    out.forEach(function (p, n) { p.id = 'gen' + year + '_' + ('00' + (n + 1)).slice(-3); });
+    out.forEach(function (p, n) { p.id = (opts.idPrefix || 'gen') + year + '_' + ('00' + (n + 1)).slice(-3); });
     return out;
   }
 

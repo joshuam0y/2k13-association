@@ -507,7 +507,7 @@
     state.draftClasses = state.draftClasses || {};
     migrateRights(state);
     cleanClasses(state);
-    if (state.draftClasses[year]) return state.draftClasses[year].slice();
+    if (state.draftClasses[year]) return padClass(state, year).slice();
     var rng = seeded(state, 'prospects' + year);
     var D = root && root.DRAFTS, real = year < FICTIONAL_FROM && D && D[year] && D[year].length ? D[year] : null;
     var list;
@@ -538,7 +538,29 @@
       ids.push(p.id);
     });
     state.draftClasses[year] = ids;
-    return ids.slice();
+    return padClass(state, year).slice();
+  }
+  // Real classes with forfeited picks or thin data (2022 had 58 picks) get fringe generated prospects,
+  // so every class has at least PAD_TO players to draft and the late second round never runs dry.
+  var PAD_TO = 66;
+  function padClass(state, year) {
+    var ids = state.draftClasses[year] || [];
+    var ok = ids.filter(function (id) { var p = state.players[id]; return p && p.team === 'DRAFT' && !p.undrafted && !p.rights; }).length;
+    if (ok >= PAD_TO) return ids;
+    var G = (root && root.DRAFTGEN) || null;
+    if (!G && typeof require === 'function') { try { G = require('./draft-gen.js'); } catch (e) { G = null; } }
+    if (!G || typeof G.generate !== 'function') return ids;
+    var extra = null;
+    try { extra = G.generate(year, seeded(state, 'pad' + year), { size: PAD_TO - ok, fringe: true, idPrefix: 'pad', used: state }); } catch (e) { extra = null; }
+    (extra || []).forEach(function (x) {
+      x.arrivalYear = year + 1;   // fringe late picks come over right away (no overseas stash)
+      var p = normalizeProspect(x, year, seeded(state, 'padp' + x.id));
+      p.arrivalYear = year + 1; p.stashedUntil = null;
+      if (state.players[p.id]) return;
+      state.players[p.id] = p; ids.push(p.id);
+    });
+    state.draftClasses[year] = ids;
+    return ids;
   }
   function pool(state, year) {
     var ids = loadClass(state, year);
