@@ -533,35 +533,35 @@
 
   // Shot type weights and make adjustments for an offense against a defensive scheme
   // ---------------------------------------------------------------------------
-  // Era: the league changes like the real NBA did. Per season [pace, three, make2, ast]: play length
-  // divided by pace, three-point weight times three, two-point make chance plus make2, assist chance
-  // times ast. Fitted (scratchpad era fit) so a save tracks the real league averages each season
+  // Era: the league changes like the real NBA did. Per season [pace, three, make2, ast, tov]: play
+  // length divided by pace, three-point weight times three, two-point make chance plus make2, assist
+  // chance times ast, turnover chance times tov. Fitted (scratchpad era fit) so a save tracks the real league averages each season
   // (Basketball-Reference: pace 92 to 99, 20 to 37 threes, 98 to 115 points, 22 to 27 assists),
   // together with the real season-by-season tendencies (data/tendency-history.js). After 2026 the
   // league stays in the 2026 style. opts.year picks the season; without it, 2012-13.
   // ---------------------------------------------------------------------------
   var ERA = {
-    2013: [1, 1, 0, 1],
-    2014: [1.003, 1.096, 0.0052, 0.99],
-    2015: [1.011, 1.167, 0.0015, 0.999],
-    2016: [1.02, 1.238, 0.0111, 1.002],
-    2017: [1.031, 1.351, 0.0158, 0.997],
-    2018: [1.031, 1.376, 0.026, 1.01],
-    2019: [1.074, 1.466, 0.0329, 1.002],
-    2020: [1.063, 1.548, 0.0388, 0.994],
-    2021: [1.058, 1.598, 0.0398, 1.005],
-    2022: [1.052, 1.595, 0.0471, 1.009],
-    2023: [1.061, 1.524, 0.0611, 1.015],
-    2024: [1.062, 1.568, 0.058, 1.069],
-    2025: [1.066, 1.722, 0.0591, 1.059],
-    2026: [1.07, 1.681, 0.0606, 1.062]
+    2013: [1, 1, 0, 1, 1],
+    2014: [1.003, 1.096, 0.0052, 0.974, 1],
+    2015: [1.011, 1.167, 0.0015, 0.979, 0.985],
+    2016: [1.02, 1.238, 0.0111, 0.978, 0.97],
+    2017: [1.031, 1.351, 0.0158, 0.974, 0.927],
+    2018: [1.031, 1.376, 0.026, 0.972, 0.949],
+    2019: [1.074, 1.466, 0.0329, 0.977, 0.895],
+    2020: [1.063, 1.548, 0.0388, 0.966, 0.929],
+    2021: [1.058, 1.598, 0.0398, 0.977, 0.893],
+    2022: [1.052, 1.595, 0.0471, 0.97, 0.899],
+    2023: [1.061, 1.524, 0.0611, 0.977, 0.914],
+    2024: [1.062, 1.568, 0.058, 1.024, 0.878],
+    2025: [1.066, 1.722, 0.0591, 1.028, 0.922],
+    2026: [1.07, 1.681, 0.0606, 1.048, 0.923]
   };
   function eraFor(year) {
     year = +year || 2013;
     var ys = Object.keys(ERA).map(Number).sort(function (a, b) { return a - b; }), best = ys[0];
     ys.forEach(function (y) { if (y <= year) best = y; });
     var e = ERA[best];
-    return { pace: e[0], three: e[1], make2: e[2], ast: e[3] };
+    return { pace: e[0], three: e[1], make2: e[2], ast: e[3], tov: e[4] != null ? e[4] : 1 };
   }
 
   function shotPlan(offStrat, defStrat, era) {
@@ -792,7 +792,7 @@
         // ---- turnover ----
         var hand = lineupZ(off, 'handle') * 0.6 + lineupZ(off, 'pass') * 0.4;
         var stl = lineupZ(def, 'steal') * 0.6 + lineupZ(def, 'perD') * 0.4;
-        var pTO = T.toBase * Math.exp(T.minorK * (-0.14 * hand + 0.12 * stl) - edge * 3);
+        var pTO = T.toBase * era.tov * Math.exp(T.minorK * (-0.14 * hand + 0.12 * stl) - edge * 3);
         if (rng() < pTO) {
           var tp = pickBy(off.lineup, function (s) {
             return (0.4 + s.usage) * (s.group === 'G' ? 1.25 : 1) * Math.exp(-0.2 * s.z.handle);
