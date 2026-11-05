@@ -257,8 +257,11 @@
     var st = ctx.state, p = st.players[id], dir = dirOf(ctx, abbr);
     var eff = effRating(p, dir);
     var talent = talentCurve(eff);
-    if (isStashed(st, p)) {
-      talent *= dir === "rebuild" ? 0.8 : dir === "contend" ? 0.4 : 0.6;
+    var away = isStashed(st, p) ? Math.max(1, +p.stashedUntil - ctx.year + 1) : 0;
+    if (away) {
+      // overseas or redshirting: worth less the longer he is away (Embiid sitting one season out is
+      // still Embiid), more so for a contender that needs help now
+      talent *= Math.pow(dir === "rebuild" ? 0.9 : dir === "contend" ? 0.7 : 0.82, away);
     } else {
       var g = injuryGames(st, p);
       if (g > 0) talent *= 1 - Math.min(1, g / 82) * (dir === "contend" ? 0.65 : dir === "rebuild" ? 0.4 : 0.5);
@@ -269,6 +272,16 @@
     // contract: what he is paid against what a player of his level earns, year by year
     var w = dir === "contend" ? 0.25 : dir === "rebuild" ? 0.45 : 0.35;
     var rem = remaining(p, ctx.year), surplus = 0, opt = p.contract && p.contract.option;
+    // draft rights with no deal yet (a stash, a redshirt, a pick not signed): the cheap rookie deal he
+    // will sign is part of his value, like it is for a signed rookie
+    var lead = 0;
+    if (!rem.length && p.draft && !p.retired) {
+      var C = cba(), start = away ? +p.stashedUntil : ctx.year, rs = null;
+      if (C && typeof C.rookieScale === "function" && p.draft.round === 1) { try { rs = C.rookieScale(p.draft.pick, start); } catch (e) { rs = null; } }
+      if (rs && rs.salaries) rem = rs.salaries.map(function (a, k) { return { year: start + k, amount: a }; });
+      else { var mn = C && typeof C.minSalary === "function" ? C.minSalary(0, start) : 1e6 * ctx.capRatio; rem = [{ year: start, amount: mn }, { year: start + 1, amount: mn }]; }
+      lead = Math.max(0, start - ctx.year);
+    }
     for (var i = 0; i < rem.length; i++) {
       var ratio = ctx.capRatio * Math.pow(1.045, i);
       var s = (marketSalary(projRating(p, i), ratio) - rem[i].amount) / 1e6 / ratio;
@@ -276,7 +289,7 @@
         if (opt.type === "team" && s < 0) s = 0;                       // team would decline
         if ((opt.type === "player" || opt.type === "eto") && s > 0) s = 0;  // player would opt out
       }
-      surplus += s * Math.pow(0.88, i);
+      surplus += s * Math.pow(0.88, i + lead);
     }
     var contract = surplus * w;
     if (rem.length === 1) {
