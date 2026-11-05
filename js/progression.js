@@ -316,7 +316,7 @@
   // ---------------------------------------------------------------------------
   var SETTINGS = { variety: true };   // PROG.settings.variety = false: careers follow history with tiny noise
   var DRIFT_SD = 1.2, DRIFT_MEAN = 0.2, DRIFT_PULL = 0.7, DRIFT_PULL_UP = 0.7, DRIFT_MAX = 6, BOOST_KEEP = 0.9, BOOST_MAX = 8, STAR = 90, STAR_CAP = 2, OFF_MAX = 9;
-  var BREAKOUT = 0.05, STALL = 0.05, NO_BLOOM = 0.15, OFF_PATH = 0.3, HEALTHY_CAP_FROM = 85;   // per young player per season (breakouts up to +9 over his real arc)
+  var BREAKOUT = 0.05, STALL = 0.05, NO_BLOOM = 0.15, OFF_PATH = 0.3, HEALTHY_CAP_FROM = 85, LOST_MAX = 25;   // per young player per season (breakouts up to +9 over his real arc)
   var MAJOR_INJURY = /ACL|Achilles|Patellar/i;
   function seasonContext(state, done) {
     var season = state.season && (state.season.year == null || +state.season.year === done) ? state.season : null;
@@ -341,6 +341,7 @@
       var avail = Math.max(10, C.teamGames - missed);
       var mpg = (nbaMin + 0.5 * glMin) / avail;
       var played = (st && st.g) || (g2 && g2.g) || isNbaTeam(state, p.team);
+      if (played) out.mpg = mpg;   // for the growth he misses when he does not play (offseason)
       if (played && mpg >= 24) out.pt = 0.5 + Math.min(0.5, (mpg - 24) / 20);
       else if (played && mpg < 10 && !out.major) out.pt = -(0.75 + Math.min(0.75, (10 - mpg) / 13));
     } else if (age <= 29) {
@@ -449,6 +450,7 @@
         if (rem == null) rem = wi ? whatIf(p, rng) : p.ovr;
         var pr = p.prog || {}, off = (pr.drift || 0) + (pr.boost || 0);
         if (wi) off = Math.min(off, 3);   // the what-if ceiling moves only a little with his form
+        off += pr.lost || 0;   // growth he missed by not playing also lowers his ceiling
         if (rem >= STAR || (p.fate === 'healthy' && rem >= HEALTHY_CAP_FROM)) off = Math.min(off, STAR_CAP);
         var pot = rem + off * (age <= 27 ? 1 : 0.5);
         p.pot = clamp(Math.max(Math.round(pot), p.ovr), OVR_MIN, OVR_MAX);
@@ -648,6 +650,17 @@
         if (realMove <= -3 && p.age <= 30 && gp0 >= 0.7 * C.teamGames && mpg0 >= 28) pr.drift = Math.min(DRIFT_MAX + 2, pr.drift - 0.5 * realMove);
         // the tight cap is for stars and healthy-fate stars (Rose, Klay); a healthy-fate role player
         // (Bradley, Jennings) gets the normal room to grow
+        // Growth he never got: a young player on the user's team grows only as much as he plays (24+ mpg
+        // all of his real growth, under 8 about a third). It stays lost, and he wins a quarter of it back
+        // each season he plays 24+. AI teams follow how the real teams developed their players.
+        pr.lost = pr.lost || 0;
+        if (p.team === state.userTeam && eff.mpg != null && seasonAge <= 24 && realMove > 0) {
+          var share = eff.mpg >= 24 ? 1 : eff.mpg >= 15 ? 0.8 : eff.mpg >= 8 ? 0.55 : 0.35;
+          pr.lost -= realMove * (1 - share);
+        }
+        if (pr.lost < 0 && eff.mpg != null && eff.mpg >= 24) pr.lost *= 0.75;
+        if (pr.lost < 0 && p.team !== state.userTeam && line0 && gp0 && mpg0 >= 24) pr.lost *= 0.75;
+        pr.lost = clamp(pr.lost, -LOST_MAX, 0);
         var star = tgt >= STAR, capped = star || (p.fate === 'healthy' && tgt >= HEALTHY_CAP_FROM);
         // stars and healthy-fate players: positive drift pulled back hard
         if (capped && pr.drift > STAR_CAP) pr.drift = STAR_CAP + (pr.drift - STAR_CAP) * 0.3;
@@ -658,12 +671,13 @@
         else if (young && (p.pot || 0) >= 78 && (p.pot - p.ovr) >= 4 && rng() < STALL) pr.boost -= 4 + rng() * 4; // stall
         // a real late bloomer may never bloom here: when his real rating jumps, sometimes most of the
         // jump does not happen (it fades back in slowly over the next seasons, if at all)
-        else if (realMove >= 5 && p.age <= 27 && rng() < NO_BLOOM) { pr.boost -= 0.8 * realMove; pr.noBloom = next; }
+        else if (realMove >= 5 && p.age <= 27 && !pr.noBloom && rng() < NO_BLOOM) { pr.boost -= 0.8 * realMove; pr.noBloom = next; }   // once a career
         pr.boost = clamp(pr.boost, -BOOST_MAX, BOOST_MAX);
         if (star && pr.boost > 0) pr.boost = 0;
         var off = pr.drift + pr.boost;
         if (off < 0 && star) off *= 0.6;   // stars stay stars
         if (off > OFF_MAX) off = OFF_MAX;   // breakouts make a role player a star, not an 87 into a 99
+        off += pr.lost;
         newOvr = tgt + off + gauss(rng) * 0.6;
         // a player who was never really a 90 only gets half of anything above 90
         var soft = Math.max(STAR, tgt + STAR_CAP);
