@@ -523,7 +523,8 @@
         <button type="button" class="btn btn-gold btn-big" id="nextPhase">NEXT: ${esc(nextName.toUpperCase())}</button>
         ${link && UI.pages[link[0]] ? `<a class="btn btn-big" href="#/${link[0]}">${link[1]}</a>` : ''}
         ${UI.rookieLink ? UI.rookieLink(g) : ''}
-      </div>`;
+      </div>
+      ${UI.rightsLine ? UI.rightsLine(g) : ''}`;
   }
 
   // ---------- sim next game and the result strip ----------

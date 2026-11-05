@@ -10,6 +10,11 @@
 //   preview(state, abbr, choices)     roster count, payroll and cap room after those choices
 //   pending(state, abbr)              true while the team has picks to decide and has not been through the step
 // Nothing changes unless one of these is called: skipping the step keeps every rookie signed.
+// Draft rights overseas, all year (any draft year, rights players from before 2013 too):
+//   rights(state, abbr)               every player the team holds abroad: drafted where, arrival season, the deal he would sign
+//   canBringOver / bringOver(state, abbr, id)   offseason only (draft to training camp), with a roster spot:
+//                                     he signs the deal DRAFT.signRookies gives an arriving stash and joins the roster
+//   releaseRights(state, abbr, id)    he becomes a free agent, still overseas until his arrival season
 (function (root) {
   'use strict';
 
@@ -217,10 +222,166 @@
     return { year: Y, roster: roster, maxRoster: MAX_ROSTER, payroll: pay, cap: cap, room: Math.max(0, cap - pay), overCap: cap > 0 && pay > cap, removed: off };
   }
 
+  // ---------------------------------------------------------------------------
+  // Draft rights overseas
+  // ---------------------------------------------------------------------------
+  var OFFSEASON = { draftLottery: 1, draft: 1, resign: 1, freeAgency: 1, training: 1 };
+  var BRING = { draft: 1, resign: 1, freeAgency: 1, training: 1 };
+  function seasonLabel(y) { return (y - 1) + '-' + String(y).slice(-2); }
+  // The next season to be played: the coming one in the offseason, the current one during the season.
+  function nextSeason(state) { return OFFSEASON[state.phase] ? +state.year + 1 : +state.year; }
+  function hasDeal(p) { return !!(p.contract && Array.isArray(p.contract.salaries) && p.contract.salaries.length); }
+  // Abroad: stashedUntil (the season-ending year of his first NBA season) still ahead, no NBA deal.
+  // A redshirt pick (hurt, not abroad) is not one of them.
+  function isOverseas(state, p) {
+    return !!(p && !p.retired && p.stashedUntil != null && +p.stashedUntil > +state.year && !hasDeal(p) &&
+      (!p.injury || /overseas/i.test(p.injury.type || '')));
+  }
+
+  function cbaRules(year) {
+    var C = mod('CBA');
+    try { return C && typeof C.rules === 'function' ? C.rules(year) : null; } catch (e) { return null; }
+  }
+  function capRatio(year) {
+    var r = cbaRules(year);
+    return r && r.cap ? r.cap / 58044000 : Math.pow(1.045, Math.max(0, year - 2013));
+  }
+  function minFor(yearsPro, year) {
+    var r = cbaRules(year);
+    if (r && typeof r.minSalary === 'function') {
+      try { var v = +r.minSalary(yearsPro); if (v > 0) return v; } catch (e) { /* fall back */ }
+    }
+    return Math.round((yearsPro <= 0 ? 490180 : 762195) * capRatio(year));
+  }
+  // The deal an arriving pick signs: DRAFT.signRookies' signOne, copied here because js/draft.js does
+  // not export it (first round: the rookie scale at 120%; otherwise two minimum seasons).
+  function arrivalDeal(p, signYear) {
+    var start = signYear + 1, C = mod('CBA'), cc = null, first = p.draft && +p.draft.round === 1;
+    if (first && C && typeof C.rookieContract === 'function') {
+      try { cc = C.rookieContract(p.draft.pick, start, 1.2); } catch (e) { cc = null; }
+      if (!cc || !cc.salaries || !cc.salaries.length || cc.salaries.some(function (x) { return !(x.amount > 0); })) cc = null;
+    }
+    if (cc) { cc.rookie = true; cc.twoWay = false; return cc; }
+    if (first) {
+      var pk = +p.draft.pick || 15, a = (834000 + 2871000 * (0.5 * Math.exp(-(pk - 1) / 5) + 0.5 * (30 - pk) / 29)) * 1.2 * capRatio(start);
+      var sal = [a, a * 1.047, a * 1.094, a * 1.094 * (1.26 + 0.35 * (pk - 1) / 29)].map(function (x, i) { return { year: start + i, amount: Math.round(x) }; });
+      return { salaries: sal, option: { year: start + 3, type: 'team' }, rookie: true, twoWay: false, signedYear: signYear };
+    }
+    return { salaries: [{ year: start, amount: minFor(0, start) }, { year: start + 1, amount: minFor(1, start + 1) }], option: null, rookie: false, twoWay: false, signedYear: signYear };
+  }
+  // What he signs if he comes over in signYear's offseason, without changing anything. Rights players
+  // (drafted before 2013) sign DRAFT.signRights' market deal, worked out on a copy.
+  function offerFor(state, p, signYear) {
+    var D = mod('DRAFT');
+    if (p.rights && D && typeof D.signRights === 'function') {
+      var q = JSON.parse(JSON.stringify(p)), tmp = Object.assign({}, state, { transactions: [] });
+      try { q.stashedUntil = null; D.signRights(tmp, q, signYear); return q.contract; } catch (e) { return null; }
+    }
+    return arrivalDeal(p, signYear);
+  }
+
+  function rosterLimit(state, abbr) {
+    var F = mod('FA');
+    try { if (F && typeof F.rosterLimit === 'function') return F.rosterLimit(state, abbr); } catch (e) { /* default */ }
+    return MAX_ROSTER;
+  }
+  function rightsCheck(state, abbr, id) {
+    var p = state.players && state.players[id];
+    if (!p) return { ok: false, reason: 'No such player.' };
+    if (p.team !== abbr) return { ok: false, reason: p.name + ' is not on the ' + teamName(state, abbr) + '.' };
+    if (!isOverseas(state, p)) return { ok: false, reason: p.name + ' is not playing overseas on your draft rights.' };
+    return { ok: true, p: p };
+  }
+  function canBringOver(state, abbr, id) {
+    abbr = abbr || state.userTeam;
+    var c = rightsCheck(state, abbr, id);
+    if (!c.ok) return c;
+    if (!BRING[state.phase]) return { ok: false, reason: 'Players overseas can only come over in the offseason, from the draft to training camp.' };
+    var n = rosterCount(state, abbr, +state.year + 1), lim = rosterLimit(state, abbr);
+    if (n >= lim) return { ok: false, reason: 'Your roster is full (' + n + ' of ' + lim + '). Waive or trade a player before bringing ' + c.p.name + ' over.' };
+    return { ok: true, p: c.p, roster: n, limit: lim };
+  }
+
+  function rightsRow(state, p, abbr) {
+    var d = p.draft || {}, until = +p.stashedUntil, now = BRING[state.phase];
+    var sy = now ? +state.year : until - 1, c = offerFor(state, p, sy) || { salaries: [] };
+    var sal = (c.salaries || []).map(function (s) { return { year: s.year, amount: s.amount }; });
+    var can = canBringOver(state, abbr, p.id);
+    return {
+      id: p.id, name: p.name, pos: p.pos || '', age: p.age || null, ovr: p.ovr || 0,
+      draftYear: d.year != null ? +d.year : (p.draftYear != null ? +p.draftYear : null), round: +d.round || null, pick: +d.pick || null,
+      draftedBy: d.team || null, until: until, arrives: seasonLabel(until), seasonsLeft: Math.max(0, until - nextSeason(state)),
+      deal: { salaries: sal, years: sal.length, first: sal.length ? sal[0].amount : 0, total: sal.reduce(function (t, s) { return t + s.amount; }, 0),
+        kind: c.via === 'rights' ? 'rights' : c.rookie ? 'rookie' : 'minimum', now: !!now },
+      canBring: can.ok, bringReason: can.ok ? null : can.reason
+    };
+  }
+  function rights(state, abbr) {
+    abbr = abbr || state.userTeam;
+    var out = [];
+    Object.keys(state.players || {}).forEach(function (id) {
+      var p = state.players[id];
+      if (p && p.team === abbr && isOverseas(state, p)) out.push(rightsRow(state, p, abbr));
+    });
+    return out.sort(function (a, b) { return a.until - b.until || String(a.name).localeCompare(String(b.name)); });
+  }
+  function rightsCount(state, abbr) {
+    abbr = abbr || state.userTeam;
+    var n = 0;
+    Object.keys(state.players || {}).forEach(function (id) { var p = state.players[id]; if (p && p.team === abbr && isOverseas(state, p)) n++; });
+    return n;
+  }
+  function draftedText(p) {
+    var d = p.draft;
+    return d ? ' (' + d.year + ' ' + ordinal(+d.round) + ' pick ' + d.pick + ')' : '';
+  }
+
+  // He comes over now: no longer stashed, he signs the arriving stash's deal and counts on the roster.
+  function bringOver(state, abbr, id) {
+    abbr = abbr || state.userTeam;
+    var c = canBringOver(state, abbr, id);
+    if (!c.ok) return c;
+    var p = c.p, until = +p.stashedUntil, signYear = +state.year, D = mod('DRAFT');
+    p.stashedUntil = null;
+    if (p.injury && /overseas/i.test(p.injury.type || '')) p.injury = null;
+    // the same two routes as DRAFT.signRookies for an arriving stash
+    if (p.rights && D && typeof D.signRights === 'function') D.signRights(state, p, signYear);
+    else {
+      var deal = arrivalDeal(p, signYear), sal = deal.salaries;
+      p.contract = deal; p.salary = sal[0].amount; p.contractEnd = sal[sal.length - 1].year;
+      log(state, 'sign', teamName(state, abbr) + ' signed ' + (p.draft && +p.draft.round === 1 ? 'first-round pick ' : 'second-round pick ') + p.name +
+        ' (' + sal.length + ' years, ' + money(sal[0].amount) + ' first season).', id);
+    }
+    log(state, 'sign', p.name + (until > signYear + 1 ? ' comes over from overseas early to join the ' + teamName(state, abbr) + ' (he was due in ' + seasonLabel(until) + ').'
+      : ' arrives from overseas to join the ' + teamName(state, abbr) + '.'), id);
+    var s0 = p.contract.salaries[0];
+    return { ok: true, message: p.name + ' signs (' + p.contract.salaries.length + ' years, ' + money(s0 ? s0.amount : 0) + ' first season) and joins your roster.' };
+  }
+
+  // He becomes a free agent and stays overseas until his arrival season, like a released stashed pick.
+  function releaseRights(state, abbr, id) {
+    abbr = abbr || state.userTeam;
+    var c = rightsCheck(state, abbr, id);
+    if (!c.ok) return c;
+    var p = c.p, until = +p.stashedUntil;
+    clearDeal(p, null);
+    p.team = 'FA'; p.lastTeam = abbr; p.yearsWithTeam = 0;
+    if (state.fa && state.fa.rights && state.fa.rights[id]) delete state.fa.rights[id];
+    if (p.draft && +p.draft.year === draftYear(state) && windowOf(state).open) {
+      var r = record(state);
+      if (r.declined.indexOf(id) < 0) r.declined.push(id);
+      r.stashed = r.stashed.filter(function (x) { return x !== id; });
+    }
+    log(state, 'release', teamName(state, abbr) + ' give up the draft rights to ' + p.name + draftedText(p) + '; he becomes a free agent when he comes over for ' + seasonLabel(until) + '.', id);
+    return { ok: true, message: p.name + ': draft rights released.' };
+  }
+
   var ROOKIES = {
     windowOf: windowOf, list: list, rowFor: rowFor, canDecline: canDecline, decline: decline, stash: stash,
     apply: apply, markDone: markDone, pending: pending, released: released, preview: preview,
-    draftYear: draftYear, dealYear: dealYear, money: money
+    draftYear: draftYear, dealYear: dealYear, money: money,
+    rights: rights, rightsCount: rightsCount, isOverseas: isOverseas, canBringOver: canBringOver, bringOver: bringOver, releaseRights: releaseRights,
+    arrivalDeal: arrivalDeal, seasonLabel: seasonLabel
   };
 
   if (root) root.ROOKIES = ROOKIES;

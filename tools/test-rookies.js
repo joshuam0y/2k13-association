@@ -150,6 +150,73 @@ check(R.pending(base, user), 'the step is pending until the user goes through it
   check(!R.apply(s, p.team, { [r1.id]: 'decline' }).ok, 'apply is refused too');
 }
 
+// ---------- draft rights overseas (all year) ----------
+{
+  // in season (a new league, regular season 2013): listed, but nobody comes over
+  const s = L.newLeague('BKN', { seed });
+  const holder = Object.keys(s.teams).find(a => R.rights(s, a).length);
+  const list = R.rights(s, holder), x = list[0], p = s.players[x.id];
+  console.log('  in season, ' + holder + ' overseas: ' + list.map(r => r.name + ' arrives ' + r.arrives + ', ' + r.seasonsLeft + ' left').join('; '));
+  check(list.every(r => !('pot' in r) && !('potential' in r)), 'draft rights rows never carry potential');
+  check(x.arrives === (p.stashedUntil - 1) + '-' + String(p.stashedUntil).slice(2) && x.seasonsLeft === p.stashedUntil - s.year && x.draftYear && x.pick, 'a row has his draft, arrival season and seasons left');
+  check(R.rightsCount(s, holder) === list.length, 'rightsCount matches the list');
+  const before = clone(p), tx = s.transactions.length;
+  const nb = R.bringOver(s, holder, x.id);
+  check(!nb.ok && /offseason/.test(nb.reason) && JSON.stringify(s.players[x.id]) === JSON.stringify(before) && s.transactions.length === tx, 'no bringing over during the season (' + nb.reason + ')');
+  const other = Object.keys(s.teams).find(a => a !== holder);
+  check(!R.releaseRights(s, other, x.id).ok && !R.bringOver(s, other, x.id).ok && s.players[x.id].team === holder, 'another team cannot touch his rights');
+  const rel = R.releaseRights(s, holder, x.id);
+  check(rel.ok && s.players[x.id].team === 'FA' && s.players[x.id].contract === null && s.players[x.id].stashedUntil === before.stashedUntil, 'rights can be released in season: a free agent, still overseas until ' + before.stashedUntil);
+  const t1 = s.transactions[s.transactions.length - 1];
+  check(t1.type === 'release' && t1.ids[0] === x.id && /give up the draft rights/.test(t1.text), 'release logged: ' + t1.text);
+  check(!FA.freeAgents(s).some(q => q.id === x.id), 'he is not on the market before he comes over');
+}
+{
+  // offseason (re-signing, just after the draft)
+  const s = clone(base);
+  const holder = Object.keys(s.teams).find(a => R.rights(s, a).some(r => s.players[r.id].rights));
+  const x = R.rights(s, holder).find(r => s.players[r.id].rights);
+  const roster = FA.rosterCount(s, holder), pay = FA.payroll(s, holder, Y), tx = s.transactions.length;
+  check(x.canBring && x.deal.now && x.deal.kind === 'rights' && x.deal.years > 0, holder + ' can bring ' + x.name + ' over now on a rights deal (' + x.deal.years + ' years, $' + (x.deal.first / 1e6).toFixed(2) + 'M)');
+  const res = R.bringOver(s, holder, x.id), p = s.players[x.id];
+  check(res.ok, 'bringing him over works: ' + res.message);
+  check(p.team === holder && p.stashedUntil == null && !(p.injury && /overseas/i.test(p.injury.type)), 'he is no longer stashed or "playing overseas"');
+  check(p.contract.via === 'rights' && p.contract.salaries[0].year === Y && p.contract.salaries.length === x.deal.years && p.contract.salaries[0].amount === x.deal.first, 'he signs the deal shown, starting next season');
+  check(FA.rosterCount(s, holder) === roster + 1 && FA.payroll(s, holder, Y) === pay + x.deal.first, 'roster up one, payroll up by his first season');
+  const lines = s.transactions.slice(tx);
+  check(lines.length === 2 && lines.every(t => t.type === 'sign' && t.ids[0] === x.id) && /comes over from overseas early|arrives from overseas/.test(lines[1].text), 'the signing and the arrival are logged: ' + lines.map(t => t.text).join(' | '));
+  check(!R.rights(s, holder).some(r => r.id === x.id) && !R.bringOver(s, holder, x.id).ok, 'he leaves the overseas list and cannot come over twice');
+  DRAFT.signRookies(s);
+  check(JSON.stringify(s.players[x.id].contract) === JSON.stringify(p.contract), 'DRAFT.signRookies leaves his new deal alone');
+}
+{
+  // a stashed second-rounder brought back the same summer signs the second-round deal
+  const s = clone(base);
+  R.stash(s, user, r2.id);
+  const x = R.rights(s, user).find(r => r.id === r2.id);
+  check(x && x.deal.kind === 'minimum' && x.seasonsLeft === 1, 'the stashed second-rounder shows on the overseas list, one season left');
+  const res = R.bringOver(s, user, r2.id), p = s.players[r2.id];
+  check(res.ok && p.contract.salaries.length === 2 && p.contract.salaries[0].year === Y && p.contract.salaries[0].amount === x.deal.first && p.team === user, 'he signs two minimum seasons from next season');
+  check(R.list(s, user).some(r => r.id === r2.id && r.status === 'signed'), 'he is back on the rookie list as a signed pick');
+}
+{
+  // roster full: blocked with a clear message
+  const s = clone(base);
+  const holder = Object.keys(s.teams).find(a => a !== user && R.rights(s, a).length) || Object.keys(s.teams).find(a => R.rights(s, a).length);
+  const x = R.rights(s, holder)[0];
+  const lim = FA.rosterLimit(s, holder);
+  const pool = FA.freeAgents(s).filter(q => !q.stashedUntil);
+  while (FA.rosterCount(s, holder) < lim && pool.length) {
+    const q = pool.pop();
+    q.team = holder; q.contract = { salaries: [{ year: Y, amount: 1000000 }], option: null, rookie: false, twoWay: false, signedYear: D, via: 'min' };
+  }
+  const before = clone(s.players[x.id]);
+  const row = R.rights(s, holder).find(r => r.id === x.id);
+  const res = R.bringOver(s, holder, x.id);
+  check(!row.canBring && /roster is full/.test(row.bringReason), 'the row says the roster is full (' + row.bringReason + ')');
+  check(!res.ok && /roster is full/.test(res.reason) && JSON.stringify(s.players[x.id]) === JSON.stringify(before), 'bringing him over is blocked with a full roster');
+}
+
 console.warn = origWarn;
 const uniq = [...new Set(warnings.map(w => w.replace(/\d+/g, '#')))];
 if (uniq.length) console.log('module warnings:', uniq.slice(0, 10));

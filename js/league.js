@@ -110,15 +110,17 @@
       state.players[p.id] = p;
     });
     if (W.DRAFTS) Object.keys(W.DRAFTS).forEach(function (yr) {
+      var cls = [];
       W.DRAFTS[yr].forEach(function (pr) {
         if (state.players[pr.id] || pr.rights) return;
         var p = clone(pr); p.team = "DRAFT"; p.contract = null; p.yearsPro = 0; p.yearsWithTeam = 0;
         p.personality = personalityFor(p.id, rng); p.mood = 60; p.careerStats = []; p.awards = []; p.retired = false;
-        scaleProspect(p, Math.max(+yr + 1, +p.arrivalYear || +yr + 1));
-        state.players[p.id] = p;
+        state.players[p.id] = p; cls.push(p);
       });
+      // the whole class onto the 2K13 rookie scale (by rank in the class, js/draft.js)
+      if (mod("DRAFT") && W.DRAFT.rookieScale) safe("rookieScale", function () { W.DRAFT.rookieScale(cls, +yr); });
     });
-    state.ratingScale = 1;
+    state.ratingScale = 2;
     base.teams.forEach(function (t0) {
       var t = clone(t0);
       t.picks = []; t.direction = "neutral"; t.strategy = { pace: 50, three: 50, defense: "man", crash: 50 };
@@ -670,6 +672,23 @@
     if (!state || !state.teams) return state;
     // saves from before the 2K13 rating scale: every rating once onto it (players by the current
     // season, prospects by their arrival season)
+    // saves from the first 2K13 scale: classes not drafted yet are rated again from the real data,
+    // by rank in the class (Randle and Stauskas were in the 50s)
+    if (state.ratingScale === 1 && W.DRAFTS && mod("DRAFT") && W.DRAFT.rookieScale) safe("migrate rookie scale", function () {
+      Object.keys(W.DRAFTS).forEach(function (yr) {
+        var cls = [];
+        W.DRAFTS[yr].forEach(function (pr) {
+          var p = state.players[pr.id];
+          if (!p || p.team !== "DRAFT" || pr.rights) return;
+          var o = p.ovr;
+          p.ovr = pr.ovr; p.pot = pr.pot; p.scaled = false;
+          if (p.attrs && mod("PROG") && W.PROG.setOvr) { p.ovr = o; W.PROG.setOvr(p, pr.ovr, { keepPot: true }); p.ovr = pr.ovr; }
+          cls.push(p);
+        });
+        if (cls.length) W.DRAFT.rookieScale(cls, +yr);
+      });
+      state.ratingScale = 2;
+    });
     if (!state.ratingScale) safe("migrate rating scale", function () {
       for (var id in state.players) {
         var p = state.players[id];
@@ -677,7 +696,7 @@
         if (p.team === "DRAFT") scaleProspect(p, Math.max((+p.draftYear || state.year) + 1, +p.arrivalYear || 0));
         else if (!p.retired && state.year > 2013) scaleProspect(p, state.year);
       }
-      state.ratingScale = 1;
+      state.ratingScale = 2;
     });
     state.news = state.news || []; state.events = state.events || []; state.transactions = state.transactions || [];
     safe("migrate brands", function () { applyBrands(state); });

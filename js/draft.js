@@ -488,17 +488,6 @@
     p.draftYear = year;
     if (p.arrivalYear == null) p.arrivalYear = year + 1;
     p.undrafted = !!p.undrafted;
-    // on the 2K13 scale: real classes carry the rating from the 2K game of their first season
-    var P = root && root.PROG;
-    if (!p.scaled && P && typeof P.scaleRating === 'function' && (p.arrivalYear || year + 1) > 2013) {
-      var ay = Math.max(year + 1, +p.arrivalYear || year + 1);
-      var o = Math.round(P.scaleRating(ay, p.ovr)), pt = p.pot != null ? Math.round(P.scaleRating(ay, p.pot)) : null;
-      if (typeof P.setOvr === 'function' && p.attrs) P.setOvr(p, o, { keepPot: true }); else p.ovr = o;
-      p.ovr = o; if (pt != null) p.pot = pt;
-      p.scaled = true;
-      // undrafted rookies come in below the first round (their real rating was earned later)
-      if (p.undrafted && p.ovr > 70) { if (typeof P.setOvr === 'function' && p.attrs) P.setOvr(p, 70, { keepPot: true }); p.ovr = 70; }
-    }
     if (p.pot == null || p.pot < p.ovr) p.pot = p.ovr;
     p.contract = null;
     p.yearsPro = 0; p.yearsWithTeam = 0; p.draft = null;
@@ -509,6 +498,68 @@
     p.retired = false; p.hof = false;
     if (p.injury === undefined) p.injury = null;
     return p;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Rookie ratings on the 2K13 scale. Real classes carry the rating from the 2K game of their first
+  // NBA season, and the 2K games disagree (a 66 was mid-pack for a 2K14 rookie but the bottom of the
+  // 2K15 league), so a prospect is placed by his rank in his own class: he gets the rating of the
+  // 2013 prospect at the same rank, and keeps his real upside (potential minus rating). A stash whose data rating is from his
+  // arrival season first loses 3 a season overseas (1.5 past 21), so at the draft he is rated at his
+  // draft age.
+  // Generated classes (2027 on, fitted to the real ones) go through the same scale.
+  // ---------------------------------------------------------------------------
+  var BASE_CLASS = 2013, baseCache = null;
+  function deAged(x, year) {
+    var ay = +x.arrivalYear || year + 1, gap = Math.max(0, ay - (year + 1));
+    // a teenager grows about 3 a season overseas, an older prospect about 1.5
+    return (+x.ovr || 0) - ((+x.age || 21) <= 21 ? 3 : 1.5) * gap;
+  }
+  function sortedNums(a) { return a.slice().sort(function (x, y) { return x - y; }); }
+  function baseClass() {
+    if (baseCache) return baseCache;
+    var D = root && root.DRAFTS, b = D && D[BASE_CLASS] ? D[BASE_CLASS].filter(function (x) { return x && !x.rights && !x.undrafted; }) : [];
+    if (b.length < 30) return null;
+    baseCache = { ovr: sortedNums(b.map(function (x) { return deAged(x, BASE_CLASS); })) };
+    return baseCache;
+  }
+  function rankIn(a, v) {
+    var below = 0, eq = 0;
+    a.forEach(function (x) { if (x < v) below++; else if (x === v) eq++; });
+    if (eq) return (below + eq / 2) / a.length;
+    if (below === 0 || below === a.length) return below / a.length;
+    var x0 = a[below - 1], x1 = a[below];
+    return (below - 0.5 + (v - x0) / (x1 - x0)) / a.length;
+  }
+  function valueAt(a, r, v, src) {
+    // past the ends of his class: the same distance past the ends of the 2013 class
+    if (v > src[src.length - 1]) return a[a.length - 1] + (v - src[src.length - 1]);
+    if (v < src[0]) return a[0] - (src[0] - v);
+    var x = r * a.length - 0.5, i = Math.floor(x), f = x - i;
+    if (i < 0) return a[0];
+    if (i >= a.length - 1) return a[a.length - 1];
+    return a[i] + (a[i + 1] - a[i]) * f;
+  }
+  function rookieScale(list, year) {
+    var B = baseClass(), P = root && root.PROG;
+    if (!B || !list || !list.length) return list;
+    var todo = list.filter(function (p) { return p && !p.scaled; });
+    var drafted = todo.filter(function (p) { return !p.undrafted; });
+    if (drafted.length < 20) return list;
+    var o = sortedNums(drafted.map(function (p) { return deAged(p, year); }));
+    todo.forEach(function (p) {
+      var v = deAged(p, year), pv = +(p.pot != null ? p.pot : p.ovr) || 0;
+      var no = Math.round(clamp(valueAt(B.ovr, rankIn(o, v), v, o), 35, 99));
+      // potential keeps his real upside over his rating (history players get theirs from their real
+      // careers each summer anyway, js/progression.js adjustPot)
+      var np = Math.round(clamp(no + Math.max(0, pv - v), 35, 99));
+      // undrafted rookies come in below the first round (their real rating was earned later)
+      if (p.undrafted) no = Math.min(no, 70);
+      if (P && typeof P.setOvr === 'function' && p.attrs) P.setOvr(p, no, { keepPot: true });
+      p.ovr = no; p.pot = Math.max(no, np);
+      p.scaled = true;
+    });
+    return list;
   }
 
   // Puts the year's class into state.players (team "DRAFT"). Returns the prospect ids.
@@ -533,6 +584,7 @@
       if (!gen || !gen.length) gen = generateClass(state, year, rng);
       list = gen.map(function (x) { return normalizeProspect(x, year, rng); });
     }
+    rookieScale(list, year);
     var ids = [], idx = leagueIndex(state);
     list.forEach(function (p) {
       var ex = state.players[p.id];
@@ -1098,6 +1150,7 @@
     simPicks: simPicks,
     finish: finish,
     loadClass: loadClass,
+    rookieScale: rookieScale,
     pool: pool,
     cleanClasses: cleanClasses,
     alreadyInLeague: alreadyInLeague,

@@ -519,7 +519,7 @@
         <section>${UI.header('NEXT 5')}${next.length ? UI.gameList(next, abbr) : '<p class="muted">No games left.</p>'}</section>
       </div>`;
     }
-    const links = isUser ? `<div class="row-btns">${UI.pages.manage ? '<a class="btn" href="#/manage">ROTATION</a>' : ''}${UI.pages.trade ? '<a class="btn" href="#/trade">TRADES</a>' : ''}${UI.pages.fa ? '<a class="btn" href="#/fa">FREE AGENCY</a>' : ''}${UI.pages.gleague ? '<a class="btn" href="#/gleague">' + (window.GLEAGUE && GLEAGUE.leagueName ? esc(String(GLEAGUE.leagueName(UI.state.game.year)).replace(/^NBA /, '').toUpperCase()) : 'G LEAGUE') + '</a>' : ''}</div>`
+    const links = isUser ? `<div class="row-btns">${UI.pages.manage ? '<a class="btn" href="#/manage">ROTATION</a>' : ''}${UI.pages.trade ? '<a class="btn" href="#/trade">TRADES</a>' : ''}${UI.pages.fa ? '<a class="btn" href="#/fa">FREE AGENCY</a>' : ''}${UI.rightsLink ? UI.rightsLink(UI.state.game) : ''}${UI.pages.gleague ? '<a class="btn" href="#/gleague">' + (window.GLEAGUE && GLEAGUE.leagueName ? esc(String(GLEAGUE.leagueName(UI.state.game.year)).replace(/^NBA /, '').toUpperCase()) : 'G LEAGUE') + '</a>' : ''}</div>`
       : (UI.state.game && UI.state.game.teams[abbr] && UI.pages.trade ? `<div class="row-btns"><a class="btn btn-gold" href="#/trade/with/${esc(abbr)}">TRADE WITH ${esc(t.name.toUpperCase())}</a></div>` : '');
     let summary = '';
     try { summary = teamSummary(abbr, roster); } catch (e) { console.warn('Team summary failed', e); }
