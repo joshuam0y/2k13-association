@@ -417,12 +417,19 @@
     if (age <= 25 && rng() < 0.05) d += (rng() < 0.55 ? 1 : -1) * (3 + rng() * 3);
     return d;
   }
-  // A real career that ended young (James Young, RJ Hampton, AJ Griffin) has no real ratings left, so
+  // A real career that ended young (James Young, RJ Hampton, AJ Griffin; a top-10 pick up to 27, like
+  // Derrick Williams) has no real ratings left, so
   // each save draws once what he might have been: the upside of his draft slot (about 85 for a top 5
   // pick, 77 mid first round, 73 second round) with a wide spread. Minutes and breakouts take him there.
+  // his real overall pick: from the save's draft, else data/draft-prior.js for the October 2012 league
+  function draftPick(p) {
+    if (p.draft && +p.draft.pick) return +p.draft.pick;
+    var D = root && root.DRAFT_PRIOR, d = D && D[p.id];
+    return d ? +d[1] : null;
+  }
   function whatIf(p, rng) {
     if (p.whatIf == null) {
-      var slot = p.draft && p.draft.pick ? +p.draft.pick : 50;
+      var slot = draftPick(p) || 50;
       var up = 72 + 14 * Math.exp(-(slot - 1) / 15);
       p.whatIf = Math.round(clamp(up + gauss(rng) * 4, p.ovr + 1, 92));
     }
@@ -435,7 +442,8 @@
       if (SETTINGS.variety && info && info.years && info.years.length) {
         var rem = null;
         info.years.forEach(function (y) { if (y >= next) { var v = scaleRating(y, +info.t[y]); if (rem == null || v > rem) rem = v; } });
-        var wi = rem == null && age <= 25;
+        // what-if ceiling: careers that ended by 25, or by 27 for a top-10 pick (Derrick Williams, Bennett)
+        var wi = rem == null && (age <= 25 || (age <= 27 && (draftPick(p) || 99) <= 10));
         if (rem == null) rem = wi ? whatIf(p, rng) : p.ovr;
         var pr = p.prog || {}, off = (pr.drift || 0) + (pr.boost || 0);
         if (wi) off = Math.min(off, 3);   // the what-if ceiling moves only a little with his form
