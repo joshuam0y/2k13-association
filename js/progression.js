@@ -316,7 +316,7 @@
   // ---------------------------------------------------------------------------
   var SETTINGS = { variety: true };   // PROG.settings.variety = false: careers follow history with tiny noise
   var DRIFT_SD = 1.2, DRIFT_MEAN = 0.2, DRIFT_PULL = 0.7, DRIFT_PULL_UP = 0.7, DRIFT_MAX = 6, BOOST_KEEP = 0.9, BOOST_MAX = 8, STAR = 90, STAR_CAP = 2, OFF_MAX = 9;
-  var BREAKOUT = 0.05, STALL = 0.05, NO_BLOOM = 0.15, OFF_PATH = 0.3;   // per young player per season (breakouts up to +9 over his real arc)
+  var BREAKOUT = 0.05, STALL = 0.05, NO_BLOOM = 0.15, OFF_PATH = 0.3, HEALTHY_CAP_FROM = 85;   // per young player per season (breakouts up to +9 over his real arc)
   var MAJOR_INJURY = /ACL|Achilles|Patellar/i;
   function seasonContext(state, done) {
     var season = state.season && (state.season.year == null || +state.season.year === done) ? state.season : null;
@@ -449,7 +449,7 @@
         if (rem == null) rem = wi ? whatIf(p, rng) : p.ovr;
         var pr = p.prog || {}, off = (pr.drift || 0) + (pr.boost || 0);
         if (wi) off = Math.min(off, 3);   // the what-if ceiling moves only a little with his form
-        if (rem >= STAR || p.fate === 'healthy') off = Math.min(off, STAR_CAP);
+        if (rem >= STAR || (p.fate === 'healthy' && rem >= HEALTHY_CAP_FROM)) off = Math.min(off, STAR_CAP);
         var pot = rem + off * (age <= 27 ? 1 : 0.5);
         p.pot = clamp(Math.max(Math.round(pot), p.ovr), OVR_MIN, OVR_MAX);
         return;
@@ -646,7 +646,9 @@
         // healthy starter who played big minutes keeps about half of it (Avery Bradley at 28)
         var line0 = C.stats[id], gp0 = line0 ? +line0.g || 0 : 0, mpg0 = gp0 ? (+line0.min || 0) / gp0 : 0;
         if (realMove <= -3 && p.age <= 30 && gp0 >= 0.7 * C.teamGames && mpg0 >= 28) pr.drift = Math.min(DRIFT_MAX + 2, pr.drift - 0.5 * realMove);
-        var star = tgt >= STAR, capped = star || p.fate === 'healthy';
+        // the tight cap is for stars and healthy-fate stars (Rose, Klay); a healthy-fate role player
+        // (Bradley, Jennings) gets the normal room to grow
+        var star = tgt >= STAR, capped = star || (p.fate === 'healthy' && tgt >= HEALTHY_CAP_FROM);
         // stars and healthy-fate players: positive drift pulled back hard
         if (capped && pr.drift > STAR_CAP) pr.drift = STAR_CAP + (pr.drift - STAR_CAP) * 0.3;
         pr.boost = (pr.boost || 0) * BOOST_KEEP;
