@@ -278,7 +278,37 @@
     return { w: w, l: l };
   }
 
+  // The team's head coaches, newest first, as stints: { name, from, to, interim, note } (season-ending
+  // years). Real coaches from data/coach-history.js up to today (mid-season changes only once they
+  // happened in this save's calendar), then the save's own coach for seasons past the data.
+  function history(state, abbr, opts) {
+    opts = opts || {};
+    var H = opts.hist || (typeof window !== 'undefined' && window.COACH_HISTORY) || (root && root.COACH_HISTORY);
+    var year = +(state && state.year) || 2013, today = opts.today || '';
+    var seq = [];
+    if (H) for (var y = 2013; y <= year; y++) {
+      var open = H[y] && H[y][abbr];
+      if (!open) continue;
+      seq.push({ season: y, name: open });
+      (H.changes || []).filter(function (c) { return c.team === abbr && +c.season === y && (y < year || !today || c.date <= today); })
+        .sort(function (a, b) { return a.date < b.date ? -1 : 1; })
+        .forEach(function (c) { seq.push({ season: y, name: c['in'], interim: !!c.interim, note: 'replaced ' + c.out + (c.outRecord ? ' (' + c.outRecord + ')' : '') }); });
+    }
+    // past the real data: the save's own coach
+    var dataYears = H ? Object.keys(H).filter(function (k) { return /^\d{4}$/.test(k); }).map(Number) : [];
+    var lastData = dataYears.length ? Math.max.apply(null, dataYears) : 0, cur = of(state, abbr);
+    if (year > lastData && cur && cur.name && (!seq.length || seq[seq.length - 1].name !== cur.name)) seq.push({ season: year, name: cur.name });
+    var stints = [];
+    seq.forEach(function (e) {
+      var last = stints[stints.length - 1];
+      if (last && last.name === e.name) { last.to = e.season; if (!e.interim) last.interim = false; return; }
+      stints.push({ name: e.name, from: e.season, to: e.season, interim: !!e.interim, note: e.note || '' });
+    });
+    return stints.reverse();
+  }
+
   var COACH = {
+    history: history,
     init: init,
     ovr: ovr,
     of: of,

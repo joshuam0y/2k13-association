@@ -462,6 +462,19 @@
   }
 
   // ---------- Team roster ----------
+  // Head coaches of a team, newest first (cosmetic, from js/coaches.js COACH.history)
+  const seasonLbl = y => (y - 1) + '-' + String(y).slice(2);
+  function coachBox(abbr) {
+    const C = window.COACH, g = UI.state.game;
+    if (!C || typeof C.history !== 'function' || !g || abbr === 'FA') return '';
+    let list = [];
+    try { list = C.history(g, abbr, { today: window.LEAGUE && LEAGUE.currentDate ? LEAGUE.currentDate(g) || '' : '' }); } catch (e) { list = []; }
+    if (!list.length) return '';
+    return `${UI.header('COACHES', 'Head coaches since 2012-13')}<ul class="tm-coaches">${list.map((c, i) => `<li${i === 0 ? ' class="now"' : ''}>
+      <b>${esc(c.name)}</b>${c.interim ? ' <span class="ts-tag">INTERIM</span>' : ''}${i === 0 ? ' <span class="ts-tag">CURRENT</span>' : ''}
+      <small>${c.from === c.to ? seasonLbl(c.from) : seasonLbl(c.from) + ' to ' + seasonLbl(c.to)}${c.note ? ' | ' + esc(c.note) : ''}</small></li>`).join('')}</ul>`;
+  }
+
   P.team = function (app, abbr) {
     const t = UI.team(abbr);
     const known = abbr === 'FA' || UI.teams().some(x => x.abbr === abbr);
@@ -541,7 +554,8 @@
       ${summary}
       ${UI.header('ROSTER', data.length > 1 ? 'Click a column to sort.' : '')}
       ${table}
-      ${sched}`;
+      ${sched}
+      ${coachBox(abbr)}`;
     const headRow = UI.$('#rtHead', app);
     if (headRow) headRow.addEventListener('click', e => {
       const b = e.target.closest('[data-sort]');

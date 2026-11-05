@@ -875,3 +875,10 @@ html { scroll-padding-bottom: calc(var(--mb-h, var(--bar-h)) + 12px); }
   body.tb-tight .mainnav { order: 3; flex: 0 0 100%; height: 46px; margin-top: 8px; }
   body.tb-tight .mainnav > a:first-child { padding-left: 0; }
 }
+
+/* team page: head coaches */
+.tm-coaches { list-style: none; margin: 0 0 24px; padding: 0; display: grid; gap: 6px; }
+.tm-coaches li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 10px 12px; background: #0d0d0f; border-left: 3px solid #333; }
+.tm-coaches li.now { border-left-color: var(--gold); }
+.tm-coaches li b { font-family: var(--display); letter-spacing: .06em; }
+.tm-coaches li small { flex: 1 1 100%; color: var(--muted); font-size: 12px; }
