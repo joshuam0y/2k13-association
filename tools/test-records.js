@@ -101,7 +101,7 @@ ok(kobe.rank >= 2 && kobe.rank <= 6, "Kobe ranks near the top all-time: " + kobe
 ok(REC.board(s, "r", "reb")[0].name === "Wilt Chamberlain" && REC.board(s, "r", "ast", { limit: 3 }).some(x => x.name === "John Stockton"), "Wilt leads rebounds, Stockton on assists");
 const act = REC.board(s, "r", "pts", { activeOnly: true, limit: 5 });
 ok(act.every(x => !x.real && x.p && !x.p.retired), "active leaders hold save players only");
-ok(REC.realGames("pts")[0].v === 100 && REC.realGames("pts")[0].name === "Wilt Chamberlain" && REC.realGames("stl").length === 2, "real single-game records with ties");
+ok(REC.realGames("pts")[0].v === 100 && REC.realGames("pts")[0].name === "Wilt Chamberlain" && REC.realGames("stl").filter(g => g.v === 11).length === 2 && REC.realGames("pts").length >= 5 && REC.realGames("pts")[1].name === "Kobe Bryant", "real single-game top 5 with ties (Wilt 100, Kobe 81)");
 ok(REC.singleGame(s, "r", "pts", 10).length === 10 && REC.singleGame(s, "p", "pts", 5).length > 0, "league single-game records kept for both phases");
 
 // ---------- storage ----------
