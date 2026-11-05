@@ -349,13 +349,16 @@
       else if (isNbaTeam(state, p.team) && mpg2 < 12 && !out.major) out.pt = -(0.4 + Math.min(0.4, (12 - mpg2) / 15));
     }
     // How well he played: production per minute against what is normal for his overall this season.
-    // A great season pushes him up about a point, a bad one pulls him down the same (31 and up: half the
-    // upside). Only real minutes count.
+    // A great season pushes him up about a point, a bad one pulls him down (less for a star; 31 and up
+    // get half the upside). Only real minutes count.
     out.prod = 0;
     var ln = C.stats[id], fit = prodFit(state, C);
     if (fit && ln && (+ln.min || 0) >= PROD_MIN) {
       var z = (eff36(ln) - (fit.a + fit.b * (p.ovr || 0))) / fit.sd;
-      out.prod = clamp(z, -2, 2) * PROD_K * (z > 0 && age >= 31 ? 0.5 : 1);
+      // a bad season costs an established player less (a 75 the full amount, a 95 about half): one off
+      // year from LeBron does not mean what it means for a role player
+      var level = z < 0 ? clamp(1 - ((p.ovr || 0) - 75) / 40, 0.45, 1) : 1;
+      out.prod = clamp(z, -2, 2) * PROD_K * (z > 0 && age >= 31 ? 0.5 : 1) * level;
     }
     return out;
   }
