@@ -219,6 +219,9 @@
     parkeja01: { from: 2015, note: 'torn ACL in December 2014 and again in 2017' },
     exumda01: { from: 2016, note: 'torn ACL in August 2015' },
     embiijo01: { from: 2015, note: 'foot injuries, missed 2014-15 and 2015-16' },
+    jennibr01: { from: 2015, note: 'ruptured Achilles in January 2015, never the same' },
+    matthwe02: { from: 2015, note: 'ruptured Achilles in March 2015' },
+    gayru01: { from: 2017, note: 'ruptured Achilles in January 2017' },
     // a number 1 pick whose shoulder condition derailed him: the healthy path grows toward his projection
     fultzma01: { from: 2018, note: 'thoracic outlet syndrome in 2017-18', grow: [82, 86], quiet: true },
     // career fate (not an injury): left the NBA in 2015; the other path keeps him playing
