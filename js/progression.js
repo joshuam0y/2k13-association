@@ -323,7 +323,7 @@
   // ---------------------------------------------------------------------------
   var SETTINGS = { variety: true };   // PROG.settings.variety = false: careers follow history with tiny noise
   var DRIFT_SD = 1.2, DRIFT_MEAN = 0.2, DRIFT_PULL = 0.7, DRIFT_PULL_UP = 0.7, DRIFT_MAX = 6, BOOST_KEEP = 0.9, BOOST_MAX = 8, STAR = 90, STAR_CAP = 2, OFF_MAX = 9;
-  var BREAKOUT = 0.05, STALL = 0.05, NO_BLOOM = 0.15, OFF_PATH = 0.3, HEALTHY_CAP_FROM = 85, LOST_MAX = 25;   // per young player per season (breakouts up to +9 over his real arc)
+  var BREAKOUT = 0.05, STALL = 0.05, NO_BLOOM = 0.15, OFF_PATH = 0.3, HEALTHY_CAP_FROM = 85, LOST_MAX = 25, NON_STAR_PEAK = 88, NON_STAR_MAX = 93;   // per young player per season (breakouts up to +9 over his real arc)
   var MAJOR_INJURY = /ACL|Achilles|Patellar/i;
   function seasonContext(state, done) {
     var season = state.season && (state.season.year == null || +state.season.year === done) ? state.season : null;
@@ -399,6 +399,10 @@
     var b = sxx > 0 ? sxy / sxx : 0, a = my - b * mx, ss = 0;
     xs.forEach(function (x, i) { var r = ys[i] - (a + b * x); ss += ws[i] * r * r; });
     return (C.prodFit = { a: a, b: b, sd: Math.max(0.5, Math.sqrt(ss / W)) });
+  }
+  function realPeak(info) {
+    if (info.peak == null) { var b = 0; info.years.forEach(function (y) { b = Math.max(b, scaleRating(y, +info.t[y])); }); info.peak = b; }
+    return info.peak;
   }
   function peakYear(info) {
     var best = null, by = null;
@@ -699,8 +703,13 @@
         var ceil = Math.max(p.pot || 0, p.whatIf || 0) + 1;
         if (newOvr > p.ovr && newOvr > ceil) newOvr = Math.max(p.ovr, ceil) + (newOvr - Math.max(p.ovr, ceil)) * 0.25;
       }
+      // a player who was never really a star (real peak under 88) can become a very good player here,
+      // rarely an MVP: past 90 his gains count about 30%, and 93 is the most he reaches
+      var rp = info ? realPeak(info) : null;
+      if (rp != null && rp < NON_STAR_PEAK && newOvr > 90) newOvr = Math.min(NON_STAR_MAX, 90 + (newOvr - 90) * 0.3);
       setOvr(p, newOvr, { keepPot: true });
       adjustPot(p, p.age, rng, !!info, info, next);
+      if (rp != null && rp < NON_STAR_PEAK && p.pot > NON_STAR_MAX) p.pot = Math.max(p.ovr, NON_STAR_MAX);
       p.formBase = p.ovr;
       if (p.ovr !== before) out.changes.push({ id: id, from: before, to: p.ovr });
       if (p.team !== 'DRAFT') report.players[id] = [shown, p.ovr, p.age];
