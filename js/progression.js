@@ -348,7 +348,42 @@
       if (st2 && st2.g && mpg2 >= 30) out.pt = 0.3 + Math.min(0.3, (mpg2 - 30) / 20);
       else if (isNbaTeam(state, p.team) && mpg2 < 12 && !out.major) out.pt = -(0.4 + Math.min(0.4, (12 - mpg2) / 15));
     }
+    // How well he played: production per minute against what is normal for his overall this season.
+    // A great season pushes him up about a point, a bad one pulls him down the same (31 and up: half the
+    // upside). Only real minutes count.
+    out.prod = 0;
+    var ln = C.stats[id], fit = prodFit(state, C);
+    if (fit && ln && (+ln.min || 0) >= PROD_MIN) {
+      var z = (eff36(ln) - (fit.a + fit.b * (p.ovr || 0))) / fit.sd;
+      out.prod = clamp(z, -2, 2) * PROD_K * (z > 0 && age >= 31 ? 0.5 : 1);
+    }
     return out;
+  }
+  // production per 36 minutes: points, rebounds, assists, steals, blocks, minus missed shots and turnovers
+  function eff36(ln) {
+    var e = (ln.pts || 0) + (ln.oreb || 0) + (ln.dreb || 0) + (ln.ast || 0) + (ln.stl || 0) + (ln.blk || 0)
+      - ((ln.fga || 0) - (ln.fgm || 0)) - ((ln.fta || 0) - (ln.ftm || 0)) - (ln.tov || 0);
+    return 36 * e / Math.max(1, ln.min || 0);
+  }
+  var PROD_MIN = 800, PROD_K = 0.6;
+  // the season's line of production by overall (minutes weighted least squares) and its spread, once per offseason
+  function prodFit(state, C) {
+    if (C.prodFit !== undefined) return C.prodFit;
+    var xs = [], ys = [], ws = [];
+    Object.keys(C.stats).forEach(function (id) {
+      var ln = C.stats[id], p = state.players && state.players[id];
+      if (!p || !ln || (+ln.min || 0) < PROD_MIN) return;
+      xs.push(p.ovr || 0); ys.push(eff36(ln)); ws.push(+ln.min);
+    });
+    if (xs.length < 60) return (C.prodFit = null);
+    var W = 0, mx = 0, my = 0;
+    xs.forEach(function (x, i) { W += ws[i]; mx += ws[i] * x; my += ws[i] * ys[i]; });
+    mx /= W; my /= W;
+    var sxy = 0, sxx = 0;
+    xs.forEach(function (x, i) { sxy += ws[i] * (x - mx) * (ys[i] - my); sxx += ws[i] * (x - mx) * (x - mx); });
+    var b = sxx > 0 ? sxy / sxx : 0, a = my - b * mx, ss = 0;
+    xs.forEach(function (x, i) { var r = ys[i] - (a + b * x); ss += ws[i] * r * r; });
+    return (C.prodFit = { a: a, b: b, sd: Math.max(0.5, Math.sqrt(ss / W)) });
   }
   function peakYear(info) {
     var best = null, by = null;
@@ -564,7 +599,7 @@
       p.age = seasonAge + 1;
       var info = targetInfo(id, state);
       var tgt = info ? targetFor(info, next) : null;
-      var eff = SETTINGS.variety ? seasonEffects(state, p, id, seasonAge, C, rng) : { pt: 0, inj: 0 };
+      var eff = SETTINGS.variety ? seasonEffects(state, p, id, seasonAge, C, rng) : { pt: 0, inj: 0, prod: 0 };
       var newOvr;
       if (tgt != null && !SETTINGS.variety) {
         // no-variance mode (tests and comparisons): stay close to the real arc
@@ -574,7 +609,7 @@
         // History as a guide, with real variety: real target + personal drift + breakouts + small noise
         var pr = p.prog = p.prog || { drift: 0, boost: 0 };
         var d0 = pr.drift || 0;
-        pr.drift = clamp(d0 * (d0 > 0 ? DRIFT_PULL_UP : DRIFT_PULL) + DRIFT_MEAN + gauss(rng) * DRIFT_SD + eff.pt + eff.inj, -DRIFT_MAX, DRIFT_MAX);   // the small mean offsets injuries and the star cap
+        pr.drift = clamp(d0 * (d0 > 0 ? DRIFT_PULL_UP : DRIFT_PULL) + DRIFT_MEAN + gauss(rng) * DRIFT_SD + eff.pt + eff.inj + (eff.prod || 0), -DRIFT_MAX, DRIFT_MAX);   // the small mean offsets injuries and the star cap
         var prevTgt = targetFor(info, done), realMove = prevTgt != null ? tgt - prevTgt : 0;
         // A real drop before 31 often came from injuries or a lost role that did not happen here: a
         // healthy starter who played big minutes keeps about half of it (Avery Bradley at 28)
@@ -603,7 +638,7 @@
         // never more than 2 above the real rating once he is a 90+ player, or on a healthy-fate path
         if (capped) newOvr = Math.min(newOvr, tgt + STAR_CAP);
       } else {
-        newOvr = p.ovr + ageCurveDelta(p.age, p.ovr, p.pot, rng) + eff.pt + eff.inj;
+        newOvr = p.ovr + ageCurveDelta(p.age, p.ovr, p.pot, rng) + eff.pt + eff.inj + (eff.prod || 0);
         // past his real career or a made-up player: young ones can still break out (if they play)
         if (SETTINGS.variety && p.age <= 25 && eff.pt >= 0 && rng() < BREAKOUT) newOvr += 3 + rng() * 4;
       }
