@@ -432,8 +432,10 @@
       if (SETTINGS.variety && info && info.years && info.years.length) {
         var rem = null;
         info.years.forEach(function (y) { if (y >= next) { var v = scaleRating(y, +info.t[y]); if (rem == null || v > rem) rem = v; } });
-        if (rem == null) rem = age <= 25 ? whatIf(p, rng) : p.ovr;
+        var wi = rem == null && age <= 25;
+        if (rem == null) rem = wi ? whatIf(p, rng) : p.ovr;
         var pr = p.prog || {}, off = (pr.drift || 0) + (pr.boost || 0);
+        if (wi) off = Math.min(off, 3);   // the what-if ceiling moves only a little with his form
         if (rem >= STAR || p.fate === 'healthy') off = Math.min(off, STAR_CAP);
         var pot = rem + off * (age <= 27 ? 1 : 0.5);
         p.pot = clamp(Math.max(Math.round(pot), p.ovr), OVR_MIN, OVR_MAX);
@@ -648,6 +650,9 @@
         newOvr = p.ovr + ageCurveDelta(p.age, p.ovr, p.pot, rng) + eff.pt + eff.inj + (eff.prod || 0);
         // past his real career or a made-up player: young ones can still break out (if they play)
         if (SETTINGS.variety && p.age <= 25 && eff.pt >= 0 && rng() < BREAKOUT) newOvr += 3 + rng() * 4;
+        // well past his ceiling, gains come slowly (a what-if bust can become a star, rarely an MVP)
+        var ceil = Math.max(p.pot || 0, p.whatIf || 0) + 3;
+        if (newOvr > p.ovr && newOvr > ceil) newOvr = Math.max(p.ovr, ceil) + (newOvr - Math.max(p.ovr, ceil)) * 0.35;
       }
       setOvr(p, newOvr, { keepPot: true });
       adjustPot(p, p.age, rng, !!info, info, next);
