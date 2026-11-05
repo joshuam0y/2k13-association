@@ -315,7 +315,7 @@
   // ---------------------------------------------------------------------------
   var SETTINGS = { variety: true };   // PROG.settings.variety = false: careers follow history with tiny noise
   var DRIFT_SD = 1.2, DRIFT_MEAN = 0.2, DRIFT_PULL = 0.7, DRIFT_PULL_UP = 0.7, DRIFT_MAX = 6, BOOST_KEEP = 0.9, BOOST_MAX = 8, STAR = 90, STAR_CAP = 2, OFF_MAX = 9;
-  var BREAKOUT = 0.05, STALL = 0.05, NO_BLOOM = 0.15;   // per young player per season (breakouts up to +9 over his real arc)
+  var BREAKOUT = 0.05, STALL = 0.05, NO_BLOOM = 0.15, OFF_PATH = 0.3;   // per young player per season (breakouts up to +9 over his real arc)
   var MAJOR_INJURY = /ACL|Achilles|Patellar/i;
   function seasonContext(state, done) {
     var season = state.season && (state.season.year == null || +state.season.year === done) ? state.season : null;
@@ -431,7 +431,7 @@
     if (p.whatIf == null) {
       var slot = draftPick(p) || 50;
       var up = 72 + 14 * Math.exp(-(slot - 1) / 15);
-      p.whatIf = Math.round(clamp(up + gauss(rng) * 4, p.ovr + 1, 92));
+      p.whatIf = Math.round(clamp(up + gauss(rng) * 4, p.ovr + 1, 90));
     }
     return Math.max(p.ovr, p.whatIf);
   }
@@ -443,7 +443,8 @@
         var rem = null;
         info.years.forEach(function (y) { if (y >= next) { var v = scaleRating(y, +info.t[y]); if (rem == null || v > rem) rem = v; } });
         // what-if ceiling: careers that ended by 25, or by 27 for a top-10 pick (Derrick Williams, Bennett)
-        var wi = rem == null && (age <= 25 || (age <= 27 && (draftPick(p) || 99) <= 10));
+        if (p.offPath) rem = null;
+        var wi = rem == null && (age <= 25 || (age <= 27 && (draftPick(p) || 99) <= 10) || (p.offPath && age <= 28));
         if (rem == null) rem = wi ? whatIf(p, rng) : p.ovr;
         var pr = p.prog || {}, off = (pr.drift || 0) + (pr.boost || 0);
         if (wi) off = Math.min(off, 3);   // the what-if ceiling moves only a little with his form
@@ -562,7 +563,7 @@
   function retireRoll(state, p, seasonDone, rng) {
     var info = targetInfo(p.id, state);
     var age = (p.age || 22) + 1; // his age next season
-    var ch = info ? historyRetireChance(info, seasonDone, p, !isNbaTeam(state, p.team)) : null;
+    var ch = info && !p.offPath ? historyRetireChance(info, seasonDone, p, !isNbaTeam(state, p.team)) : null;
     if (ch == null) ch = ageRetireChance(age, p.ovr - (p.form || 0), !isNbaTeam(state, p.team));
     if (p.stashedUntil) ch *= 0.2; // rights held, still overseas
     return ch > 0 && rng() < ch;
@@ -619,6 +620,15 @@
       p.age = seasonAge + 1;
       var info = targetInfo(id, state);
       var tgt = info ? targetFor(info, next) : null;
+      // A top-10 pick on a real bust path who plays well here may leave it (Derrick Williams, Anthony
+      // Bennett): from then on he grows toward his draft slot's ceiling instead of following real life
+      if (tgt != null && !p.offPath && SETTINGS.variety && p.age <= 25 && (draftPick(p) || 99) <= 10 && C.has) {
+        var promise = 72 + 14 * Math.exp(-(draftPick(p) - 1) / 15), lnB = C.stats[id];
+        var mpgB = lnB && lnB.g ? (+lnB.min || 0) / lnB.g : 0, fitB = prodFit(state, C);
+        var zB = fitB && lnB && (+lnB.min || 0) >= PROD_MIN ? (eff36(lnB) - (fitB.a + fitB.b * (p.ovr || 0))) / fitB.sd : -9;
+        if (tgt <= promise - 5 && mpgB >= 24 && zB >= 0.5 && rng() < OFF_PATH) p.offPath = next;
+      }
+      if (p.offPath) tgt = null;
       var eff = SETTINGS.variety ? seasonEffects(state, p, id, seasonAge, C, rng) : { pt: 0, inj: 0, prod: 0 };
       var newOvr;
       if (tgt != null && !SETTINGS.variety) {
@@ -662,8 +672,8 @@
         // past his real career or a made-up player: young ones can still break out (if they play)
         if (SETTINGS.variety && p.age <= 25 && eff.pt >= 0 && rng() < BREAKOUT) newOvr += 3 + rng() * 4;
         // well past his ceiling, gains come slowly (a what-if bust can become a star, rarely an MVP)
-        var ceil = Math.max(p.pot || 0, p.whatIf || 0) + 3;
-        if (newOvr > p.ovr && newOvr > ceil) newOvr = Math.max(p.ovr, ceil) + (newOvr - Math.max(p.ovr, ceil)) * 0.35;
+        var ceil = Math.max(p.pot || 0, p.whatIf || 0) + 1;
+        if (newOvr > p.ovr && newOvr > ceil) newOvr = Math.max(p.ovr, ceil) + (newOvr - Math.max(p.ovr, ceil)) * 0.25;
       }
       setOvr(p, newOvr, { keepPot: true });
       adjustPot(p, p.age, rng, !!info, info, next);
@@ -798,7 +808,7 @@
     ageCurveDelta: ageCurveDelta,
     retireChance: function (p, seasonDone, unsigned, state) {
       var info = targetInfo(p.id, state);
-      var ch = info ? historyRetireChance(info, seasonDone, p, !isNbaTeam(state, p.team)) : null;
+      var ch = info && !p.offPath ? historyRetireChance(info, seasonDone, p, !isNbaTeam(state, p.team)) : null;   // off his real path: by age and rating
       return ch == null ? ageRetireChance((p.age || 22) + 1, p.ovr, unsigned) : ch;
     },
     primaryPos: primaryPos,
