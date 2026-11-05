@@ -346,8 +346,8 @@
   var ALL_TIME = [['Kareem Abdul-Jabbar', 38387], ['Karl Malone', 36928], ['Michael Jordan', 32292], ['Wilt Chamberlain', 31419],
     ["Shaquille O'Neal", 28596], ['Moses Malone', 27409], ['Elvin Hayes', 27313], ['Hakeem Olajuwon', 26946], ['Oscar Robertson', 26710],
     ['Dominique Wilkins', 26668], ['John Havlicek', 26395], ['Alex English', 25613], ['Reggie Miller', 25279], ['Jerry West', 25192]];
-  var MILE = { pts: [15000, 20000, 25000, 30000, 35000, 40000], reb: [10000, 12500, 15000], ast: [7500, 10000, 12500] };
-  var MILE_WORD = { pts: 'point', reb: 'rebound', ast: 'assist' };
+  var MILE = { pts: [15000, 20000, 25000, 30000, 35000, 40000], reb: [10000, 12500, 15000], ast: [7500, 10000, 12500], tpm: [2000, 2500, 3000] };
+  var MILE_WORD = { pts: 'point', reb: 'rebound', ast: 'assist', tpm: 'three' };
 
   function glob(name) {
     if (typeof window !== 'undefined' && window[name]) return window[name];
@@ -376,24 +376,27 @@
     return !!(p.draft && p.draft.year === year - 1);
   }
 
-  // career totals before this season: real seasons (CAREER_PRIOR, per game averages) plus seasons simmed in this save
+  // career totals before this season: real seasons (exact totals from js/records.js when it is loaded, else
+  // CAREER_PRIOR per game averages) plus seasons simmed in this save
   var priorCache = {};
   function careerBase(state, id) {
-    var p = player(state, id), out = { pts: 0, reb: 0, ast: 0 };
-    var CP = glob('CAREER_PRIOR');
+    var p = player(state, id), out = { pts: 0, reb: 0, ast: 0, tpm: 0 };
+    var CP = glob('CAREER_PRIOR'), REC = glob('RECORDS');
     var key = id;
+    // (js/records.js keeps its own cache)
+    if (REC && REC.prior) { var pr = REC.prior(id).r; priorCache[key] = { pts: pr[1], reb: pr[2], ast: pr[3], tpm: pr[6] }; }
     if (!priorCache[key]) {
-      var pc = { pts: 0, reb: 0, ast: 0 };
+      var pc = { pts: 0, reb: 0, ast: 0, tpm: 0 };
       ((CP && CP[id]) || []).forEach(function (x) {
         if (!x || !x.g) return;
         pc.pts += Math.round(x.g * (x.pts || 0)); pc.reb += Math.round(x.g * (x.reb || 0)); pc.ast += Math.round(x.g * (x.ast || 0));
       });
       priorCache[key] = pc;
     }
-    out.pts = priorCache[key].pts; out.reb = priorCache[key].reb; out.ast = priorCache[key].ast;
+    out.pts = priorCache[key].pts; out.reb = priorCache[key].reb; out.ast = priorCache[key].ast; out.tpm = priorCache[key].tpm;
     (p.careerStats || []).forEach(function (r) {
       if (!r || r.year >= yearOf(state)) return;
-      out.pts += r.pts || 0; out.reb += rebOf(r); out.ast += r.ast || 0;
+      out.pts += r.pts || 0; out.reb += rebOf(r); out.ast += r.ast || 0; out.tpm += r.tpm || 0;
     });
     return out;
   }
@@ -434,8 +437,8 @@
         var b = gm.played && season.boxScores && season.boxScores[gm.id];
         if (!b || !b.home || typeof b.home !== 'object') return;
         [].concat(b.home.box || [], b.away.box || []).forEach(function (r) {
-          var x = pend[r.id] || (pend[r.id] = { pts: 0, reb: 0, ast: 0 });
-          x.pts += r.pts || 0; x.reb += rebOf(r); x.ast += r.ast || 0;
+          var x = pend[r.id] || (pend[r.id] = { pts: 0, reb: 0, ast: 0, tpm: 0 });
+          x.pts += r.pts || 0; x.reb += rebOf(r); x.ast += r.ast || 0; x.tpm += r.tpm || 0;
         });
       });
     }
@@ -602,10 +605,12 @@
     if (!ps || !run) return;
     var c = run.cur[r.id];
     if (!c) {
-      var base = careerBase(state, r.id), pd = run.pend[r.id] || { pts: 0, reb: 0, ast: 0 };
-      c = run.cur[r.id] = { pts: base.pts + (ps.pts || 0) - pd.pts, reb: base.reb + rebOf(ps) - pd.reb, ast: base.ast + (ps.ast || 0) - pd.ast };
+      var base = careerBase(state, r.id), pd = run.pend[r.id] || { pts: 0, reb: 0, ast: 0, tpm: 0 };
+      c = run.cur[r.id] = { pts: base.pts + (ps.pts || 0) - pd.pts, reb: base.reb + rebOf(ps) - pd.reb, ast: base.ast + (ps.ast || 0) - pd.ast,
+        tpm: base.tpm + (ps.tpm || 0) - (pd.tpm || 0) };
     }
-    var stat = { pts: r.pts || 0, reb: rebOf(r), ast: r.ast || 0 };
+    var stat = { pts: r.pts || 0, reb: rebOf(r), ast: r.ast || 0, tpm: r.tpm || 0 };
+    var REC = glob('RECORDS');
     Object.keys(MILE).forEach(function (k) {
       var before = c[k], after = before + stat[k];
       c[k] += stat[k];
@@ -618,7 +623,14 @@
           name + ' became the latest member of the ' + comma(hit) + '-' + MILE_WORD[k] + ' club with ' + stat[k] + ' ' + MILE_WORD[k] + 's against the ' +
           nick(state, gameOpp(state, r, abbr, d)) + '. He has ' + comma(after) + ' for his career.', [r.id], { team: abbr }));
       }
-      if (k === 'pts') ALL_TIME.forEach(function (x, rank) {
+      // passing a name on the all-time board (js/records.js: the real greats plus the save), once each
+      if (REC && REC.passes) REC.passes(state, p, k, before, after).forEach(function (x) {
+        var mk = r.id + 'pa' + k + x.who.id;
+        if (g.ms[mk]) return;
+        g.ms[mk] = 1;
+        out.push(dayItem(state, d, i, 'milestone', x.headline, x.body, [r.id], { team: abbr }));
+      });
+      else if (k === 'pts') ALL_TIME.forEach(function (x, rank) {
         if (before < x[1] && after >= x[1] && !g.ms[r.id + 'at' + rank]) {
           g.ms[r.id + 'at' + rank] = 1;
           out.push(dayItem(state, d, i, 'milestone', name + ' Passes ' + x[0] + ' On All-Time Scoring List',

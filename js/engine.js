@@ -1353,6 +1353,41 @@
       });
     });
     if (h.top.length > 10) { h.top.sort(function (a, b) { return b[0] - a[0]; }); h.top.length = 10; }
+    trackGameHighs(season, res);
+  }
+
+  // Single-game highs for the records pages (js/records.js archives them when the season ends), read
+  // before the box score is slimmed. Regular season (r) and playoffs (p) apart; Play-In games count as neither.
+  //   season.gh[r|p][player id][stat] = [value, times reached, date, opponent, game id] (the first game at that value)
+  //   season.gtop[r|p][stat] = the season's best games [value, player id, date, team, opponent, game id],
+  //   GTOP_N[r|p] at most (ties keep the earlier game first)
+  // Reads the result only: no rng and nothing the simulation uses.
+  var HI_KEYS = ['pts', 'reb', 'ast', 'stl', 'blk', 'tpm'];
+  var GTOP_N = { r: 10, p: 5 };
+  function trackGameHighs(season, res) {
+    if (res.playIn) return;
+    var ph = res.playoff ? 'p' : 'r';
+    var gh = season.gh || (season.gh = { r: {}, p: {} }), top = season.gtop || (season.gtop = { r: {}, p: {} });
+    [[res.home, res.away], [res.away, res.home]].forEach(function (pair) {
+      var side = pair[0], opp = pair[1].abbr;
+      (side.box || []).forEach(function (r) {
+        if (!(r.min > 0)) return;
+        var mine = null;
+        HI_KEYS.forEach(function (k) {
+          var v = k === 'reb' ? (r.oreb || 0) + (r.dreb || 0) : r[k] || 0;
+          if (v <= 0) return;
+          mine = mine || gh[ph][r.id] || (gh[ph][r.id] = {});
+          var cur = mine[k];
+          if (!cur || v > cur[0]) mine[k] = [v, 1, res.date, opp, res.id];
+          else if (v === cur[0]) cur[1]++;
+          var list = top[ph][k] || (top[ph][k] = []), n = GTOP_N[ph];
+          if (list.length >= n && v <= list[list.length - 1][0]) return;
+          list.push([v, r.id, res.date, side.abbr, opp, res.id]);
+          list.sort(function (a, b) { return b[0] - a[0]; });
+          if (list.length > n) list.length = n;
+        });
+      });
+    });
   }
 
   function storeResult(season, g, res) {
@@ -1891,7 +1926,9 @@
     tEncode: tEncode,
     tDecode: tDecode,
     PBX: PBX,
-    unpackPbx: unpackPbx
+    unpackPbx: unpackPbx,
+    HI_KEYS: HI_KEYS,
+    GTOP_N: GTOP_N
   };
 
   if (typeof window !== 'undefined') window.ENGINE = ENGINE;

@@ -439,8 +439,9 @@
     if (!s) { fr.needState(app, 'history'); return; }
     const a = String(arg || '');
     if (/^\d{4}$/.test(a)) { seasonDetail(app, s, Number(a)); return; }
-    const tab = HTABS.some(t => t[0] === a) ? a : '';
-    const content = { '': seasonsTab, records: recordsTab, hof: hofTab, jerseys: jerseysTab, prior: priorTab }[tab](s);
+    const head = a.split('/')[0];
+    const tab = HTABS.some(t => t[0] === head) ? head : '';
+    const content = { '': seasonsTab, records: allTimeTab, hof: hofTab, jerseys: jerseysTab, prior: priorTab }[tab](s, a.split('/').slice(1));
     app.innerHTML = `${fr.subnav('history')}${UI.header('LEAGUE HISTORY', 'Champions, records and legends of this Association and the years before it.')}${fr.tabs('history', HTABS, tab)}${content}`;
   };
 
@@ -546,6 +547,78 @@
       ${UI.header('SINGLE-SEASON RECORDS', '')}<div class="fr-leads">${single}${singleTot}</div>`;
   }
 
+  // ---------- all-time records (js/records.js): #/history/records/<sub>/<r|p>/<stat> ----------
+  const RTABS = [['game', 'SINGLE GAME'], ['career', 'CAREER LEADERS'], ['season', 'SEASON HIGHS'], ['active', 'ACTIVE LEADERS'], ['save', 'THIS ASSOCIATION']];
+  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const gameDate = d => { const x = String(d || '').split('-'); return x.length === 3 ? `${MON[+x[1] - 1]} ${+x[2]}, ${x[0]}` : esc(d || ''); };
+  const int = v => Math.round(v || 0).toLocaleString('en-US');
+  const sinceNote = (R, stat) => R.SINCE[stat] ? `${R.LABEL[stat].charAt(0) + R.LABEL[stat].slice(1).toLowerCase()} were first tracked in ${R.SINCE[stat] - 1}-${String(R.SINCE[stat]).slice(2)}, so earlier careers count from then.` : '';
+  function rcLink(sub, ph, stat, label, on) {
+    return `<a href="#/history/records/${sub}/${ph}/${stat}" class="${on ? 'on' : ''}">${label}</a>`;
+  }
+  function rcControls(R, sub, ph, stat, stats) {
+    return `<div class="tabs rc-tabs">${RTABS.map(([k, t]) => rcLink(k, ph, stat === 'g' && k !== 'career' && k !== 'active' ? 'pts' : stat, t, k === sub)).join('')}</div>
+      ${sub === 'save' ? '' : `<div class="rc-chips" role="group" aria-label="Regular season or playoffs">${rcLink(sub, 'r', stat, 'REGULAR SEASON', ph === 'r')}${rcLink(sub, 'p', stat, 'PLAYOFFS', ph === 'p')}</div>
+      <div class="rc-chips rc-stats" role="group" aria-label="Stat">${stats.map(k => rcLink(sub, ph, k, R.SHORT[k], k === stat)).join('')}</div>`}`;
+  }
+  function who(s, x) {
+    const p = x.id && playerOf(s, x.id);
+    return p ? fr.plink(p) : esc(x.name || x.id || '?');
+  }
+  function gameRow(s, x, i, R, stat) {
+    return `<li class="${i === 0 ? 'top' : ''}${x.real ? ' rc-real' : ''}"><span class="rc-rank">${x.real ? '' : i + 1}</span><span class="rc-n">${who(s, x)}<small>${x.team ? esc(x.team) + ' vs ' + esc(x.opp) + ', ' : ''}${gameDate(x.date)}${x.real ? ' | Real NBA, before 2012-13' : ''}</small></span><b>${esc(x.v)} <small>${esc(R.SHORT[stat])}</small></b></li>`;
+  }
+  function trackedNote(R, s) {
+    const y = R.trackingSince(s);
+    return y ? `Since this save started tracking (${esc(fr.seasonLabel(y))}).` : 'Since this save started tracking.';
+  }
+  function allTimeTab(s, rest) {
+    const R = window.RECORDS;
+    if (!R) return recordsTab(s);
+    const sub = RTABS.some(t => t[0] === rest[0]) ? rest[0] : 'game';
+    const ph = rest[1] === 'p' ? 'p' : 'r';
+    const careerish = sub === 'career' || sub === 'active';
+    const stats = careerish ? R.TOT.slice(1).concat('g') : R.HI;
+    const stat = stats.includes(rest[2]) ? rest[2] : 'pts';
+    const ctl = rcControls(R, sub, ph, stat, stats);
+    const phLabel = ph === 'p' ? 'Playoffs' : 'Regular season';
+    if (sub === 'save') return ctl + recordsTab(s);
+    if (sub === 'game') {
+      const cards = R.HI.map(k => {
+        const best = R.singleGame(s, ph, k, 1)[0];
+        return `<a class="rc-card${k === stat ? ' on' : ''}" href="#/history/records/game/${ph}/${k}"><small>${esc(R.LABEL[k])}</small><b>${best ? esc(best.v) : '-'}</b><span>${best ? esc((playerOf(s, best.id) || {}).name || best.id) : 'No games yet'}</span></a>`;
+      }).join('');
+      const list = R.singleGame(s, ph, stat, 10);
+      const real = ph === 'r' ? R.realGames(stat) : [];
+      return `${ctl}${UI.header('SINGLE-GAME RECORDS', esc(phLabel) + ' games in this Association. ' + trackedNote(R, s))}<div class="rc-cards">${cards}</div>
+        ${UI.header('MOST ' + R.LABEL[stat] + ' IN A GAME', '')}
+        ${list.length ? `<ol class="rc-list">${list.map((x, i) => gameRow(s, x, i, R, stat)).join('')}</ol>` : `<p class="muted">No ${ph === 'p' ? 'playoff ' : ''}games recorded ${esc(trackedNote(R, s).replace(/^Since/, 'since').replace(/\.$/, ''))} yet.</p>`}
+        ${real.length ? `${UI.header('THE REAL NBA RECORD', 'Before 2012-13, from Basketball-Reference box scores.')}<ol class="rc-list">${real.map((x, i) => gameRow(s, x, i, R, stat)).join('')}</ol>` : ''}
+        ${R.SINCE[stat] && ph === 'r' ? `<p class="pk-note">${esc(sinceNote(R, stat))}</p>` : ''}`;
+    }
+    if (sub === 'season') {
+      const yr = s.season ? s.year : null;
+      const cards = R.HI.map(k => {
+        const list = R.seasonHighs(s, ph, k).slice(0, k === stat ? 10 : 3);
+        return `<div class="fr-lead rc-lead${k === stat ? ' on' : ''}"><div class="fr-lead-k">${esc(R.LABEL[k])}</div>${list.length ? `<ol class="rc-list">${list.map((x, i) => gameRow(s, x, i, R, k)).join('')}</ol>` : '<p class="muted">No games yet.</p>'}</div>`;
+      }).join('');
+      return `${ctl}${UI.header('SEASON HIGHS', esc(yr ? fr.seasonLabel(yr) : '') + ' ' + esc(phLabel.toLowerCase()) + ': the best single games so far.')}<div class="rc-leads">${cards}</div>`;
+    }
+    // career and active leaders
+    const list = R.board(s, ph, stat, { activeOnly: sub === 'active', limit: sub === 'active' ? 25 : 50 });
+    const all = sub === 'active' ? R.board(s, ph, stat) : list;
+    const cut = R.cutoff(ph, stat);
+    const rows = list.map((x, i) => {
+      const rank = sub === 'active' ? (x.v >= cut ? all.findIndex(y => y.id === x.id) + 1 : null) : i + 1;
+      const tag = x.real ? `<small>${esc(x.from - 1)}-${esc(String(x.to).slice(2))} | Real NBA, retired before 2012-13</small>` : x.p && x.p.retired ? '<small>Retired</small>' : '<small class="rc-act">Active</small>';
+      return `<li class="${i === 0 ? 'top' : ''}${x.real ? ' rc-real' : ''}"><span class="rc-rank">${sub === 'active' ? i + 1 : rank}</span><span class="rc-n">${x.p ? fr.plink(x.p) : esc(x.name)}${tag}</span><b>${int(x.v)}${sub === 'active' && rank ? `<small>${esc(R.ord(rank))} all-time</small>` : ''}</b></li>`;
+    }).join('');
+    const title = (sub === 'active' ? 'ACTIVE LEADERS: ' : 'ALL-TIME: ') + R.LABEL[stat];
+    const sub2 = `${phLabel}, real NBA careers plus every game in this Association.${ph === 'p' ? ' Playoff games in this save count from the season it started tracking.' : ''}`;
+    return `${ctl}${UI.header(title, esc(sub2))}${rows ? `<ol class="rc-list rc-board">${rows}</ol>` : '<p class="muted">Nobody on this list yet.</p>'}
+      ${R.SINCE[stat] ? `<p class="pk-note">${esc(sinceNote(R, stat))}</p>` : ''}`;
+  }
+
   function hofTab(s) {
     const list = Object.keys(s.players || {}).map(id => s.players[id]).filter(p => p && p.hof)
       .sort((a, b) => (b.hofYear || b.hofInducted || 0) - (a.hofYear || a.hofInducted || 0) || (b.ovr || 0) - (a.ovr || 0));
@@ -630,6 +703,22 @@
     return `${tl.length ? `${UI.header('MOST TITLES', 'Before the 2012-13 season')}<div class="fr-titles">${tl.map(t => `<span>${known(t) ? fr.logo(t, 30) : ''}<b>${titles[t]}</b><small>${esc(t)}</small></span>`).join('')}</div>` : ''}
       ${UI.header('CHAMPIONS AND MVPS', 'The real NBA, year by year.')}
       ${rows ? `<div class="tscroll"><table class="stats"><thead><tr><th class="l">SEASON</th><th class="l">CHAMPION</th><th class="l hide-sm">RUNNER-UP</th><th class="l hide-sm">FINALS MVP</th><th class="l">MVP</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="muted">The history file has no champions or MVPs listed.</p>'}`;
+  }
+
+  // #/records: the all-time records, also in the More menu and on the League page
+  P.records = function (app, arg) { P.history(app, 'records' + (arg ? '/' + arg : '')); };
+  P.records.navLabel = 'Records';
+  P.records.navDesc = 'All-time and single-game records, real NBA history plus this Association.';
+  const baseLeague = P.league;
+  if (typeof baseLeague === 'function') {
+    P.league = function (app, arg) {
+      baseLeague.call(this, app, arg);
+      try {
+        const grid = UI.$('.tile-grid', app);
+        if (grid && UI.tile && !UI.$('a[href="#/history/records"]', grid)) grid.insertAdjacentHTML('beforeend', UI.tile('#/history/records', 'awards', 'RECORDS'));
+      } catch (e) { console.warn('Records link failed', e); }
+    };
+    Object.keys(baseLeague).forEach(k => { P.league[k] = baseLeague[k]; });
   }
 
   P.news.navLabel = 'News';

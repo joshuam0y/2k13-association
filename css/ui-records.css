@@ -1,0 +1,32 @@
+/* All-time records (js/ui-history.js #/history/records) and the career highs block on the player card. Mobile first. */
+.rc-tabs a, .rc-chips a { min-height: 44px; display: inline-flex; align-items: center; }
+.rc-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: -8px 0 14px; }
+.rc-chips a { font-family: var(--display); font-size: 13px; letter-spacing: .12em; padding: 0 14px; border: 1px solid var(--line2); color: var(--text2); background: var(--bg2); }
+.rc-chips a.on { border-color: var(--gold); color: var(--gold); }
+.rc-stats a { min-width: 52px; justify-content: center; padding: 0 10px; }
+.rc-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 18px; }
+.rc-card { display: flex; flex-direction: column; min-height: 44px; padding: 10px; border: 1px solid var(--line); background: var(--bg2); color: var(--text2); min-width: 0; }
+.rc-card.on { border-color: var(--gold); }
+.rc-card small { font-family: var(--display); font-size: 11px; letter-spacing: .12em; color: var(--gold); }
+.rc-card b { font-family: var(--display); font-size: 28px; color: #fff; line-height: 1.1; }
+.rc-card span { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc-list { list-style: none; margin: 0 0 14px; padding: 0; border: 1px solid var(--line); background: var(--bg2); }
+.rc-list li { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 12px; border-top: 1px solid var(--line); }
+.rc-list li:first-child { border-top: 0; }
+.rc-list li.top b { color: var(--gold); }
+.rc-list li.rc-real { background: rgba(212, 175, 55, .05); }
+.rc-rank { width: 24px; flex: none; font-family: var(--display); color: var(--text2); text-align: right; }
+.rc-n { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-wrap: anywhere; }
+.rc-n small, .rc-list b small { font-size: 11px; color: var(--text2); font-weight: 400; }
+.rc-n a { min-height: 24px; }
+.rc-list b { font-family: var(--display); font-size: 18px; color: #fff; text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
+.rc-act { color: var(--gold) !important; }
+.rc-leads { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.rc-lead .rc-list { border: 0; margin: 0; }
+.rc-lead.on { border-color: var(--gold-dim); }
+.pk-highs td small { display: block; font-size: 11px; color: var(--text2); }
+@media (min-width: 720px) {
+  .rc-cards { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .rc-leads { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1100px) { .rc-leads { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

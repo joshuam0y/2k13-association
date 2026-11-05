@@ -113,7 +113,33 @@
     return `<div class="tscroll"><table class="stats pk-career"><thead><tr><th class="l">SEASON</th><th class="l">TEAM</th><th>G</th><th>MPG</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>FG%</th><th>3P%</th><th>FT%</th></tr></thead>
       <tbody>${rows.map(r => `<tr${r.live ? ' class="pk-live"' : ''}><td class="l">${esc(UI.seasonLabel(r.year))}${r.live ? ' <small>so far</small>' : ''}</td><td class="l">${teamCell(r.team)}</td>${cells(r.s, r)}</tr>`).join('')}</tbody>
       <tfoot><tr><td class="l">CAREER</td><td class="l">${rows.length} season${rows.length > 1 ? 's' : ''}</td>${cells(total)}</tr></tfoot></table></div>
-      <p class="pk-note">Regular season, per game. Gold marks a career high.</p>`;
+      <p class="pk-note">Regular season, per game. Gold marks a career high.</p>
+      ${highsHtml(p)}`;
+  }
+
+  // Career highs (single games, js/records.js) and career totals with the all-time rank.
+  function highsHtml(p) {
+    const R = window.RECORDS, g = UI.state.game;
+    if (!R || !g) return '';
+    const hi = R.careerHighs(g, p);
+    const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const day = d => { const x = String(d || '').split('-'); return x.length === 3 ? `${MON[+x[1] - 1]} ${+x[2]}, ${x[0]}` : ''; };
+    const cellHi = x => x ? `<b>${esc(x[0])}</b><small>vs ${esc(x[3])}, ${esc(day(x[2]))}${x[1] > 1 ? ' (' + esc(x[1]) + 'x)' : ''}</small>` : '<span class="muted">-</span>';
+    const any = ['r', 'p'].some(ph => Object.keys(hi[ph]).length);
+    const y = R.trackingSince(g);
+    const since = 'Single games since this save started tracking' + (y ? ' (' + UI.seasonLabel(y) + ')' : '') + '.';
+    const cellTot = (ph, k) => {
+      const r = R.rankOf(g, p, ph, k);
+      return r.v ? `<b>${R.comma(r.v)}</b>${r.rank ? `<small>${esc(R.ord(r.rank))} all-time</small>` : ''}` : '<span class="muted">-</span>';
+    };
+    return `${UI.header('CAREER HIGHS', esc(since))}
+      ${any ? `<div class="tscroll"><table class="stats pk-highs"><thead><tr><th class="l">STAT</th><th class="l">REGULAR SEASON</th><th class="l">PLAYOFFS</th></tr></thead><tbody>${R.HI.map(k =>
+        `<tr><td class="l">${esc(R.SHORT[k])}</td><td class="l">${cellHi(hi.r[k])}</td><td class="l">${cellHi(hi.p[k])}</td></tr>`).join('')}</tbody></table></div>`
+        : `<p class="muted">No games recorded since this save started tracking.</p>`}
+      ${UI.header('CAREER TOTALS', 'Real NBA career plus this Association, with the rank on the all-time list.')}
+      <div class="tscroll"><table class="stats pk-highs"><thead><tr><th class="l">STAT</th><th class="l">REGULAR SEASON</th><th class="l">PLAYOFFS</th></tr></thead><tbody>${R.TOT.slice(1).concat('g').map(k =>
+        `<tr><td class="l">${esc(R.SHORT[k])}</td><td class="l">${cellTot('r', k)}</td><td class="l">${cellTot('p', k)}</td></tr>`).join('')}</tbody></table></div>
+      <p class="pk-note">Steals and blocks were first tracked in 1973-74 and threes in 1979-80. <a href="#/history/records/career/r/pts">ALL-TIME LEADERS</a></p>`;
   }
 
   // Seasons played before the current one: real seasons plus completed seasons in the save.

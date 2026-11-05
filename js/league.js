@@ -468,6 +468,8 @@
     // career stats
     var ps = state.season.playerStats || {};
     for (var id in ps) if (state.players[id]) state.players[id].careerStats.push(Object.assign({ year: state.year, team: state.players[id].team }, ps[id]));
+    // single-game highs, league records and playoff totals for the records pages (js/records.js)
+    if (mod("RECORDS")) safe("records", function () { W.RECORDS.archive(state); });
     state.history.seasons.push({ year: state.year, champion: champ, finalsMvp: fm, awards: awards, allStars: state.allStars && state.allStars.year === state.year ? state.allStars : null, standings: clone(state.season.standings) });
     if (champ) news(state, (state.teams[champ] ? state.teams[champ].city + " " + state.teams[champ].name : champ) + " win the " + state.year + " title", "", []);
     // coaching changes are cosmetic (names and records only)
