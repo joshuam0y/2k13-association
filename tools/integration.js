@@ -55,10 +55,11 @@ for (let n = 0; n < seasons; n++) {
   if (bad.length) problems.push(`after ${s.year - 1} offseason, roster sizes off: ${bad.join(", ")}`);
   // real retirements as a guide: players still playing well may stay up to three seasons past their real exit
   const T = window.TARGETS || {};
-  // (players under 31 at their real exit may keep playing if a team signs them, and so may healthy-fate
+  // (players still at starter level (76+) retire by age and rating instead; players under 31 at their
+  // real exit may keep playing if a team signs them, and so may healthy-fate
   // players whose real careers injuries cut short, like Granger)
   const late = Object.values(s.players).filter(p => !p.retired && p.team !== "DRAFT" && T[p.id] && T[p.id].retire != null && T[p.id].retire + 3 < s.year
-    && (p.age || 0) - (s.year - T[p.id].retire) >= 31 && p.fate !== "healthy");
+    && (p.age || 0) - (s.year - T[p.id].retire) >= 31 && p.fate !== "healthy" && p.ovr < 76);
   if (late.length) problems.push(`${late.length} players still active four or more seasons past their real retirement: ${late.slice(0, 5).map(p => p.name).join(", ")}`);
   // tendencies age each offseason (player.tend): every active player has them, in range, threes trending up
   if (window.ENGINE && window.ENGINE.tendencyOf) {

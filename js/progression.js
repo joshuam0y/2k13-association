@@ -468,6 +468,7 @@
   // Real retirements happen in the real summer: TARGETS retire is the first season he did not play,
   // so retire - 1 is his last real season. Nobody keeps playing past it unless the sim has made him
   // clearly better than he really was, and even then only for a season or two.
+  var KEEP_OVR = 76;   // still a starter: retirement by age and rating instead of the real calendar
   function historyRetireChance(info, seasonDone, p, unsigned) {
     var r = info.retire != null ? info.retire - 1 : null;
     if (r == null) {
@@ -482,6 +483,9 @@
     var age = p.age || 0, good = (p.ovr || 0) >= 82;
     // careers that injuries really ended (Bynum's knees on his real-fate path) end on time
     if (INJURY_FATES[p.id] && p.fate !== 'healthy' && d >= 0) return d === 0 ? 0.96 : 1;
+    // past his real exit and still a starter (or clearly better than he really was): the calendar stops
+    // deciding, age and rating do, like for made-up players (a 75+ player can last to 38 or so, rarely 40)
+    if (d >= 0 && ((p.ovr || 0) >= KEEP_OVR || better >= 4)) return ageRetireChance(age + 1, p.ovr || 0, unsigned);
     if (d < -2) ch = 0;
     else if (d === -2) ch = age >= 35 && better <= -4 ? 0.12 : 0;
     else if (d === -1) ch = age >= 34 ? 0.1 : 0.03;
