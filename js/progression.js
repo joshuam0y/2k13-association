@@ -222,6 +222,7 @@
     jennibr01: { from: 2015, note: 'ruptured Achilles in January 2015, never the same' },
     matthwe02: { from: 2015, note: 'ruptured Achilles in March 2015' },
     gayru01: { from: 2017, note: 'ruptured Achilles in January 2017' },
+    bradlav01: { from: 2019, note: 'sports hernia surgery in 2018 and leg injuries after' },
     // a number 1 pick whose shoulder condition derailed him: the healthy path grows toward his projection
     fultzma01: { from: 2018, note: 'thoracic outlet syndrome in 2017-18', grow: [82, 86], quiet: true },
     // career fate (not an injury): left the NBA in 2015; the other path keeps him playing
