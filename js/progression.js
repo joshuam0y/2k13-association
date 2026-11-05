@@ -125,6 +125,13 @@
     var ft = state && state.prog && state.prog.fateTargets;
     var t = (ft && ft[id]) || (T && T[id]);
     if (!t) return null;
+    // seasons he was out of the NBA (overseas, unsigned, hurt) carry a placeholder 2K rating, not his
+    // level: they are skipped and the seasons around them fill the gap (Nate Wolters 72, then 56 in Europe)
+    if (Array.isArray(t.out) && t.out.length) {
+      var t2 = {};
+      Object.keys(t).forEach(function (k) { if (!(/^\d{4}$/.test(k) && t.out.indexOf(+k) >= 0)) t2[k] = t[k]; });
+      t = t2;
+    }
     var years = Object.keys(t).filter(function (k) { return /^\d{4}$/.test(k) && t[k] != null; })
       .map(Number).sort(function (a, b) { return a - b; });
     if (!years.length && t.retire == null) return null;
