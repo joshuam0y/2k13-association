@@ -566,7 +566,7 @@
     return p ? fr.plink(p) : esc(x.name || x.id || '?');
   }
   function gameRow(s, x, i, R, stat) {
-    return `<li class="${i === 0 ? 'top' : ''}${x.real ? ' rc-real' : ''}"><span class="rc-rank">${x.real ? '' : i + 1}</span><span class="rc-n">${who(s, x)}<small>${x.team ? esc(x.team) + ' vs ' + esc(x.opp) + ', ' : ''}${gameDate(x.date)}${x.real ? ' | Real NBA, before 2012-13' : ''}</small></span><b>${esc(x.v)} <small>${esc(R.SHORT[stat])}</small></b></li>`;
+    return `<li class="${i === 0 ? 'top' : ''}${x.real ? ' rc-real' : ''}"><span class="rc-rank">${i + 1}</span><span class="rc-n">${who(s, x)}<small>${x.team ? esc(x.team) + ' vs ' + esc(x.opp) + ', ' : ''}${gameDate(x.date)}${x.real ? ' | Real NBA, before 2012-13' : ''}</small></span><b>${esc(x.v)} <small>${esc(R.SHORT[stat])}</small></b></li>`;
   }
   function trackedNote(R, s) {
     const y = R.trackingSince(s);
@@ -593,7 +593,7 @@
       return `${ctl}${UI.header('SINGLE-GAME RECORDS', esc(phLabel) + ' games in this Association. ' + trackedNote(R, s))}<div class="rc-cards">${cards}</div>
         ${UI.header('MOST ' + R.LABEL[stat] + ' IN A GAME', '')}
         ${list.length ? `<ol class="rc-list">${list.map((x, i) => gameRow(s, x, i, R, stat)).join('')}</ol>` : `<p class="muted">No ${ph === 'p' ? 'playoff ' : ''}games recorded ${esc(trackedNote(R, s).replace(/^Since/, 'since').replace(/\.$/, ''))} yet.</p>`}
-        ${real.length ? `${UI.header('THE REAL NBA RECORD', 'Before 2012-13, from Basketball-Reference box scores.')}<ol class="rc-list">${real.map((x, i) => gameRow(s, x, i, R, stat)).join('')}</ol>` : ''}
+        ${real.length ? `${UI.header('REAL NBA TOP ' + real.length, 'The best real games before 2012-13 (regular season).')}<ol class="rc-list">${real.map((x, i) => gameRow(s, x, i, R, stat)).join('')}</ol>` : ''}
         ${R.SINCE[stat] && ph === 'r' ? `<p class="pk-note">${esc(sinceNote(R, stat))}</p>` : ''}`;
     }
     if (sub === 'season') {
