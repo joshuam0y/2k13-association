@@ -365,7 +365,14 @@ function refill(state, minSize, maxSize) {
   const near = retireGaps.filter(g => Math.abs(g) <= 1).length / Math.max(1, retireGaps.length);
   check(retireGaps.length > 30 && near >= 0.9, 'history players under 80 retire within a year of their real year (' + (100 * near).toFixed(1) + '% of ' + retireGaps.length + ')');
   const stillActive = Object.values(state.players).filter(p => !p.retired && T[p.id] && T[p.id].retire < state.year - 1);
-  check(stillActive.every(p => p.ovr >= 76), 'players past their real retirement are only those the sim kept good (' + stillActive.length + ')');
+  // (history as a guide: a player may stay when the sim kept him better than his real last season, or
+  // when his real career ended before 31 and a team still wants him)
+  const keptGood = p => {
+    const r = T[p.id].retire, last = T[p.id][r - 1] != null ? PROG.scaleRating(r - 1, T[p.id][r - 1]) : null;
+    const exitAge = (p.age || 0) - (state.year - r);
+    return exitAge < 31 || last == null || p.ovr >= last - 1;
+  };
+  check(stillActive.every(keptGood), 'players past their real retirement are only those the sim kept good or who left young (' + stillActive.length + ')');
   console.log('   smallest roster after each offseason (before refill): ' + minRoster.join(' '));
   check(minRoster.every(n => n >= 8), 'no roster collapses (min ' + Math.min(...minRoster) + ')');
   check(shortages.every(n => n === 0), 'free agent pool always refills rosters to 13');

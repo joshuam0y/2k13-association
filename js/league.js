@@ -216,6 +216,13 @@
       if (best) { t.logo = best.url; t.logoNoRef = !!best.noReferrer; }
     }
   }
+  // Real seasons lost to injury (Achilles, ACL, knees, back): the only real lost seasons the save keeps
+  var INJURY_OUT = {"thompkl01":[2020,2021],"duranke01":[2020],"walljo01":[2020],"irvinky01":[2026],"lillada01":[2026],"halibty01":[2026],"vanvlfr01":[2026],
+    "beysa01":[2025],"leonaka01":[2022],"murraja01":[2022],"willizi01":[2022],"isaacjo01":[2021,2022],"balllo01":[2023,2024],"rosede01":[2013],"bynuman01":[2013],
+    "gallida01":[2014,2023],"porzikr01":[2019],"murrade01":[2019],"roberan03":[2019],"couside01":[2020],"ezelife01":[2014],"adamsst01":[2024],"chandwi01":[2016],
+    "exumda01":[2016],"knighbr03":[2018],"nunnke01":[2022],"fryech01":[2013],"okafoem01":[2014],"richaja01":[2014],"haywobr01":[2014],"cartemi01":[2022],
+    "colliza01":[2021],"wisemja01":[2022],"curryse01":[2018],"kolokch01":[2024],"cancavl01":[2024],"sumneed01":[2022],"williel01":[2013],"pondequ01":[2016,2017],
+    "milleda01":[2020]};
   function startSeason(state) {
     applyBrands(state);
     // The offseason heals last season's injuries (overseas stash players stay away until they arrive)
@@ -224,8 +231,11 @@
       var op = state.players[oid];
       var otg = mod("PROG") && W.PROG.targetsOf ? W.PROG.targetsOf(state, oid) : (W.TARGETS && W.TARGETS[oid]);
       if (newYear && op && op.injury && op.injury.type !== "Playing overseas" && op.injury.season !== state.year) op.injury = null;
-      // Real lost seasons (TARGETS out list): the player sits out the whole year, like he did in real life
+      // Real seasons lost to injury (TARGETS out list, injury years only): the player sits out the whole
+      // year, like he did in real life. Years he was out of the league or overseas (Greg Monroe in Russia)
+      // do not bench him: if he is still good in this save, he plays.
       if (!op || op.retired || !otg || !Array.isArray(otg.out) || otg.out.indexOf(state.year) < 0) continue;
+      if (!INJURY_OUT[oid] || INJURY_OUT[oid].indexOf(state.year) < 0) continue;
       if (!op.injury || (op.injury.games || 0) < 82) op.injury = { type: "Out for the season", games: 999, real: true, season: state.year };
     }
     var E = mod("ENGINE");

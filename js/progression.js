@@ -311,7 +311,8 @@
   // Playing time (25 and under) and major injuries move drift for everyone (fictional players too).
   // ---------------------------------------------------------------------------
   var SETTINGS = { variety: true };   // PROG.settings.variety = false: careers follow history with tiny noise
-  var DRIFT_SD = 1.2, DRIFT_MEAN = 0.2, DRIFT_PULL = 0.7, DRIFT_PULL_UP = 0.7, DRIFT_MAX = 6, BOOST_KEEP = 0.9, BOOST_MAX = 8, STAR = 90, STAR_CAP = 2, OFF_MAX = 7;
+  var DRIFT_SD = 1.2, DRIFT_MEAN = 0.2, DRIFT_PULL = 0.7, DRIFT_PULL_UP = 0.7, DRIFT_MAX = 6, BOOST_KEEP = 0.9, BOOST_MAX = 8, STAR = 90, STAR_CAP = 2, OFF_MAX = 9;
+  var BREAKOUT = 0.05, STALL = 0.05, NO_BLOOM = 0.15;   // per young player per season (breakouts up to +9 over his real arc)
   var MAJOR_INJURY = /ACL|Achilles|Patellar/i;
   function seasonContext(state, done) {
     var season = state.season && (state.season.year == null || +state.season.year === done) ? state.season : null;
@@ -563,19 +564,27 @@
         var pr = p.prog = p.prog || { drift: 0, boost: 0 };
         var d0 = pr.drift || 0;
         pr.drift = clamp(d0 * (d0 > 0 ? DRIFT_PULL_UP : DRIFT_PULL) + DRIFT_MEAN + gauss(rng) * DRIFT_SD + eff.pt + eff.inj, -DRIFT_MAX, DRIFT_MAX);   // the small mean offsets injuries and the star cap
+        var prevTgt = targetFor(info, done), realMove = prevTgt != null ? tgt - prevTgt : 0;
+        // A real drop before 31 often came from injuries or a lost role that did not happen here: a
+        // healthy starter who played big minutes keeps about half of it (Avery Bradley at 28)
+        var line0 = C.stats[id], gp0 = line0 ? +line0.g || 0 : 0, mpg0 = gp0 ? (+line0.min || 0) / gp0 : 0;
+        if (realMove <= -3 && p.age <= 30 && gp0 >= 0.7 * C.teamGames && mpg0 >= 28) pr.drift = Math.min(DRIFT_MAX + 2, pr.drift - 0.5 * realMove);
         var star = tgt >= STAR, capped = star || p.fate === 'healthy';
         // stars and healthy-fate players: positive drift pulled back hard
         if (capped && pr.drift > STAR_CAP) pr.drift = STAR_CAP + (pr.drift - STAR_CAP) * 0.3;
         pr.boost = (pr.boost || 0) * BOOST_KEEP;
         var py = peakYear(info);
         var young = p.age <= 25 && !star && (py == null || next <= py + 1);
-        if (young && rng() < 0.025) pr.boost += 4 + rng() * 3;                                   // breakout
-        else if (young && (p.pot || 0) >= 82 && (p.pot - p.ovr) >= 4 && rng() < 0.03) pr.boost -= 4 + rng() * 3; // stall
+        if (young && rng() < BREAKOUT) pr.boost += 4 + rng() * 5;                                // breakout (the James Young story)
+        else if (young && (p.pot || 0) >= 78 && (p.pot - p.ovr) >= 4 && rng() < STALL) pr.boost -= 4 + rng() * 4; // stall
+        // a real late bloomer may never bloom here: when his real rating jumps, sometimes most of the
+        // jump does not happen (it fades back in slowly over the next seasons, if at all)
+        else if (realMove >= 5 && p.age <= 27 && rng() < NO_BLOOM) { pr.boost -= 0.8 * realMove; pr.noBloom = next; }
         pr.boost = clamp(pr.boost, -BOOST_MAX, BOOST_MAX);
         if (star && pr.boost > 0) pr.boost = 0;
         var off = pr.drift + pr.boost;
         if (off < 0 && star) off *= 0.6;   // stars stay stars
-        if (off > OFF_MAX) off = OFF_MAX;   // breakouts make a role player a starter, not an 87 into a 99
+        if (off > OFF_MAX) off = OFF_MAX;   // breakouts make a role player a star, not an 87 into a 99
         newOvr = tgt + off + gauss(rng) * 0.6;
         // a player who was never really a 90 only gets half of anything above 90
         var soft = Math.max(STAR, tgt + STAR_CAP);
