@@ -364,7 +364,8 @@ function refill(state, minSize, maxSize) {
   check(perYear.every(n => n >= 5) && perYear.reduce((s, x) => s + x, 0) > 150, 'retirements happen every year');
   const near = retireGaps.filter(g => Math.abs(g) <= 1).length / Math.max(1, retireGaps.length);
   check(retireGaps.length > 30 && near >= 0.9, 'history players under 80 retire within a year of their real year (' + (100 * near).toFixed(1) + '% of ' + retireGaps.length + ')');
-  const stillActive = Object.values(state.players).filter(p => !p.retired && T[p.id] && T[p.id].retire < state.year - 1);
+  // (anyone may play up to three seasons past his real exit when healthy and playing well)
+  const stillActive = Object.values(state.players).filter(p => !p.retired && T[p.id] && T[p.id].retire < state.year - 3);
   // (history as a guide: a player may stay when the sim kept him better than his real last season, or
   // when his real career ended before 31 and a team still wants him)
   const keptGood = p => {
