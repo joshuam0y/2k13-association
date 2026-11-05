@@ -358,6 +358,13 @@
     if (g && g.season && n.year === g.year && n.day != null && g.season.days && g.season.days[n.day] && n.day < (g.season.day || 0) + 1) return shortDate(g.season.days[n.day].date);
     return UI.seasonLabel(n.year || UI.year());
   };
+  // All-Star Weekend stories open their event on the weekend page (js/ui-allstar.js)
+  const AS_NEWS = [[/Rising Stars/, 'rising'], [/Skills Challenge/, 'skills'], [/Three-Point/, 'three'], [/Slam Dunk/, 'dunk'], [/All-Star MVP/, 'game']];
+  function allStarHref(n) {
+    if (!n || n.type !== 'allStars' || !UI.pages.allstar) return null;
+    const hit = AS_NEWS.find(x => x[0].test(n.headline || ''));
+    return hit ? '#/allstar/' + (n.year || UI.year()) + '/' + hit[1] : null;
+  }
   function hubNewsHtml() {
     const list = UI.newsList().slice(0, 5);
     if (!list.length) return '';
@@ -365,7 +372,7 @@
     return `<section class="hub-news">${UI.header('LATEST NEWS', `<a href="${href}">ALL NEWS</a>`)}
       <ul class="hn-list">${list.map(n => {
         const info = UI.newsInfo(n);
-        return `<li class="hn${info.mine ? ' mine' : ''}${info.big ? ' big' : ''}"><a href="${href}${info.mine ? '/mine' : '/' + info.kind}">${UI.newsBadge(info)}<span class="hn-h">${esc(n.headline || n.body)}</span><small>${info.mine ? '<i>YOUR TEAM</i> ' : ''}${esc(UI.newsDate(n))}</small></a></li>`;
+        return `<li class="hn${info.mine ? ' mine' : ''}${info.big ? ' big' : ''}"><a href="${esc(allStarHref(n) || href + (info.mine ? '/mine' : '/' + info.kind))}">${UI.newsBadge(info)}<span class="hn-h">${esc(n.headline || n.body)}</span><small>${info.mine ? '<i>YOUR TEAM</i> ' : ''}${esc(UI.newsDate(n))}</small></a></li>`;
       }).join('')}</ul></section>`;
   }
 
@@ -457,7 +464,7 @@
       if ((n.ids || []).some(id => seenIds[id]) && info.kind === 'signing') return;
       if (!(info.kind === 'award' || info.kind === 'world' || info.kind === 'milestone' || info.mine)) return;
       if (/ win the \d{4} title/.test(n.headline || '') && (g.history && g.history.seasons || []).length > a.seasons) return;   // the champions row below says it
-      out.rows.push({ kind: info.kind, label: info.label, mine: info.mine, pri: info.mine ? 1 : info.kind === 'award' ? 2 : 6, text: n.headline || n.body, href: '#/news' + (info.mine ? '/mine' : '/' + info.kind) });
+      out.rows.push({ kind: info.kind, label: info.label, mine: info.mine, pri: info.mine ? 1 : info.kind === 'award' ? 2 : 6, text: n.headline || n.body, href: allStarHref(n) || '#/news' + (info.mine ? '/mine' : '/' + info.kind) });
     });
     // season awards when a season finished during the sim
     const hs = (g.history && g.history.seasons) || [];

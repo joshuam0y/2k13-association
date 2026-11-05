@@ -27,7 +27,7 @@
   UI.currentDate = () => (UI.state.game && UI.state.L && UI.state.L.currentDate ? UI.state.L.currentDate(UI.state.game) : null);
 
   // Save after any change made by another page (trades, signings, draft picks).
-  UI.saveNow = async function () { UI.bump(); const ok = await UI.saves.write(); UI.updateChrome(); return ok; };
+  UI.saveNow = async function () { UI.bump(); UI.updateChrome(); const ok = await UI.saves.write(); UI.updateChrome(); return ok; };
 
   const pause = ms => new Promise(res => setTimeout(res, ms || 0));
   const money = n => (UI.fmtMoney ? UI.fmtMoney(n) : '$' + (n / 1e6).toFixed(1) + 'M');
@@ -278,6 +278,8 @@
       UI.toast('The sim stopped with an error: ' + (e && e.message ? e.message : e), 'error');
     }
     title.textContent = 'SAVING';
+    // the record chip shows the new record right away, not after a slow save
+    UI.bump(); UI.updateChrome();
     await UI.saves.write();
     overlay.hidden = true;
     UI.simming = false;

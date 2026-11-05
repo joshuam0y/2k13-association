@@ -91,6 +91,14 @@ for (const y of [2016, 2019, 2021, 2023, 2025]) {
   }
   if (y === 2025) ok(w.game.format === 'tournament' && w.game.teams.length === 4 && w.game.teams[3].key === 'rising' && w.game.games.length === 3, '2025: four-team tournament with the Rising Stars winner');
 }
+// links: event keys open their day, a plain link opens the next event still to happen, else Friday
+const LT = (arg, st) => AS.linkTarget(arg, st || s);
+ok(LT('three').day === 'sat' && LT('three').event === 'three' && LT('2013/dunk').year === 2013, 'event links open Saturday events');
+ok(LT('rising').day === 'fri' && LT('skills').day === 'sat' && LT('game').day === 'sun', 'each event opens its day');
+ok(LT('sun').day === 'sun' && LT('2013/sat').day === 'sat', 'day links still work');
+ok(LT('').day === 'fri' && LT('2013').day === 'fri', 'plain link after the weekend opens Friday, not Sunday');
+const pre = L.newLeague('OKC', { seed: 3 });
+ok(AS.linkTarget('', pre).day === 'fri', 'plain link before the weekend opens Friday');
 function score(g) { return g.home.pts + '-' + g.away.pts; }
 ok(!warns.some(w => /allstar/.test(w)), 'no allstar warnings: ' + warns.filter(w => /allstar/.test(w)).join(' | '));
 console.log('All-Star tests: ' + pass + ' passed, ' + fail + ' failed');

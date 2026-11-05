@@ -57,10 +57,10 @@
     tournament: 'Four teams of seven: three of first and second year players and one from the G League. Semifinals to 40, the final to 25.' };
   function friday(wk) {
     const rs = wk.rising;
-    if (!rs || rs.format === 'none') return `<section class="as-ev">${UI.header('RISING STARS')}<p class="muted">${esc((rs && rs.note) || 'Not held this season.')}</p></section>`;
+    if (!rs || rs.format === 'none') return `<section class="as-ev" id="as-ev-rising">${UI.header('RISING STARS')}<p class="muted">${esc((rs && rs.note) || 'Not held this season.')}</p></section>`;
     const mvp = rs.mvp;
     const champ = (rs.teams.find(t => t.key === rs.champion) || {}).name || '';
-    return `<section class="as-ev">${UI.header('RISING STARS', esc(RS_FMT[rs.format] || ''))}
+    return `<section class="as-ev" id="as-ev-rising">${UI.header('RISING STARS', esc(RS_FMT[rs.format] || ''))}
       ${rs.draftNote ? `<p class="as-note">${esc(rs.draftNote)}</p>` : ''}
       <div class="as-wins">${winnerCard('RISING STARS MVP', mvp && mvp.id, mvp ? `${mvp.pts} PTS, ${mvp.reb} REB, ${mvp.ast} AST${mvp.g > 1 ? ' in ' + mvp.g + ' games' : ''}` : '')}
         ${champ ? `<div class="as-win as-win-team"><div class="as-win-t"><small>CHAMPIONS</small><b>${esc(champ)}</b></div></div>` : ''}</div>
@@ -70,7 +70,7 @@
 
   // ---------- Saturday ----------
   function skillsHtml(sk) {
-    if (!sk || !sk.rounds.length) return `<section class="as-ev">${UI.header('SKILLS CHALLENGE')}<p class="muted">Not enough players for the course.</p></section>`;
+    if (!sk || !sk.rounds.length) return `<section class="as-ev" id="as-ev-skills">${UI.header('SKILLS CHALLENGE')}<p class="muted">Not enough players for the course.</p></section>`;
     const who = ids => ids.map(plink).join(' / ');
     const rounds = sk.rounds.map(r => {
       if (r.matches) return `<div class="as-round"><h4>${esc(r.name.toUpperCase())}</h4><div class="as-matches">${r.matches.map(m => `<div class="as-match">
@@ -79,11 +79,11 @@
         ${r.rows.map(x => `<tr class="${x.adv || x.made ? 'adv' : ''}"><td class="l">${x.label ? `<b>${esc(x.label)}</b> <small class="muted">${x.ids.map(pname).join(', ')}</small>` : who(x.ids)}${x.adv ? ' <span class="as-adv">ADVANCES</span>' : ''}${x.made ? ' <span class="as-adv">MADE IT</span>' : ''}</td>
           <td>${x.attempts != null ? x.attempts : x.time.toFixed(1) + 's'}</td>${x.pts != null ? `<td>${x.pts}</td>` : ''}</tr>`).join('')}</tbody></table></div></div>`;
     }).join('');
-    return `<section class="as-ev">${UI.header('SKILLS CHALLENGE', sk.format === 'bracket' ? 'Head-to-head races through the obstacle course.' : sk.format === 'teams' ? 'Team events: shooting, passing and dribbling, then a half-court shot final.' : 'Timed runs through the obstacle course.')}
+    return `<section class="as-ev" id="as-ev-skills">${UI.header('SKILLS CHALLENGE', sk.format === 'bracket' ? 'Head-to-head races through the obstacle course.' : sk.format === 'teams' ? 'Team events: shooting, passing and dribbling, then a half-court shot final.' : 'Timed runs through the obstacle course.')}
       <div class="as-wins">${winnerCard('SKILLS CHALLENGE', sk.winner, '', sk.format === 'teams' ? sk.winnerName : null)}</div>${rounds}</section>`;
   }
   function threeHtml(th) {
-    if (!th || !th.rounds.length) return `<section class="as-ev">${UI.header('THREE-POINT CONTEST')}<p class="muted">Not enough shooters.</p></section>`;
+    if (!th || !th.rounds.length) return `<section class="as-ev" id="as-ev-three">${UI.header('THREE-POINT CONTEST')}<p class="muted">Not enough shooters.</p></section>`;
     const fieldInfo = {};
     (th.field || []).forEach(f => { fieldInfo[f.id] = f; });
     const rack = rk => `<span class="as-rack${rk.money ? ' money' : ''}" title="${esc(rk.spot)}${rk.money ? ', money ball rack' : ''}">${rk.balls.map(b => `<i class="${b.m ? 'in' : ''}${b.v > 1 ? ' mb' : ''}"></i>`).join('')}</span>`;
@@ -93,18 +93,18 @@
           <div class="as-racks">${x.racks.map(rack).join('')}${x.deep && x.deep.length ? `<span class="as-rack deep" title="Deep shots, 3 points">${x.deep.map(b => `<i class="${b.m ? 'in' : ''} mb"></i>`).join('')}</span>` : ''}</div></div>
           <b>${x.score}</b></div>`).join('')}</div></div>`).join('');
     const rl = th.rules;
-    return `<section class="as-ev">${UI.header('THREE-POINT CONTEST', `${(th.field || []).length} shooters, ${rl.balls} balls a round, money balls worth 2${rl.moneyRack ? ', one money ball rack' : ''}${rl.deep ? ', two deep shots worth 3' : ''}. Max ${rl.max}.`)}
+    return `<section class="as-ev" id="as-ev-three">${UI.header('THREE-POINT CONTEST', `${(th.field || []).length} shooters, ${rl.balls} balls a round, money balls worth 2${rl.moneyRack ? ', one money ball rack' : ''}${rl.deep ? ', two deep shots worth 3' : ''}. Max ${rl.max}.`)}
       <div class="as-wins">${winnerCard('THREE-POINT CHAMPION', th.winner, th.winScore != null ? th.winScore + ' in the final' : '')}</div>${rounds}
       <p class="as-key"><i class="in"></i> make <i class="in mb"></i> money ball <i></i> miss</p></section>`;
   }
   function dunkHtml(dk) {
-    if (!dk || !dk.rounds.length) return `<section class="as-ev">${UI.header('SLAM DUNK CONTEST')}<p class="muted">No dunkers this year.</p></section>`;
+    if (!dk || !dk.rounds.length) return `<section class="as-ev" id="as-ev-dunk">${UI.header('SLAM DUNK CONTEST')}<p class="muted">No dunkers this year.</p></section>`;
     const rounds = dk.rounds.map(r => `<div class="as-round"><h4>${esc(r.name.toUpperCase())}</h4><div class="as-dunkers">${r.rows.map(x => `
       <div class="as-dunker${x.adv ? ' adv' : ''}${/Final|Dunk-off/.test(r.name) && x.id === dk.winner ? ' as-champ' : ''}">
         <div class="as-dk-h">${UI.headshot(pl(x.id), 'as-mini')}<span>${plink(x.id)}</span><b>${x.score}</b></div>
         ${x.dunks.map(d => `<div class="as-dk"><span>${esc(d.dunk)}${d.made ? (d.attempts > 1 ? ` <small class="muted">(attempt ${d.attempts})</small>` : '') : ' <small class="as-miss">MISSED</small>'}</span><span class="as-judges">${d.judges.map(j => `<i class="${j === 10 ? 'ten' : ''}">${j}</i>`).join('')}</span><b class="${d.score === 50 ? 'ten' : ''}">${d.score}</b></div>`).join('')}
       </div>`).join('')}</div></div>`).join('');
-    return `<section class="as-ev">${UI.header('SLAM DUNK CONTEST', 'Five judges score each dunk from 6 to 10, so a dunk scores 30 to 50.')}
+    return `<section class="as-ev" id="as-ev-dunk">${UI.header('SLAM DUNK CONTEST', 'Five judges score each dunk from 6 to 10, so a dunk scores 30 to 50.')}
       <div class="as-wins">${winnerCard('SLAM DUNK CHAMPION', dk.winner, '')}</div>${rounds}</section>`;
   }
   const saturday = wk => skillsHtml(wk.skills) + threeHtml(wk.three) + dunkHtml(wk.dunk);
@@ -115,11 +115,11 @@
     tournament: 'Four teams: three of eight All-Stars and the Rising Stars champions. Every game is played to 40.' };
   function sunday(wk) {
     const gm = wk.game;
-    if (!gm || !gm.games.length) return `<section class="as-ev">${UI.header('ALL-STAR GAME')}<p class="muted">The game could not be played.</p></section>`;
+    if (!gm || !gm.games.length) return `<section class="as-ev" id="as-ev-game">${UI.header('ALL-STAR GAME')}<p class="muted">The game could not be played.</p></section>`;
     const mvp = gm.mvp;
     const champ = (gm.teams.find(t => t.key === gm.champion) || {}).name || '';
     const draft = gm.draft && gm.draft.length ? `<details class="as-det"><summary>THE DRAFT</summary><ol class="as-draft">${gm.draft.map(d => `<li><small>${esc(pl(d.by).name)}</small> ${plink(d.id)}</li>`).join('')}</ol></details>` : '';
-    return `<section class="as-ev">${UI.header('ALL-STAR GAME', esc(ASG_FMT[gm.format] || '') + (gm.elamNote ? ' ' + esc(gm.elamNote) : ''))}
+    return `<section class="as-ev" id="as-ev-game">${UI.header('ALL-STAR GAME', esc(ASG_FMT[gm.format] || '') + (gm.elamNote ? ' ' + esc(gm.elamNote) : ''))}
       <div class="as-wins">${winnerCard(gm.trophy ? 'ALL-STAR MVP | ' + gm.trophy.toUpperCase() : 'ALL-STAR MVP', mvp && mvp.id, mvp ? `${mvp.pts} PTS, ${mvp.reb} REB, ${mvp.ast} AST${mvp.g > 1 ? ' in ' + mvp.g + ' games' : ''}` : '')}
         ${champ ? `<div class="as-win as-win-team"><div class="as-win-t"><small>WINNERS</small><b>${esc(champ)}</b></div></div>` : ''}</div>
       ${gm.games.map((g, i) => gameCard(g, gm, i === gm.games.length - 1)).join('')}
@@ -132,9 +132,9 @@
     const g = game(), A = AS();
     if (!g || !g.season) { app.innerHTML = UI.header('ALL-STAR WEEKEND') + UI.empty('NO LEAGUE LOADED', 'Start or load an Association to see the All-Star Weekend.', '<a class="btn btn-gold" href="#/home">MAIN MENU</a>'); return; }
     if (!A) { app.innerHTML = UI.header('ALL-STAR WEEKEND') + UI.empty('NOT AVAILABLE', 'The All-Star module did not load.'); return; }
-    const parts = String(arg || '').split('/');
-    let year = /^\d{4}$/.test(parts[0]) ? Number(parts[0]) : g.year;
-    let day = DAYS.some(d => d[0] === parts[parts.length - 1]) ? parts[parts.length - 1] : 'sun';
+    // the day (and event) the link asks for; a plain link opens the next event still to happen, else Friday
+    const to = A.linkTarget ? A.linkTarget(arg, g) : { year: g.year, day: 'fri', event: null };
+    const year = to.year, day = to.day;
     const st = A.status(g);
     if (year === g.year && !st.weekend && st.passed) { if (A.weekend(g)) save(); }
     const book = g.allStarWeekend || {};
@@ -151,6 +151,7 @@
     const tabs = `<nav class="as-days">${DAYS.map(d => `<a href="#/allstar/${year}/${d[0]}" class="${d[0] === day ? 'on' : ''}"><b>${d[1]}</b><small>${esc(d[2])}</small></a>`).join('')}</nav>`;
     const body = day === 'fri' ? friday(wk) : day === 'sat' ? saturday(wk) : sunday(wk);
     app.innerHTML = `<div class="as-page">${hero}${yearTabs}${tabs}${body}</div>`;
+    if (to.event) { const el = UI.$('#as-ev-' + to.event, app); if (el && el.scrollIntoView) setTimeout(() => el.scrollIntoView({ block: 'start' }), 0); }
   };
   P.allstar.navLabel = 'All-Star';
   P.allstar.navDesc = 'All-Star Weekend: Rising Stars, the Saturday contests and the All-Star Game.';

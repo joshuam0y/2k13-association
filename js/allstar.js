@@ -786,6 +786,24 @@
       weekend: state.allStarWeekend ? state.allStarWeekend[y] || null : null };
   }
 
+  // Where a link to the weekend page opens: #/allstar[/<year>][/<fri|sat|sun|rising|skills|three|dunk|game>].
+  // An event key opens its day (and the page scrolls to it); a plain link opens the day of the next event
+  // still to happen, or Friday when the whole weekend is still ahead or already over.
+  var EVENT_DAY = { rising: 'fri', skills: 'sat', three: 'sat', dunk: 'sat', game: 'sun' };
+  function addDays(iso, n) { var d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+  function linkTarget(arg, state) {
+    var parts = String(arg || '').split('/').filter(Boolean);
+    var year = /^\d{4}$/.test(parts[0] || '') ? Number(parts.shift()) : yearOf(state);
+    var key = parts[0] || '';
+    if (EVENT_DAY[key]) return { year: year, day: EVENT_DAY[key], event: key };
+    if (key === 'fri' || key === 'sat' || key === 'sun') return { year: year, day: key, event: null };
+    var day = 'fri';
+    var L = mod('LEAGUE'), today = L && L.currentDate && state && state.season && year === yearOf(state) ? L.currentDate(state) : null;
+    var sun = dateOf(year);
+    if (today && !breakPassed(state)) day = today <= addDays(sun, -2) ? 'fri' : today <= addDays(sun, -1) ? 'sat' : 'sun';
+    return { year: year, day: day, event: null };
+  }
+
   // Builds the weekend right after the break, so the contests use the stats from that day
   (function hookAdvance() {
     var L = mod('LEAGUE');
@@ -807,6 +825,8 @@
     weekend: weekend,
     status: status,
     dateOf: dateOf,
+    linkTarget: linkTarget,
+    EVENT_DAY: EVENT_DAY,
     hostOf: function (y) { return HOSTS[y] || null; },
     rsFormat: rsFormat,
     asgFormat: asgFormat,
