@@ -566,7 +566,7 @@
     return p ? fr.plink(p) : esc(x.name || x.id || '?');
   }
   function gameRow(s, x, i, R, stat) {
-    return `<li class="${i === 0 ? 'top' : ''}${x.real ? ' rc-real' : ''}"><span class="rc-rank">${i + 1}</span><span class="rc-n">${who(s, x)}<small>${x.team ? esc(x.team) + ' vs ' + esc(x.opp) + ', ' : ''}${gameDate(x.date)}${x.real ? ' | Real NBA, before 2012-13' : ''}</small></span><b>${esc(x.v)} <small>${esc(R.SHORT[stat])}</small></b></li>`;
+    return `<li class="${i === 0 ? 'top' : ''}${x.real ? ' rc-real' : ''}"><span class="rc-rank">${i + 1}</span><span class="rc-n">${who(s, x)}<small>${x.team ? esc(x.team) + ' vs ' + esc(x.opp) + ', ' : ''}${gameDate(x.date)}${x.real ? ' | Real NBA, before 2012-13' : ' | This Association'}</small></span><b>${esc(x.v)} <small>${esc(R.SHORT[stat])}</small></b></li>`;
   }
   function trackedNote(R, s) {
     const y = R.trackingSince(s);
@@ -583,6 +583,12 @@
     const ctl = rcControls(R, sub, ph, stat, stats);
     const phLabel = ph === 'p' ? 'Playoffs' : 'Regular season';
     if (sub === 'save') return ctl + recordsTab(s);
+    // real games and this save's games in one list, best first (an earlier game first on ties). A game
+    // from the save gets in once it reaches the real list (at least the lowest real game shown).
+    const allTime = (real, mine) => {
+      const floor = real.length ? Math.min(...real.map(x => x.v)) : 0;
+      return real.concat(mine.filter(x => x.v >= floor)).sort((a, b) => (b.v - a.v) || String(a.date || '').localeCompare(String(b.date || ''))).slice(0, 10);
+    };
     if (sub === 'game') {
       const cards = R.HI.map(k => {
         const best = R.singleGame(s, ph, k, 1)[0];
@@ -593,7 +599,7 @@
       return `${ctl}${UI.header('SINGLE-GAME RECORDS', esc(phLabel) + ' games in this Association. ' + trackedNote(R, s))}<div class="rc-cards">${cards}</div>
         ${UI.header('MOST ' + R.LABEL[stat] + ' IN A GAME', '')}
         ${list.length ? `<ol class="rc-list">${list.map((x, i) => gameRow(s, x, i, R, stat)).join('')}</ol>` : `<p class="muted">No ${ph === 'p' ? 'playoff ' : ''}games recorded ${esc(trackedNote(R, s).replace(/^Since/, 'since').replace(/\.$/, ''))} yet.</p>`}
-        ${real.length ? `${UI.header('REAL NBA TOP ' + real.length, 'The best real games before 2012-13 (regular season).')}<ol class="rc-list">${real.map((x, i) => gameRow(s, x, i, R, stat)).join('')}</ol>` : ''}
+        ${real.length ? `${UI.header('ALL-TIME TOP GAMES', 'The real NBA before 2012-13 and this Association together. A game from your save that reaches the list takes its place.')}<ol class="rc-list">${allTime(real, list).map((x, i) => gameRow(s, x, i, R, stat)).join('')}</ol>` : ''}
         ${R.SINCE[stat] && ph === 'r' ? `<p class="pk-note">${esc(sinceNote(R, stat))}</p>` : ''}`;
     }
     if (sub === 'season') {
