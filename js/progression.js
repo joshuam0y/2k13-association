@@ -742,6 +742,13 @@
     }
     return null;
   }
+  // His real blocks and steals per 36 that season (data/defense-history.js): { blk, stl, min } or null
+  function realDefense(id, year) {
+    var H = root && root.DEFENSE_HISTORY, v = H && H[id];
+    if (!v) return null;
+    for (var i = 0; i + 3 < v.length; i += 4) if (v[i] === year) return { blk: v[i + 1] / 10, stl: v[i + 2] / 10, min: v[i + 3] * 10 };
+    return null;
+  }
   function ageTendencies(state, next, done) {
     var E = root && root.ENGINE;
     if (!E || typeof E.tendencyOf !== 'function') return 0;
@@ -793,6 +800,17 @@
       var o = {};
       TEND_KEYS.forEach(function (k) { o[k] = clamp(Math.round(cur[k]), 0, 100); });
       if (gen0) o.generated = true;
+      // blocks and steals per 36 (x10): move with his block and steal ratings, a little toward what the
+      // ratings call for, and toward his real season when there is one (data/defense-history.js)
+      if (E.defRates && E.genDefRates) {
+        var dr = E.defRates(p), g = E.genDefRates(p);
+        if (t.gb && t.gs) { dr.blk *= clamp(g.blk * 100 / t.gb, 0.6, 1.6); dr.stl *= clamp(g.stl * 100 / t.gs, 0.6, 1.6); }
+        dr.blk += 0.05 * (g.blk - dr.blk); dr.stl += 0.05 * (g.stl - dr.stl);
+        var rd = realDefense(id, next);
+        if (rd) { var wd = 0.6 * clamp(rd.min / 1500, 0.25, 1); dr.blk += wd * (rd.blk - dr.blk); dr.stl += wd * (rd.stl - dr.stl); }
+        o.blk = clamp(Math.round(dr.blk * 10), 0, 60); o.stl = clamp(Math.round(dr.stl * 10), 2, 40);
+        o.gb = Math.round(g.blk * 100); o.gs = Math.round(g.stl * 100);
+      }
       p.tend = o; p.tendYear = next; p.tendOvr = p.ovr; n++;
     });
     return n;

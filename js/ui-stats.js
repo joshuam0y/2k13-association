@@ -29,8 +29,8 @@
   const PICKS = {};
   PICK_SRC.split(' ').forEach(s => { const a = s.split(':'); PICKS[a[0]] = { year: +a[1], pick: +a[2], round: +a[2] <= 30 ? 1 : 2, team: a[3] }; });
 
-  const K = ['min', 'pts', 'fgm', 'fga', 'tpm', 'tpa', 'ftm', 'fta', 'oreb', 'dreb', 'ast', 'stl', 'blk', 'tov', 'pf'];
-  const PCT = { fgp: 1, tpp: 1, ftp: 1, tsp: 1 };
+  const K = ['min', 'pts', 'fgm', 'fga', 'tpm', 'tpa', 'ftm', 'fta', 'oreb', 'dreb', 'ast', 'stl', 'blk', 'tov', 'pf', 'pm', 'dfga', 'dfgm', 'dfgx'];
+  const PCT = { fgp: 1, tpp: 1, ftp: 1, tsp: 1, ofg: 1 };
   const INT = { g: 1, gs: 1, dd: 1, td: 1, seasons: 1 };
   const game = () => UI.state.game;
 
@@ -62,7 +62,6 @@
       if (!line) return;
       const cats = ddCats(row);
       if (cats >= 2) line.dd = (line.dd || 0) + 1;
-      if (cats >= 3) line.td = (line.td || 0) + 1;
     }));
     const ha = r.home.abbr, aa = r.away.abbr;
     if (state && ha && aa) {
@@ -129,6 +128,8 @@
     s.ftp = s.fta ? s.ftm / s.fta : null;
     const tsa = s.fga + 0.44 * s.fta;
     s.tsp = tsa ? s.pts / (2 * tsa) : null;
+    // shots he guarded: opponent FG%
+    s.ofg = s.dfga >= 1 ? s.dfgm / s.dfga : null;
     s.eff = s.pts + s.reb + s.ast + s.stl + s.blk - (s.fga - s.fgm) - (s.fta - s.ftm) - s.tov;
     return s;
   }
@@ -198,6 +199,7 @@
   }
   function fmt(k, v, mode) {
     if (v == null || isNaN(v)) return '-';
+    if (k === 'pm') { const t = mode === 'tot' ? String(Math.round(v)) : Number(v).toFixed(1); return v > 0 ? '+' + t : t; }
     if (PCT[k]) return (v * 100).toFixed(1);
     if (INT[k] || mode === 'tot') return Math.round(v).toLocaleString('en-US');
     return Number(v).toFixed(1);
@@ -272,6 +274,8 @@
     { k: 'ftp', label: 'FREE THROW %', unit: 'FT%', q: 'ftm', n: 125, only: true, ab: 'FTM' },
     { k: 'tpm', label: '3-POINTERS MADE', unit: 'TOTAL', total: true },
     { k: 'dd', label: 'DOUBLE-DOUBLES', unit: 'TOTAL', total: true },
+    { k: 'td', label: 'TRIPLE-DOUBLES', unit: 'TOTAL', total: true },
+    { k: 'pm', label: 'PLUS-MINUS', unit: '+/-', q: 'min', n: 1000, ab: 'MIN', note: 'Points scored minus points allowed while he is on the floor, per game' },
     { k: 'min', label: 'MINUTES', unit: 'MPG', q: 'min', n: 2000, ab: 'MIN' },
     { k: 'eff', label: 'EFFICIENCY', unit: 'EFF', q: 'min', n: 2000, ab: 'MIN', note: 'PTS + REB + AST + STL + BLK, minus missed shots and turnovers, per game' }
   ];
@@ -282,7 +286,8 @@
     const minGpo = Math.min(4, Math.max(1, tg));
     const cov = coverage();
     const cards = LEADS.map(L => {
-      if (L.k === 'dd' && !list.some(x => x.s.dd != null)) return '';
+      if ((L.k === 'dd' || L.k === 'td') && !list.some(x => x.s[L.k] != null)) return '';
+      if (L.k === 'pm' && !list.some(x => x.s.pm)) return '';
       let need = '', ok;
       if (L.total) { ok = x => x.s.g > 0; need = po ? 'Playoff total' : 'Season total'; }
       else if (L.only) {
@@ -319,7 +324,7 @@
 
   // ---------- PLAYERS ----------
   const PCOLS = [['g', 'G'], ['gs', 'GS'], ['min', 'MIN'], ['pts', 'PTS'], ['reb', 'REB'], ['oreb', 'OREB'], ['ast', 'AST'], ['stl', 'STL'], ['blk', 'BLK'], ['tov', 'TOV'],
-    ['fgm', 'FGM'], ['fga', 'FGA'], ['fgp', 'FG%'], ['tpm', '3PM'], ['tpa', '3PA'], ['tpp', '3P%'], ['ftm', 'FTM'], ['fta', 'FTA'], ['ftp', 'FT%'], ['tsp', 'TS%'], ['dd', 'DD'], ['eff', 'EFF']];
+    ['fgm', 'FGM'], ['fga', 'FGA'], ['fgp', 'FG%'], ['tpm', '3PM'], ['tpa', '3PA'], ['tpp', '3P%'], ['ftm', 'FTM'], ['fta', 'FTA'], ['ftp', 'FT%'], ['tsp', 'TS%'], ['dd', 'DD'], ['td', 'TD'], ['pm', '+/-'], ['ofg', 'OPP FG%'], ['eff', 'EFF']];
   const MODES = [['pg', 'PER GAME'], ['tot', 'TOTALS'], ['p36', 'PER 36']];
   const seg = (name, opts, on) => `<div class="sc-seg" role="group">${opts.map(([v, l]) => `<button type="button" data-sc-${name}="${esc(v)}" class="${v === on ? 'on' : ''}" aria-pressed="${v === on}">${l}</button>`).join('')}</div>`;
 

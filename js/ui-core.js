@@ -272,7 +272,9 @@
     const reb = t.reb != null ? t.reb : (t.oreb || 0) + (t.dreb || 0);
     return {
       g, mpg: t.min / g, pts: t.pts / g, reb: reb / g, ast: t.ast / g, stl: t.stl / g, blk: t.blk / g,
-      fgp: t.fga ? t.fgm / t.fga : null, tpp: t.tpa ? t.tpm / t.tpa : null, ftp: t.fta ? t.ftm / t.fta : null
+      fgp: t.fga ? t.fgm / t.fga : null, tpp: t.tpa ? t.tpm / t.tpa : null, ftp: t.fta ? t.ftm / t.fta : null,
+      // tracked since plus-minus, triple-doubles and guarded shots were added (null on older seasons)
+      pm: t.pm != null ? t.pm / g : null, td: t.td != null ? t.td : null, ofg: t.dfga ? t.dfgm / t.dfga : null
     };
   };
 

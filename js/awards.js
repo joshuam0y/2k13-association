@@ -33,7 +33,9 @@
     return {
       g: g, gs: t.gs || 0, mpg: (t.min || 0) / g, ppg: (t.pts || 0) / g, rpg: reb / g, apg: (t.ast || 0) / g,
       spg: (t.stl || 0) / g, bpg: (t.blk || 0) / g, drpg: ((t.dreb || 0) + 0.7 * (t.reb || 0)) / g,
-      fgp: t.fga ? t.fgm / t.fga : 0, gmsc: gmsc / g
+      fgp: t.fga ? t.fgm / t.fga : 0, gmsc: gmsc / g,
+      // shots he guarded: opponent FG% against what those shooters make on an average defender (negative = better)
+      dfga: t.dfga || 0, oppVs: t.dfga ? ((t.dfgm || 0) - (t.dfgx || 0)) / t.dfga : 0, pm: (t.pm || 0) / g
     };
   }
 
@@ -70,6 +72,14 @@
     return s / keys.length;
   }
 
+  // Defensive reputation: DPOY and All-Defensive picks in the last three seasons (real ones before 2013, then this save's)
+  var DEF_REP = { 'DPOY': 3, 'All-Defensive 1st Team': 2, 'All-Defensive 2nd Team': 1 };
+  function defRep(p, year) {
+    var prior = (typeof window !== 'undefined' && window.AWARDS_PRIOR && window.AWARDS_PRIOR[p.id]) || [], pts = 0;
+    prior.concat(p.awards || []).forEach(function (a) { if (a && DEF_REP[a.award] && a.year < year && a.year >= year - 3) pts += DEF_REP[a.award] * (a.year === year - 1 ? 1 : 0.6); });
+    return 0.45 * Math.min(pts, 6);
+  }
+
   // Team defense: points allowed per game against the league average
   function teamDefense(state) {
     var st = standings(state), out = {}, sum = 0, n = 0;
@@ -101,9 +111,16 @@
       // overall value: game score with a nod to scoring volume
       c.value = line.gmsc + 0.25 * line.ppg + 0.2 * line.apg;
       c.rep = clamp(((p.ovr || 75) - 80) * 0.2, -3, 4);   // voters lean on reputation a little
-      // defensive value: stocks, defensive boards, ratings and team defense
-      c.defense = 3.2 * line.spg + 2.6 * line.bpg + 0.45 * line.drpg + 0.12 * (attrAvg(p, ['perD', 'intD', 'diq']) - 60) +
-        0.35 * c.teamDef + 0.06 * line.mpg;
+      // defensive value, the whole profile: how good a defender he is (perimeter or interior by position,
+      // awareness, hands, rim protection), what the shooters he guards make against what they usually
+      // make (shrunk toward zero on small samples), steals, blocks and defensive boards, team defense,
+      // net rating while he plays and minutes, plus a little reputation
+      var big = clamp(((+p.ht || 79) - 78) / 5, 0, 1);
+      var dz = (1 - big) * attrAvg(p, ['perD', 'perD', 'diq', 'steal']) + big * attrAvg(p, ['intD', 'intD', 'diq', 'block']);
+      var shrink = line.dfga / (line.dfga + 15 * line.g);
+      c.defense = 0.2 * (dz - 60) - 130 * line.oppVs * shrink + 1.6 * line.spg + 1.5 * line.bpg + 0.15 * line.drpg +
+        0.6 * c.teamDef + 0.1 * clamp(line.pm, -8, 8) + 0.05 * line.mpg + 0.2 * c.rep +
+        defRep(p, year) - 0.06 * Math.max(0, line.ppg - 16);   // voters remember stoppers; a big scoring load costs a bit
       list.push(c);
     });
     return list;

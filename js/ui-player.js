@@ -100,20 +100,21 @@
       return w ? v / w : null;
     };
     const G = rows.reduce((t, r) => t + (Number(r.s.g) || 0), 0);
-    const total = { g: G, mpg: avg('mpg'), pts: avg('pts'), reb: avg('reb'), ast: avg('ast'), stl: avg('stl'), blk: avg('blk'), fgp: avg('fgp'), tpp: avg('tpp'), ftp: avg('ftp') };
+    const tdSum = rows.some(r => r.s.td != null) ? rows.reduce((t, r) => t + (Number(r.s.td) || 0), 0) : null;
+    const total = { g: G, mpg: avg('mpg'), pts: avg('pts'), reb: avg('reb'), ast: avg('ast'), stl: avg('stl'), blk: avg('blk'), fgp: avg('fgp'), tpp: avg('tpp'), ftp: avg('ftp'), pm: avg('pm'), td: tdSum, ofg: avg('ofg') };
     const best = {};
     ['pts', 'reb', 'ast', 'stl', 'blk'].forEach(k => { best[k] = Math.max.apply(null, rows.map(r => Number(UI.fmt1(r.s[k])) || 0)); });
     const hi = (r, k) => (rows.length > 1 && best[k] > 0 && Number(UI.fmt1(r.s[k])) === best[k] ? ' class="pk-hi"' : '');
-    const cells = (st, r) => `<td>${esc(st.g == null ? '-' : st.g)}</td><td>${UI.fmt1(st.mpg)}</td><td${r ? hi(r, 'pts') : ''}><b>${UI.fmt1(st.pts)}</b></td><td${r ? hi(r, 'reb') : ''}>${UI.fmt1(st.reb)}</td><td${r ? hi(r, 'ast') : ''}>${UI.fmt1(st.ast)}</td><td${r ? hi(r, 'stl') : ''}>${UI.fmt1(st.stl)}</td><td${r ? hi(r, 'blk') : ''}>${UI.fmt1(st.blk)}</td><td>${UI.fmtPct(st.fgp)}</td><td>${UI.fmtPct(st.tpp)}</td><td>${UI.fmtPct(st.ftp)}</td>`;
+    const cells = (st, r) => `<td>${esc(st.g == null ? '-' : st.g)}</td><td>${UI.fmt1(st.mpg)}</td><td${r ? hi(r, 'pts') : ''}><b>${UI.fmt1(st.pts)}</b></td><td${r ? hi(r, 'reb') : ''}>${UI.fmt1(st.reb)}</td><td${r ? hi(r, 'ast') : ''}>${UI.fmt1(st.ast)}</td><td${r ? hi(r, 'stl') : ''}>${UI.fmt1(st.stl)}</td><td${r ? hi(r, 'blk') : ''}>${UI.fmt1(st.blk)}</td><td>${UI.fmtPct(st.fgp)}</td><td>${UI.fmtPct(st.tpp)}</td><td>${UI.fmtPct(st.ftp)}</td><td>${st.pm == null ? '-' : (st.pm > 0 ? '+' : '') + UI.fmt1(st.pm)}</td><td>${st.td == null ? '-' : st.td}</td><td>${UI.fmtPct(st.ofg)}</td>`;
     const known = abbr => UI.teams().some(t => t.abbr === abbr);
     const teamCell = abbr => {
       const parts = String(abbr || '').split('/');
       return parts.length > 1 ? `<span class="pk-tot">${esc(parts.join(', '))}</span>` : `<span class="pk-tm">${known(abbr) ? UI.logo(abbr, 18) : ''}${esc(abbr || '')}</span>`;
     };
-    return `<div class="tscroll"><table class="stats pk-career"><thead><tr><th class="l">SEASON</th><th class="l">TEAM</th><th>G</th><th>MPG</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>FG%</th><th>3P%</th><th>FT%</th></tr></thead>
+    return `<div class="tscroll"><table class="stats pk-career"><thead><tr><th class="l">SEASON</th><th class="l">TEAM</th><th>G</th><th>MPG</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>FG%</th><th>3P%</th><th>FT%</th><th title="Plus-minus per game">+/-</th><th title="Triple-doubles">TD</th><th title="Field goal percentage of the shots he guarded">OPP FG%</th></tr></thead>
       <tbody>${rows.map(r => `<tr${r.live ? ' class="pk-live"' : ''}><td class="l">${esc(UI.seasonLabel(r.year))}${r.live ? ' <small>so far</small>' : ''}</td><td class="l">${teamCell(r.team)}</td>${cells(r.s, r)}</tr>`).join('')}</tbody>
       <tfoot><tr><td class="l">CAREER</td><td class="l">${rows.length} season${rows.length > 1 ? 's' : ''}</td>${cells(total)}</tr></tfoot></table></div>
-      <p class="pk-note">Regular season, per game. Gold marks a career high.</p>
+      <p class="pk-note">Regular season, per game. Gold marks a career high. OPP FG% is how often the shots he guarded went in.</p>
       ${highsHtml(p)}`;
   }
 
@@ -265,10 +266,10 @@
   function gameLogHtml(p) {
     const log = UI.gameLog(p.id);
     if (!log.length) return UI.empty('NO GAMES THIS SEASON', esc(p.name) + ' has not played a game this season.');
-    return `<div class="tscroll"><table class="stats"><thead><tr><th class="l">GAME</th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>FG</th><th>3P</th><th>FT</th><th></th></tr></thead><tbody>${log.map(({ game: g, side, row: r }) => {
+    return `<div class="tscroll"><table class="stats"><thead><tr><th class="l">GAME</th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>FG</th><th>3P</th><th>FT</th><th>+/-</th><th></th></tr></thead><tbody>${log.map(({ game: g, side, row: r }) => {
       const opp = side === 'home' ? g.away : g.home;
       const won = side === 'home' ? g.hs > g.as : g.as > g.hs;
-      return `<tr><td class="l">${esc(UI.gameDay(g))} ${side === 'home' ? 'vs' : '@'} ${esc(opp)} <span class="${won ? 'win' : 'loss'}">${won ? 'W' : 'L'}</span>${g.playoff ? ' <small>PO</small>' : ''}</td><td>${Math.round(r.min || 0)}</td><td><b>${r.pts || 0}</b></td><td>${r.reb != null ? r.reb : (r.oreb || 0) + (r.dreb || 0)}</td><td>${r.ast || 0}</td><td>${r.stl || 0}</td><td>${r.blk || 0}</td><td>${r.fgm || 0}-${r.fga || 0}</td><td>${r.tpm || 0}-${r.tpa || 0}</td><td>${r.ftm || 0}-${r.fta || 0}</td><td><a href="#/game/${encodeURIComponent(g.id)}">BOX</a></td></tr>`;
+      return `<tr><td class="l">${esc(UI.gameDay(g))} ${side === 'home' ? 'vs' : '@'} ${esc(opp)} <span class="${won ? 'win' : 'loss'}">${won ? 'W' : 'L'}</span>${g.playoff ? ' <small>PO</small>' : ''}</td><td>${Math.round(r.min || 0)}</td><td><b>${r.pts || 0}</b></td><td>${r.reb != null ? r.reb : (r.oreb || 0) + (r.dreb || 0)}</td><td>${r.ast || 0}</td><td>${r.stl || 0}</td><td>${r.blk || 0}</td><td>${r.fgm || 0}-${r.fga || 0}</td><td>${r.tpm || 0}-${r.tpa || 0}</td><td>${r.ftm || 0}-${r.fta || 0}</td><td>${r.pm > 0 ? '+' : ''}${r.pm || 0}</td><td><a href="#/game/${encodeURIComponent(g.id)}">BOX</a></td></tr>`;
     }).join('')}</tbody></table></div>`;
   }
 

@@ -812,7 +812,7 @@
   // ---------- Box score ----------
   // Player rows sort by points by default. Tapping a column header sorts both teams by it,
   // tapping it again flips the order. Players who did not play stay at the bottom.
-  const BOX_COLS = [['min', 'MIN'], ['pts', 'PTS'], ['fg', 'FG'], ['tp', '3P'], ['ft', 'FT'], ['oreb', 'OREB'], ['dreb', 'DREB'], ['reb', 'REB'], ['ast', 'AST'], ['stl', 'STL'], ['blk', 'BLK'], ['tov', 'TOV'], ['pf', 'PF']];
+  const BOX_COLS = [['min', 'MIN'], ['pts', 'PTS'], ['fg', 'FG'], ['tp', '3P'], ['ft', 'FT'], ['oreb', 'OREB'], ['dreb', 'DREB'], ['reb', 'REB'], ['ast', 'AST'], ['stl', 'STL'], ['blk', 'BLK'], ['tov', 'TOV'], ['pf', 'PF'], ['pm', '+/-']];
   const boxSort = { key: 'pts', dir: -1, game: null };
   const boxReb = r => (r.reb != null ? Number(r.reb) || 0 : (Number(r.oreb) || 0) + (Number(r.dreb) || 0));
   const boxName = r => { const p = UI.player(r.id); return r.name || (p ? p.name : r.id); };
@@ -849,8 +849,8 @@
       const p = UI.player(r.id);
       const dnp = !(r.min > 0);
       return `<tr class="${dnp ? 'dnp' : ''}"><td class="l"><a href="#/player/${esc(r.id)}">${esc(boxName(r))}</a>${r.starter ? ' <span class="bx-s" title="Starter">S</span>' : ''}${p ? ` <small class="muted">${esc(p.pos)}</small>` : ''}</td>
-        ${dnp ? '<td colspan="13" class="l muted">Did not play</td>' : td('min', Math.round(r.min)) + td('pts', `<b>${r.pts || 0}</b>`) + td('fg', `${r.fgm || 0}-${r.fga || 0}`) + td('tp', `${r.tpm || 0}-${r.tpa || 0}`) + td('ft', `${r.ftm || 0}-${r.fta || 0}`) +
-          td('oreb', r.oreb || 0) + td('dreb', r.dreb || 0) + td('reb', boxReb(r)) + td('ast', r.ast || 0) + td('stl', r.stl || 0) + td('blk', r.blk || 0) + td('tov', r.tov || 0) + td('pf', r.pf || 0)}</tr>`;
+        ${dnp ? '<td colspan="14" class="l muted">Did not play</td>' : td('min', Math.round(r.min)) + td('pts', `<b>${r.pts || 0}</b>`) + td('fg', `${r.fgm || 0}-${r.fga || 0}`) + td('tp', `${r.tpm || 0}-${r.tpa || 0}`) + td('ft', `${r.ftm || 0}-${r.fta || 0}`) +
+          td('oreb', r.oreb || 0) + td('dreb', r.dreb || 0) + td('reb', boxReb(r)) + td('ast', r.ast || 0) + td('stl', r.stl || 0) + td('blk', r.blk || 0) + td('tov', r.tov || 0) + td('pf', r.pf || 0) + td('pm', (r.pm > 0 ? '+' : '') + (r.pm || 0))}</tr>`;
     }).join('');
   }
   function boxTable(abbr, box) {
@@ -862,7 +862,7 @@
     return `<div class="box-team">${UI.header(UI.teamName(abbr).toUpperCase())}
       <div class="tscroll"><table class="stats box"><thead>${boxHead()}</thead>
       <tbody>${boxBody(rows)}</tbody>
-      <tfoot><tr><td class="l">TOTALS</td><td>${Math.round(sum('min'))}</td><td><b>${sum('pts')}</b></td><td>${fgm}-${fga}${pct(fgm, fga)}</td><td>${tpm}-${tpa}${pct(tpm, tpa)}</td><td>${ftm}-${fta}${pct(ftm, fta)}</td><td>${sum('oreb')}</td><td>${sum('dreb')}</td><td>${rows.reduce((s, r) => s + reb(r), 0)}</td><td>${sum('ast')}</td><td>${sum('stl')}</td><td>${sum('blk')}</td><td>${sum('tov')}</td><td>${sum('pf')}</td></tr></tfoot>
+      <tfoot><tr><td class="l">TOTALS</td><td>${Math.round(sum('min'))}</td><td><b>${sum('pts')}</b></td><td>${fgm}-${fga}${pct(fgm, fga)}</td><td>${tpm}-${tpa}${pct(tpm, tpa)}</td><td>${ftm}-${fta}${pct(ftm, fta)}</td><td>${sum('oreb')}</td><td>${sum('dreb')}</td><td>${rows.reduce((s, r) => s + reb(r), 0)}</td><td>${sum('ast')}</td><td>${sum('stl')}</td><td>${sum('blk')}</td><td>${sum('tov')}</td><td>${sum('pf')}</td><td></td></tr></tfoot>
       </table></div></div>`;
   }
 

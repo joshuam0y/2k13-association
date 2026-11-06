@@ -9,7 +9,9 @@
   // ---------------------------------------------------------------------------
   var ATTR_KEYS = ['close', 'mid', 'three', 'ft', 'layup', 'dunk', 'post', 'handle', 'pass', 'oreb', 'dreb',
     'steal', 'block', 'perD', 'intD', 'speed', 'vert', 'strength', 'stamina', 'durability', 'oiq', 'diq'];
-  var STAT_KEYS = ['min', 'pts', 'fgm', 'fga', 'tpm', 'tpa', 'ftm', 'fta', 'oreb', 'dreb', 'ast', 'stl', 'blk', 'tov', 'pf'];
+  var STAT_KEYS = ['min', 'pts', 'fgm', 'fga', 'tpm', 'tpa', 'ftm', 'fta', 'oreb', 'dreb', 'ast', 'stl', 'blk', 'tov', 'pf', 'pm', 'dfga', 'dfgm', 'dfgx', 'td'];
+  // pm: plus-minus, dfga / dfgm: shots he guarded and how many went in (opponent FG%), dfgx: how many those
+  // shooters would make against an average defender (expected), td: triple-doubles
   var SHOT_TYPES = ['close', 'post', 'mid', 'three'];
   var DAY_MS = 86400000;
   var KEEP_PBP = 20;            // play-by-play kept for the most recent 20 games
@@ -44,6 +46,14 @@
     makeOvr: 0.0028,           // per (softened) z of shooter overall vs his defender
     teamEdge: 0.0010,         // per point of lineup average overall vs the opponent lineup
     formSd: 0.015,             // per-game shooting form of a team (hot and cold nights)
+    pFormMake: 0.028,         // per-game shooting form of a player (hot and cold nights, more for high-usage scorers)
+    pFormUse: 0.16,           // per-game aggression of a player (log sd of his shot share)
+    blkNorm: 3.5,             // blocks per 36 of an average five on the floor (summed); more shot blockers, more blocks
+    blkLineupExp: 0.55,       //   how much the five's blocking moves the block chance
+    blkExp: 1.1,              // who gets the block: blocks per 36 to this power
+    stlNorm: 5.8,             // steals per 36 of an average five on the floor (summed)
+    stlLineupExp: 0.35,
+    stlExp: 1.0,
     soft: 0.7,                // regression of elite shot-making toward the mean (diminishing returns)
     starDrain: 0.2,           // extra fatigue per unit of usage above average
     rubber: 0.0014,           // leading teams ease off and trailing teams push (per point of lead, capped at 20)
@@ -145,6 +155,22 @@
   }
   function randInt(lo, hi, rng) { return lo + Math.floor(rng() * (hi - lo + 1)); }
   function emptyLine() { var o = { g: 0, gs: 0 }; STAT_KEYS.forEach(function (k) { o[k] = 0; }); return o; }
+  // Blocks and steals per 36: his save copy (player.tend.blk / stl, x10, aged each offseason), his real
+  // first season (data/defense-history.js, small samples shrink toward his ratings), else his ratings.
+  function genDefRates(p) {
+    var a = p.attrs || p.ratings || {}, ht = +p.ht || 79;
+    return { blk: 0.77 * Math.exp(0.03 * ((+a.block || 50) - 60) + 0.09 * (ht - 80)),
+      stl: 1.16 * Math.exp(0.02 * ((+a.steal || 50) - 60) - 0.012 * (ht - 79)) };
+  }
+  function defRates(p) {
+    if (p.tend && p.tend.blk != null) return { blk: p.tend.blk / 10, stl: p.tend.stl / 10 };
+    var g = genDefRates(p), H = typeof window !== 'undefined' ? window.DEFENSE_HISTORY : null, v = H && p.id != null ? H[p.id] : null;
+    if (v && v.length >= 4) {
+      var w = clamp(v[3] * 10 / 1500, 0.25, 1);
+      return { blk: w * v[1] / 10 + (1 - w) * g.blk, stl: w * v[2] / 10 + (1 - w) * g.stl };
+    }
+    return g;
+  }
   function round1(x) { return Math.round(x * 10) / 10; }
   function globalLeague() {
     if (typeof window !== 'undefined' && window.LEAGUE_2012) return window.LEAGUE_2012;
@@ -385,8 +411,9 @@
       a: rp.a, z: zp.z, offZ: zp.offZ, makeZ: zp.makeZ, ovrZ: zp.ovrZ, ovrSoft: zp.ovrSoft, shares: zp.shares, usage: usageOf(zp, n),
       target: 0, sec: 0, energy: 1, fouls: 0, out: false, onCourt: false, starter: false,
       injuryAt: -1, injury: null, need: 0, astTend: null, foulTend: 1, gen: true,
-      box: emptyLine()
+      box: emptyLine(), blk36: 0.77, stl36: 1.16, fMake: 0, fUse: 1
     };
+    var dr = defRates(p); s.blk36 = Math.max(0.05, dr.blk); s.stl36 = Math.max(0.2, dr.stl);
     // Style: tendencies blended with the rating-based shot mix and usage (T.tendBlend on the tendency)
     var td = tendencyOf(p, n), B = T.tendBlend;
     // real tendencies are spread out to match real stats; generated ones already sit on the rating scale
@@ -600,6 +627,16 @@
     var paceF = 1 - clamp(T.stratPace * (H.strat.pace + A.strat.pace), -0.1, 0.1);
     H.form = (rng() + rng() + rng() - 1.5) * 2 * T.formSd;
     A.form = (rng() + rng() + rng() - 1.5) * 2 * T.formSd;
+    // each player's night: hot or cold shooting and how aggressive he is, bigger swings for the
+    // high-usage scorers (a 34 a game star can go for 70 or for 15); averages stay the same
+    teams.forEach(function (t) {
+      t.roster.forEach(function (s) {
+        var k = clamp(0.55 + 0.45 * s.usage, 0.6, 1.4), gu = (rng() + rng() + rng() - 1.5) * 2, gm = (rng() + rng() + rng() - 1.5) * 2;
+        var su = T.pFormUse * k;
+        s.fUse = Math.exp(gu * su - su * su / 2);
+        s.fMake = gm * T.pFormMake * k;
+      });
+    });
 
     // Each pbp line also gets a structured twin in pbx (kind, side and the players involved, packed into
     // one number at the end, see packPbx) and pbl notes every lineup change, for the court view.
@@ -798,9 +835,11 @@
             return (0.4 + s.usage) * (s.group === 'G' ? 1.25 : 1) * Math.exp(-0.2 * s.z.handle);
           });
           tp.box.tov++;
-          var ps = T.stealShare * Math.exp(T.minorK * 0.15 * stl);
+          var stlSum = 0;
+          def.lineup.forEach(function (s) { stlSum += s.stl36; });
+          var ps = clamp(T.stealShare * Math.pow(stlSum / T.stlNorm, T.stlLineupExp), 0.3, 0.8);
           if (rng() < ps) {
-            var st = pickBy(def.lineup, function (s) { return Math.exp(T.stlK * s.z.steal); });
+            var st = pickBy(def.lineup, function (s) { return Math.pow(s.stl36, T.stlExp) * Math.exp(0.15 * s.z.steal); });
             st.box.stl++;
             log(off, tp.name + ' turnover, stolen by ' + st.name, PBX.TOV, tp, st, null, 1);
             return { next: def, dead: false };
@@ -830,7 +869,7 @@
         }
       }
       // ---- shot ----
-      var shooter = putbackBy || pickBy(off.lineup, function (s) { return s.usage * (0.5 + 0.5 * s.energy); });
+      var shooter = putbackBy || pickBy(off.lineup, function (s) { return s.usage * s.fUse * (0.5 + 0.5 * s.energy); });
       var type = putbackBy ? 'close' : pickWeighted(SHOT_TYPES, SHOT_TYPES.map(function (t) {
         return shooter.shares[t] * off.plan.mult[t] * (t === 'close' && trans > 0 ? 1 + trans : 1);
       }), rng);
@@ -845,12 +884,13 @@
         defZ = dfd.z.perD - fz(dfd);
       }
       var pMake = T.makeBase[type] + T.makeOff[type] * offZ - T.makeDef[type] * defZ +
-        T.makeOvr * ((shooter.ovrSoft - fz(shooter)) - (dfd.ovrSoft - fz(dfd))) + edge + off.form;
+        T.makeOvr * ((shooter.ovrSoft - fz(shooter)) - (dfd.ovrSoft - fz(dfd))) + edge + off.form + shooter.fMake;
       if (putbackBy) pMake += 0.04;
       pMake += off.plan.make[type];
       if (trans) pMake += T.stratTrans * trans;   // transition chances after the other team crashed the glass
       if (clock < 2 && rng() < 0.5) pMake *= 0.4; // end of quarter heave
       pMake = clamp(pMake, 0.12, 0.85);
+      var pExp = clamp(pMake + T.makeDef[type] * defZ + T.makeOvr * (dfd.ovrSoft - fz(dfd)), 0.12, 0.85);   // against an average defender
       var is3 = type === 'three';
       var pFoul = T.foulShot[type] * ((1 - T.tendBlend) * Math.exp(0.15 * shooter.z.strength + 0.6 * (shooter.usage - 1)) +
         T.tendBlend * shooter.foulTend) * Math.exp(-0.1 * dfd.z.diq) * (shooter.gen ? T.genFoul : 1);
@@ -861,7 +901,7 @@
         fouler.box.pf++; fouler.fouls++;
         addTeamFoul(def);
         if (rng() < pMake * T.andOneFactor) {
-          shooter.box.fga++; shooter.box.fgm++;
+          shooter.box.fga++; shooter.box.fgm++; dfd.box.dfga++; dfd.box.dfgm++; dfd.box.dfgx += pExp;
           if (is3) { shooter.box.tpa++; shooter.box.tpm++; }
           var pts = is3 ? 3 : 2;
           shooter.box.pts += pts; off.pts += pts;
@@ -875,10 +915,10 @@
         foulOutCheck(def, fouler);
         return afterFT(off, def, shootFT(off, shooter, is3 ? 3 : 2));
       }
-      shooter.box.fga++;
+      shooter.box.fga++; dfd.box.dfga++; dfd.box.dfgx += pExp;
       if (is3) shooter.box.tpa++;
       if (rng() < pMake) {
-        shooter.box.fgm++;
+        shooter.box.fgm++; dfd.box.dfgm++;
         if (is3) shooter.box.tpm++;
         var p2 = is3 ? 3 : 2;
         shooter.box.pts += p2; off.pts += p2;
@@ -887,13 +927,15 @@
         return { next: def, dead: true };
       }
       // miss: blocked?
-      var maxBlk = -9;
-      def.lineup.forEach(function (s) { maxBlk = Math.max(maxBlk, s.z.block - fz(s)); });
-      var pBlk = T.blockGivenMiss[type] * Math.exp(T.minorK * 0.35 * (maxBlk - n.blkZ));
+      // (blocks follow real shot blockers: the five's blocks per 36 set the chance, each one's share
+      // goes by his own rate, the man guarding the shot first, bigs at the rim)
+      var blkSum = 0;
+      def.lineup.forEach(function (s) { blkSum += s.blk36 * Math.exp(-0.5 * fz(s)); });
+      var pBlk = T.blockGivenMiss[type] * clamp(Math.pow(blkSum / T.blkNorm, T.blkLineupExp), 0.35, 2.2);
       var blocked = rng() < pBlk;
       if (blocked) {
         var bl = pickBy(def.lineup, function (s) {
-          return Math.exp(T.blkK * s.z.block) * (s === dfd ? 1.6 : 1) * (type === 'three' || type === 'mid' ? 1 : (s.group === 'B' ? 1.5 : 0.8));
+          return Math.pow(s.blk36, T.blkExp) * Math.exp(0.15 * s.z.block) * (s === dfd ? 1.6 : 1) * (type === 'three' || type === 'mid' ? 1 : (s.group === 'B' ? 1.3 : 0.85));
         });
         bl.box.blk++;
         log(off, shooter.name + ' misses ' + desc + ', blocked by ' + bl.name, PBX.MISS, shooter, bl, null, SHOT_TYPES.indexOf(type));
@@ -951,7 +993,10 @@
       dur = Math.min(dur, 24);
       if (dur >= clock) dur = clock;
       runClock(dur);
+      var hp0 = H.pts, ap0 = A.pts;
       var res = play(poss, def, putback, trans);
+      var dpm = (H.pts - hp0) - (A.pts - ap0);
+      if (dpm) { H.lineup.forEach(function (s) { s.box.pm += dpm; }); A.lineup.forEach(function (s) { s.box.pm -= dpm; }); }
       poss = res.next;
       second = !!res.second;
       putback = res.putback || null;
@@ -979,6 +1024,7 @@
       return {
         id: s.id, name: s.name, min: round1(s.sec / 60), pts: b.pts, fgm: b.fgm, fga: b.fga, tpm: b.tpm, tpa: b.tpa,
         ftm: b.ftm, fta: b.fta, oreb: b.oreb, dreb: b.dreb, ast: b.ast, stl: b.stl, blk: b.blk, tov: b.tov, pf: b.pf,
+        pm: b.pm, dfga: b.dfga, dfgm: b.dfgm, dfgx: Math.round(b.dfgx * 100) / 100, td: [b.pts, b.oreb + b.dreb, b.ast, b.stl, b.blk].filter(function (x) { return x >= 10; }).length >= 3 ? 1 : 0,
         starter: s.starter
       };
     });
@@ -1293,7 +1339,7 @@
     var s = map[row.id] || (map[row.id] = emptyLine());
     if (row.min > 0) s.g++;
     if (row.starter) s.gs++;
-    STAT_KEYS.forEach(function (k) { s[k] += row[k]; });
+    STAT_KEYS.forEach(function (k) { s[k] = (s[k] || 0) + (row[k] || 0); });
     s.min = round1(s.min);
   }
 
@@ -1911,6 +1957,8 @@
     computeNorms: function (league) { return computeNorms(leagueTeamsPlayers(league)); },
     rng: mulberry32,
     STAT_KEYS: STAT_KEYS,
+    defRates: defRates,
+    genDefRates: genDefRates,
     ATTR_KEYS: ATTR_KEYS,
     tuning: T,
     TEND_KEYS: TEND_KEYS,
