@@ -152,6 +152,13 @@
       drawn.push(remaining.splice(k, 1)[0]);
     }
     var final = drawn.concat(remaining);
+    // new expansion teams (js/expansion.js) cannot pick higher than fifth in their first draft
+    var ex = state && state.expansion;
+    if (ex && +ex.capDraft === year && Array.isArray(ex.teams)) {
+      var capAt = (ex.capPick || 5) - 1, held = [];
+      final = final.filter(function (x, i) { if (i < capAt && ex.teams.indexOf(x.abbr) >= 0) { held.push(x); return false; } return true; });
+      Array.prototype.splice.apply(final, [Math.min(capAt, final.length), 0].concat(held));   // fifth and sixth at best
+    }
     var result = {
       year: year, era: eo.era, draws: eo.draws,
       order: final.map(function (x) { return x.abbr; }),
@@ -607,8 +614,10 @@
   // last picks can take one of those, as in 2022 with 58 real picks). Only a class with fewer than
   // PAD_TO real players in all gets fringe generated prospects. Generated filler left undrafted from
   // older saves is removed when the real class is big enough.
-  var PAD_TO = 60;
+  // (two rounds: 60 picks, 64 in a 32-team league)
+  function padTo(state) { return Math.max(60, ROUNDS * teamList(state).length); }
   function padClass(state, year) {
+    var PAD_TO = padTo(state);
     var ids = state.draftClasses[year] || [];
     var inPool = function (id) { var p = state.players[id]; return p && p.team === 'DRAFT' && !p.rights; };
     var real = ids.filter(function (id) { return !/^pad/.test(id) && inPool(id); }).length;
