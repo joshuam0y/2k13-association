@@ -46,8 +46,11 @@
     makeOvr: 0.0028,           // per (softened) z of shooter overall vs his defender
     teamEdge: 0.0010,         // per point of lineup average overall vs the opponent lineup
     formSd: 0.015,             // per-game shooting form of a team (hot and cold nights)
-    pFormMake: 0.028,         // per-game shooting form of a player (hot and cold nights, more for high-usage scorers)
-    pFormUse: 0.16,           // per-game aggression of a player (log sd of his shot share)
+    pFormMake: 0.015,         // per-game shooting form of a player (hot and cold nights, more for high-usage scorers)
+    pFormUse: 0.06,           // per-game aggression of a player (log sd of his shot share)
+    takeover: 0.06,           // chance of a takeover night per unit of usage above average (stars)
+    takeoverUse: 1.5,         //   his shot share that night
+    takeoverMake: 0.04,       //   and his shooting
     blkNorm: 3.5,             // blocks per 36 of an average five on the floor (summed); more shot blockers, more blocks
     blkLineupExp: 0.55,       //   how much the five's blocking moves the block chance
     blkExp: 1.1,              // who gets the block: blocks per 36 to this power
@@ -588,13 +591,13 @@
     var ys = Object.keys(ERA).map(Number).sort(function (a, b) { return a - b; }), best = ys[0];
     ys.forEach(function (y) { if (y <= year) best = y; });
     var e = ERA[best];
-    return { pace: e[0], three: e[1], make2: e[2], ast: e[3], tov: e[4] != null ? e[4] : 1 };
+    return { pace: e[0], three: e[1], make2: e[2], ast: e[3], tov: e[4] != null ? e[4] : 1, make3: 0, four: 0 };
   }
 
   function shotPlan(offStrat, defStrat, era) {
     era = era || eraFor(2013);
     var mult = { close: 1, post: 1, mid: 1, three: Math.exp(T.stratThree * offStrat.three) * era.three };
-    var make = { close: era.make2, post: era.make2, mid: era.make2, three: 0 };
+    var make = { close: era.make2, post: era.make2, mid: era.make2, three: era.make3 || 0 };
     if (defStrat.defense === 'zone') {
       mult.close *= 0.86; mult.post *= 0.92; mult.mid *= 1.04; mult.three *= 1.17;
     } else if (defStrat.defense === 'switch') {
@@ -621,7 +624,8 @@
     var qStart = [0, 0];
     var injuriesOut = [];
     var homeEdge = opts.neutral ? 0 : T.homeMake;
-    var era = eraFor(opts.year);
+    // opts.era: this save's style after 2026 (js/future.js via season.era); else the real season's
+    var era = opts.era || eraFor(opts.year);
     H.plan = shotPlan(H.strat, A.strat, era);
     A.plan = shotPlan(A.strat, H.strat, era);
     var paceF = 1 - clamp(T.stratPace * (H.strat.pace + A.strat.pace), -0.1, 0.1);
@@ -633,8 +637,12 @@
       t.roster.forEach(function (s) {
         var k = clamp(0.55 + 0.45 * s.usage, 0.6, 1.4), gu = (rng() + rng() + rng() - 1.5) * 2, gm = (rng() + rng() + rng() - 1.5) * 2;
         var su = T.pFormUse * k;
-        s.fUse = Math.exp(gu * su - su * su / 2);
-        s.fMake = gm * T.pFormMake * k;
+        // now and then a star takes over a game (the 60 and 70 point nights); the rest of his nights
+        // give a little back so his average stays where it was
+        var pt = T.takeover * clamp(s.usage - 1, 0, 1);
+        var hot = pt > 0 && rng() < pt;
+        s.fUse = Math.exp(gu * su - su * su / 2) * (hot ? T.takeoverUse : 1) / (1 + pt * (T.takeoverUse - 1));
+        s.fMake = gm * T.pFormMake * k + (hot ? T.takeoverMake : 0);
       });
     });
 
@@ -895,6 +903,9 @@
       var pFoul = T.foulShot[type] * ((1 - T.tendBlend) * Math.exp(0.15 * shooter.z.strength + 0.6 * (shooter.usage - 1)) +
         T.tendBlend * shooter.foulTend) * Math.exp(-0.1 * dfd.z.diq) * (shooter.gen ? T.genFoul : 1);
       var desc = shotDesc(type, shooter, rng);
+      // the 4-point line (a league change after 2026): some threes come from 30 feet, worth four
+      var deep = is3 && era.four > 0 && rng() < era.four;
+      if (deep) { pMake = Math.max(0.12, pMake - 0.08); desc = 'a 4-point shot from 30 feet'; }
       if (rng() < pFoul) {
         var fouler = (type === 'close' || type === 'post') && rng() < 0.45 ?
           pickBy(def.lineup, function (s) { return s.group === 'B' ? 2 : 1; }) : dfd;
@@ -903,7 +914,7 @@
         if (rng() < pMake * T.andOneFactor) {
           shooter.box.fga++; shooter.box.fgm++; dfd.box.dfga++; dfd.box.dfgm++; dfd.box.dfgx += pExp;
           if (is3) { shooter.box.tpa++; shooter.box.tpm++; }
-          var pts = is3 ? 3 : 2;
+          var pts = is3 ? (deep ? 4 : 3) : 2;
           shooter.box.pts += pts; off.pts += pts;
           var a1 = putbackBy ? null : creditAssist(off, shooter, type);
           log(off, shooter.name + ' makes ' + desc + (a1 ? ' (' + a1.name + ' assists)' : '') + ', fouled by ' + fouler.name,
@@ -920,7 +931,7 @@
       if (rng() < pMake) {
         shooter.box.fgm++; dfd.box.dfgm++;
         if (is3) shooter.box.tpm++;
-        var p2 = is3 ? 3 : 2;
+        var p2 = is3 ? (deep ? 4 : 3) : 2;
         shooter.box.pts += p2; off.pts += p2;
         var ast = putbackBy ? null : creditAssist(off, shooter, type);
         log(off, shooter.name + ' makes ' + desc + (ast ? ' (' + ast.name + ' assists)' : ''), PBX.MAKE, shooter, ast, null, SHOT_TYPES.indexOf(type));
@@ -1476,7 +1487,7 @@
 
   function playGame(season, league, by, g, rng, isPlayoff, dayDate) {
     var res = simGame(teamObj(season, league, by, g.home), teamObj(season, league, by, g.away), rng,
-      { injuries: season.injuries, norms: season.norms, year: season.year });
+      { injuries: season.injuries, norms: season.norms, year: season.year, era: season.era });
     return recordResult(season, by, g, res, isPlayoff, dayDate);
   }
 

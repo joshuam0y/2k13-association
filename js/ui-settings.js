@@ -104,9 +104,20 @@
           <li class="gs-row"><span class="gs-t"><b>Difficulty</b><small>Every league plays on Normal, like a default 2K13 Association.</small></span><span class="gs-fixed">${esc(diff.toUpperCase())}</span></li>
           <li class="gs-row"><span class="gs-t"><b>First-time guide</b><small>Show the four step tour of the season hub again.</small></span><button type="button" class="btn btn-small" id="gsTour">SHOW TOUR</button></li>
         </ul>
-      </section>`;
+      </section>
+      ${futureCard(g)}`;
 
-    app.querySelectorAll('.gs-sw').forEach(b => b.addEventListener('click', () => {
+    app.querySelectorAll('.gs-sw[data-fkey]').forEach(b => b.addEventListener('click', () => {
+      const key = b.getAttribute('data-fkey'), on = g.settings[key] === false;
+      g.settings[key] = on;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-checked', on ? 'true' : 'false');
+      b.querySelector('span').textContent = on ? 'ON' : 'OFF';
+      if (window.FUTURE) window.FUTURE.activate(g);
+      UI.saveNow();
+      UI.toast((key === 'futureExpansion' ? 'Expansion' : 'Rule changes') + (on ? ' on.' : ' off.'));
+    }));
+    app.querySelectorAll('.gs-sw[data-key]').forEach(b => b.addEventListener('click', () => {
       const key = b.getAttribute('data-key');
       const on = !a[key];
       a[key] = on;
@@ -127,6 +138,25 @@
     tour.addEventListener('click', () => { if (UI.guide) { location.hash = '#/season'; setTimeout(() => UI.guide.start(true), 60); } });
     if (!UI.guide) tour.disabled = true;
   };
+  // After the real data (2025-26): rule changes and expansion (js/future.js), with what has happened so far
+  function futureCard(g) {
+    const F = window.FUTURE;
+    if (!F) return '';
+    const sw = (key, title, text) => { const on = g.settings[key] !== false; return `<li class="gs-row">
+        <span class="gs-t"><b id="gs-l-${key}">${esc(title)}</b><small>${esc(text)}</small></span>
+        <button type="button" class="gs-sw${on ? ' on' : ''}" role="switch" aria-checked="${on}" aria-labelledby="gs-l-${key}" data-fkey="${key}"><i></i><span>${on ? 'ON' : 'OFF'}</span></button></li>`; };
+    const list = F.timeline(g);
+    const label = y => (y - 1) + '-' + String(y).slice(2);
+    return `<section class="gs-card">
+        <div class="gs-k">THE LEAGUE AFTER 2026</div>
+        <p class="gs-intro">Real history ends with the 2025-26 season. After that the game keeps changing: the style of play drifts, and some summers the league announces a rule change that really changes how games play.</p>
+        <ul class="gs-list">
+          ${sw('futureRules', 'Rule changes', 'The three-point line moving back, a 20 second shot clock, a 4-point line, 72 game seasons, lottery reform, a new media deal, high schoolers back in the draft.')}
+          ${sw('futureExpansion', 'Expansion', 'Seattle and Las Vegas join the league, with an expansion draft and new conferences.')}
+        </ul>
+        ${list.length ? `<ul class="gs-list gs-future">${list.map(c => `<li class="gs-row"><span class="gs-t"><b>${esc(label(c.year))}: ${esc(c.headline)}</b><small>${esc(c.body)}</small></span></li>`).join('')}</ul>` : `<p class="gs-intro muted">No changes yet${g.year <= F.LAST_REAL ? ': the first ones can come in the summer of 2026' : ''}.</p>`}
+      </section>`;
+  }
   P.settings.navLabel = 'Settings';
   P.settings.navDesc = 'GM Assistant and game options';
 

@@ -243,6 +243,8 @@
     state.season = E.newSeason(leagueView(state), { year: state.year, userTeam: state.userTeam,
       rules: mod("CBA") ? safe("rules", function () { return W.CBA.rules(state.year); }, null) : null });
     state.season.userTeam = state.userTeam;
+    // after 2026: this save's style of play and season length (js/future.js)
+    if (mod("FUTURE")) safe("futureSeason", function () { W.FUTURE.startSeason(state); });
     // keep saved rotations from season to season (players who left are dropped)
     state.season.lineups = state.season.lineups || {};
     for (var ab in state.teams) {
@@ -485,6 +487,8 @@
     // coaching changes are cosmetic (names and records only)
     if (mod("COACH") && W.COACH.aiChanges) { var crng = rngFor(state); safe("coachChanges", function () { W.COACH.aiChanges(state, crng); }); }
     if (mod("PROG") && W.PROG.fateNews) safe("fateNews", function () { (W.PROG.fateNews(state, state.year) || []).forEach(function (n) { news(state, n.headline, n.body, n.ids); }); });
+    // after the real data: rule changes and expansion announced this summer (js/future.js)
+    if (mod("FUTURE")) safe("future", function () { W.FUTURE.summer(state); });
     state.phase = "draftLottery";
   }
 
@@ -611,6 +615,8 @@
       var REDSHIRT = { noelne01: 1, embiijo01: 1, simmobe01: 1, portemi01: 1, gilesha01: 1 };
       for (var rid in REDSHIRT) { var rp = state.players[rid]; if (rp && rp.injury && rp.injury.type === "Playing overseas") rp.injury.type = "Recovering from injury (redshirt season)"; }
       offseasonTrades(state, rng, 1);
+      // expansion teams announced two summers ago join now, with their expansion draft (js/future.js)
+      if (mod("FUTURE")) safe("expansion", function () { W.FUTURE.afterDraft(state); });
       state.phase = "resign";
       // contracts expire and the re-signing window opens now, so the user can re-sign in this phase
       if (mod("FA")) safe("startOffseason", function () { W.FA.startOffseason(state); });
@@ -713,6 +719,7 @@
     state.news = state.news || []; state.events = state.events || []; state.transactions = state.transactions || [];
     safe("migrate brands", function () { applyBrands(state); });
     safe("migrate news", function () { worldSeen(state); });
+    if (mod("FUTURE")) safe("migrate future", function () { W.FUTURE.activate(state); });
     if (state.coaches) for (var k in state.coaches) if (state.coaches[k]) delete state.coaches[k].ovr;
     return state;
   }

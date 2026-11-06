@@ -99,6 +99,7 @@
   }
 
   var ruleCache = {};
+  var futureHook = null;   // js/future.js: this save's league changes after 2026 (cap jumps, lottery odds, season length)
   function rules(year) {
     year = Math.round(+year || 2013);
     if (ruleCache[year]) return ruleCache[year];
@@ -140,6 +141,7 @@
     };
     r.rookieScale = function (pick) { var row = rookieRow(pick, year); return row ? row.salaries[0] : 0; };
     r.rookieScaleRow = function (pick) { var row = rookieRow(pick, year); return row ? row.salaries.slice() : null; };
+    if (futureHook) futureHook(r, year);
     ruleCache[year] = r;
     return r;
   }
@@ -570,7 +572,8 @@
   }
 
   var CBA = {
-    rules: rules, eraOf: eraOf, salaryYear: salaryYear, salaryOf: salaryOf,
+    rules: rules, eraOf: eraOf,
+    setFuture: function (fn) { futureHook = fn || null; ruleCache = {}; }, salaryYear: salaryYear, salaryOf: salaryOf,
     maxSalary: maxSalary, minSalary: minSalary, rookieScale: rookieScale, rookieContract: rookieContract,
     payroll: payroll, capSpace: capSpace, capStatus: capStatus, rosterCount: rosterCount, twoWayCount: twoWayCount,
     birdRights: birdRights, canSign: canSign, maxIncoming: maxIncoming, validateTrade: validateTrade,

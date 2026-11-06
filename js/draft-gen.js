@@ -328,8 +328,8 @@
 
   // One draw of (age, ovr, pot): age from the real mix, then pot and ovr from a Gaussian copula
   // fitted to that age group (young players carry more upside, older ones are closer to finished).
-  function drawRatings(rng, fixedAge) {
-    var age = fixedAge || pickWeighted(rng, AGE_PAIRS);
+  function drawRatings(rng, fixedAge, pairs) {
+    var age = fixedAge || pickWeighted(rng, pairs || AGE_PAIRS);
     var G = AGE_GROUPS[ageGroup(age)];
     var e1 = gauss(rng), e2 = gauss(rng);
     var pot = Math.round(quantile(G.pot, phi(e1)));
@@ -441,9 +441,12 @@
     addUsed(taken, opts.used);
 
     var posPairs = POSITIONS.map(function (p) { return [p, POS[p].share]; });
+    // high schoolers eligible again (a league change after 2026, js/future.js): more 18 and 19 year olds
+    var W0 = typeof window !== 'undefined' ? window : null, young = W0 && W0.FUTURE ? W0.FUTURE.youngDraft(year) : 0;
+    var agePairs = young ? AGE_PAIRS.map(function (a) { return [a[0], a[0] === 18 ? a[1] * (1 + 8 * young) : a[0] === 19 ? a[1] * (1 + young) : a[1]]; }) : AGE_PAIRS;
     var out = [];
     for (var i = 0; i < target; i++) {
-      var r = drawRatings(rng);
+      var r = drawRatings(rng, null, agePairs);
       // Past the real class size, the extra prospects are fringe players from the bottom of the pool
       if (i >= core || opts.fringe) { for (var t = 0; t < 80 && r.pot > FRINGE_POT; t++) r = drawRatings(rng, r.age); }
       var pos = pickWeighted(rng, posPairs);

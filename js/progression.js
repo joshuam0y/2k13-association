@@ -777,7 +777,7 @@
         cur.pass += 0.15 * (gen.pass - cur.pass);
         if (line && line.g >= 20 && line.min >= 400) {
           var ast36 = 36 * (line.ast || 0) / line.min;
-          var eraAst = E.eraFor ? E.eraFor(done).ast : 1;
+          var eraAst = state.season && state.season.era ? state.season.era.ast : E.eraFor ? E.eraFor(done).ast : 1;
           cur.pass += 0.15 * (E.tEncode('pass', ast36 / (ENGINE_PASS_CAL * eraAst)) - cur.pass);
         }
         var age = p.age || 25;
