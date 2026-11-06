@@ -1108,6 +1108,15 @@
         }
       }
     });
+    // 16-team conferences (a 32-team league, js/expansion.js): 4 games against five conference rivals
+    // (division mates first), 3 against the other ten (each team hosts five of them twice) and 2 against
+    // every team in the other conference: 20 + 30 + 32 = 82
+    Object.keys(confs).forEach(function (c) {
+      var list = [];
+      Object.keys(confs[c]).sort().forEach(function (d) { list = list.concat(confs[c][d]); });
+      if (list.length !== 16) return;
+      for (var ii = 0; ii < 16; ii++) for (var dd = 3; dd <= 7; dd++) set(list[ii], list[(ii + dd) % 16], 3, list[ii]);
+    });
     var games = [];
     Object.keys(counts).forEach(function (k) {
       var m = counts[k];
@@ -1137,7 +1146,7 @@
     var total = {}, played = {}, last = {}, prev2 = {};
     abbrs.forEach(function (a) { total[a] = 0; played[a] = 0; last[a] = -9; prev2[a] = -9; });
     matchups.forEach(function (m) { total[m.home]++; total[m.away]++; });
-    var remaining = matchups.slice();
+    var remaining = matchups.slice(), dayMax = Math.max(15, Math.floor(abbrs.length / 2));
     var wts = dates.map(function (d) { return d.slice(5) === '12-25' ? 0.65 : WEEKDAY_W[weekday(d)]; });
     // opening night is light
     wts[0] = 0.4;
@@ -1151,8 +1160,8 @@
       var frac = cumW / totalW;
       var daysLeft = dates.length - di;
       var target = Math.round(remaining.length * wts[di] / remW + (rng() - 0.5) * 2);
-      target = clamp(target, 1, 15);
-      if (di === dates.length - 1) target = 15;
+      target = clamp(target, 1, dayMax);
+      if (di === dates.length - 1) target = dayMax;
       var busy = {};
       var cand = [];
       for (var k = 0; k < remaining.length; k++) {
@@ -1176,7 +1185,7 @@
         var g = cand[c].m;
         if (busy[g.home] || busy[g.away]) continue;
         if (chosen.length >= target && !(cand[c].must >= 6)) continue;
-        if (chosen.length >= 15) break;
+        if (chosen.length >= dayMax) break;
         busy[g.home] = busy[g.away] = 1;
         chosen.push(cand[c]);
       }

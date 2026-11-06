@@ -615,6 +615,8 @@
       // contracts expire and the re-signing window opens now, so the user can re-sign in this phase
       if (mod("FA")) safe("startOffseason", function () { W.FA.startOffseason(state); });
       quietOffseasonDecisions(state);
+      // an expansion announced earlier happens now, right after the draft (js/expansion.js)
+      if (mod("EXPANSION")) safe("expansion", function () { W.EXPANSION.applyPending(state); });
     } else if (phase === "resign") {
       if (mod("FA")) {
         safe("startOffseason", function () { W.FA.startOffseason(state); });

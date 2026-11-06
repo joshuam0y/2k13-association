@@ -352,7 +352,17 @@
         </div>
         <div class="row-btns"><button type="button" class="btn btn-gold" id="crSave">SAVE RULES</button><button type="button" class="btn btn-danger" id="crReset">BACK TO REAL RULES</button></div>
       </div>
-      <div class="cm-summary">Stored overrides: <code>${esc(JSON.stringify(state.settings.overrides || {}))}</code></div>`;
+      <div class="cm-summary">Stored overrides: <code>${esc(JSON.stringify(state.settings.overrides || {}))}</code></div>
+      ${expansionHtml(state)}`;
+    const exBtn = UI.$('#crExpand');
+    if (exBtn) exBtn.addEventListener('click', () => {
+      const r = window.EXPANSION.addTeams(state, { year: state.year + 1 });
+      if (!r || !r.ok) { UI.toast((r && r.reason) || 'Expansion failed.'); return; }
+      X().log(state, 'commissioner', 'Commissioner expansion: Seattle and Las Vegas join for ' + state.year + '-' + String(state.year + 1).slice(2) + (r.pending ? ' (right after this summer\'s draft).' : '.'), []);
+      X().refresh(); X().persist();
+      UI.toast(r.pending ? 'Expansion set: the new teams join right after this summer\'s draft.' : 'The league now has 32 teams.');
+      drawRules(body, state);
+    });
     const describe = o => {
       const parts = [];
       if (o.seasonGames) parts.push(o.seasonGames + '-game seasons');
@@ -387,6 +397,19 @@
       UI.toast('Back to the real rules.');
       drawRules(body, state);
     });
+  }
+
+  // ---------- expansion (js/expansion.js) ----------
+  function expansionHtml(state) {
+    const E = window.EXPANSION;
+    if (!E) return '';
+    const ex = state.expansion || {};
+    const label = y => (y - 1) + '-' + String(y).slice(2);
+    const status = E.isExpanded(state) ? 'The league has 32 teams since ' + label(ex.year) + '.'
+      : ex.pending ? 'Seattle and Las Vegas join for ' + label(ex.pending) + ', right after the draft.' : '';
+    return `<div class="cm-h4">EXPANSION</div>
+      <p class="muted">Adds the Seattle SuperSonics and the Las Vegas Neon for next season, with an expansion draft (each team protects eight players and loses at most one). Memphis moves to the East.</p>
+      ${status ? `<p>${esc(status)}</p>` : `<div class="row-btns"><button type="button" class="btn" id="crExpand">EXPAND THE LEAGUE NOW</button></div>`}`;
   }
 
   // ---------- log ----------
