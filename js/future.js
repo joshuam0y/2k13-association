@@ -136,6 +136,7 @@
       if (rng() < odds) {
         f.expansion = { year: next + 1, announced: done };
         post(state, 'NBA Votes To Expand To 32 Teams', 'Seattle and Las Vegas join the league for the ' + seasonLabel(next + 1) + ' season. An expansion draft follows the ' + next + ' draft, and the conferences will be realigned.');
+        X.addTeams(state, { year: next + 1 });   // pending: it happens right after next summer's draft (EXPANSION.applyPending)
         out = { expansion: next + 1 };
       }
     }
@@ -168,15 +169,6 @@
     return out;
   }
 
-  // After the draft (LEAGUE.nextPhase, draft to re-signing): the expansion teams join for next season
-  function afterDraft(state) {
-    var f = state.future, X = root && root.EXPANSION;
-    if (!f || !f.expansion || f.expansion.done || f.expansion.year !== state.year + 1 || !X) return false;
-    if (!settingOn(state, 'futureExpansion')) return false;
-    X.addTeams(state, { year: state.year + 1 });
-    f.expansion.done = true;
-    return true;
-  }
 
   // ---------------------------------------------------------------------------
   // The new season (LEAGUE.startSeason): its era for the engine, a shorter schedule if the league cut games
@@ -225,6 +217,14 @@
   var current = null;
   function activate(state) {
     current = state || null;
+    // expansion switched off before the teams joined: the announced expansion is called off
+    var X = root && root.EXPANSION;
+    if (state && state.future && state.future.expansion && !settingOn(state, 'futureExpansion') && state.expansion && state.expansion.pending && !(X && X.isExpanded(state))) {
+      state.expansion.pending = null; state.future.expansion.cancelled = true;
+    }
+    if (state && state.future && state.future.expansion && state.future.expansion.cancelled && settingOn(state, 'futureExpansion') && X && !X.isExpanded(state) && state.future.expansion.year > state.year) {
+      X.addTeams(state, { year: state.future.expansion.year }); state.future.expansion.cancelled = false;
+    }
     var C = root && root.CBA;
     if (C && typeof C.setFuture === 'function') C.setFuture(state && state.future && state.future.changes.length ? cbaHook : null);
   }
@@ -247,13 +247,13 @@
     var f = state && state.future;
     if (!f) return [];
     var out = (f.changes || []).map(function (c) { var d = BY_ID[c.id] || {}; return { year: c.year, announced: c.announced, id: c.id, cat: d.cat, headline: d.headline, body: (d.body || '').replace('{season}', 'the ' + seasonLabel(c.year) + ' season') }; });
-    if (f.expansion) out.push({ year: f.expansion.year, announced: f.expansion.announced, id: 'expansion', cat: 'format', headline: 'Expansion To 32 Teams', body: 'Seattle and Las Vegas join for the ' + seasonLabel(f.expansion.year) + ' season.' + (f.expansion.done ? '' : ' (coming)') });
+    if (f.expansion) out.push({ year: f.expansion.year, announced: f.expansion.announced, id: 'expansion', cat: 'format', headline: 'Expansion To 32 Teams', body: 'Seattle and Las Vegas join for the ' + seasonLabel(f.expansion.year) + ' season.' + (f.expansion.cancelled ? ' (called off)' : root.EXPANSION && root.EXPANSION.isExpanded(state) ? '' : ' (coming)') });
     return out.sort(function (a, b) { return b.year - a.year; });
   }
 
   var FUTURE = {
     LAST_REAL: LAST_REAL, CHANGES: CHANGES,
-    eraFor: eraFor, summer: summer, afterDraft: afterDraft, startSeason: startSeason, activate: activate,
+    eraFor: eraFor, summer: summer, startSeason: startSeason, activate: activate,
     youngDraft: youngDraft, seasonGames: seasonGames, trimSchedule: trimSchedule, timeline: timeline
   };
   if (root) root.FUTURE = FUTURE;

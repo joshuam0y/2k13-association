@@ -615,8 +615,6 @@
       var REDSHIRT = { noelne01: 1, embiijo01: 1, simmobe01: 1, portemi01: 1, gilesha01: 1 };
       for (var rid in REDSHIRT) { var rp = state.players[rid]; if (rp && rp.injury && rp.injury.type === "Playing overseas") rp.injury.type = "Recovering from injury (redshirt season)"; }
       offseasonTrades(state, rng, 1);
-      // expansion teams announced two summers ago join now, with their expansion draft (js/future.js)
-      if (mod("FUTURE")) safe("expansion", function () { W.FUTURE.afterDraft(state); });
       state.phase = "resign";
       // contracts expire and the re-signing window opens now, so the user can re-sign in this phase
       if (mod("FA")) safe("startOffseason", function () { W.FA.startOffseason(state); });
