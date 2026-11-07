@@ -262,12 +262,35 @@
     return { season: state.year, teams: teams, players: players };
   }
   // real rebrands and logo changes on their real dates
-  var REBRANDS = { NOH: [[2014, "New Orleans", "Pelicans"]], CHA: [[2015, "Charlotte", "Hornets"]] };
+  var REBRANDS = { NOH: [[2014, "New Orleans", "Pelicans"]], CHA: [[2015, "Charlotte", "Hornets"]], BKN: [[2013, "Brooklyn", "Nets"]] };
+  // Real moves for leagues that start before they happened: the SuperSonics become the Oklahoma City Thunder for
+  // 2008-09 (the franchise keeps everything: players, contracts, picks, coach)
+  var RELOCATIONS = { 2009: { from: "SEA", to: "OKC", city: "Oklahoma City", name: "Thunder", colors: ["#007AC1", "#EF3B24"],
+    headline: "The SuperSonics move to Oklahoma City", body: "Seattle's franchise is now the Oklahoma City Thunder, starting with the 2008-09 season." } };
+  function relocate(state, r) {
+    var t = state.teams[r.from];
+    if (!t || state.teams[r.to]) return false;
+    t.abbr = r.to; t.city = r.city; t.name = r.name; t.colors = r.colors.slice();
+    state.teams[r.to] = t; delete state.teams[r.from];
+    var swap = function (a) { return a === r.from ? r.to : a; };
+    Object.keys(state.players).forEach(function (id) {
+      var p = state.players[id];
+      p.team = swap(p.team); if (p.lastTeam) p.lastTeam = swap(p.lastTeam);
+      if (p.draft && p.draft.team) p.draft.team = swap(p.draft.team);
+    });
+    Object.keys(state.teams).forEach(function (a) { (state.teams[a].picks || []).forEach(function (pk) { pk.original = swap(pk.original); if (pk.swap) pk.swap = swap(pk.swap); }); });
+    Object.keys(state.coaches || {}).forEach(function (id) { var c = state.coaches[id]; if (c && c.team) c.team = swap(c.team); });
+    if (state.fa && state.fa.rights) Object.keys(state.fa.rights).forEach(function (id) { var x = state.fa.rights[id]; if (x && x.team) x.team = swap(x.team); });
+    state.userTeam = swap(state.userTeam);
+    news(state, r.headline, r.body, []);
+    (state.transactions = state.transactions || []).push({ year: state.year, day: 0, type: "relocation", text: r.headline + ".", ids: [] });
+    return true;
+  }
   function applyBrands(state) {
     for (var abbr in state.teams) {
       var t = state.teams[abbr];
       (REBRANDS[abbr] || []).forEach(function (r) {
-        if (state.year >= r[0] && t.name !== r[2]) { t.city = r[1]; t.name = r[2]; news(state, "The " + r[1] + " franchise is now the " + r[1] + " " + r[2], "New name, colors and logo for the " + (state.year - 1) + "-" + String(state.year).slice(2) + " season.", []); }
+        if (state.year >= r[0] && (t.name !== r[2] || t.city !== r[1])) { t.city = r[1]; t.name = r[2]; news(state, "The " + r[1] + " franchise is now the " + r[1] + " " + r[2], "New name, colors and logo for the " + (state.year - 1) + "-" + String(state.year).slice(2) + " season.", []); }
       });
       var list = W.LOGOS && W.LOGOS[abbr], best = null;
       if (list) list.forEach(function (e) { if (e.verified !== false && e.from <= state.year && (!best || e.from >= best.from)) best = e; });
@@ -282,6 +305,8 @@
     "colliza01":[2021],"wisemja01":[2022],"curryse01":[2018],"kolokch01":[2024],"cancavl01":[2024],"sumneed01":[2022],"williel01":[2013],"pondequ01":[2016,2017],
     "milleda01":[2020]};
   function startSeason(state) {
+    var move = RELOCATIONS[state.year];
+    if (move) safe("relocation", function () { relocate(state, move); });
     applyBrands(state);
     // The offseason heals last season's injuries (overseas stash players stay away until they arrive)
     var newYear = state.history && state.history.seasons && state.history.seasons.length > 0;
@@ -679,6 +704,9 @@
       quietOffseasonDecisions(state);
       // an expansion announced earlier happens now, right after the draft (js/expansion.js)
       if (mod("EXPANSION")) safe("expansion", function () { W.EXPANSION.applyPending(state); });
+      // a league that opened in 2003-04: the Bobcats join after the 2004 draft
+      if (mod("EXPANSION") && W.EXPANSION.applyHistoric && state.startYear && state.startYear <= 2004 && state.year === 2004 && !state.teams.CHA)
+        safe("bobcats", function () { W.EXPANSION.applyHistoric(state, "bobcats"); });
     } else if (phase === "resign") {
       if (mod("FA")) {
         safe("startOffseason", function () { W.FA.startOffseason(state); });

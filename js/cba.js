@@ -52,7 +52,7 @@
   }
   function seasonLabel(y) { return (y - 1) + "-" + String(y).slice(2); }
 
-  function eraOf(year) { return year <= 2017 ? "2011" : year <= 2023 ? "2017" : "2023"; }
+  function eraOf(year) { return year <= 2011 ? "2005" : year <= 2017 ? "2011" : year <= 2023 ? "2017" : "2023"; }
 
   // ---------------------------------------------------------------------------
   // Season figures (real through 2027, then 4.5% a year)
@@ -61,7 +61,7 @@
 
   function rawSeason(year) {
     var H = hist(), S = H.seasons, last = H.lastRealYear || 2027;
-    var y = year < 2013 ? 2013 : year;
+    var y = year < 2013 && !S[year] ? 2013 : year;
     if (S[y]) {
       var s = {};
       for (var k in S[y]) s[k] = S[y][k];
@@ -92,7 +92,7 @@
   function rookieRow(pick, year) {
     var H = hist(), rows = H.rookieScale2013;
     if (!(pick >= 1 && pick <= rows.length)) return null;
-    var row = rows[pick - 1], f = year <= 2013 ? 1 : rawSeason(year).cap / H.seasons[2013].cap;
+    var row = rows[pick - 1], f = year === 2013 ? 1 : rawSeason(year).cap / H.seasons[2013].cap;
     var y1 = r100(row[0] * f), y2 = r100(row[1] * f), y3 = r100(row[2] * f);
     var y4 = Math.round(y3 * (1 + row[3]));
     return { salaries: [y1, y2, y3, y4], y4Raise: row[3], qoRaise: row[4] };
@@ -123,8 +123,9 @@
       seasonGames: games, seasonNote: (H.seasonNotes && H.seasonNotes[year]) || null,
       shortened: year === 2020 ? "bubble" : year === 2021 ? "72 games" : null,
       rosterMin: 13, rosterMax: 15, offseasonRosterMax: 20,
-      raise: era === "2011" ? 0.045 : 0.05, birdRaise: era === "2011" ? 0.075 : 0.08,
-      maxYears: { bird: 5, other: 4, mle: 4, taxMle: era === "2023" ? 2 : 3, room: era === "2023" ? 3 : 2, bae: 2, min: 2 },
+      // the 2005 CBA (through 2010-11): bigger raises and longer deals
+      raise: era === "2005" ? 0.08 : era === "2011" ? 0.045 : 0.05, birdRaise: era === "2005" ? 0.105 : era === "2011" ? 0.075 : 0.08,
+      maxYears: era === "2005" ? { bird: 6, other: 5, mle: 5, taxMle: 3, room: 2, bae: 2, min: 2 } : { bird: 5, other: 4, mle: 4, taxMle: era === "2023" ? 2 : 3, room: era === "2023" ? 3 : 2, bae: 2, min: 2 },
       tradeCushion: era === "2023" ? 0 : 100000
     };
     r.minSalary = function (yearsPro) {
@@ -411,6 +412,7 @@
   function maxIncoming(year, outgoing, status) {
     status = status || {};
     var r = rules(year), era = r.era, out = +outgoing || 0;
+    if (era === "2005") return out * 1.25 + 100000;      // the 2005 CBA: 125% + $100,000 for everyone
     if (era === "2011") {
       if (status.overTax) return out * 1.25 + 100000;
       if (out <= 9800000) return out * 1.5 + 100000;
@@ -435,6 +437,7 @@
 
   function matchRuleText(year, status) {
     var r = rules(year);
+    if (r.era === "2005") return "125% + $100,000";
     if (r.era === "2011") return status.overTax ? "125% + $100,000 for a team over the tax after the trade"
       : "150% + $100,000 up to $9.8M, outgoing + $5M up to $19.6M, then 125% + $100,000";
     if (r.era === "2017") return status.overTax ? "125% + $100,000 for a team over the tax after the trade"

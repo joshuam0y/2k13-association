@@ -1518,6 +1518,22 @@
     location.hash = '#/season';
   }
 
+  // The best single games of this postseason (js/records.js season highs, playoffs)
+  function playoffHighs() {
+    const R = window.RECORDS, g = UI.state.game;
+    if (!R || !g || !g.season) return '';
+    const cards = R.HI.map(k => {
+      const list = R.seasonHighs(g, 'p', k).slice(0, 5);
+      if (!list.length) return '';
+      return `<div class="fr-lead rc-lead"><div class="fr-lead-k">${esc(R.LABEL[k])}</div><ol class="rc-list">${list.map((x, i) => {
+        const p = g.players[x.id];
+        return `<li class="${i === 0 ? 'top' : ''}"><span class="rc-rank">${i + 1}</span><span class="rc-n">${p ? `<a href="#/player/${esc(x.id)}">${esc(p.name)}</a>` : esc(x.id)}<small>${esc(x.team || '')} vs ${esc(x.opp || '')}${x.gid ? ` | <a href="#/game/${esc(x.gid)}">BOX</a>` : ''}</small></span><b>${esc(x.v)} <small>${esc(R.SHORT[k])}</small></b></li>`;
+      }).join('')}</ol></div>`;
+    }).join('');
+    return cards ? `${UI.header('PLAYOFF HIGHS', 'The best single games of these playoffs.')}<div class="rc-leads">${cards}</div>
+      <p class="pk-note"><a href="#/history/records/season/p/pts">ALL PLAYOFF SEASON HIGHS</a></p>` : '';
+  }
+
   P.playoffs = function (app, arg) {
     const s = UI.state.season;
     const g = UI.state.game;
@@ -1584,7 +1600,7 @@
     const found = live && sel ? findSeriesById(live, sel) : null;
     // the Play-In: the live one, or the matchups the standings point to during a Play-In regular season
     const piHtml = pi ? playInHtml(pi, { noTitle: !live.drawn && piStage(pi) !== 'done' }) : !live && g && s && cbaRules(yr).playIn ? playInHtml(projectedPlayIn(), { projected: true }) : '';
-    app.innerHTML = `<div class="po-page">${hero}${controls}${champBanner}${piHtml}${bracket2k(br, found ? sel : null)}</div>${found ? panelHtml(found.x, found.ri) : ''}`;
+    app.innerHTML = `<div class="po-page">${hero}${controls}${champBanner}${piHtml}${bracket2k(br, found ? sel : null)}</div>${found ? panelHtml(found.x, found.ri) : ''}${playoffHighs()}`;
 
     // wiring
     const on = (id, fn) => { const b = UI.$('#' + id, app); if (b) b.addEventListener('click', fn); };

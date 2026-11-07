@@ -159,3 +159,28 @@
   if (root) root.CAP_HISTORY = CAP_HISTORY;
   if (typeof module !== "undefined" && module.exports) module.exports = CAP_HISTORY;
 })(typeof self !== "undefined" ? self : this);
+
+/* 2003-04 through 2011-12, for Associations that start before 2012-13 (js/league.js opts.start). Cap, tax and
+   mid-level are the real figures; minimum salaries and the bi-annual exception follow Larry Coon's CBA FAQ. Before the
+   2011 CBA there was no apron, taxpayer mid-level or room exception (null); the minimum payroll was 75% of the cap. */
+(function (g) {
+  var H = g.CAP_HISTORY;
+  if (!H || !H.seasons) return;
+  var rows = {
+    2004: [43840000, 54630000, 4917000, 1595000, 366931, 1070000],
+    2005: [43870000, 54630000, 5000000, 1640000, 385277, 1100000],
+    2006: [49500000, 61700000, 5000000, 1700000, 398762, 1138500],
+    2007: [53135000, 65420000, 5215000, 1780000, 412718, 1178348],
+    2008: [55630000, 67865000, 5356000, 1830000, 427163, 1219590],
+    2009: [58680000, 71150000, 5585000, 1910000, 442114, 1262275],
+    2010: [57700000, 69920000, 5854000, 1990000, 457588, 1306455],
+    2011: [58044000, 70307000, 5765000, 1940000, 473604, 1352181],
+    2012: [58044000, 70307000, 5000000, 1957000, 473604, 1352181]
+  };
+  Object.keys(rows).forEach(function (y) {
+    if (H.seasons[y]) return;
+    var r = rows[y], cba11 = +y >= 2012;
+    H.seasons[y] = { cap: r[0], tax: r[1], apron: cba11 ? r[1] + 4000000 : null, apron2: null, minPayroll: Math.round(r[0] * (cba11 ? 0.85 : 0.75)),
+      mle: r[2], taxMle: cba11 ? 3000000 : null, roomException: cba11 ? 2500000 : null, bae: r[3], minSalary0: r[4], minSalary10: r[5] };
+  });
+})(typeof window !== 'undefined' ? window : globalThis);

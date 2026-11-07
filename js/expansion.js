@@ -29,6 +29,23 @@
     { abbr: 'LVG', city: 'Las Vegas', name: 'Neon', conf: 'West', div: 'Pacific', colors: ['#E4187B', '#16161D'] }
   ];
   var ALIGN = { PHX: { conf: 'West', div: 'Southwest' }, MEM: { conf: 'East', div: 'Southeast' } };
+  // Real expansions for leagues that start before they happened (js/league.js runs them after that summer's draft).
+  // 2004: the Charlotte Bobcats, and the league goes to six divisions (New Orleans moves to the West).
+  var HISTORIC = {
+    bobcats: {
+      year: 2005,
+      teams: [{ abbr: 'CHA', city: 'Charlotte', name: 'Bobcats', conf: 'East', div: 'Southeast', colors: ['#F26532', '#0C2340'] }],
+      align: { BOS: ['East', 'Atlantic'], BKN: ['East', 'Atlantic'], NYK: ['East', 'Atlantic'], PHI: ['East', 'Atlantic'], TOR: ['East', 'Atlantic'],
+        CHI: ['East', 'Central'], CLE: ['East', 'Central'], DET: ['East', 'Central'], IND: ['East', 'Central'], MIL: ['East', 'Central'],
+        ATL: ['East', 'Southeast'], MIA: ['East', 'Southeast'], ORL: ['East', 'Southeast'], WAS: ['East', 'Southeast'],
+        DEN: ['West', 'Northwest'], MIN: ['West', 'Northwest'], POR: ['West', 'Northwest'], SEA: ['West', 'Northwest'], OKC: ['West', 'Northwest'], UTA: ['West', 'Northwest'],
+        GSW: ['West', 'Pacific'], LAC: ['West', 'Pacific'], LAL: ['West', 'Pacific'], PHX: ['West', 'Pacific'], SAC: ['West', 'Pacific'],
+        DAL: ['West', 'Southwest'], HOU: ['West', 'Southwest'], MEM: ['West', 'Southwest'], NOH: ['West', 'Southwest'], SAS: ['West', 'Southwest'] },
+      headline: 'The Charlotte Bobcats join the NBA',
+      body: 'Charlotte gets a team back for the 2004-05 season and the league splits into six divisions; New Orleans moves to the West. The Bobcats took 14 players in the expansion draft.',
+      tx: 'The NBA expands to 30 teams: the Charlotte Bobcats join for 2004-05.'
+    }
+  };
   var PROTECT = 8, ROSTER = 14, CAP_PICK = 5;
   var OFFSEASON_AFTER_DRAFT = { resign: 1, freeAgency: 1, training: 1 };
 
@@ -79,9 +96,10 @@
     return t;
   }
 
-  function expansionDraft(state, Y, rng) {
+  function expansionDraft(state, Y, rng, NEW) {
+    NEW = NEW || TEAMS;
     var news = [], picks = [], byTeam = {}, protectedBy = {};
-    Object.keys(state.teams).forEach(function (a) { if (TEAMS.every(function (t) { return t.abbr !== a; })) byTeam[a] = []; });
+    Object.keys(state.teams).forEach(function (a) { if (NEW.every(function (t) { return t.abbr !== a; })) byTeam[a] = []; });
     var owner = {};
     Object.keys(state.players).forEach(function (id) {
       var p = state.players[id], a = ownerOf(state, p, Y);
@@ -93,7 +111,8 @@
       protectedBy[a] = list.slice(0, PROTECT);
       list.slice(PROTECT).forEach(function (p) { pool.push(p); });
     });
-    var lost = {}, order = rng() < 0.5 ? [TEAMS[0].abbr, TEAMS[1].abbr] : [TEAMS[1].abbr, TEAMS[0].abbr];
+    var order = NEW.map(function (t) { return t.abbr; }), lost = {};
+    if (order.length === 2 && rng() < 0.5) order.reverse();
     for (var round = 0; round < ROSTER; round++) {
       order.forEach(function (abbr) {
         var cand = pool.filter(function (p) { return !lost[owner[p.id]]; });
@@ -141,6 +160,27 @@
     return function () { s |= 0; s = (s + 0x6D2B79F5) | 0; var t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   }
 
+  // A real expansion from HISTORIC (key), in the summer before its first season
+  function applyHistoric(state, key) {
+    var H = HISTORIC[key];
+    if (!H || !state || !state.teams || H.teams.every(function (t) { return state.teams[t.abbr]; })) return null;
+    var Y = H.year;
+    H.teams.forEach(function (t0) { state.teams[t0.abbr] = makeTeam(t0, Y); });
+    Object.keys(H.align).forEach(function (a) { var t = state.teams[a]; if (t) { t.conf = H.align[a][0]; t.div = H.align[a][1]; } });
+    var C = mod('COACH');
+    if (C && C.init) { try { C.init(state); } catch (e) { /* coaches are cosmetic */ } }
+    var D = mod('DRAFT');
+    if (D && D.ensurePicks) D.ensurePicks(state, 7, Y);
+    var picks = expansionDraft(state, Y, seeded(state, key + Y), H.teams);
+    state.historic = state.historic || {};
+    state.historic[key] = Y;
+    state.expansion = state.expansion || {};
+    state.expansion.capDraft = Y; state.expansion.capPick = CAP_PICK; state.expansion.capTeams = H.teams.map(function (t) { return t.abbr; });
+    addNews(state, H.headline, H.body, []);
+    addTx(state, H.tx, []);
+    return picks;
+  }
+
   // The expansion itself (the new teams' first season is Y)
   function apply(state, Y) {
     TEAMS.forEach(function (t0) { state.teams[t0.abbr] = makeTeam(t0, Y); });
@@ -154,7 +194,7 @@
     state.expansion.year = Y; state.expansion.pending = null;
     state.expansion.teams = TEAMS.map(function (t) { return t.abbr; });
     state.expansion.capDraft = Y;      // their first draft (the summer of season Y): no pick above CAP_PICK
-    state.expansion.capPick = CAP_PICK;
+    state.expansion.capPick = CAP_PICK; state.expansion.capTeams = TEAMS.map(function (t) { return t.abbr; });
     state.expansion.draft = picks.map(function (x) { return { id: x.p.id, from: x.from, to: x.to, n: x.n }; });
     var label = (Y - 1) + '-' + String(Y).slice(2);
     addNews(state, 'The NBA expands to 32 teams',
@@ -187,7 +227,7 @@
     return true;
   }
 
-  var EXPANSION = { addTeams: addTeams, applyPending: applyPending, isExpanded: isExpanded, TEAMS: TEAMS, ALIGN: ALIGN, PROTECT: PROTECT, ROSTER: ROSTER, CAP_PICK: CAP_PICK };
+  var EXPANSION = { addTeams: addTeams, applyPending: applyPending, applyHistoric: applyHistoric, HISTORIC: HISTORIC, isExpanded: isExpanded, TEAMS: TEAMS, ALIGN: ALIGN, PROTECT: PROTECT, ROSTER: ROSTER, CAP_PICK: CAP_PICK };
   if (root) root.EXPANSION = EXPANSION;
   if (typeof module !== 'undefined' && module.exports) module.exports = EXPANSION;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

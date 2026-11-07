@@ -154,10 +154,12 @@
     var final = drawn.concat(remaining);
     // new expansion teams (js/expansion.js) cannot pick higher than fifth in their first draft
     var ex = state && state.expansion;
-    if (ex && +ex.capDraft === year && Array.isArray(ex.teams)) {
-      var capAt = (ex.capPick || 5) - 1, held = [];
-      final = final.filter(function (x, i) { if (i < capAt && ex.teams.indexOf(x.abbr) >= 0) { held.push(x); return false; } return true; });
-      Array.prototype.splice.apply(final, [Math.min(capAt, final.length), 0].concat(held));   // fifth and sixth at best
+    var capTeams = ex && (ex.capTeams || ex.teams);
+    if (ex && +ex.capDraft === year && Array.isArray(capTeams)) {
+      // the new teams near the top drop to fifth and sixth together (one at a time would lift the other back up)
+      var capAt = (ex.capPick || 5) - 1, reach = capAt + capTeams.length, held = [];
+      final = final.filter(function (x, i) { if (i < reach && capTeams.indexOf(x.abbr) >= 0) { held.push(x); return false; } return true; });
+      Array.prototype.splice.apply(final, [Math.min(capAt, final.length), 0].concat(held));
     }
     var result = {
       year: year, era: eo.era, draws: eo.draws,

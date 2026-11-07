@@ -1088,7 +1088,24 @@
   // ---------------------------------------------------------------------------
   // Schedule
   // ---------------------------------------------------------------------------
+  // Leagues that are not 30 or 32 teams (29 in 2003-04): three games against everyone, minus the pairs at the
+  // smallest distances on a shuffled circle, so every team plays 82 and hosts 41
+  function circleMatchups(abbrs, rng) {
+    var order = abbrs.slice();
+    for (var k = order.length - 1; k > 0; k--) { var r = Math.floor(rng() * (k + 1)); var tmp = order[k]; order[k] = order[r]; order[r] = tmp; }
+    var N = order.length, drop = {}, cut = 3 * (N - 1) - 82, games = [];
+    for (var d = 1; d <= Math.floor(cut / 2); d++) drop[d] = true;
+    if (cut % 2) drop[N / 2] = true;
+    for (var i = 0; i < N; i++) for (var j = i + 1; j < N; j++) {
+      var a = order[i], b = order[j], dist = Math.min(j - i, N - (j - i));
+      games.push({ home: a, away: b }, { home: b, away: a });
+      if (drop[dist]) continue;
+      if (j - i <= N / 2 && !(N % 2 === 0 && j - i === N / 2)) games.push({ home: a, away: b }); else games.push({ home: b, away: a });
+    }
+    return games;
+  }
   function buildMatchups(teams, rng) {
+    if (teams.length !== 30 && teams.length !== 32 && teams.length >= 29) return circleMatchups(teams.map(function (t) { return t.abbr; }), rng);
     var confs = {};
     teams.forEach(function (t) {
       var c = t.conf || 'East', d = t.div || c;
