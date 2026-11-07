@@ -242,16 +242,26 @@
   };
 
   // ---------- New league: pick a team (2K13 style cards) ----------
+  let newStart = 2013;
   P.new = function (app) {
     if (!UI.canPlay()) { app.innerHTML = UI.notBuilt('engine'); return; }
-    // Always the opening-night data: a new league starts from LEAGUE_2012, whatever save is loaded.
-    const L = UI.state.league;
+    // Always opening-night data: 2012-13 is LEAGUE_2012; other seasons load data/start-YYYY.js first.
+    const start = newStart;
+    const S = start !== 2013 && window.START_LEAGUES && window.START_LEAGUES[start];
+    if (start !== 2013 && !S) {
+      app.innerHTML = `<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE ${esc((UI.START_YEARS.find(x => x.year === start) || {}).label || '')} LEAGUE...</div></section>`;
+      UI.loadStart(start).then(() => P.new(app)).catch(e => { newStart = 2013; UI.toast(e.message, 'error'); P.new(app); });
+      return;
+    }
+    const L = S || UI.state.league;
+    const seasonLbl = (start - 1) + '-' + String(start).slice(2), lastLbl = (start - 2) + '-' + String(start - 1).slice(2);
+    const teamLogo = (abbr, size) => (S ? UI.logoFor(L.teams.find(t => t.abbr === abbr) || { abbr }, size) : UI.logo(abbr, size));
     const rosters = {};
     L.players.forEach(p => { if (!p.retired && p.team && p.team !== 'FA' && p.team !== 'DRAFT') (rosters[p.team] = rosters[p.team] || []).push(p); });
     Object.keys(rosters).forEach(k => rosters[k].sort(byOvr));
-    const H = window.HISTORY_PRIOR;
+    const H = S ? S.prior && S.prior.history : window.HISTORY_PRIOR;
     const recOf = abbr => {
-      const r = H && H.records && (H.records[2012] || H.records['2012']);
+      const r = H && H.records && (H.records[start - 1] || H.records[String(start - 1)]);
       const x = r && r[abbr];
       return x ? (typeof x === 'string' ? x : x.w != null ? x.w + '-' + x.l : '') : '';
     };
@@ -267,10 +277,10 @@
     const card = x => {
       const t = x.t, c1 = (t.colors && t.colors[0]) || '#333';
       return `<button type="button" class="team-tile ts-card" data-team="${esc(t.abbr)}" style="--c1:${esc(c1)}">
-        <span class="ts-top">${UI.logo(t.abbr, 54)}
+        <span class="ts-top">${teamLogo(t.abbr, 54)}
           <span class="ts-nm"><small>${esc(t.city)}</small><b>${esc(t.name)}</b></span>
           <span class="ts-ovr" title="Team overall rating"><small>TEAM OVR</small><b>${x.ovr || '-'}</b></span></span>
-        <span class="ts-tags"><span class="ts-tag ${tierCls(x.tier)}">${esc(x.tier.toUpperCase())}</span>${x.cap.word ? `<span class="ts-tag cap-${x.cap.word.toLowerCase()}" title="${esc(x.cap.line)}">${esc(x.cap.word.toUpperCase())}</span>` : ''}${x.rec ? `<span class="ts-tag ts-rec" title="2011-12 record">2011-12: ${esc(x.rec)}</span>` : ''}</span>
+        <span class="ts-tags"><span class="ts-tag ${tierCls(x.tier)}">${esc(x.tier.toUpperCase())}</span>${x.cap.word ? `<span class="ts-tag cap-${x.cap.word.toLowerCase()}" title="${esc(x.cap.line)}">${esc(x.cap.word.toUpperCase())}</span>` : ''}${x.rec ? `<span class="ts-tag ts-rec" title="${esc(lastLbl)} record">${esc(lastLbl)}: ${esc(x.rec)}</span>` : ''}</span>
         <span class="ts-stars">${x.r.slice(0, 3).map(p => `<span><i>${esc(p.name)}</i><b class="${UI.ovrClass(p.ovr)}">${esc(p.ovr)}</b></span>`).join('')}</span>
       </button>`;
     };
@@ -278,7 +288,9 @@
     const visible = f => info.filter(x => f === 'all' || x.t.conf === f || x.tier === f);
     const slots = UI.saves.list();
     const first = UI.saves.firstEmpty() || 1;
+    const seasons = UI.START_YEARS.map(s => `<button type="button" class="ch-chip${s.year === start ? ' on' : ''}" data-start="${s.year}" title="${esc(s.note || '')}">${esc(s.label)}</button>`).join('');
     app.innerHTML = `${UI.header('SELECT YOUR TEAM', 'TEAM OVR rates the whole team from its top eight players. Contenders are 81 and up, rebuilds 76 and below.')}
+      <div class="ts-start"><span class="ts-start-k">START IN</span><div class="ch-chips">${seasons}</div><span class="muted ts-start-n">${esc((UI.START_YEARS.find(s => s.year === start) || {}).note || '')}: the real ${esc(seasonLbl)} rosters, contracts and draft picks.</span></div>
       <div class="ts-bar">
         <div class="ts-filters" role="group" aria-label="Filter teams">${FILTERS.map(([k, l], i) => `<button type="button" data-f="${k}" class="${i ? '' : 'on'}" aria-pressed="${!i}">${l}</button>`).join('')}</div>
         <button type="button" class="btn btn-small ts-random" id="randomBtn">RANDOM TEAM</button>
@@ -324,7 +336,7 @@
       UI.$$('.ts-card', app).forEach(b => b.classList.toggle('picked', b.getAttribute('data-team') === abbr));
       const t = x.t;
       UI.$('#confirmBox', app).style.setProperty('--c1', (t.colors && t.colors[0]) || '#333');
-      UI.$('#confirmTeam', app).innerHTML = `${UI.logo(abbr, 72)}
+      UI.$('#confirmTeam', app).innerHTML = `${teamLogo(abbr, 72)}
         <div class="ts-hinfo"><div class="ct-k">${esc(x.tier.toUpperCase())} | TEAM OVR ${x.ovr || '-'}${x.cap.word ? ' | ' + esc(x.cap.word.toUpperCase()) : ''}</div>
         <h2 class="ct-t" id="confirmName">${esc(t.city + ' ' + t.name)}</h2><div class="ts-pay">${esc(x.cap.line)}</div></div>
         <button type="button" class="ts-x" id="closeBtn" aria-label="Close">&times;</button>`;
@@ -354,6 +366,7 @@
     document.addEventListener('keydown', onKey);
     window.addEventListener('hashchange', () => document.body.classList.remove('ts-lock'), { once: true });
     drawGrid();
+    UI.$$('[data-start]', app).forEach(b => b.addEventListener('click', () => { newStart = +b.getAttribute('data-start'); P.new(app); }));
     UI.$('#cancelBtn', app).addEventListener('click', close);
     UI.$('#startBtn', app).addEventListener('click', async () => {
       if (!picked) return;
@@ -362,7 +375,7 @@
       btn.textContent = 'BUILDING THE LEAGUE...';
       await new Promise(r => setTimeout(r, 30));
       try {
-        await UI.saves.create(Number(UI.$('#saveSlot').value), UI.$('#saveName').value.trim() || 'My Association', picked);
+        await UI.saves.create(Number(UI.$('#saveSlot').value), UI.$('#saveName').value.trim() || 'My Association', picked, start);
         UI.updateChrome();
         location.hash = '#/season';
       } catch (e) {

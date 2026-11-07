@@ -45,15 +45,70 @@
     var r = function () { return Math.round(20 + rng() * 60); };
     return { loyalty: r(), winning: r(), money: r(), market: r(), ego: r() };
   }
+  // ---------- start years ----------
+  // A league can open in another season. data/start-YYYY.js sets window.START_LEAGUES[YYYY]: the opening-night
+  // league (teams; players with contracts, ratings and tendencies, in the data/league2012.js format), draft
+  // rights, pick ownership, and prior: what happened before it (career seasons, awards, champions and MVPs,
+  // all-time totals, last season's records). useStart swaps the "before the save" tables (CAREER_PRIOR,
+  // AWARDS_PRIOR, HISTORY_PRIOR, ALLTIME_PRIOR) to that season so every page reads the right past.
+  // 2013 (the 2012-13 season, data/league2012.js) needs no start file.
+  var PRIOR_BASE = null, PRIOR_FOR = {};
+  function startData(year) { year = +year || 2013; return year === 2013 ? null : (W.START_LEAGUES && W.START_LEAGUES[year]) || null; }
+  function mergePrior(base, add, year) {
+    var career = {}, awards = {};
+    function merge(dst, src, keyOf) {
+      Object.keys(src || {}).forEach(function (id) {
+        var have = {};
+        (dst[id] || []).forEach(function (x) { have[keyOf(x)] = 1; });
+        var list = (dst[id] || []).concat((src[id] || []).filter(function (x) { return x && x.year < year && !have[keyOf(x)]; }));
+        list.sort(function (a, b) { return a.year - b.year; });
+        if (list.length) dst[id] = list;
+      });
+    }
+    Object.keys(base.career || {}).forEach(function (id) { var l = base.career[id].filter(function (x) { return x.year < year; }); if (l.length) career[id] = l; });
+    merge(career, add.career, function (x) { return x.year + "|" + x.team; });
+    Object.keys(base.awards || {}).forEach(function (id) { var l = base.awards[id].filter(function (x) { return x.year < year; }); if (l.length) awards[id] = l; });
+    merge(awards, add.awards, function (x) { return x.year + "|" + x.award; });
+    var h = base.history || {}, ah = add.history || {};
+    var seen = {}, champs = [];
+    (h.champions || []).concat(ah.champions || []).forEach(function (c) { if (c && c.year < year && !seen[c.year]) { seen[c.year] = 1; champs.push(c); } });
+    champs.sort(function (a, b) { return a.year - b.year; });
+    var titles = {};
+    champs.forEach(function (c) { if (c.abbr) titles[c.abbr] = (titles[c.abbr] || 0) + 1; });
+    // franchises whose old titles carry no abbreviation keep the count from the base table
+    Object.keys(h.titles || {}).forEach(function (a) {
+      var before = (h.champions || []).filter(function (c) { return c.abbr === a; }).length;
+      if ((h.titles[a] || 0) > before) titles[a] = (titles[a] || 0) + h.titles[a] - before;
+    });
+    var mvp = {};
+    Object.keys(h.mvp || {}).concat(Object.keys(ah.mvp || {})).forEach(function (y) { if (+y < year) mvp[y] = (ah.mvp && ah.mvp[y]) || h.mvp[y]; });
+    var history = Object.assign({}, h, { champions: champs, mvp: mvp, titles: titles });
+    if (ah.records) history.records = ah.records;
+    return { career: career, awards: awards, history: history, alltime: add.alltime || base.alltime };
+  }
+  function useStart(year) {
+    year = +year || 2013;
+    if (!PRIOR_BASE) PRIOR_BASE = { career: W.CAREER_PRIOR, awards: W.AWARDS_PRIOR, history: W.HISTORY_PRIOR, alltime: W.ALLTIME_PRIOR };
+    var S = startData(year), m = PRIOR_BASE;
+    if (S && S.prior) m = PRIOR_FOR[year] || (PRIOR_FOR[year] = mergePrior(PRIOR_BASE, S.prior, year));
+    W.CAREER_PRIOR = m.career; W.AWARDS_PRIOR = m.awards; W.HISTORY_PRIOR = m.history; W.ALLTIME_PRIOR = m.alltime;
+    return S ? year : 2013;
+  }
+
+  // opts.start: the season to open in (season-ending year, 2013 by default; others need data/start-YYYY.js)
   function newLeague(userTeam, opts) {
     opts = opts || {};
-    var base = W.LEAGUE_2012;
+    var startYear = +opts.start || 2013;
+    var base = startData(startYear) || W.LEAGUE_2012;
     if (!base) throw new Error("League data not loaded");
+    if (startYear !== 2013 && base === W.LEAGUE_2012) throw new Error("The " + (startYear - 1) + "-" + String(startYear).slice(2) + " league data is not loaded");
+    var other = base !== W.LEAGUE_2012;
+    useStart(other ? base.season : 2013);
     var seed = opts.seed || Math.floor(Math.random() * 2147483646) + 1;
     var rng = mulberry32(seed);
     var state = { version: 1, year: base.season, phase: "regular", userTeam: userTeam, day: 0, rngSeed: seed,
       players: {}, teams: {}, season: null, history: { seasons: [], prior: W.HISTORY_PRIOR || null },
-      transactions: [], news: [], events: [], settings: { difficulty: "normal" } };
+      transactions: [], news: [], events: [], settings: { difficulty: "normal" }, startYear: base.season };
     base.players.forEach(function (p0) {
       var p = clone(p0);
       p.contract = p.team === "FA" ? null : contractFor(p0, state.year);
@@ -86,11 +141,13 @@
     // never part of a draft class. DRAFT.signRookies signs them with whoever holds the rights then.
     var teamAbbrs = {};
     base.teams.forEach(function (t0) { teamAbbrs[t0.abbr] = true; });
-    var rightsPlayers = (W.DRAFT_RIGHTS || []).slice();
+    var rightsPlayers = (other ? base.rights || [] : W.DRAFT_RIGHTS || []).slice();
     if (W.DRAFTS) Object.keys(W.DRAFTS).forEach(function (yr) { W.DRAFTS[yr].forEach(function (pr) { if (pr && pr.rights) rightsPlayers.push(pr); }); });
     rightsPlayers.forEach(function (pr) {
       var r = pr.rights;
       if (state.players[pr.id] || !r || !teamAbbrs[r.team]) return;
+      // another start year: only rights to players still overseas (the rest are in the league file or gone)
+      if (other && !(+pr.arrivalYear > state.year) && !(+r.draftYear >= state.year)) return;
       var p = clone(pr);
       p.team = r.team; p.draftYear = r.draftYear; p.realPick = r.pick; p.undrafted = false;
       p.draft = { year: r.draftYear, round: r.pick <= 30 ? 1 : 2, pick: r.pick, team: r.draftedBy || r.team };
@@ -110,6 +167,7 @@
       state.players[p.id] = p;
     });
     if (W.DRAFTS) Object.keys(W.DRAFTS).forEach(function (yr) {
+      if (+yr < state.year) return;   // classes drafted before the start are in the league file (or out of the league)
       var cls = [];
       W.DRAFTS[yr].forEach(function (pr) {
         if (state.players[pr.id] || pr.rights) return;
@@ -130,7 +188,7 @@
       t.coach = null;
       state.teams[t.abbr] = t;
     });
-    assignPicks(state, W.PICKS_2012);
+    assignPicks(state, other ? base.picks || null : W.PICKS_2012);
     // injury and career fates: once per save, real story or the healthy path (never shown in the UI)
     if (mod("PROG") && W.PROG.rollFates) safe("fates", function () { W.PROG.rollFates(state); });
     // coaches are cosmetic: names and records for display
@@ -688,6 +746,8 @@
   var UNDRAFTED_MAX = 70;
   function migrate(state) {
     if (!state || !state.teams) return state;
+    // the past this save started from (another start year swaps the career, awards and history tables)
+    useStart(state.startYear || 2013);
     // saves from before the 2K13 rating scale: every rating once onto it (players by the current
     // season, prospects by their arrival season)
     // saves from the first 2K13 scale: classes not drafted yet are rated again from the real data,
@@ -746,7 +806,7 @@
   }
 
   var API = { KEY_DATES: KEY_DATES, newLeague: newLeague, advance: advance, nextPhase: nextPhase, leagueView: leagueView, resolveEvent: resolveEvent,
-    clearResolved: clearResolved, currentDate: currentDate, pendingEvents: pendingEvents, OFFSEASON: OFFSEASON,
+    clearResolved: clearResolved, currentDate: currentDate, useStart: useStart, startData: startData, pendingEvents: pendingEvents, OFFSEASON: OFFSEASON,
     userPicksLeft: userPicksLeft, handlesContractDecisions: true, autoOn: autoOn, applyBrands: applyBrands, migrate: migrate, rosterRules: rosterRules, rosterOf: rosterOf, enforceRosters: enforceRosters, assignPicks: assignPicks };
   W.LEAGUE = API;
   if (typeof module !== "undefined") module.exports = API;

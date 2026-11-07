@@ -83,6 +83,35 @@
     return (t.city + ' ' + t.name).trim();
   };
 
+  // Seasons a new Association can open in. Other than 2012-13 they load data/start-YYYY.js on demand.
+  UI.START_YEARS = [
+    { year: 2013, label: '2012-13', note: 'The 2K13 rosters' },
+    { year: 2017, label: '2016-17', note: 'KD joins the Warriors', file: 'data/start-2017.js' }
+  ];
+  const startLoads = {};
+  UI.loadStart = function (year) {
+    year = +year;
+    if (year === 2013 || (window.START_LEAGUES && window.START_LEAGUES[year])) return Promise.resolve(true);
+    const info = UI.START_YEARS.find(s => s.year === year);
+    if (!info || !info.file) return Promise.reject(new Error('This save started in ' + (year - 1) + '-' + String(year).slice(2) + ', which this version does not have.'));
+    if (!startLoads[year]) startLoads[year] = new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = info.file;
+      s.onload = () => (window.START_LEAGUES && window.START_LEAGUES[year] ? res(true) : rej(new Error('The ' + info.label + ' league data did not load.')));
+      s.onerror = () => { delete startLoads[year]; rej(new Error('The ' + info.label + ' league data did not load. Check the connection and try again.')); };
+      document.head.appendChild(s);
+    });
+    return startLoads[year];
+  };
+  // A logo from a team object (for teams outside the loaded league, like another start year's)
+  UI.logoFor = function (t, size) {
+    const c1 = (t.colors && t.colors[0]) || '#333';
+    const c2 = (t.colors && t.colors[1]) || '#999';
+    const style = `--c1:${c1};--c2:${c2};--sz:${size || 40}px`;
+    const img = t.logo ? `<img src="${UI.esc(t.logo)}" alt="" loading="lazy"${t.logoNoRef || /wikia|nocookie/.test(t.logo) ? ' referrerpolicy="no-referrer"' : ''} onerror="this.parentNode.classList.add('nologo');this.remove()">` : '';
+    return `<span class="logo${t.logo ? '' : ' nologo'}" style="${style}" title="${UI.esc(((t.city || '') + ' ' + (t.name || '')).trim())}">${img}<b>${UI.esc(t.abbr)}</b></span>`;
+  };
+
   UI.logo = function (abbr, size) {
     const t = UI.team(abbr);
     const c1 = (t.colors && t.colors[0]) || '#333';
