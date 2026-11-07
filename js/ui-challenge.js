@@ -100,6 +100,8 @@
       return;
     }
     if (part[0] === 'sim') { drawSim(app); return; }
+    if (part[0] === 'game') { drawGame(app, +part[1] || 0, part[2] || ''); return; }
+    if (part[0] === 's') { openShared(app, part.slice(1).join('/')); return; }
     if (part[0] === 'result') { drawResult(app, part[1] != null && part[1] !== '' ? +part[1] : 0); return; }
     drawSetup(app);
   };
@@ -391,18 +393,29 @@
         <div class="ch-sim-rec" id="chRec">0-0</div>
         <div class="ch-bar"><i id="chBar"></i></div>
         <ol class="ch-tick" id="chTick"></ol>
-        <button type="button" class="btn" id="chFast">SKIP TO THE END</button>
+        <div class="row-btns center"><button type="button" class="btn btn-gold" id="chWatch"${RUN.fast ? ' disabled' : ''}>WATCH THE NEXT GAME</button><button type="button" class="btn" id="chFast"${RUN.fast ? ' disabled' : ''}>SKIP TO THE END</button></div>
       </section>`;
-    UI.$('#chFast').addEventListener('click', () => { RUN.fast = true; UI.$('#chFast').disabled = true; });
+    UI.$('#chFast').addEventListener('click', () => { RUN.fast = true; RUN.watch = false; UI.$('#chFast').disabled = true; UI.$('#chWatch').disabled = true; });
+    UI.$('#chWatch').addEventListener('click', () => { RUN.watch = true; UI.$('#chWatch').textContent = 'FINDING YOUR NEXT GAME...'; UI.$('#chWatch').disabled = true; });
+    if (RUN.seen == null) RUN.seen = ch.season.order.length;
     RUN.paused = false;
+    RUN.watching = null;
     tick();
   }
   function tick() {
     if (!RUN) return;
     if (!onSim()) { RUN.paused = true; return; }
     const ch = RUN.ch, s = ch.season;
+    if (RUN.watching) return;
     const beforeGames = Object.keys(s.boxScores).length;
-    const done = C.step(ch, RUN.fast ? 30 : 3);
+    const done = C.step(ch, RUN.fast ? 30 : RUN.watch ? 1 : 3);
+    // the user's game that was just played, kept whole for the court view
+    let mine = null;
+    while (RUN.seen < s.order.length) {
+      const id = s.order[RUN.seen++], b = s.boxScores[id];
+      if (b && b.home && typeof b.home === 'object' && (b.home.abbr === ch.user || b.away.abbr === ch.user) && b.pbx) mine = b;
+    }
+    if (RUN.watch && mine && !done) { RUN.watch = false; RUN.watching = JSON.parse(JSON.stringify(mine)); drawWatch(document.getElementById('app'), RUN.watching); return; }
     const pr = C.progress(ch);
     const rec = UI.$('#chRec'), bar = UI.$('#chBar'), ph = UI.$('#chPhase'), tk = UI.$('#chTick');
     if (rec) rec.textContent = pr.w + '-' + pr.l;
@@ -429,12 +442,142 @@
   function finish() {
     const ch = RUN.ch;
     const r = C.summary(ch);
+    if (RUN.shared) r.sharedFrom = RUN.shared;
     RUN = null;
     keepResult(r);
     ls.del(KEY_CUR);
     CUR = null;
     ODDS = null;
     location.hash = '#/challenge/result/0';
+  }
+
+  // A challenge game on the court: lookups from the challenge, not the save
+  function courtOpts(teams, names, game) {
+    return { game, start: 0, autoplay: true, team: a => teamOf(teams, a), player: id => names(id),
+      logo: (a, size) => logo(teamOf(teams, a), size) };
+  }
+  let courtCtl = null;
+  function mountCourt(el, opts) {
+    if (courtCtl) { try { courtCtl.destroy(); } catch (e) { /* gone */ } courtCtl = null; }
+    if (!(window.COURT && typeof window.COURT.mount === 'function' && window.COURT.available(opts.game))) { el.innerHTML = '<p class="muted">The court view needs the play-by-play of this game, which is not kept.</p>'; return; }
+    courtCtl = window.COURT.mount(el, opts);
+    if (courtCtl && UI.extras && typeof UI.extras.onLeave === 'function') UI.extras.onLeave(() => { if (courtCtl) { courtCtl.destroy(); courtCtl = null; } });
+  }
+  function drawWatch(app, b) {
+    const ch = RUN.ch, teams = ch.teams, s = ch.season, st = s.standings[ch.user] || { w: 0, l: 0 };
+    const opp = b.home.abbr === ch.user ? b.away.abbr : b.home.abbr, home = b.home.abbr === ch.user;
+    app.innerHTML = `<div class="ch-top">${logo(teamOf(teams, ch.user), 40)}<div><div class="ch-top-k">${b.playoff ? 'PLAYOFFS' : 'GAME ' + (st.w + st.l)} | ${esc(UI.dateLabel ? UI.dateLabel(b.date) : b.date)}</div>
+        <div class="ch-top-t">${home ? 'vs' : 'at'} ${esc(tName(teamOf(teams, opp)))}</div></div></div>
+      <div class="ct-host" id="chCourt"></div>
+      <div class="row-btns center"><button type="button" class="btn btn-gold" id="chGoOn">BACK TO THE SEASON</button><button type="button" class="btn" id="chAgainW">WATCH THE NEXT ONE TOO</button></div>`;
+    mountCourt(UI.$('#chCourt'), courtOpts(teams, id => ch.players[id] || null, b));
+    UI.$('#chGoOn').addEventListener('click', () => drawSim(app));
+    UI.$('#chAgainW').addEventListener('click', () => { drawSim(app); RUN.watch = true; const w = UI.$('#chWatch'); if (w) { w.disabled = true; w.textContent = 'FINDING YOUR NEXT GAME...'; } });
+  }
+
+  // ---------- replays: the season again from its seed, so any game of it can be opened ----------
+  let REPLAY = null;   // { when, boxes: { gid: box }, names: { id: player }, done }
+  function chFromResult(r) {
+    const cfg = Object.assign({}, r.cfg);
+    return buildChallenge(cfg, cfg.mode === 'alltime' ? draftFromResult(r, cfg) : null);
+  }
+  function replay(r, onProgress) {
+    if (REPLAY && REPLAY.when === r.when && REPLAY.done) return Promise.resolve(REPLAY);
+    return loadFor(r.cfg).then(() => new Promise((res, rej) => {
+      let ch;
+      try { ch = chFromResult(r); } catch (e) { rej(e); return; }
+      const rp = { when: r.when, boxes: {}, names: {}, done: false, seen: 0 };
+      Object.keys(ch.players).forEach(id => { const p = ch.players[id]; rp.names[id] = { name: p.name, pos: p.pos, nbaId: p.nbaId || null, team: p.team }; });
+      REPLAY = rp;
+      const go = () => {
+        if (REPLAY !== rp) return;
+        let fin = false;
+        try {
+          for (let i = 0; i < 12 && !fin; i++) {
+            fin = C.step(ch, 1);
+            const sn = ch.season;
+            while (rp.seen < sn.order.length) {
+              const id = sn.order[rp.seen++], b = sn.boxScores[id];
+              if (b && b.home && typeof b.home === 'object' && (b.home.abbr === ch.user || b.away.abbr === ch.user)) rp.boxes[id] = JSON.parse(JSON.stringify(b));
+            }
+          }
+        } catch (e) { rej(e); return; }
+        if (onProgress) onProgress(C.progress(ch).frac);
+        if (fin) { rp.done = true; res(rp); } else setTimeout(go, 0);
+      };
+      go();
+    }));
+  }
+  function drawGame(app, idx, gid) {
+    const r = results()[idx];
+    if (!r) { location.hash = '#/challenge'; return; }
+    const back = `<div class="row-btns"><a class="btn" href="#/challenge/result/${idx}">BACK TO THE RESULTS</a></div>`;
+    const show = rp => {
+      if (location.hash.indexOf('#/challenge/game/' + idx + '/' + gid) !== 0) return;
+      const b = rp.boxes[gid];
+      if (!b) { app.innerHTML = UI.empty('GAME NOT FOUND', 'That game is not in this season.', back); return; }
+      gamePage(app, r, idx, b, rp);
+    };
+    if (REPLAY && REPLAY.when === r.when && REPLAY.done) { show(REPLAY); return; }
+    app.innerHTML = `<section class="ch-load"><div class="ch-spin-ring"></div><div>REPLAYING THE SEASON...</div><div class="ch-bar ch-load-bar"><i id="chRpBar"></i></div><p class="muted ch-small">Same seed, same luck. Only the first game you open takes a moment.</p></section>`;
+    replay(r, f => { const el = UI.$('#chRpBar'); if (el) el.style.width = (f * 100).toFixed(0) + '%'; })
+      .then(show)
+      .catch(e => { app.innerHTML = UI.empty('COULD NOT REPLAY', esc(e && e.message ? e.message : e), back); });
+  }
+  function gamePage(app, r, idx, b, rp) {
+    const teams = r.teams, me = r.team.abbr;
+    const nm = id => (rp.names[id] || {}).name || id;
+    const pm = v => (v > 0 ? '+' : '') + (v || 0);
+    const table = side => {
+      const t = teamOf(teams, b[side].abbr);
+      const rows = b[side].box.filter(x => x.min > 0).sort((x, y) => (y.starter ? 1 : 0) - (x.starter ? 1 : 0) || y.min - x.min);
+      return `<h3 class="ch-bx-h">${logo(t, 26)}<span>${esc(b[side].abbr === me ? tName(r.team) : tName(t))}</span><b>${b[side].pts}</b></h3>
+        <div class="tscroll"><table class="stats ch-bx"><thead><tr><th class="l">PLAYER</th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>FG</th><th>3P</th><th>FT</th><th>TO</th><th>+/-</th></tr></thead><tbody>${rows.map(x =>
+          `<tr${x.starter ? ' class="ch-st"' : ''}><td class="l">${esc(nm(x.id))}</td><td>${Math.round(x.min || 0)}</td><td><b>${x.pts || 0}</b></td><td>${(x.oreb || 0) + (x.dreb || 0)}</td><td>${x.ast || 0}</td><td>${x.stl || 0}</td><td>${x.blk || 0}</td><td>${x.fgm || 0}-${x.fga || 0}</td><td>${x.tpm || 0}-${x.tpa || 0}</td><td>${x.ftm || 0}-${x.fta || 0}</td><td>${x.tov || 0}</td><td>${pm(x.pm)}</td></tr>`).join('')}</tbody></table></div>`;
+    };
+    const q = Array.isArray(b.quarters) ? b.quarters : [];
+    const qh = q.map((x, i) => `<th>${i < 4 ? 'Q' + (i + 1) : 'OT' + (i - 3)}</th>`).join('');
+    const qr = side => q.map(x => `<td>${x[side === 'home' ? 0 : 1]}</td>`).join('');
+    const A = teamOf(teams, b.away.abbr), H = teamOf(teams, b.home.abbr);
+    const won = (b.home.abbr === me) === (b.home.pts > b.away.pts);
+    app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(r.label)} | ${b.playoff ? 'PLAYOFFS | ' : ''}${esc(UI.dateLabel ? UI.dateLabel(b.date) : b.date)}</div>
+        <div class="ch-top-t">${won ? 'WIN' : 'LOSS'} ${Math.max(b.home.pts, b.away.pts)}-${Math.min(b.home.pts, b.away.pts)}</div></div><a class="btn btn-small" href="#/challenge/result/${idx}">RESULTS</a></div>
+      <div class="ch-score"><span>${logo(A, 44)}<b>${b.away.pts}</b></span><small>FINAL${b.ot ? ' / ' + (b.ot > 1 ? b.ot : '') + 'OT' : ''}</small><span><b>${b.home.pts}</b>${logo(H, 44)}</span></div>
+      ${q.length ? `<div class="tscroll"><table class="stats ch-q"><thead><tr><th class="l"></th>${qh}<th>T</th></tr></thead><tbody><tr><td class="l">${esc(A.abbr)}</td>${qr('away')}<td><b>${b.away.pts}</b></td></tr><tr><td class="l">${esc(H.abbr)}</td>${qr('home')}<td><b>${b.home.pts}</b></td></tr></tbody></table></div>` : ''}
+      <div class="row-btns center"><button type="button" class="btn btn-gold" id="chCourtGo"${b.pbx ? '' : ' disabled'}>WATCH ON THE COURT</button></div>
+      <div class="ct-host" id="chCourt"></div>
+      ${table('away')}${table('home')}
+      <div class="row-btns"><a class="btn" href="#/challenge/result/${idx}">BACK TO THE RESULTS</a></div>`;
+    const go = UI.$('#chCourtGo');
+    go.addEventListener('click', () => { go.hidden = true; mountCourt(UI.$('#chCourt'), courtOpts(teams, id => rp.names[id] || null, b)); UI.$('#chCourt').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+  }
+
+  // ---------- share links: the setup and the seed, so the same season plays on any device ----------
+  function b64(str) { return btoa(unescape(encodeURIComponent(str))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  function unb64(code) { const t = code.replace(/-/g, '+').replace(/_/g, '/'); return decodeURIComponent(escape(atob(t + '==='.slice((t.length + 3) % 4)))); }
+  function shareCode(r) {
+    const c = r.cfg, o = { v: 1, m: c.mode === 'alltime' ? 'a' : 'y', y: c.year, b: c.build === 'wheel' ? 'w' : 'f', t: c.team, n: c.name || '', s: c.seed,
+      i: c.injuries === false ? 0 : 1, e: c.era || 2013, w: r.w, l: r.l };
+    if (c.mode === 'alltime') { const ix = {}; C.allTimePool().forEach((e, k) => { ix[e.key] = k; }); o.d = (r.draft || []).map(x => ix[x.key]); }
+    else o.p = c.picks;
+    return b64(JSON.stringify(o));
+  }
+  function openShared(app, code) {
+    let o;
+    try { o = JSON.parse(unb64(code)); } catch (e) { app.innerHTML = UI.empty('LINK NOT READABLE', 'This challenge link is broken or cut off.', '<div class="row-btns"><a class="btn" href="#/challenge">DRAFT CHALLENGE</a></div>'); return; }
+    const cfg = { mode: o.m === 'a' ? 'alltime' : 'year', year: +o.y || 2013, build: o.b === 'w' ? 'wheel' : 'free', team: o.t, name: o.n || '', seed: +o.s,
+      injuries: o.i !== 0, era: +o.e || 2013, picks: o.p || [] };
+    ensureData(cfg, app, () => {
+      try {
+        let dr = null;
+        if (cfg.mode === 'alltime') {
+          dr = C.newDraft(cfg);
+          (o.d || []).forEach(k => { const e = dr.pool[k]; if (e) C.draftPick(dr, e.key); });
+        }
+        RUN = { ch: buildChallenge(cfg, dr), fast: false, paused: false, ticker: [], shared: { w: o.w, l: o.l } };
+        location.hash = '#/challenge/sim';
+      } catch (e) { app.innerHTML = UI.empty('COULD NOT OPEN THE CHALLENGE', esc(e && e.message ? e.message : e), '<div class="row-btns"><a class="btn" href="#/challenge">DRAFT CHALLENGE</a></div>'); }
+    });
   }
 
   // =====================================================================
@@ -466,7 +609,7 @@
     const awardRow = (k, label) => { const a = aw[k]; if (!a) return ''; const t = teamOf(teams, a.team); return `<li class="${a.mine ? 'me' : ''}"><small>${label}</small>${logo(t, 22)}<b>${esc(a.name)}</b>${a.season ? `<span class="muted">${esc(short(a.season))}</span>` : ''}${a.line ? `<span class="muted">${a.line.pts} / ${a.line.reb} / ${a.line.ast}</span>` : ''}</li>`; };
     const stand = c => `<div class="ch-stand"><h4>${c.toUpperCase()}</h4><ol>${r.standings[c].map((x, i) => `<li class="${x.abbr === me.abbr ? 'me' : ''}${i === 7 ? ' cut' : ''}"><span class="ch-feed-n">${i + 1}</span>${logo(teamOf(teams, x.abbr), 20)}<span class="ch-stand-n">${esc(x.abbr === me.abbr ? tName(me) : x.name)}</span><b>${x.w}-${x.l}</b>${r.mode === 'year' && x.real ? `<small class="muted" title="Real record">${x.real.w}-${x.real.l}</small>` : ''}</li>`).join('')}</ol></div>`;
     const benchRows = r.bench.filter(b => b.line && b.line.g).map(b => `<tr><td class="l">${esc(b.name)}</td><td>${esc(b.pos)}</td><td>${b.ovr}</td><td>${b.line.g}</td><td>${b.line.mpg}</td><td>${b.line.pts}</td><td>${b.line.reb}</td><td>${b.line.ast}</td></tr>`).join('');
-    const log = r.log.map(g => `<li class="${g.won ? 'w' : 'l'}${g.playoff ? ' po' : ''}"><span class="ch-log-d">${esc(UI.dateLabel ? UI.dateLabel(g.date) : g.date)}</span><b>${g.won ? 'W' : 'L'}</b><span>${g.us}-${g.them}</span><span>${g.home ? 'vs' : 'at'} ${esc(g.opp)}</span><small class="muted">${esc(g.top)}</small></li>`).join('');
+    const log = r.log.map(g => `<li class="${g.won ? 'w' : 'l'}${g.playoff ? ' po' : ''}"><a href="#/challenge/game/${idx}/${esc(g.id)}"><span class="ch-log-d">${esc(UI.dateLabel ? UI.dateLabel(g.date) : g.date)}</span><b>${g.won ? 'W' : 'L'}</b><span>${g.us}-${g.them}</span><span>${g.home ? 'vs' : 'at'} ${esc(g.opp)}</span><small class="muted">${esc(g.top)}</small></a></li>`).join('');
     app.innerHTML = `
       <section class="ch-res ${r.exit === 'champion' ? 'champ' : ''}" style="--c1:${esc(me.colors[0])};--c2:${esc(me.colors[1] || me.colors[0])}">
         <div class="ch-res-k">${esc(r.label)} DRAFT CHALLENGE | ${esc(BUILD[r.build] ? BUILD[r.build].label : '')}</div>
@@ -475,10 +618,11 @@
         ${realT ? `<div class="ch-res-real">The real ${esc(seasonLabel(r.year))} ${esc(tName(me.orig || me))} went ${realT.w}-${realT.l}.</div>` : ''}
         ${series ? `<ol class="ch-series">${series}</ol>` : ''}
       </section>
+      ${r.sharedFrom ? `<div class="note">${r.sharedFrom.w === r.w && r.sharedFrom.l === r.l ? 'Shared challenge: the same season your friend simmed.' : 'Shared challenge: the original run went ' + r.sharedFrom.w + '-' + r.sharedFrom.l + '. A different browser rolled the luck a little differently.'}</div>` : ''}
       <div class="row-btns center ch-acts"><button type="button" class="btn btn-gold" id="chAgain">RUN IT BACK</button><button type="button" class="btn" id="chOdds">SIM 10 MORE SEASONS</button><button type="button" class="btn" id="chShare">SHARE</button><a class="btn" href="#/challenge">NEW CHALLENGE</a></div>
       <div id="chOddsBox">${oddsHtml(r)}</div>
       ${UI.header('YOUR FIVE')}<div class="ch-cards">${fiveCards}</div>
-      ${r.best.length ? `${UI.header('BEST NIGHTS')}<ol class="ch-best">${r.best.map(b => `<li><b>${b.pts}</b><span><b>${esc(b.name)}</b><small>${b.reb} reb | ${b.ast} ast | ${b.playoff ? 'playoffs ' : ''}vs ${esc(b.opp)}, ${esc(UI.dateLabel ? UI.dateLabel(b.date) : b.date)}</small></span></li>`).join('')}</ol>` : ''}
+      ${r.best.length ? `${UI.header('BEST NIGHTS')}<ol class="ch-best">${r.best.map(b => `<li>${b.gid ? `<a href="#/challenge/game/${idx}/${esc(b.gid)}">` : '<span class="ch-best-a">'}<b>${b.pts}</b><span><b>${esc(b.name)}</b><small>${b.reb} reb | ${b.ast} ast | ${b.playoff ? 'playoffs ' : ''}vs ${esc(b.opp)}, ${esc(UI.dateLabel ? UI.dateLabel(b.date) : b.date)}</small></span>${b.gid ? '<i class="ch-go-i">BOX</i></a>' : '</span>'}</li>`).join('')}</ol>` : ''}
       ${UI.header('AROUND THE LEAGUE')}
       <div class="ch-league">
         <ul class="ch-awards"><li class="${r.champion && r.champion.abbr === me.abbr ? 'me' : ''}"><small>CHAMPION</small>${r.champion ? logo(teamOf(teams, r.champion.abbr), 22) + '<b>' + esc(tName(r.champion)) + '</b>' : '<b>-</b>'}</li>
@@ -488,7 +632,7 @@
       ${UI.header('STANDINGS', r.mode === 'year' ? 'Gray number: the real record' : '')}<div class="ch-stands">${stand('East')}${stand('West')}</div>
       ${r.moves && r.moves.length ? `${UI.header('WHO REPLACED YOUR PICKS')}<ul class="ch-moves">${r.moves.map(m => `<li>${logo(teamOf(teams, m.team), 22)}<span>Lost <b>${esc(m.outName)}</b>, signed <b>${esc(m.inName)}</b> (${m.inOvr})</span></li>`).join('')}</ul>` : ''}
       ${benchRows ? `${UI.header('THE SCRUBS')}<div class="tscroll"><table class="stats"><thead><tr><th class="l">PLAYER</th><th>POS</th><th>OVR</th><th>G</th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th></tr></thead><tbody>${benchRows}</tbody></table></div>` : ''}
-      <details class="ch-logbox"><summary>GAME LOG (${r.log.length} GAMES)</summary><ol class="ch-log">${log}</ol></details>`;
+      <details class="ch-logbox"><summary>GAME LOG (${r.log.length} GAMES) | TAP A GAME FOR THE BOX SCORE</summary><ol class="ch-log">${log}</ol></details>`;
     UI.$('#chAgain').addEventListener('click', () => rerun(r));
     UI.$('#chShare').addEventListener('click', () => share(r));
     UI.$('#chOdds').addEventListener('click', () => runOdds(r));
@@ -553,9 +697,13 @@
   }
 
   function share(r) {
+    loadFor(r.cfg).then(() => shareNow(r)).catch(() => shareNow(r, true));
+  }
+  function shareNow(r, plain) {
     const names = r.five.map(x => x.name).join(', ');
-    const text = `My ${r.label} Draft Challenge: ${names} went ${r.w}-${r.l}. ${r.exit === 'champion' ? 'NBA Champions.' : r.result + '.'}`;
-    const url = location.origin + location.pathname + '#/challenge';
+    const text = `My ${r.label} Draft Challenge: ${names} went ${r.w}-${r.l}. ${r.exit === 'champion' ? 'NBA Champions.' : r.result + '.'} Sim the same season:`;
+    let url = location.origin + location.pathname + '#/challenge';
+    if (!plain) { try { url += '/s/' + shareCode(r); } catch (e) { /* plain link */ } }
     if (navigator.share) { navigator.share({ title: 'Draft Challenge', text, url }).catch(() => {}); return; }
     const all = text + ' ' + url;
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(all).then(() => UI.toast('Copied to the clipboard.')).catch(() => UI.toast(all));

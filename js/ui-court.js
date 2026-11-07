@@ -136,8 +136,8 @@
     return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
   }
   // Home wears white with the team color, away wears the team color (bright enough to see on the dark floor).
-  function kits(home, away) {
-    const cols = abbr => { const t = UI.team(abbr) || {}; return (t.colors && t.colors.length ? t.colors : ['#555', '#999']).concat(['#555', '#999']); };
+  function kits(home, away, teamOf) {
+    const cols = abbr => { const t = (teamOf || UI.team)(abbr) || {}; return (t.colors && t.colors.length ? t.colors : ['#555', '#999']).concat(['#555', '#999']); };
     const hc = cols(home), ac = cols(away);
     const ink = [hc[0], hc[1]].find(c => lum(c) < 0.4) || '#1a1a1a';
     const fill = [ac[0], ac[1]].find(c => lum(c) > 0.05 && lum(c) < 0.7) || '#6d6d75';
@@ -172,19 +172,21 @@
   }
 
   // ---------- mount ----------
-  // opts: { game (result with pbp, pbx, pbl), start (event index to start from), autoplay, onStep(i), onEnd() }
+  // opts: { game (result with pbp, pbx, pbl), start (event index to start from), autoplay, onStep(i), onEnd(),
+  //   team(abbr), player(id), logo(abbr, size): lookups for games outside the save (the Draft Challenge) }
   COURT.mount = function (el, opts) {
     opts = opts || {};
+    const logoOf = opts.logo || UI.logo, playerOf = opts.player || UI.player;
     const tl = timeline(opts.game);
     if (!tl) { el.innerHTML = '<p class="muted">The court view needs the play-by-play of this game, which is not kept.</p>'; return null; }
     const game = opts.game;
     const evs = tl.events;
     const id = ++uid;
-    const kit = kits(tl.home, tl.away);
+    const kit = kits(tl.home, tl.away, opts.team);
     const abbr = { home: tl.home, away: tl.away };
     const info = {};
     SIDES.forEach(side => (game[side].box || []).forEach((r, i) => {
-      const p = UI.player ? UI.player(r.id) : null;
+      const p = playerOf ? playerOf(r.id) : null;
       const name = r.name || (p && p.name) || r.id;
       const pos = String((p && p.pos) || 'SF').toUpperCase().split(/[-\/ ,]/)[0];
       info[keyOf(side, i)] = { id: r.id, name, pos, ini: initials(name), last: lastName(name), side };
@@ -201,9 +203,9 @@
     el.innerHTML = `
       <div class="ct-wrap">
         <div class="ct-strip">
-          <div class="ct-tm">${UI.logo(tl.away, 26)}<b>${esc(tl.away)}</b><span class="ct-pts" data-s="away">0</span></div>
+          <div class="ct-tm">${logoOf(tl.away, 26)}<b>${esc(tl.away)}</b><span class="ct-pts" data-s="away">0</span></div>
           <div class="ct-clk"><b class="ct-per">Q1</b><span class="ct-time">12:00</span></div>
-          <div class="ct-tm ct-tm-h"><span class="ct-pts" data-s="home">0</span><b>${esc(tl.home)}</b>${UI.logo(tl.home, 26)}</div>
+          <div class="ct-tm ct-tm-h"><span class="ct-pts" data-s="home">0</span><b>${esc(tl.home)}</b>${logoOf(tl.home, 26)}</div>
         </div>
         <div class="ct-stage">
           <svg class="ct-svg" role="img" aria-label="Court view of the game" preserveAspectRatio="xMidYMid meet"></svg>
@@ -331,7 +333,7 @@
     }
     function drawLine(ev) {
       if (!ev) return;
-      $('.ct-lt').innerHTML = `<span class="ct-lc">${esc(ev.per)} ${esc(ev.clock)}</span>${ev.team ? UI.logo(ev.team, 20) : ''}`;
+      $('.ct-lt').innerHTML = `<span class="ct-lc">${esc(ev.per)} ${esc(ev.clock)}</span>${ev.team ? logoOf(ev.team, 20) : ''}`;
       $('.ct-lx').textContent = ev.body || ev.text;
       $('.ct-line').classList.toggle('made', ev.pts > 0);
     }
@@ -363,7 +365,7 @@
       const onFloor = st.on[p.side].indexOf(st.sel) >= 0;
       c.hidden = false;
       c.innerHTML = `<button type="button" class="ct-x" aria-label="Close">X</button>
-        <div class="ct-cn">${UI.logo(abbr[p.side], 22)}<b>${esc(p.name)}</b><small>${esc(p.pos)}${onFloor ? '' : ' | BENCH'}</small></div>
+        <div class="ct-cn">${logoOf(abbr[p.side], 22)}<b>${esc(p.name)}</b><small>${esc(p.pos)}${onFloor ? '' : ' | BENCH'}</small></div>
         <div class="ct-cl"><span><b>${line.pts}</b>PTS</span><span><b>${line.reb}</b>REB</span><span><b>${line.ast}</b>AST</span></div>`;
       c.querySelector('.ct-x').addEventListener('click', () => select(st.sel));
     }

@@ -454,7 +454,7 @@
       (us.box || []).forEach(function (r) {
         if (!top || (r.pts || 0) > (top.pts || 0)) top = r;
         var p = ch.players[r.id];
-        if (p && !p.scrub) best.push({ id: r.id, name: p.name, pts: r.pts || 0, reb: (r.oreb || 0) + (r.dreb || 0), ast: r.ast || 0, opp: them.abbr, date: bx.date, playoff: !!bx.playoff });
+        if (p && !p.scrub) best.push({ gid: gid, id: r.id, name: p.name, pts: r.pts || 0, reb: (r.oreb || 0) + (r.dreb || 0), ast: r.ast || 0, opp: them.abbr, date: bx.date, playoff: !!bx.playoff });
       });
       log.push({ id: gid, date: bx.date, home: side === 'home', opp: them.abbr, us: us.pts, them: them.pts, won: us.pts > them.pts, playoff: !!bx.playoff,
         top: top && ch.players[top.id] ? ch.players[top.id].name + ' ' + (top.pts || 0) : '' });
