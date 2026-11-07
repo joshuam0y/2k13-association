@@ -205,3 +205,6 @@
   .ch-log li { grid-template-columns: 62px 16px 62px 58px minmax(0, 1fr); font-size: 12px; }
   .ch-odds-g b { font-size: 19px; }
 }
+/* single-column lists never grow past the screen (long names and results ellipsize instead) */
+.ch-past-list, .ch-list, .ch-feed, .ch-board, .ch-best, .ch-awards, .ch-moves, .ch-log, .ch-leaders ol, .ch-stand ol { grid-template-columns: minmax(0, 1fr); }
+.ch-past-r small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
