@@ -66,6 +66,20 @@ ok(new Set(used).size === 5, "five different teams");
 const rw = C.play(wcfg);
 ok(rw.w + rw.l === 82, "wheel team season: " + rw.w + "-" + rw.l);
 
+// the other seasons: 29 teams in 2003-04, real records, era style
+[[2004, "NOH"], [2009, "OKC"], [2017, "PHI"]].forEach(([y, team]) => {
+  const d = C.seasonData(y);
+  if (!d) { ok(false, y + " rosters loaded"); return; }
+  const picks = d.players.slice(0, 5).map(p => p.id);
+  const rs = C.play({ mode: "year", year: y, team, picks, seed: y });
+  const all = Object.values(rs.standings).flat();
+  ok(all.length === d.teams.length && all.every(t => t.w + t.l === 82), y + ": " + d.teams.length + " teams, all play 82; the top five (" + rs.five.map(x => x.name.split(" ").slice(-1)[0]).join(", ") + ") went " + rs.w + "-" + rs.l + ", " + rs.result);
+  ok(rs.five.every(x => x.real && x.line && x.line.mpg >= 30), y + ": real lines kept and big minutes (" + rs.five.map(x => x.line.mpg).join(", ") + ", blowouts rest the stars)");
+  ok(rs.team.real && rs.team.orig, y + ": the franchise's real record (" + rs.team.real.w + "-" + rs.team.real.l + ")");
+});
+const lb = C.allTimePool().filter(e => e.base === "jamesle01").map(e => e.label);
+ok(lb.length === 3 && lb.indexOf("2003-04") < 0, "all-time LeBron: " + lb.join(", ") + " (no rookie year)");
+
 // all-time draft
 const acfg = { mode: "alltime", team: "LAL", seed: 3, build: "free" };
 const dr = C.newDraft(acfg);

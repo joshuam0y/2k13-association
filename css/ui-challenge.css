@@ -208,3 +208,5 @@
 /* single-column lists never grow past the screen (long names and results ellipsize instead) */
 .ch-past-list, .ch-list, .ch-feed, .ch-board, .ch-best, .ch-awards, .ch-moves, .ch-log, .ch-leaders ol, .ch-stand ol { grid-template-columns: minmax(0, 1fr); }
 .ch-past-r small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-pl-b small .ch-real { flex-basis: 100%; }
+.ch-pl-b small .ch-real i { font-style: normal; font-size: 10px; letter-spacing: .1em; color: var(--muted); }

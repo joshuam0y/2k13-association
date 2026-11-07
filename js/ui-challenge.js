@@ -197,7 +197,7 @@
   function playerRow(p, teams, btn) {
     const from = p.from || p.team;
     const t = p.season && p.season !== 2013 && C.eraTeam(p.season, from) || teamOf(teams, from);
-    return `<li class="ch-pl">${face(p, (t.colors || ['#444'])[0])}<span class="ch-pl-b"><b>${esc(p.name)}</b><small>${logo(t, 18)} ${esc(C.primaryPos(p.pos))}${p.age ? ' | ' + p.age : ''}${p.label ? ' | ' + esc(p.label) : ''}${p.stats ? ' | <span class="ch-real">' + esc(realLine(p.stats)) + '</span>' : ''}</small></span>
+    return `<li class="ch-pl">${face(p, (t.colors || ['#444'])[0])}<span class="ch-pl-b"><b>${esc(p.name)}</b><small>${logo(t, 18)} ${esc(C.primaryPos(p.pos))}${p.age ? ' | ' + p.age : ''}${p.label ? ' | ' + esc(p.label) : ''}${p.stats ? '<span class="ch-real">' + esc(realLine(p.stats)) + ' <i>PTS / REB / AST</i></span>' : ''}</small></span>
       <span class="ch-ovr ${UI.ovrClass(p.ovr)}">${p.ovr}</span>${btn || ''}</li>`;
   }
 

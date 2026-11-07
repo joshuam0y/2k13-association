@@ -12,10 +12,10 @@
   'use strict';
   var W = root;
   var SEASONS = [
-    { year: 2004, label: '2003-04', file: 'data/era-2004.js', ready: false },
-    { year: 2009, label: '2008-09', file: 'data/era-2009.js', ready: false },
+    { year: 2004, label: '2003-04', file: 'data/era-2004.js' },
+    { year: 2009, label: '2008-09', file: 'data/era-2009.js' },
     { year: 2013, label: '2012-13', builtin: true },
-    { year: 2017, label: '2016-17', file: 'data/era-2017.js', ready: false }
+    { year: 2017, label: '2016-17', file: 'data/era-2017.js' }
   ];
   var ROUNDS = 5;
   var GROUP = { PG: 'G', SG: 'G', SF: 'W', PF: 'B', C: 'B', G: 'G', F: 'W' };
@@ -49,7 +49,7 @@
     var prior = W.CAREER_PRIOR || null;
     var teams = src.teams.map(function (t) {
       return { abbr: t.abbr, city: t.city, name: t.name, conf: t.conf, div: t.div, colors: (t.colors || ['#333', '#777']).slice(0, 2), logo: t.logo || null,
-        logoNoRef: !!t.logoNoRef, real: t.real || (REAL_2013[t.abbr] ? { w: REAL_2013[t.abbr][0], l: REAL_2013[t.abbr][1] } : null) };
+        logoNoRef: !!t.logoNoRef, real: t.real || t.record || (year === 2013 && REAL_2013[t.abbr] ? { w: REAL_2013[t.abbr][0], l: REAL_2013[t.abbr][1] } : null) };
     });
     var known = {};
     teams.forEach(function (t) { known[t.abbr] = true; });
