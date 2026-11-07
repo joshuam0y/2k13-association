@@ -28,7 +28,9 @@
     eight: { label: '8-MAN', note: 'Tight playoff rotation', starters: [36, 35, 34, 33, 32], bench: [26, 24, 20] },
     seven: { label: '7-MAN', note: 'Shortest rotation', starters: [38, 37, 36, 35, 34], bench: [32, 28] },
     depth: { label: 'DEPTH', note: '10 men, fresh legs', starters: [32, 31, 30, 29, 28], bench: [22, 20, 18, 16, 14] },
-    young: { label: 'YOUNG PLAYERS', note: 'Develop the kids', young: true, starters: [34, 33, 32, 30, 29], bench: [24, 22, 18, 12, 6] }
+    young: { label: 'YOUNG PLAYERS', note: 'Develop the kids', young: true, starters: [34, 33, 32, 30, 29], bench: [24, 22, 18, 12, 6] },
+    // Draft Challenge teams (js/challenge.js): the five picks carry the load, the scrub bench fills in
+    challenge: { label: 'IRON FIVE', note: 'Starters play 38 to 40', starters: [40, 39, 38, 38, 37], bench: [18, 14, 10, 6] }
   };
   function youthBonus(p) { return clamp((26 - (+p.age || 26)) * 1.5, 0, 9); }
 
@@ -1213,9 +1215,10 @@
     return { days: days, left: remaining };
   }
 
-  function buildSchedule(teams, rng, start, end) {
+  // matchups (optional): [{ home, away }, ...] to place instead of the NBA formula (js/challenge.js)
+  function buildSchedule(teams, rng, start, end, matchups) {
     var dates = buildCalendar(start, end);
-    var matchups = buildMatchups(teams, rng);
+    matchups = matchups ? matchups.map(function (g) { return { home: g.home, away: g.away }; }) : buildMatchups(teams, rng);
     var best = null;
     for (var attempt = 0; attempt < 12; attempt++) {
       var res = scheduleOnce(teams, matchups, dates, rng);
@@ -1965,6 +1968,7 @@
     version: 1,
     newSeason: newSeason,
     realSchedule: realSchedule,
+    buildSchedule: buildSchedule,
     simDays: simDays,
     simGame: simGame,
     playoffs: playoffs,

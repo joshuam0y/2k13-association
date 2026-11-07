@@ -46,7 +46,7 @@
   };
 
   // ---------- Main menu ----------
-  // Four choices only: play a new Association, continue the last one, load a save, soundtrack.
+  // Five choices only: play a new Association, continue the last one, the Draft Challenge, load a save, soundtrack.
   P.home = function (app) {
     const latest = UI.saves.latest();
     const engineOk = UI.canPlay();
@@ -61,8 +61,9 @@
         <div class="mm-grid">
           ${UI.tile('#/new', 'ball', 'PLAY THE ASSOCIATION', { cls: 'mt-hero', disabled: !engineOk, sub: engineOk ? 'NEW LEAGUE' : 'SIM ENGINE NOT LOADED' })}
           ${cont}
-          ${UI.tile('#/saves', 'load', 'LOAD')}
-          ${UI.tile('#/soundtrack', 'music', 'SOUNDTRACK')}
+          ${UI.tile('#/challenge', 'draft', 'DRAFT CHALLENGE', { cls: 'mt-challenge mt-hot', disabled: !engineOk, sub: 'PICK FIVE, SIM A SEASON' })}
+          ${UI.tile('#/saves', 'load', 'LOAD', { cls: 'mt-half' })}
+          ${UI.tile('#/soundtrack', 'music', 'SOUNDTRACK', { cls: 'mt-half' })}
         </div>
       </section>`;
   };

@@ -25,7 +25,7 @@
   const CORE = ['home', 'new', 'continue', 'teams', 'team', 'player', 'season', 'game', 'standings', 'leaders', 'stats', 'league', 'playoffs', 'saves', 'soundtrack'];
   const MORE = [
     ['trade', 'Trades'], ['manage', 'Rotation'], ['draft', 'Draft'], ['league', 'League'], ['playoffs', 'Playoffs'],
-    ['live', 'Watch Live'], ['saves', 'Saves'], ['fantasy', 'Fantasy Draft'], ['commish', 'Commissioner'], ['soundtrack', 'Soundtrack']
+    ['live', 'Watch Live'], ['saves', 'Saves'], ['challenge', 'Draft Challenge'], ['fantasy', 'Fantasy Draft'], ['commish', 'Commissioner'], ['soundtrack', 'Soundtrack']
   ];
   // Aliases and pages reached another way; never listed on their own.
   const SKIP = ['trades', 'myteam', 'gm', 'fa', 'freeagency', 'commissioner', 'news', 'awards', 'history', 'classes'];
@@ -74,7 +74,7 @@
   // One gold button that always does the obvious next step (UI.nextAction in js/ui-season.js): the next
   // game, the awards show, the playoffs, the next offseason step. In the top bar on wide screens, a
   // sticky bar above the music bar on phones. N on the keyboard presses it.
-  const NEXT_HIDDEN = ['new', 'live', 'fantasy'];   // pages with their own flow
+  const NEXT_HIDDEN = ['new', 'live', 'fantasy', 'challenge'];   // pages with their own flow
   function nextBtn() {
     let b = document.getElementById('nextBtn');
     if (b) return b;
