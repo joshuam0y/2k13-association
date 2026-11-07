@@ -43,7 +43,16 @@
     var list = Array.isArray(it) ? it : [it];
     state.news = state.news || [];
     list.forEach(function (x) { if (x) state.news.push(x); });
-    if (state.news.length > MAX_NEWS) state.news.splice(0, state.news.length - MAX_NEWS);
+    if (state.news.length > MAX_NEWS) {
+      // drop the oldest items wherever they sit: js/league.js adds at the front, this module at the back
+      var order = state.news.map(function (x, i) { return [((x && x.year) || 0) * 1000 + ((x && x.day) || 0), i]; })
+        .sort(function (a, b) { return a[0] - b[0] || b[1] - a[1]; });
+      var drop = {};
+      order.slice(0, state.news.length - MAX_NEWS).forEach(function (o) { drop[o[1]] = true; });
+      var kept = state.news.filter(function (x, i) { return !drop[i]; });
+      state.news.length = 0;
+      Array.prototype.push.apply(state.news, kept);
+    }
     return it;
   }
 

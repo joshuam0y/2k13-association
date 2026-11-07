@@ -720,6 +720,27 @@
     safe("migrate brands", function () { applyBrands(state); });
     safe("migrate news", function () { worldSeen(state); });
     if (mod("FUTURE")) safe("migrate future", function () { W.FUTURE.activate(state); });
+    // triple-doubles from before box scores counted them: one recount of the season in progress from every
+    // full box score still kept (all of the user's games and the latest 120 around the league)
+    if (state.season && !state.season.tdCounted) safe("migrate triple-doubles", function () {
+      var s = state.season, reg = {}, po = {};
+      Object.keys(s.boxScores || {}).forEach(function (gid) {
+        var b = s.boxScores[gid];
+        if (!b || !b.home || typeof b.home !== "object" || b.playIn) return;
+        var m = b.playoff ? po : reg;
+        ["home", "away"].forEach(function (side) {
+          (b[side].box || []).forEach(function (r) {
+            var td = r.td || ([r.pts, (r.oreb || 0) + (r.dreb || 0), r.ast, r.stl, r.blk].filter(function (x) { return x >= 10; }).length >= 3 ? 1 : 0);
+            if (td) m[r.id] = (m[r.id] || 0) + 1;
+          });
+        });
+      });
+      [[s.playerStats, reg], [s.playoffStats, po]].forEach(function (pr) {
+        var map = pr[0] || {};
+        Object.keys(pr[1]).forEach(function (id) { if (map[id] && (map[id].td || 0) < pr[1][id]) map[id].td = pr[1][id]; });
+      });
+      s.tdCounted = true;
+    });
     if (state.coaches) for (var k in state.coaches) if (state.coaches[k]) delete state.coaches[k].ovr;
     return state;
   }

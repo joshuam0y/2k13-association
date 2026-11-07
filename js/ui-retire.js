@@ -18,7 +18,8 @@
   const FRANCHISE = { PHO: 'PHX', NJN: 'BKN', SEA: 'OKC', NOK: 'NOH', VAN: 'MEM', WSB: 'WAS' };
   const OLD_NICK = { SEA: 'SuperSonics', NJN: 'Nets', VAN: 'Grizzlies', WSB: 'Bullets', NOK: 'Hornets', CHH: 'Hornets' };
   const OLD_CITY = { SEA: 'Seattle', NJN: 'New Jersey', VAN: 'Vancouver', WSB: 'Washington', NOK: 'New Orleans/Oklahoma City', CHH: 'Charlotte' };
-  const franchiseOf = a => FRANCHISE[a] || a;
+  // SEA before 2009 is the old SuperSonics (now OKC); later SEA seasons belong to the expansion SuperSonics (js/expansion.js)
+  const franchiseOf = (a, year) => (a === 'SEA' && year > 2008 ? 'SEA' : FRANCHISE[a] || a);
   const known = a => UI.teams().some(t => t.abbr === a);
   const nickOf = a => OLD_NICK[a] || (known(franchiseOf(a)) ? UI.team(franchiseOf(a)).name : a);
   const fullOf = a => (OLD_NICK[a] ? OLD_CITY[a] + ' ' + OLD_NICK[a] : known(franchiseOf(a)) ? UI.teamName(franchiseOf(a)) : a);
@@ -127,7 +128,7 @@
     // Teams in the order he played for them, one entry per franchise; seasons counted per franchise.
     const teams = [];
     rows.forEach(r => r.teams.forEach(a => {
-      const f = franchiseOf(a);
+      const f = franchiseOf(a, r.year);
       let t = teams.find(x => x.f === f);
       if (!t) teams.push(t = { f, abbr: a, years: [] });
       t.abbr = a;   // the latest name he played under
