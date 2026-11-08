@@ -19,9 +19,8 @@
   };
 
   // ---------- navigation ----------
-  // The top bar (index.html) holds six links: Home, Season, Rosters, Free Agency, Standings, Stats.
-  // Everything else sits under More. League pages (news, awards, history, draft classes) are reached
-  // from the League menu (#/league), so they stay out of More.
+  // The top bar (index.html) holds seven links: Home, Season, Rosters, Free Agency, Standings, Stats, League.
+  // Every page is also in the grouped Menu (MENU below).
   const CORE = ['home', 'new', 'continue', 'teams', 'team', 'player', 'season', 'game', 'standings', 'leaders', 'stats', 'league', 'playoffs', 'saves', 'soundtrack'];
   const MORE = [
     ['trade', 'Trades'], ['manage', 'Rotation'], ['draft', 'Draft'], ['league', 'League'], ['playoffs', 'Playoffs'],
@@ -39,17 +38,41 @@
     });
     return out;
   };
+  // Every page, grouped. The menu opens as a panel under the top bar that fits the screen (it scrolls when the
+  // window is short) and sits above the music bar; pages not grouped here land under MORE.
+  const MENU = [
+    ['MY TEAM', [['team', 'My Team'], ['manage', 'Rotation'], ['trade', 'Trades'], ['fa', 'Free Agency'], ['draft', 'Draft'], ['rights', 'Draft Rights'],
+      ['rookies', 'Rookies'], ['progress', 'Progression'], ['gleague', 'G League']]],
+    ['SEASON', [['season', 'Schedule'], ['standings', 'Standings'], ['stats', 'Stats'], ['leaders', 'Leaders'], ['playoffs', 'Playoffs'], ['allstar', 'All-Star'], ['live', 'Watch Live']]],
+    ['LEAGUE', [['league', 'League Home'], ['news', 'News'], ['news/transactions', 'Transactions'], ['awards', 'Awards'], ['awardshow', 'Awards Show'],
+      ['history', 'History'], ['records', 'Records'], ['retirements', 'Retirements'], ['classes', 'Draft Classes'], ['teams', 'All Teams']]],
+    ['MODES', [['new', 'New League'], ['challenge', 'Draft Challenge'], ['fantasy', 'Fantasy Draft']]],
+    ['GAME', [['saves', 'Saves'], ['settings', 'Settings'], ['commish', 'Commissioner'], ['soundtrack', 'Soundtrack']]]
+  ];
   function buildExtraNav() {
     const nav = document.getElementById('mainnav');
     nav.querySelectorAll('.nav-extra, .navmore').forEach(x => x.remove());
-    const extra = UI.extraPages();
-    if (!extra.length) return;
+    const pages = UI.pages || {}, has = r => typeof pages[r.split('/')[0]] === 'function';
+    const listed = {};
+    const groups = MENU.map(([title, items]) => [title, items.filter(([r]) => has(r))]).filter(g => g[1].length);
+    groups.forEach(g => g[1].forEach(([r]) => { listed[r.split('/')[0]] = true; }));
+    const rest = UI.extraPages().filter(x => !listed[x.route] && x.route !== 'watch').map(x => [x.route, x.label]);
+    if (rest.length) groups.push(['MORE', rest]);
     const more = document.createElement('details');
     more.className = 'navmore';
-    more.innerHTML = `<summary>More</summary><div class="navmore-list">${extra.map(x => `<a href="#/${esc(x.route)}" data-nav="${esc(x.route)}">${esc(x.label)}</a>`).join('')}</div>`;
+    more.innerHTML = `<summary>Menu</summary><div class="navmore-list" role="menu">${groups.map(([title, items]) =>
+      `<div class="nm-group"><div class="nm-k">${esc(title)}</div>${items.map(([r, l]) =>
+        `<a href="#/${esc(r)}" data-nav="${esc(r.split('/')[0])}">${esc(l)}</a>`).join('')}</div>`).join('')}</div>`;
     nav.appendChild(more);
+    const place = () => {
+      const bar = document.querySelector('.topbar'), list = more.querySelector('.navmore-list');
+      if (bar && list) list.style.top = Math.round(bar.getBoundingClientRect().bottom) + 'px';
+    };
+    more.addEventListener('toggle', () => { place(); document.body.classList.toggle('menu-open', more.open); });
+    window.addEventListener('resize', place);
     more.addEventListener('click', e => { if (e.target.closest('a')) more.open = false; });
     document.addEventListener('click', e => { if (!more.contains(e.target)) more.open = false; });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') more.open = false; });
   }
 
   UI.updateChrome = function () {
@@ -166,7 +189,7 @@
     const navKey = NAV[page] || page;
     UI.$$('#mainnav a').forEach(a => a.classList.toggle('on', a.getAttribute('data-nav') === navKey));
     const more = UI.$('#mainnav .navmore');
-    if (more) more.classList.toggle('on', !!more.querySelector(`a[data-nav="${navKey}"]`));
+    if (more) more.classList.toggle('on', !UI.$(`#mainnav > a[data-nav="${navKey}"]`) && !!more.querySelector(`a[data-nav="${navKey}"]`));
     // Phones: keep the current tab visible in the scrolling nav.
     const nav = UI.$('#mainnav');
     const cur = UI.$('#mainnav > a.on') || (more && more.classList.contains('on') ? more : null);
