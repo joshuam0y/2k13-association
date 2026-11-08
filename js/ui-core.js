@@ -84,11 +84,31 @@
   };
 
   // Seasons a new Association can open in. Other than 2012-13 they load data/start-YYYY.js on demand.
+  // Seasons a new Association can open in. Other than 2012-13 they load data/start-YYYY.js on demand.
   UI.START_YEARS = [
     { year: 2004, label: '2003-04', note: "LeBron's rookie year", file: 'data/start-2004.js' },
+    { year: 2005, label: '2004-05', note: 'The Bobcats arrive, Shaq goes to Miami', file: 'data/start-2005.js' },
+    { year: 2006, label: '2005-06', note: "Kobe's 81-point season", file: 'data/start-2006.js' },
+    { year: 2007, label: '2006-07', note: "Dirk's MVP year", file: 'data/start-2007.js' },
     { year: 2008, label: '2007-08', note: 'The new Big Three in Boston', file: 'data/start-2008.js' },
+    { year: 2009, label: '2008-09', note: "LeBron's first MVP", file: 'data/start-2009.js' },
+    { year: 2010, label: '2009-10', note: 'The Lakers go back to back', file: 'data/start-2010.js' },
+    { year: 2011, label: '2010-11', note: "Dirk's title run", file: 'data/start-2011.js' },
+    { year: 2012, label: '2011-12', note: "The Heat's first title", file: 'data/start-2012.js' },
     { year: 2013, label: '2012-13', note: 'The 2K13 rosters' },
-    { year: 2017, label: '2016-17', note: 'KD joins the Warriors', file: 'data/start-2017.js' }
+    { year: 2014, label: '2013-14', note: "The Spurs' beautiful game", file: 'data/start-2014.js' },
+    { year: 2015, label: '2014-15', note: "Curry's Warriors take off", file: 'data/start-2015.js' },
+    { year: 2016, label: '2015-16', note: 'The 73-win Warriors', file: 'data/start-2016.js' },
+    { year: 2017, label: '2016-17', note: 'KD joins the Warriors', file: 'data/start-2017.js' },
+    { year: 2018, label: '2017-18', note: "LeBron's last Cleveland run", file: 'data/start-2018.js' },
+    { year: 2019, label: '2018-19', note: 'Kawhi in Toronto', file: 'data/start-2019.js' },
+    { year: 2020, label: '2019-20', note: 'LeBron and AD in L.A.', file: 'data/start-2020.js' },
+    { year: 2021, label: '2020-21', note: 'Giannis and the Bucks', file: 'data/start-2021.js' },
+    { year: 2022, label: '2021-22', note: "The Warriors' fourth ring", file: 'data/start-2022.js' },
+    { year: 2023, label: '2022-23', note: 'Jokic and the Nuggets', file: 'data/start-2023.js' },
+    { year: 2024, label: '2023-24', note: "The Celtics' 18th banner", file: 'data/start-2024.js' },
+    { year: 2025, label: '2024-25', note: 'SGA and the Thunder', file: 'data/start-2025.js' },
+    { year: 2026, label: '2025-26', note: 'Last season', file: 'data/start-2026.js' }
   ];
   const startLoads = {};
   UI.loadStart = function (year) {

@@ -65,5 +65,18 @@ const CHECK = {
   if (Y === 2004) ok(!!s.teams.CHA && s.teams.NOH.conf === "West" && Object.values(s.players).filter(p => p.team === "CHA").length >= 10, "the Bobcats joined with an expansion draft and New Orleans moved West");
 });
 
+// every start file: the league builds, rosters are legal, a week plays
+fs.readdirSync("data").filter(f => /^start-\d{4}\.js$/.test(f)).forEach(f => {
+  const Y = +f.slice(6, 10);
+  require("../data/" + f);
+  const D = window.START_LEAGUES[Y];
+  let s = null, err = null;
+  try { s = L.newLeague(D.teams[0].abbr, { seed: Y, start: Y }); for (let d = 0; d < 7; d++) { s.events.forEach(e => (e.resolved = true)); L.clearResolved(s); L.advance(s, { days: 1 }); } } catch (e) { err = e; }
+  const sizes = s ? Object.keys(s.teams).map(a => Object.values(s.players).filter(p => p.team === a && !(p.stashedUntil > s.year)).length) : [];
+  const games = s ? Object.values(s.season.standings).reduce((n, x) => n + x.w + x.l, 0) / 2 : 0;
+  ok(!err && sizes.every(n => n >= 11 && n <= 16) && games > 20, D.label + ": " + (err ? "ERROR " + err.message : sizes.length + " teams, " + Math.min.apply(null, sizes) + " to " + Math.max.apply(null, sizes) + " players, " + games + " games in the first week"));
+});
+L.useStart(2013);
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exitCode = 1;
