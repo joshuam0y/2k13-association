@@ -54,7 +54,7 @@
   // 2013 (the 2012-13 season, data/league2012.js) needs no start file.
   var PRIOR_BASE = null, PRIOR_FOR = {};
   function startData(year) { year = +year || 2013; return year === 2013 ? null : (W.START_LEAGUES && W.START_LEAGUES[year]) || null; }
-  function mergePrior(base, add, year) {
+  function mergePrior(base, add, year, S) {
     var career = {}, awards = {};
     function merge(dst, src, keyOf) {
       Object.keys(src || {}).forEach(function (id) {
@@ -84,14 +84,23 @@
     Object.keys(h.mvp || {}).concat(Object.keys(ah.mvp || {})).forEach(function (y) { if (+y < year) mvp[y] = (ah.mvp && ah.mvp[y]) || h.mvp[y]; });
     var history = Object.assign({}, h, { champions: champs, mvp: mvp, titles: titles });
     if (ah.records) history.records = ah.records;
-    return { career: career, awards: awards, history: history, alltime: add.alltime || base.alltime };
+    // draft classes before 2013 and the real career ratings of those seasons (leagues that start before 2012-13)
+    var drafts = base.drafts, targets = base.targets;
+    if (S && S.drafts && Object.keys(S.drafts).length) drafts = Object.assign({}, base.drafts, S.drafts);
+    if (S && S.targetsPrior && Object.keys(S.targetsPrior).length) {
+      targets = Object.assign({}, base.targets);
+      Object.keys(S.targetsPrior).forEach(function (id) { targets[id] = Object.assign({}, base.targets[id] || {}, S.targetsPrior[id]); });
+    }
+    return { career: career, awards: awards, history: history, alltime: add.alltime || base.alltime, drafts: drafts, targets: targets };
   }
   function useStart(year) {
     year = +year || 2013;
-    if (!PRIOR_BASE) PRIOR_BASE = { career: W.CAREER_PRIOR, awards: W.AWARDS_PRIOR, history: W.HISTORY_PRIOR, alltime: W.ALLTIME_PRIOR };
+    if (!PRIOR_BASE) PRIOR_BASE = { career: W.CAREER_PRIOR, awards: W.AWARDS_PRIOR, history: W.HISTORY_PRIOR, alltime: W.ALLTIME_PRIOR, drafts: W.DRAFTS, targets: W.TARGETS };
     var S = startData(year), m = PRIOR_BASE;
-    if (S && S.prior) m = PRIOR_FOR[year] || (PRIOR_FOR[year] = mergePrior(PRIOR_BASE, S.prior, year));
+    if (S && S.prior) m = PRIOR_FOR[year] || (PRIOR_FOR[year] = mergePrior(PRIOR_BASE, S.prior, year, S));
     W.CAREER_PRIOR = m.career; W.AWARDS_PRIOR = m.awards; W.HISTORY_PRIOR = m.history; W.ALLTIME_PRIOR = m.alltime;
+    if (m.drafts) W.DRAFTS = m.drafts;
+    if (m.targets) W.TARGETS = m.targets;
     return S ? year : 2013;
   }
 
