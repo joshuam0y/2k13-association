@@ -75,8 +75,8 @@
     } catch (e) { console.warn('[challenge] could not restore', e); CUR = null; ls.del(KEY_CUR); return false; }
   }
 
-  const needYears = cfg => cfg.mode === 'alltime' ? C.SEASONS.filter(s => s.ready !== false).map(s => s.year) : [cfg.year];
-  const loadFor = cfg => Promise.all(needYears(cfg).map(y => C.load(y).catch(e => { if (cfg.mode !== 'alltime' || y === 2013) throw e; return null; })));
+  const needYears = cfg => cfg.mode === 'alltime' ? ['pool', 2013] : [cfg.year];
+  const loadFor = cfg => Promise.all(needYears(cfg).map(y => C.load(y)));
   function ensureData(cfg, app, then) {
     if (needYears(cfg).every(y => C.loaded(y))) { then(); return; }
     app.innerHTML = `<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE ${cfg.mode === 'alltime' ? 'ALL-TIME POOL' : esc(seasonLabel(cfg.year)) + ' ROSTERS'}...</div></section>`;
@@ -340,7 +340,7 @@
       const q = VIEW.q.trim().toLowerCase();
       const list = C.available(dr).filter(e => (!VIEW.pos || C.primaryPos(e.pos) === VIEW.pos) && (!VIEW.season || e.season === +VIEW.season) && (!q || e.name.toLowerCase().indexOf(q) >= 0));
       board = `<div class="ch-filters">${[''].concat(POS).map(x => `<button type="button" class="ch-chip sm${VIEW.pos === x ? ' on' : ''}" data-pos="${x}">${x || 'ALL'}</button>`).join('')}
-          <select id="chSeasonF" aria-label="Season"><option value="">ALL SEASONS</option>${C.SEASONS.filter(s => C.loaded(s.year)).map(s => `<option value="${s.year}"${+VIEW.season === s.year ? ' selected' : ''}>${esc(s.label)}</option>`).join('')}</select>
+          <select id="chSeasonF" aria-label="Season"><option value="">ALL SEASONS</option>${C.SEASONS.filter(s => C.poolSeasons().indexOf(s.year) >= 0).map(s => `<option value="${s.year}"${+VIEW.season === s.year ? ' selected' : ''}>${esc(s.label)}</option>`).join('')}</select>
           <input id="chQ" placeholder="Search players" value="${esc(VIEW.q)}" autocomplete="off"></div>
         <ul class="ch-list">${list.slice(0, 80).map(e => playerRow(e, teams, `<button type="button" class="btn btn-small btn-gold" data-take="${esc(e.key)}">DRAFT</button>`)).join('')}</ul>
         ${list.length > 80 ? `<p class="muted ch-small">Top 80 of ${list.length} shown.</p>` : ''}`;

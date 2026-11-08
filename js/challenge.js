@@ -6,17 +6,20 @@
 //   All-time: veterans from every season in one pool (no rookies), a 30-team, 5-round snake draft against
 //   29 AI teams; every team plays its five big minutes with a scrub bench.
 // Ratings: 2012-13 is the real 2K13 file (data/league2012.js); the other seasons are rated from real stats
-// on the 2K13 scale (data/era-YYYY.js, loaded on demand).
+// on the 2K13 scale (data/era-YYYY.js or data/start-YYYY.js, loaded on demand).
 // window.CHALLENGE holds the logic (node: tools/test-challenge.js); the page is drawn when the UI is loaded.
 (function (root) {
   'use strict';
   var W = root;
-  var SEASONS = [
-    { year: 2004, label: '2003-04', file: 'data/era-2004.js' },
-    { year: 2009, label: '2008-09', file: 'data/era-2009.js' },
-    { year: 2013, label: '2012-13', builtin: true },
-    { year: 2017, label: '2016-17', file: 'data/era-2017.js' }
-  ];
+  // Every season from 2003-04 to 2026-27. Three have their own Draft Challenge file (data/era-YYYY.js, rated
+  // from that season's stats); 2012-13 is the game's own league; the rest use the Association start files
+  // (data/start-YYYY.js: opening-night rosters, that season's records and per-game lines). The all-time draft
+  // uses data/challenge-pool.js, the best veterans of every season in one small file.
+  var ERA_FILES = { 2004: 'data/era-2004.js', 2009: 'data/era-2009.js', 2017: 'data/era-2017.js' };
+  var SEASONS = [];
+  for (var sy = 2004; sy <= 2027; sy++) SEASONS.push(sy === 2013 ? { year: 2013, label: '2012-13', builtin: true }
+    : { year: sy, label: (sy - 1) + '-' + String(sy).slice(2), file: ERA_FILES[sy] || 'data/start-' + sy + '.js', start: !ERA_FILES[sy] });
+  var POOL_FILE = 'data/challenge-pool.js';
   var ROUNDS = 5;
   var GROUP = { PG: 'G', SG: 'G', SF: 'W', PF: 'B', C: 'B', G: 'G', F: 'W' };
   var SCRUB_POS = ['PG', 'SG', 'SF', 'PF', 'C', 'PG', 'SF', 'C'];
@@ -39,17 +42,23 @@
   // ---------- season data ----------
   // { year, label, teams: [...], players: [...on teams], free: [...free agents] } or null when not loaded yet
   var cache = {};
-  function loaded(year) { return +year === 2013 ? !!W.LEAGUE_2012 : !!(W.ERA_ROSTERS && W.ERA_ROSTERS[year]); }
+  function loaded(year) {
+    if (year === 'pool') return !!W.CHALLENGE_POOL;
+    var info = seasonInfo(year);
+    if (!info) return false;
+    return +year === 2013 ? !!W.LEAGUE_2012 : info.start ? !!(W.START_LEAGUES && W.START_LEAGUES[year]) : !!(W.ERA_ROSTERS && W.ERA_ROSTERS[year]);
+  }
   function seasonData(year) {
     year = +year;
     if (cache[year]) return cache[year];
     var info = seasonInfo(year);
     if (!info || !loaded(year)) return null;
-    var src = year === 2013 ? W.LEAGUE_2012 : W.ERA_ROSTERS[year];
-    var prior = W.CAREER_PRIOR || null;
+    var src = year === 2013 ? W.LEAGUE_2012 : info.start ? W.START_LEAGUES[year] : W.ERA_ROSTERS[year];
+    var prior = W.CAREER_PRIOR || null, startCareer = info.start && src.prior && src.prior.career || {}, lines = info.start && src.seasonStats || {};
     var teams = src.teams.map(function (t) {
+      var real = info.start && src.real && src.real[t.abbr];
       return { abbr: t.abbr, city: t.city, name: t.name, conf: t.conf, div: t.div, colors: (t.colors || ['#333', '#777']).slice(0, 2), logo: t.logo || null,
-        logoNoRef: !!t.logoNoRef, real: t.real || t.record || (year === 2013 && REAL_2013[t.abbr] ? { w: REAL_2013[t.abbr][0], l: REAL_2013[t.abbr][1] } : null) };
+        logoNoRef: !!t.logoNoRef, real: real || t.real || t.record || (year === 2013 && REAL_2013[t.abbr] ? { w: REAL_2013[t.abbr][0], l: REAL_2013[t.abbr][1] } : null) };
     });
     var known = {};
     teams.forEach(function (t) { known[t.abbr] = true; });
@@ -57,9 +66,10 @@
     src.players.forEach(function (p0) {
       if (p0.stashedUntil) return;
       var p = { id: p0.id, name: p0.name, team: p0.team, pos: p0.pos, age: p0.age, ht: p0.ht, wt: p0.wt, ovr: p0.ovr, attrs: p0.attrs,
-        nbaId: p0.nbaId || null, stats: p0.stats || null, season: year };
+        nbaId: p0.nbaId || null, stats: lines[p0.id] || p0.stats || null, season: year };
       if (p0.tend) p.tend = p0.tend;
-      if (year === 2013) {
+      if (info.start) p.rookie = !(startCareer[p0.id] && startCareer[p0.id].length);
+      else if (year === 2013) {
         var yrs = prior ? (prior[p0.id] || []).length : null;
         p.rookie = yrs === 0 && !(p0.yearsPro > 0);
       } else p.rookie = !!p0.rookie;
@@ -80,6 +90,18 @@
   // Loads data/era-YYYY.js once (browser). Resolves to the season data.
   var loading = {};
   function load(year) {
+    if (year === 'pool') {
+      if (W.CHALLENGE_POOL) return Promise.resolve(W.CHALLENGE_POOL);
+      if (typeof document === 'undefined') return Promise.reject(new Error('No all-time pool'));
+      if (!loading.pool) loading.pool = new Promise(function (res, rej) {
+        var sp = document.createElement('script');
+        sp.src = POOL_FILE;
+        sp.onload = function () { W.CHALLENGE_POOL ? res(W.CHALLENGE_POOL) : rej(new Error('The all-time pool did not load.')); };
+        sp.onerror = function () { delete loading.pool; rej(new Error('The all-time pool did not load. Check the connection and try again.')); };
+        document.head.appendChild(sp);
+      });
+      return loading.pool;
+    }
     year = +year;
     if (loaded(year)) return Promise.resolve(seasonData(year));
     var info = seasonInfo(year);
@@ -99,6 +121,15 @@
   // Veterans from every loaded season (no rookies, 20+ games, 12+ minutes). Key: bbrefId@year.
   function allTimePool() {
     var E = W.ENGINE, out = [];
+    if (W.CHALLENGE_POOL) {
+      out = W.CHALLENGE_POOL.players.map(function (p) {
+        var q = clone(p);
+        q.base = p.id; q.key = p.id + '@' + p.season; q.from = p.team; q.label = (p.season - 1) + '-' + String(p.season).slice(2);
+        return q;
+      });
+      out.sort(byOvr);
+      return out;
+    }
     SEASONS.forEach(function (s) {
       var d = seasonData(s.year);
       if (!d) return;
@@ -122,7 +153,18 @@
     out.sort(byOvr);
     return out;
   }
-  function eraTeam(year, abbr) { var d = seasonData(year); return d ? d.teams.filter(function (t) { return t.abbr === abbr; })[0] || null : null; }
+  // seasons in the all-time pool
+  function poolSeasons() {
+    var P = W.CHALLENGE_POOL, seen = {};
+    if (P) P.players.forEach(function (p) { seen[p.season] = true; });
+    else SEASONS.forEach(function (s) { if (loaded(s.year)) seen[s.year] = true; });
+    return Object.keys(seen).map(Number).sort(function (a, b) { return a - b; });
+  }
+  function eraTeam(year, abbr) {
+    var d = seasonData(year), P = W.CHALLENGE_POOL;
+    var list = d ? d.teams : P && P.teams && P.teams[year] ? P.teams[year] : null;
+    return list ? list.filter(function (t) { return t.abbr === abbr; })[0] || null : null;
+  }
 
   // ---------- scrubs ----------
   function makeScrubs(abbr, templates, rng, used) {
@@ -500,7 +542,7 @@
 
   var API = {
     SEASONS: SEASONS, ROUNDS: ROUNDS, seasonInfo: seasonInfo, seasonData: seasonData, loaded: loaded, load: load, loadAll: loadAll,
-    allTimePool: allTimePool, eraTeam: eraTeam, buildYear: buildYear, buildAllTime: buildAllTime, newDraft: newDraft, onClock: onClock,
+    allTimePool: allTimePool, poolSeasons: poolSeasons, eraTeam: eraTeam, buildYear: buildYear, buildAllTime: buildAllTime, newDraft: newDraft, onClock: onClock,
     draftSlot: draftSlot, draftPick: draftPick, aiPick: aiPick, simToUser: simToUser, autoDraft: autoDraft, available: available,
     teamPicks: teamPicks, spin: spin, spinRoster: spinRoster, matchups: matchups, start: start, step: step, runAll: runAll,
     progress: progress, summary: summary, play: play, perGame: perGame, groupOf: groupOf, primaryPos: primaryPos, rng: mulberry32

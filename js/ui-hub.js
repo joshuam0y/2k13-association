@@ -57,7 +57,7 @@
     app.innerHTML = `
       <section class="mm">
         <div class="mm-brand"><span class="mm-2k">2K13</span><span class="mm-a">ASSOCIATION</span></div>
-        <div class="mm-k">THE 2012-13 NBA SEASON</div>
+        <div class="mm-k">${m && m.year ? 'THE ' + esc(UI.seasonLabel(m.year)) + ' NBA SEASON' : 'EVERY SEASON FROM 2003-04 TO 2026-27'}</div>
         <div class="mm-grid">
           ${UI.tile('#/new', 'ball', 'PLAY THE ASSOCIATION', { cls: 'mt-hero', disabled: !engineOk, sub: engineOk ? 'NEW LEAGUE' : 'SIM ENGINE NOT LOADED' })}
           ${cont}
@@ -484,7 +484,7 @@
     let list = [];
     try { list = C.history(g, abbr, { today: window.LEAGUE && LEAGUE.currentDate ? LEAGUE.currentDate(g) || '' : '' }); } catch (e) { list = []; }
     if (!list.length) return '';
-    return `${UI.header('COACHES', 'Head coaches since 2012-13')}<ul class="tm-coaches">${list.map((c, i) => `<li${i === 0 ? ' class="now"' : ''}>
+    return `${UI.header('COACHES', 'Head coaches, newest first')}<ul class="tm-coaches">${list.map((c, i) => `<li${i === 0 ? ' class="now"' : ''}>
       <b>${esc(c.name)}</b>${c.interim ? ' <span class="ts-tag">INTERIM</span>' : ''}${i === 0 ? ' <span class="ts-tag">CURRENT</span>' : ''}
       <small>${c.from === c.to ? seasonLbl(c.from) : seasonLbl(c.from) + ' to ' + seasonLbl(c.to)}${c.note ? ' | ' + esc(c.note) : ''}</small></li>`).join('')}</ul>`;
   }
