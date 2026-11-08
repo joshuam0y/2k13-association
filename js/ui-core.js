@@ -110,6 +110,19 @@
     { year: 2026, label: '2025-26', note: 'Last season', file: 'data/start-2026.js' },
     { year: 2027, label: '2026-27', note: 'This season, as it opened', file: 'data/start-2027.js' }
   ];
+  // real-life mode's moves (data/real-moves.js, about 700 KB): loaded only for leagues that use it
+  let realLoad = null;
+  UI.loadRealMoves = function () {
+    if (window.REAL_MOVES) return Promise.resolve(true);
+    if (!realLoad) realLoad = new Promise((res, rej) => {
+      const sc = document.createElement('script');
+      sc.src = 'data/real-moves.js';
+      sc.onload = () => (window.REAL_MOVES ? res(true) : rej(new Error('The real-life moves did not load.')));
+      sc.onerror = () => { realLoad = null; rej(new Error('The real-life moves did not load. Check the connection and try again.')); };
+      document.head.appendChild(sc);
+    });
+    return realLoad;
+  };
   const startLoads = {};
   UI.loadStart = function (year) {
     year = +year;

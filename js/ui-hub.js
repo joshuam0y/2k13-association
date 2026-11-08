@@ -243,7 +243,7 @@
   };
 
   // ---------- New league: pick a team (2K13 style cards) ----------
-  let newStart = 2013, newToday = false, newQuick = null;   // newQuick: a quick start's team, opened once its season loads   // newToday: the season being played, from today (data/start-YYYY.js today)
+  let newStart = 2013, newToday = false, newQuick = null, newReal = false;   // newReal: real-life mode   // newQuick: a quick start's team, opened once its season loads   // newToday: the season being played, from today (data/start-YYYY.js today)
   // one tap into a famous team's season (the user's family are Celtics fans)
   const QUICK = [
     { label: "2007-08 BIG THREE", team: 'BOS', start: 2008, note: 'Garnett, Pierce and Allen together for the first time' },
@@ -304,6 +304,8 @@
     app.innerHTML = `${UI.header('SELECT YOUR TEAM', 'TEAM OVR rates the whole team from its top eight players. Contenders are 81 and up, rebuilds 76 and below.')}
       <div class="ts-start ts-quick"><span class="ts-start-k">QUICK START</span><div class="ch-chips">${QUICK.map((q, i) => `<button type="button" class="ch-chip" data-quick="${i}" title="${esc(q.note)}">${UI.logo(q.team, 18)} ${esc(q.label)}</button>`).join('')}</div></div>
       <div class="ts-start"><span class="ts-start-k">START IN</span><div class="ch-chips">${seasons}</div><span class="muted ts-start-n">${T ? 'The ' + esc(seasonLbl) + ' season from today: every game so far counts with its real score, real stats so far, today\'s rosters and injuries.' : esc((UI.START_YEARS.find(s => s.year === start) || {}).note || '') + ': the real ' + esc(seasonLbl) + ' rosters, contracts and draft picks.'}</span>${S && S.today ? `<div class="ch-chips ts-when" role="group" aria-label="When"><button type="button" class="ch-chip${T ? '' : ' on'}" data-today="0">OPENING NIGHT</button><button type="button" class="ch-chip${T ? ' on' : ''}" data-today="1">TODAY, ${esc(UI.dateLabel(S.today.date).toUpperCase())}</button></div>` : ''}</div>
+      <div class="ts-start ts-real"><span class="ts-start-k">REAL LIFE</span><div class="ch-chips"><button type="button" class="ch-chip${newReal ? '' : ' on'}" data-real="0">OFF</button><button type="button" class="ch-chip${newReal ? ' on' : ''}" data-real="1">ON</button></div>
+        <span class="muted ts-start-n">${newReal ? 'The real trades, signings and releases happen on their real dates, as long as the players are still where real life had them. AI teams make no trades of their own, and your team is always yours.' : 'Off: AI teams make their own moves.'}</span></div>
       <div class="ts-bar">
         <div class="ts-filters" role="group" aria-label="Filter teams">${FILTERS.map(([k, l], i) => `<button type="button" data-f="${k}" class="${i ? '' : 'on'}" aria-pressed="${!i}">${l}</button>`).join('')}</div>
         <button type="button" class="btn btn-small ts-random" id="randomBtn">RANDOM TEAM</button>
@@ -381,6 +383,7 @@
     drawGrid();
     UI.$$('[data-start]', app).forEach(b => b.addEventListener('click', () => { newStart = +b.getAttribute('data-start'); P.new(app); }));
     UI.$$('[data-today]', app).forEach(b => b.addEventListener('click', () => { newToday = b.getAttribute('data-today') === '1'; P.new(app); }));
+    UI.$$('[data-real]', app).forEach(b => b.addEventListener('click', () => { newReal = b.getAttribute('data-real') === '1'; P.new(app); }));
     UI.$$('[data-quick]', app).forEach(b => b.addEventListener('click', () => {
       const q = QUICK[+b.getAttribute('data-quick')];
       newStart = q.start; newToday = !!q.today; newQuick = q.team; P.new(app);
@@ -394,7 +397,7 @@
       btn.textContent = 'BUILDING THE LEAGUE...';
       await new Promise(r => setTimeout(r, 30));
       try {
-        await UI.saves.create(Number(UI.$('#saveSlot').value), UI.$('#saveName').value.trim() || 'My Association', picked, start, { today: !!T });
+        await UI.saves.create(Number(UI.$('#saveSlot').value), UI.$('#saveName').value.trim() || 'My Association', picked, start, { today: !!T, realLife: newReal });
         UI.updateChrome();
         location.hash = '#/season';
       } catch (e) {

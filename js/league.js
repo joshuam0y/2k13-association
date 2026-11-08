@@ -206,6 +206,12 @@
     if (today) todayRosters(state, today);
     startSeason(state);
     if (today) { todayResults(state, today); state.startDate = today.date; }
+    // real-life mode (js/reallife.js): the real moves after opening night (or today) happen on their dates
+    if (opts.realLife) {
+      state.realLife = true;
+      var first = state.season && state.season.days[state.season.day];
+      state.realCursor = mod("REALLIFE") && first ? W.REALLIFE.dayBefore(first.date) : null;
+    }
     news(state, "Welcome to the " + (state.year - 1) + "-" + String(state.year).slice(2) + " season",
       "You are now running the " + state.teams[userTeam].city + " " + state.teams[userTeam].name + "." +
       (today ? " The season is already under way: every game before " + today.date + " counts with its real score." : ""), []);
@@ -451,8 +457,9 @@
       news(state, state.players[id].name + " injured", inj[id].type + ", expected to miss about " + inj[id].games + " games.", [id]);
     }
     safe("injuryReturns", function () { injuryReturns(state, injBefore, inj); });
+    if (state.realLife && mod("REALLIFE")) safe("realLife", function () { var nd = currentDate(state); if (nd) W.REALLIFE.applyUntil(state, state.season.phase === "done" ? nd : W.REALLIFE.dayBefore(nd)); });
     if (mod("TRADE") && state.season.phase === "regular") {
-      safe("aiTrades", function () { W.TRADE.aiTrades(state, rng); });
+      if (!state.realLife) safe("aiTrades", function () { W.TRADE.aiTrades(state, rng); });
       if (rng() < 0.08 * days) safe("aiOffers", function () { (W.TRADE.aiOffers(state, rng) || []).forEach(function (o) { state.events.push({ type: "tradeOffer", offer: o, quiet: !autoOn(state, "tradeOffers") }); }); });
     }
     if (mod("MOOD") && rng() < days / 30) safe("mood", function () { W.MOOD.update(state); });
@@ -663,7 +670,7 @@
 
   // AI to AI trades during the offseason (TRADE.aiTrades knows the rate for each phase)
   function offseasonTrades(state, rng, days) {
-    if (!mod("TRADE") || typeof W.TRADE.aiTrades !== "function") return;
+    if (!mod("TRADE") || typeof W.TRADE.aiTrades !== "function" || state.realLife) return;   // real-life mode: the real trades instead
     safe("aiTrades", function () { W.TRADE.aiTrades(state, rng, { days: days || 1 }); });
   }
 
@@ -783,6 +790,8 @@
       if (mod("EXPANSION") && W.EXPANSION.applyHistoric && state.startYear && state.startYear <= 2004 && state.year === 2004 && !state.teams.CHA)
         safe("bobcats", function () { W.EXPANSION.applyHistoric(state, "bobcats"); });
     } else if (phase === "resign") {
+      // real-life mode: the summer's real trades and signings before the AI's free agency
+      if (state.realLife && mod("REALLIFE")) safe("realLife", function () { W.REALLIFE.applyUntil(state, state.year + "-09-30"); });
       if (mod("FA")) {
         safe("startOffseason", function () { W.FA.startOffseason(state); });
         quietOffseasonDecisions(state);
@@ -822,6 +831,7 @@
       state.notices = [];
       state.events = state.events.filter(function (e) { return !(e && e.quiet && e.type === "tradeOffer"); });
       startSeason(state);
+      if (state.realLife && mod("REALLIFE") && state.season && state.season.days[0]) safe("realLife", function () { W.REALLIFE.applyUntil(state, W.REALLIFE.dayBefore(state.season.days[0].date)); });
       news(state, "The " + (state.year - 1) + "-" + String(state.year).slice(2) + " season begins", "", []);
     }
     return finishStep(state, { phase: state.phase, step: i });

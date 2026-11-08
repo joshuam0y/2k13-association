@@ -146,6 +146,7 @@
     if (!rec) throw new Error('Slot ' + slot + ' has no league data in this browser.');
     // a league that started in another season needs that season's data file (rosters and the past) first
     if (rec.game && rec.game.startYear && rec.game.startYear !== 2013) await UI.loadStart(rec.game.startYear);
+    if (rec.game && rec.game.realLife) await UI.loadRealMoves();
     const err = Saves.validate(rec.game);
     if (err) throw new Error(err);
     Saves.activate(slot, rec.game, rec.meta);
@@ -205,7 +206,8 @@
   // Start a new league in a slot.
   Saves.create = async function (slot, name, userTeam, start, more) {
     if (start && start !== 2013) await UI.loadStart(start);
-    const game = UI.state.L.newLeague(userTeam, start && start !== 2013 ? Object.assign({ start }, more || {}) : {});
+    if (more && more.realLife) await UI.loadRealMoves();
+    const game = UI.state.L.newLeague(userTeam, Object.assign(start && start !== 2013 ? { start } : {}, more || {}));
     Saves.activate(slot, game, { name, created: Date.now() });
     await Saves.write();
   };

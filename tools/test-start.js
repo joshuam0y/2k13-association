@@ -8,7 +8,7 @@ console.warn = () => {};
   "data/coach-history.js", "data/history.js", "data/personalities.js", "data/career-prior.js", "data/alltime-prior.js", "data/picks-2012.js",
   "data/awards-prior.js", "data/schedules.js", "data/tendencies.js", "data/tendency-history.js", "data/defense-history.js", "data/logos.js",
   "js/engine.js", "js/cba.js", "js/future.js", "js/trade.js", "js/freeagency.js", "js/mood.js", "js/draft.js", "js/draft-gen.js", "js/rookies.js",
-  "js/progression.js", "js/coaches.js", "js/awards.js", "js/news.js", "js/league.js", "js/expansion.js", "js/positions.js"].forEach(f => { if (fs.existsSync(f)) require("../" + f); });
+  "js/progression.js", "js/coaches.js", "js/awards.js", "js/news.js", "js/league.js", "js/expansion.js", "js/positions.js", "js/reallife.js", "data/real-moves.js"].forEach(f => { if (fs.existsSync(f)) require("../" + f); });
 const L = window.LEAGUE;
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ok  ", m); } else { fail++; console.log("  FAIL", m); } };
@@ -119,6 +119,18 @@ fs.readdirSync("data").filter(f => /^start-\d{4}\.js$/.test(f)).forEach(f => {
   let r, g = 0;
   do { s.events.forEach(e => (e.resolved = true)); L.clearResolved(s); r = L.advance(s, "endPlayoffs"); } while (r.stopped !== "seasonOver" && ++g < 400);
   ok(r.stopped === "seasonOver" && Object.keys(st).every(a => st[a].w + st[a].l === 82), "the rest of the season plays to 82 games and a champion");
+}
+// real-life mode: the real moves happen on their dates
+{
+  const s = L.newLeague("BOS", { seed: 4, start: 2008, realLife: true });
+  let r, g = 0;
+  do { s.events.forEach(e => (e.resolved = true)); L.clearResolved(s); r = L.advance(s, "endPlayoffs"); } while (r.stopped !== "seasonOver" && ++g < 400);
+  const at = id => s.players[id] && s.players[id].team;
+  ok(s.realLife && at("gasolpa01") === "LAL" && at("onealsh01") === "PHX" && at("kiddja01") === "DAL", "real life 2007-08: Gasol to the Lakers, Shaq to Phoenix, Kidd to Dallas (" + s.realApplied + " real moves)");
+  let k = 0;
+  while (s.phase !== "regular" && k++ < 120) { s.events.forEach(e => (e.resolved = true)); L.clearResolved(s); L.advance(s, "nextPhase", { auto: true }); }
+  const sizes = Object.keys(s.teams).map(a => Object.values(s.players).filter(p => p.team === a && !p.retired && !(p.stashedUntil > s.year)).length);
+  ok(at("brandel01") === "PHI" && at("artesro01") === "HOU" && Math.max.apply(null, sizes) <= 15, "real life summer 2008: Brand to Philadelphia, Artest to Houston; rosters at most 15");
 }
 // real contract options in the 2025-26 start
 {
