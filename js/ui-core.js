@@ -196,6 +196,26 @@
     return Math.round(s / ws);
   };
   UI.year = () => (UI.state.game ? UI.state.game.year : (UI.state.league && UI.state.league.season) || 2013);
+  // Install as an app: Chrome and Android offer a prompt (beforeinstallprompt); iPhone needs Share, then Add to
+  // Home Screen. Nothing shows once it runs installed.
+  let installEvt = null;
+  const standalone = () => (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; const el = document.getElementById('mmInstall'); if (el) el.innerHTML = UI.installButton(); });
+  window.addEventListener('appinstalled', () => { installEvt = null; const el = document.getElementById('mmInstall'); if (el) el.innerHTML = ''; });
+  UI.installButton = function () {
+    if (standalone()) return '';
+    if (installEvt) return '<button type="button" class="btn btn-small mm-inst" onclick="UI.install()">INSTALL THE APP</button>';
+    if (isIOS()) return '<span class="mm-inst-tip">Play it like an app: tap Share, then <b>Add to Home Screen</b>.</span>';
+    return '';
+  };
+  UI.install = async function () {
+    if (!installEvt) return;
+    installEvt.prompt();
+    try { await installEvt.userChoice; } catch (e) { /* closed */ }
+    installEvt = null;
+    const el = document.getElementById('mmInstall'); if (el) el.innerHTML = UI.installButton();
+  };
   UI.seasonLabel = y => (y - 1) + '-' + String(y).slice(-2);
   // Salary this season and the last season of the deal, from contract.salaries when present.
   UI.salaryOf = function (p) {

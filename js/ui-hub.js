@@ -57,6 +57,7 @@
     app.innerHTML = `
       <section class="mm">
         <div class="mm-brand"><span class="mm-2k">2K13</span><span class="mm-a">ASSOCIATION</span></div>
+        <div class="mm-install" id="mmInstall">${UI.installButton ? UI.installButton() : ''}</div>
         <div class="mm-k">${m && m.year ? 'THE ' + esc(UI.seasonLabel(m.year)) + ' NBA SEASON' : 'EVERY SEASON FROM 2003-04 TO 2026-27'}</div>
         <div class="mm-grid">
           ${UI.tile('#/new', 'ball', 'PLAY THE ASSOCIATION', { cls: 'mt-hero', disabled: !engineOk, sub: engineOk ? 'NEW LEAGUE' : 'SIM ENGINE NOT LOADED' })}
@@ -242,7 +243,14 @@
   };
 
   // ---------- New league: pick a team (2K13 style cards) ----------
-  let newStart = 2013, newToday = false;   // newToday: the season being played, from today (data/start-YYYY.js today)
+  let newStart = 2013, newToday = false, newQuick = null;   // newQuick: a quick start's team, opened once its season loads   // newToday: the season being played, from today (data/start-YYYY.js today)
+  // one tap into a famous team's season (the user's family are Celtics fans)
+  const QUICK = [
+    { label: "2007-08 BIG THREE", team: 'BOS', start: 2008, note: 'Garnett, Pierce and Allen together for the first time' },
+    { label: '2012-13 CELTICS', team: 'BOS', start: 2013, note: 'The last ride of Pierce and Garnett in green' },
+    { label: 'BANNER 18', team: 'BOS', start: 2024, note: 'The 2023-24 champions' },
+    { label: "TODAY'S CELTICS", team: 'BOS', start: 2027, today: true, note: '2026-27 from today, real results so far' }
+  ];
   P.new = function (app) {
     if (!UI.canPlay()) { app.innerHTML = UI.notBuilt('engine'); return; }
     // Always opening-night data: 2012-13 is LEAGUE_2012; other seasons load data/start-YYYY.js first.
@@ -294,6 +302,7 @@
     const first = UI.saves.firstEmpty() || 1;
     const seasons = UI.START_YEARS.map(s => `<button type="button" class="ch-chip${s.year === start ? ' on' : ''}" data-start="${s.year}" title="${esc(s.note || '')}">${esc(s.label)}</button>`).join('');
     app.innerHTML = `${UI.header('SELECT YOUR TEAM', 'TEAM OVR rates the whole team from its top eight players. Contenders are 81 and up, rebuilds 76 and below.')}
+      <div class="ts-start ts-quick"><span class="ts-start-k">QUICK START</span><div class="ch-chips">${QUICK.map((q, i) => `<button type="button" class="ch-chip" data-quick="${i}" title="${esc(q.note)}">${UI.logo(q.team, 18)} ${esc(q.label)}</button>`).join('')}</div></div>
       <div class="ts-start"><span class="ts-start-k">START IN</span><div class="ch-chips">${seasons}</div><span class="muted ts-start-n">${T ? 'The ' + esc(seasonLbl) + ' season from today: every game so far counts with its real score, real stats so far, today\'s rosters and injuries.' : esc((UI.START_YEARS.find(s => s.year === start) || {}).note || '') + ': the real ' + esc(seasonLbl) + ' rosters, contracts and draft picks.'}</span>${S && S.today ? `<div class="ch-chips ts-when" role="group" aria-label="When"><button type="button" class="ch-chip${T ? '' : ' on'}" data-today="0">OPENING NIGHT</button><button type="button" class="ch-chip${T ? ' on' : ''}" data-today="1">TODAY, ${esc(UI.dateLabel(S.today.date).toUpperCase())}</button></div>` : ''}</div>
       <div class="ts-bar">
         <div class="ts-filters" role="group" aria-label="Filter teams">${FILTERS.map(([k, l], i) => `<button type="button" data-f="${k}" class="${i ? '' : 'on'}" aria-pressed="${!i}">${l}</button>`).join('')}</div>
@@ -372,6 +381,11 @@
     drawGrid();
     UI.$$('[data-start]', app).forEach(b => b.addEventListener('click', () => { newStart = +b.getAttribute('data-start'); P.new(app); }));
     UI.$$('[data-today]', app).forEach(b => b.addEventListener('click', () => { newToday = b.getAttribute('data-today') === '1'; P.new(app); }));
+    UI.$$('[data-quick]', app).forEach(b => b.addEventListener('click', () => {
+      const q = QUICK[+b.getAttribute('data-quick')];
+      newStart = q.start; newToday = !!q.today; newQuick = q.team; P.new(app);
+    }));
+    if (newQuick && byAbbr[newQuick]) { const q = newQuick; newQuick = null; open(q); }
     UI.$('#cancelBtn', app).addEventListener('click', close);
     UI.$('#startBtn', app).addEventListener('click', async () => {
       if (!picked) return;
