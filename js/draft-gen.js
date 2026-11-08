@@ -466,6 +466,19 @@
         college: sch.college, country: country, fictional: true
       });
     }
+    // A real class on the big board (data/prospects-2027.js): the best rated prospects take the real names
+    // and bios in board order, with attributes rebuilt for the real position
+    var RP = (W0 && W0.REAL_PROSPECTS) || (root && root.REAL_PROSPECTS) || null, board = RP && RP[year];
+    if (board && board.length) {
+      out.sort(function (a, b) { return (b.pot + b.ovr) - (a.pot + a.ovr); });
+      board.slice(0, out.length).forEach(function (b, n) {
+        var p = out[n];
+        p.name = b[1]; p.pos = b[2]; p.ht = b[3]; p.wt = b[4]; p.age = b[5];
+        p.college = b[7] ? null : b[6]; p.club = b[7] ? b[6] : undefined; p.country = b[7] ? 'International' : 'USA';
+        p.attrs = buildAttrs(p.pos, p.ovr, rng); p.fictional = false; p.realProspect = true; p.boardRank = b[0];
+        p.arrivalYear = year + 1;
+      });
+    }
     // Shuffle so the ids do not reveal the fringe prospects
     for (var j = out.length - 1; j > 0; j--) { var k = Math.floor(rng() * (j + 1)), tmp = out[j]; out[j] = out[k]; out[k] = tmp; }
     out.forEach(function (p, n) { p.id = (opts.idPrefix || 'gen') + year + '_' + ('00' + (n + 1)).slice(-3); });
