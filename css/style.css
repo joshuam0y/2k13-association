@@ -902,3 +902,8 @@ html { scroll-padding-bottom: calc(var(--mb-h, var(--bar-h)) + 12px); }
 .mm-install { margin: 8px 0 4px; }
 .mm-inst-tip { font-size: 13px; color: var(--muted); }
 .mm-inst-tip b { color: var(--gold2); }
+
+/* Share Season (js/ui-share.js) */
+.share-wrap { max-width: 540px; margin: 0 auto; }
+.share-prev { aspect-ratio: 1080 / 1350; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; border: 1px solid var(--line); background: var(--bg2); }
+.share-prev img, .share-prev canvas { width: 100%; height: auto; display: block; }

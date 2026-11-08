@@ -43,7 +43,7 @@
   const MENU = [
     ['MY TEAM', [['team', 'My Team'], ['manage', 'Rotation'], ['trade', 'Trades'], ['fa', 'Free Agency'], ['draft', 'Draft'], ['rights', 'Draft Rights'],
       ['rookies', 'Rookies'], ['progress', 'Progression'], ['gleague', 'G League']]],
-    ['SEASON', [['season', 'Schedule'], ['standings', 'Standings'], ['stats', 'Stats'], ['leaders', 'Leaders'], ['playoffs', 'Playoffs'], ['allstar', 'All-Star'], ['live', 'Watch Live']]],
+    ['SEASON', [['season', 'Schedule'], ['standings', 'Standings'], ['stats', 'Stats'], ['leaders', 'Leaders'], ['playoffs', 'Playoffs'], ['allstar', 'All-Star'], ['live', 'Watch Live'], ['share', 'Share Season']]],
     ['LEAGUE', [['league', 'League Home'], ['news', 'News'], ['news/transactions', 'Transactions'], ['awards', 'Awards'], ['awardshow', 'Awards Show'],
       ['history', 'History'], ['records', 'Records'], ['retirements', 'Retirements'], ['classes', 'Draft Classes'], ['teams', 'All Teams']]],
     ['MODES', [['new', 'New League'], ['challenge', 'Draft Challenge'], ['fantasy', 'Fantasy Draft']]],
