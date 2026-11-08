@@ -242,7 +242,7 @@
   };
 
   // ---------- New league: pick a team (2K13 style cards) ----------
-  let newStart = 2013;
+  let newStart = 2013, newToday = false;   // newToday: the season being played, from today (data/start-YYYY.js today)
   P.new = function (app) {
     if (!UI.canPlay()) { app.innerHTML = UI.notBuilt('engine'); return; }
     // Always opening-night data: 2012-13 is LEAGUE_2012; other seasons load data/start-YYYY.js first.
@@ -254,13 +254,17 @@
       return;
     }
     const L = S || UI.state.league;
+    const T = S && S.today && newToday ? S.today : null;
     const seasonLbl = (start - 1) + '-' + String(start).slice(2), lastLbl = (start - 2) + '-' + String(start - 1).slice(2);
     const teamLogo = (abbr, size) => (S ? UI.logoFor(L.teams.find(t => t.abbr === abbr) || { abbr }, size) : UI.logo(abbr, size));
     const rosters = {};
-    L.players.forEach(p => { if (!p.retired && p.team && p.team !== 'FA' && p.team !== 'DRAFT') (rosters[p.team] = rosters[p.team] || []).push(p); });
+    L.players.forEach(p => { const tm = T && T.moves[p.id] || p.team; if (!p.retired && tm && tm !== 'FA' && tm !== 'DRAFT') (rosters[tm] = rosters[tm] || []).push(p); });
     Object.keys(rosters).forEach(k => rosters[k].sort(byOvr));
     const H = S ? S.prior && S.prior.history : window.HISTORY_PRIOR;
+    const nowRec = {};
+    if (T) T.results.forEach(r => { const hw = r[3] > r[4]; [[r[1], hw], [r[2], !hw]].forEach(([a, w]) => { const x = nowRec[a] = nowRec[a] || [0, 0]; x[w ? 0 : 1]++; }); });
     const recOf = abbr => {
+      if (T) return nowRec[abbr] ? nowRec[abbr].join('-') : '0-0';
       const r = H && H.records && (H.records[start - 1] || H.records[String(start - 1)]);
       const x = r && r[abbr];
       return x ? (typeof x === 'string' ? x : x.w != null ? x.w + '-' + x.l : '') : '';
@@ -290,7 +294,7 @@
     const first = UI.saves.firstEmpty() || 1;
     const seasons = UI.START_YEARS.map(s => `<button type="button" class="ch-chip${s.year === start ? ' on' : ''}" data-start="${s.year}" title="${esc(s.note || '')}">${esc(s.label)}</button>`).join('');
     app.innerHTML = `${UI.header('SELECT YOUR TEAM', 'TEAM OVR rates the whole team from its top eight players. Contenders are 81 and up, rebuilds 76 and below.')}
-      <div class="ts-start"><span class="ts-start-k">START IN</span><div class="ch-chips">${seasons}</div><span class="muted ts-start-n">${esc((UI.START_YEARS.find(s => s.year === start) || {}).note || '')}: the real ${esc(seasonLbl)} rosters, contracts and draft picks.</span></div>
+      <div class="ts-start"><span class="ts-start-k">START IN</span><div class="ch-chips">${seasons}</div><span class="muted ts-start-n">${T ? 'The ' + esc(seasonLbl) + ' season from today: every game so far counts with its real score, real stats so far, today\'s rosters and injuries.' : esc((UI.START_YEARS.find(s => s.year === start) || {}).note || '') + ': the real ' + esc(seasonLbl) + ' rosters, contracts and draft picks.'}</span>${S && S.today ? `<div class="ch-chips ts-when" role="group" aria-label="When"><button type="button" class="ch-chip${T ? '' : ' on'}" data-today="0">OPENING NIGHT</button><button type="button" class="ch-chip${T ? ' on' : ''}" data-today="1">TODAY, ${esc(UI.dateLabel(S.today.date).toUpperCase())}</button></div>` : ''}</div>
       <div class="ts-bar">
         <div class="ts-filters" role="group" aria-label="Filter teams">${FILTERS.map(([k, l], i) => `<button type="button" data-f="${k}" class="${i ? '' : 'on'}" aria-pressed="${!i}">${l}</button>`).join('')}</div>
         <button type="button" class="btn btn-small ts-random" id="randomBtn">RANDOM TEAM</button>
@@ -367,6 +371,7 @@
     window.addEventListener('hashchange', () => document.body.classList.remove('ts-lock'), { once: true });
     drawGrid();
     UI.$$('[data-start]', app).forEach(b => b.addEventListener('click', () => { newStart = +b.getAttribute('data-start'); P.new(app); }));
+    UI.$$('[data-today]', app).forEach(b => b.addEventListener('click', () => { newToday = b.getAttribute('data-today') === '1'; P.new(app); }));
     UI.$('#cancelBtn', app).addEventListener('click', close);
     UI.$('#startBtn', app).addEventListener('click', async () => {
       if (!picked) return;
@@ -375,7 +380,7 @@
       btn.textContent = 'BUILDING THE LEAGUE...';
       await new Promise(r => setTimeout(r, 30));
       try {
-        await UI.saves.create(Number(UI.$('#saveSlot').value), UI.$('#saveName').value.trim() || 'My Association', picked, start);
+        await UI.saves.create(Number(UI.$('#saveSlot').value), UI.$('#saveName').value.trim() || 'My Association', picked, start, { today: !!T });
         UI.updateChrome();
         location.hash = '#/season';
       } catch (e) {

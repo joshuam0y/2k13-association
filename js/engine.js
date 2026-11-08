@@ -1995,6 +1995,9 @@
     seedPlayoffs: seedPlayoffs,
     schedulePlayoffDay: schedulePlayoffDay,
     recordGame: recordGame,
+    // a real result with no box score (a league that starts during a season): the score and the standings only
+    recordScore: function (season, g, hs, as) { g.played = true; g.hs = hs; g.as = as; recordStanding(season, g.home, g.away, hs, as); },
+    emptyLine: emptyLine,
     getBoxScore: getBoxScore,
     teamSchedule: teamSchedule,
     standingsList: standingsList,

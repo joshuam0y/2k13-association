@@ -895,3 +895,4 @@ html { scroll-padding-bottom: calc(var(--mb-h, var(--bar-h)) + 12px); }
 .ts-start-k { font-family: var(--display); font-size: 12px; letter-spacing: .22em; color: var(--gold); }
 .ts-start .ch-chips { margin-top: 0; }
 .ts-start-n { font-size: 13px; flex: 1 1 220px; }
+.ts-start .ts-when { flex: 1 1 100%; }

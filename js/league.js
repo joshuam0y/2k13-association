@@ -202,10 +202,76 @@
     if (mod("PROG") && W.PROG.rollFates) safe("fates", function () { W.PROG.rollFates(state); });
     // coaches are cosmetic: names and records for display
     if (mod("COACH") && W.COACH.init) safe("coaches", function () { W.COACH.init(state); });
+    var today = opts.today && base.today ? base.today : null;
+    if (today) todayRosters(state, today);
     startSeason(state);
+    if (today) { todayResults(state, today); state.startDate = today.date; }
     news(state, "Welcome to the " + (state.year - 1) + "-" + String(state.year).slice(2) + " season",
-      "You are now running the " + state.teams[userTeam].city + " " + state.teams[userTeam].name + ".", []);
+      "You are now running the " + state.teams[userTeam].city + " " + state.teams[userTeam].name + "." +
+      (today ? " The season is already under way: every game before " + today.date + " counts with its real score." : ""), []);
     return state;
+  }
+
+  // A league that starts today, in a season still being played (base.today): the rosters as they are today,
+  // every game already played with its real score, each player's real totals so far and today's injuries.
+  function todayRosters(state, T) {
+    var year = state.year;
+    Object.keys(T.moves || {}).forEach(function (id) {
+      var p = state.players[id], to = T.moves[id];
+      if (p && to === "FA") { p.team = "FA"; p.yearsWithTeam = 0; p.contract = { salaries: [], option: null, options: [], rookie: false, twoWay: false, signedYear: null }; return; }
+      if (!p || !state.teams[to]) return;
+      p.team = to; p.yearsWithTeam = 0;
+      if (!p.contract || !p.contract.salaries || !p.contract.salaries.some(function (x) { return x.year === year && x.amount > 0; })) {
+        var r = mod("CBA") ? safe("min", function () { return W.CBA.rules(year); }, null) : null;
+        var amt = (r && r.minSalary && r.minSalary(p.yearsPro || 0)) || 1200000;
+        p.contract = { salaries: [{ year: year, amount: amt }], option: null, options: [], rookie: false, twoWay: false, signedYear: year, via: "min" };
+      }
+    });
+    // real rosters list two-way players too: keep 15, letting go of the lowest rated who have not played
+    Object.keys(state.teams).forEach(function (a) {
+      var on = Object.keys(state.players).map(function (k) { return state.players[k]; })
+        .filter(function (p) { return p.team === a && !p.retired && !(p.stashedUntil > year); });
+      var played = function (p) { var t = T.totals && T.totals[p.id]; return t ? t[0] : 0; };
+      on.sort(function (x, y) { return (played(x) > 0) - (played(y) > 0) || x.ovr - y.ovr; });
+      for (var i = 0; on.length - i > 15; i++) {
+        var p = on[i];
+        p.team = "FA"; p.yearsWithTeam = 0; p.contract = { salaries: [], option: null, options: [], rookie: false, twoWay: false, signedYear: null };
+      }
+    });
+  }
+  function todayResults(state, T) {
+    var s = state.season, E = mod("ENGINE");
+    if (!s || !E || !E.recordScore) return;
+    var real = {}, day = 0, missed = [];
+    (T.results || []).forEach(function (r) { real[r[0] + ":" + r[1] + ":" + r[2]] = r; });
+    s.days.forEach(function (d, i) {
+      if (d.playoff || d.date >= T.date) return;
+      day = i + 1;
+      d.games.forEach(function (g) {
+        var r = real[d.date + ":" + g.home + ":" + g.away];
+        if (r) { E.recordScore(s, g, r[3], r[4]); g.real = true; } else missed.push(g);
+      });
+      d.games = d.games.filter(function (g) { return g.played; });
+    });
+    // a game the real calendar has not played yet (postponed): played the day after the regular season
+    if (missed.length) {
+      var last = s.days.filter(function (d) { return !d.playoff; }).slice(-1)[0], next = new Date(last.date + "T12:00:00Z");
+      next.setUTCDate(next.getUTCDate() + 1);
+      s.days.splice(s.days.indexOf(last) + 1, 0, { date: next.toISOString().slice(0, 10), games: missed });
+    }
+    s.day = day; state.day = day;
+    Object.keys(T.totals || {}).forEach(function (id) {
+      if (!state.players[id]) return;
+      var t = T.totals[id], line = E.emptyLine();
+      ["g", "gs", "min", "pts", "fgm", "fga", "tpm", "tpa", "ftm", "fta", "oreb", "dreb", "ast", "stl", "blk", "tov", "pf", "td"].forEach(function (k, i) { line[k] = t[i] || 0; });
+      s.playerStats[id] = line;
+    });
+    Object.keys(T.injuries || {}).forEach(function (id) {
+      var p = state.players[id], x = T.injuries[id];
+      if (!p || p.retired) return;
+      s.injuries[id] = { type: x.type, games: x.games };
+      p.injury = { type: x.type, games: x.games };
+    });
   }
 
   // Draft picks each team owns. With window.PICKS_2012 (real ownership as of October 2012:

@@ -203,9 +203,9 @@
   };
 
   // Start a new league in a slot.
-  Saves.create = async function (slot, name, userTeam, start) {
+  Saves.create = async function (slot, name, userTeam, start, more) {
     if (start && start !== 2013) await UI.loadStart(start);
-    const game = UI.state.L.newLeague(userTeam, start && start !== 2013 ? { start } : {});
+    const game = UI.state.L.newLeague(userTeam, start && start !== 2013 ? Object.assign({ start }, more || {}) : {});
     Saves.activate(slot, game, { name, created: Date.now() });
     await Saves.write();
   };

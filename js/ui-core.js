@@ -255,7 +255,7 @@
       list.push({
         id: String(g.id), day: i, date: d.date || null, playoff: !!d.playoff,
         home: g.home, away: g.away, played: !!g.played,
-        hs: g.hs, as: g.as, series: g.series || null, gameNum: g.gameNum || null,
+        hs: g.hs, as: g.as, series: g.series || null, gameNum: g.gameNum || null, real: !!g.real,
         get result() { return (s.boxScores && s.boxScores[g.id]) || null; }
       });
     }));

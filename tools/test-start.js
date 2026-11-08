@@ -106,6 +106,20 @@ fs.readdirSync("data").filter(f => /^start-\d{4}\.js$/.test(f)).forEach(f => {
   ok(window.COACH.of(s, "GSW").name === "Steve Kerr" && window.COACH.of(s, "GSW").titles === 1 && window.COACH.available(s, 2017).every(c => c.name !== "Phil Jackson"),
     "2016-17: Steve Kerr (1 title) in Golden State, retired coaches off the market");
 }
+// start today: 2026-27 from the date in the data, real results and stats so far
+{
+  const s = L.newLeague("BOS", { seed: 9, start: 2027, today: true });
+  const T = window.START_LEAGUES[2027].today, st = s.season.standings;
+  const real = {}; T.results.forEach(r => { const hw = r[3] > r[4]; [[r[1], hw], [r[2], !hw]].forEach(([a, w]) => { const x = real[a] = real[a] || [0, 0]; x[w ? 0 : 1]++; }); });
+  ok(s.season.days[s.season.day].date >= T.date && Object.keys(real).every(a => st[a].w === real[a][0] && st[a].l === real[a][1]), "start today (" + T.date + "): " + T.results.length + " real results in the standings (BOS " + st.BOS.w + "-" + st.BOS.l + ")");
+  const sga = s.season.playerStats.gilgesh01;
+  ok(sga && sga.g === T.totals.gilgesh01[0] && sga.pts === T.totals.gilgesh01[3], "real totals so far (SGA " + (sga && sga.g) + " games, " + (sga && sga.pts) + " points)");
+  const sizes = Object.keys(s.teams).map(a => Object.values(s.players).filter(p => p.team === a && !p.retired && !(p.stashedUntil > s.year)).length);
+  ok(Math.max.apply(null, sizes) <= 15 && Math.min.apply(null, sizes) >= 11, "today's rosters, 11 to 15 a team (" + Math.min.apply(null, sizes) + " to " + Math.max.apply(null, sizes) + ")");
+  let r, g = 0;
+  do { s.events.forEach(e => (e.resolved = true)); L.clearResolved(s); r = L.advance(s, "endPlayoffs"); } while (r.stopped !== "seasonOver" && ++g < 400);
+  ok(r.stopped === "seasonOver" && Object.keys(st).every(a => st[a].w + st[a].l === 82), "the rest of the season plays to 82 games and a champion");
+}
 // real contract options in the 2025-26 start
 {
   const s = L.newLeague("BOS", { seed: 9, start: 2026 });

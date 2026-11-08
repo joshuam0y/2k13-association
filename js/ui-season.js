@@ -879,7 +879,7 @@
     const dayLbl = esc(g.date ? UI.dateLabel(g.date).toUpperCase() : 'DAY ' + (g.day + 1)) + (g.playoff ? ' | PLAYOFFS GAME ' + esc(g.gameNum || '') : '');
     const r = g.result;
     if (!g.played || !r) {
-      app.innerHTML = head(`<div class="sb-k">${dayLbl}</div>${g.played ? `<div class="sb-score"><span class="${g.as > g.hs ? 'win' : ''}">${g.as}</span><i>-</i><span class="${g.hs > g.as ? 'win' : ''}">${g.hs}</span></div><div class="sb-k">BOX SCORE NOT KEPT</div>` : '<div class="sb-at">@</div><div class="sb-k">NOT PLAYED YET</div>'}`) +
+      app.innerHTML = head(`<div class="sb-k">${dayLbl}</div>${g.played ? `<div class="sb-score"><span class="${g.as > g.hs ? 'win' : ''}">${g.as}</span><i>-</i><span class="${g.hs > g.as ? 'win' : ''}">${g.hs}</span></div><div class="sb-k">${g.real ? 'REAL RESULT, PLAYED BEFORE THIS LEAGUE STARTED' : 'BOX SCORE NOT KEPT'}</div>` : '<div class="sb-at">@</div><div class="sb-k">NOT PLAYED YET</div>'}`) +
         '<div class="row-btns center"><a class="btn" href="#/season">BACK TO SEASON</a></div>';
       return;
     }
