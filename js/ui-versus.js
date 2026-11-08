@@ -34,12 +34,13 @@
         <section class="ch-hero"><div class="ch-hero-k">DRAFT CHALLENGE | TWO PLAYERS</div><h1 class="ch-hero-t">YOU VS ME.</h1>
           <p class="ch-hero-p">Pass the phone. Take turns drafting five from one season, then both teams play it out in the same league and finish with a best-of-seven showdown.</p></section>
         <div class="ch-setup">
-          <div class="ch-step"><div class="ch-step-k">1 | THE SEASON</div><div class="ch-chips">${C.SEASONS.map(s => `<button type="button" class="ch-chip${VS.year === s.year ? ' on' : ''}" data-year="${s.year}">${esc(s.label)}</button>`).join('')}</div></div>
+          <div class="ch-step"><div class="ch-step-k">1 | THE SEASON</div><div class="ch-chips ch-swipe">${C.SEASONS.map(s => `<button type="button" class="ch-chip${VS.year === s.year ? ' on' : ''}" data-year="${s.year}">${esc(s.label)}</button>`).join('')}</div></div>
           ${[0, 1].map(i => `<div class="ch-step"><div class="ch-step-k">${i + 2} | PLAYER ${i + 1}</div>
             <label class="field"><span>NAME</span><input data-name="${i}" maxlength="20" placeholder="Player ${i + 1}" value="${esc(VS.names[i] || '')}"></label>${grid(i)}</div>`).join('')}
           <div class="ch-go"><button type="button" class="btn btn-gold btn-big" id="vsStart">START THE DRAFT</button>
             ${VS.cfg ? '<a class="btn" href="#/challenge/vs/draft">BACK TO OUR DRAFT</a>' : ''}<a class="btn" href="#/challenge">ONE PLAYER</a></div>
         </div>`;
+      UI.centerChips(app);
       const redraw = () => { ls.set(VS); setup(app); };
       app.querySelectorAll('[data-year]').forEach(b => b.addEventListener('click', () => { VS.year = +b.dataset.year; redraw(); }));
       app.querySelectorAll('[data-side]').forEach(b => b.addEventListener('click', () => { VS.teams[+b.dataset.side] = b.dataset.team; redraw(); }));

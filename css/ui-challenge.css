@@ -264,3 +264,27 @@
 .vs-win p { margin: 0; color: var(--text2); }
 .vs-games ol { margin: 0 0 12px; padding-left: 20px; line-height: 1.8; }
 @media (max-width: 560px) { .vs-sides { grid-template-columns: minmax(0, 1fr); } }
+
+/* phones in portrait: long chip rows (seasons, quick starts) swipe sideways instead of stacking (UI.centerChips) */
+@media (max-width: 700px) {
+  .ch-swipe { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: none;
+    margin-left: -14px; margin-right: -14px; padding: 2px 14px 8px; -webkit-mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 22px), transparent); mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 22px), transparent); }
+  .ch-swipe::-webkit-scrollbar { display: none; }
+  .ch-swipe .ch-chip { flex: 0 0 auto; scroll-snap-align: center; white-space: nowrap; }
+  .ts-start { padding: 10px 12px; gap: 6px 10px; margin-bottom: 10px; }
+  .ts-start .ch-chip { font-size: 14px; padding: 8px 12px; min-height: 40px; }
+  .ts-start-n { flex-basis: 100%; font-size: 12.5px; line-height: 1.4; }
+  .ts-real .ts-start-k, .ts-real .ch-chips { display: inline-flex; }
+}
+/* a swipe row must not widen its card */
+.ch-setup > *, .ch-step, .ts-start { min-width: 0; }
+.ts-start > .ch-swipe { flex: 1 1 100%; min-width: 0; }
+@media (max-width: 700px) {
+  .ch-seg { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ch-seg > a.ch-seg-b { grid-column: 1 / -1; }
+  .ch-teams { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 6px; }
+  .ch-team { padding: 8px 4px !important; min-height: 0; }
+  .ch-team span { font-size: 11px; letter-spacing: .06em; }
+}
+/* wide screens: every setup step spans the page (the season list fits on two rows) */
+@media (min-width: 701px) { .ch-setup { grid-template-columns: minmax(0, 1fr); } .ch-setup .ch-step { grid-column: 1 / -1; } }

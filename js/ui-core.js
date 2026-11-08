@@ -110,6 +110,13 @@
     { year: 2026, label: '2025-26', note: 'Last season', file: 'data/start-2026.js' },
     { year: 2027, label: '2026-27', note: 'This season, as it opened', file: 'data/start-2027.js' }
   ];
+  // Phones: a row of chips that swipes sideways (.ch-swipe) shows the chosen one in the middle
+  UI.centerChips = function (root) {
+    (root || document).querySelectorAll('.ch-swipe').forEach(row => {
+      const on = row.querySelector('.ch-chip.on');
+      if (on && row.scrollWidth > row.clientWidth) row.scrollLeft = on.offsetLeft - row.offsetLeft - (row.clientWidth - on.offsetWidth) / 2;
+    });
+  };
   // real-life mode's moves (data/real-moves.js, about 700 KB): loaded only for leagues that use it
   let realLoad = null;
   UI.loadRealMoves = function () {
