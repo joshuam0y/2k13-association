@@ -90,6 +90,22 @@ fs.readdirSync("data").filter(f => /^start-\d{4}\.js$/.test(f)).forEach(f => {
   const n = Object.values(s.season.days).reduce((t, d) => t + d.games.filter(g => g.home === "BOS" || g.away === "BOS").length, 0);
   ok(s.season.realSchedule && n === 66 && s.season.days[0].date === "2011-12-25", "2011-12: the real 66-game lockout schedule from Christmas Day (" + n + " games, opens " + s.season.days[0].date + ")");
 }
+// the season being played now: 2026-27 as it opened
+{
+  const s = L.newLeague("NYK", { seed: 9, start: 2027 });
+  const P = id => s.players[id];
+  const n = Object.values(s.season.days).reduce((t, d) => t + d.games.filter(g => g.home === "NYK" || g.away === "NYK").length, 0);
+  ok(s.year === 2027 && s.season.realSchedule && n === 82 && s.season.days[0].date === "2026-10-20", "2026-27: the real schedule from October 20, 2026 (" + n + " games)");
+  ok(P("wembavi01").age === 22 && P("flaggco01").age === 19 && P("curryst01").age === 38, "real ages (Wembanyama 22, Flagg 19, Curry 38)");
+  ok(P("gilgesh01").contract.salaries.length >= 4, "SGA's extension signed before the season is part of his contract (through " + P("gilgesh01").contract.salaries.slice(-1)[0].year + ")");
+  ok(window.HISTORY_PRIOR.champions.some(c => c.year === 2026 && c.abbr === "NYK"), "the Knicks are the defending champions");
+  ok(window.COACH.of(s, "NYK").name === "Mike Brown" && window.COACH.of(s, "NYK").titles === 1 && window.COACH.of(s, "DAL").name === "Dusty May", "the 2026-27 coaches (Mike Brown with his ring, Dusty May in Dallas)");
+}
+{
+  const s = L.newLeague("GSW", { seed: 9, start: 2017 });
+  ok(window.COACH.of(s, "GSW").name === "Steve Kerr" && window.COACH.of(s, "GSW").titles === 1 && window.COACH.available(s, 2017).every(c => c.name !== "Phil Jackson"),
+    "2016-17: Steve Kerr (1 title) in Golden State, retired coaches off the market");
+}
 // real contract options in the 2025-26 start
 {
   const s = L.newLeague("BOS", { seed: 9, start: 2026 });

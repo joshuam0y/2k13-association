@@ -45,7 +45,7 @@
     var d = data();
     var early = false;
     if (!state.coaches) {
-      early = earlyStart(state, d);
+      early = startCoaches(state, d);
       if (!early) {
         state.coaches = {};
         d.start.forEach(function (c) { state.coaches[c.id] = makeCoach(c, 'employed'); });
@@ -69,19 +69,38 @@
     return state;
   }
 
-  // A league that opens before 2012-13: that season's real opening-night coaches get the jobs, every coach
-  // who was hired later in real life becomes available from that season, and titles count only those
-  // won before the start.
-  function earlyStart(state, d) {
-    var Y = +state.startYear, open = d.openByYear && d.openByYear[Y];
-    if (!open || !(Y < 2013)) return false;
+  // A league that opens in another season than 2012-13: that season's real opening-night coaches get the jobs,
+  // every coach who was hired later in real life becomes available from that season, and titles count only
+  // those won before the start.
+  function openingCoaches(d, H, Y, byName) {
+    if (d.openByYear && d.openByYear[Y]) return d.openByYear[Y];
+    if (!H[Y]) return null;
+    var open = {}, nameAt = function (y, a) { return H[y] && (H[y][a] || (a === 'OKC' && H[y].SEA)); };
+    Object.keys(H[Y]).forEach(function (a) {
+      var c = byName[H[Y][a]];
+      if (!c) return;
+      var y = Y;
+      while (y > 2004 && nameAt(y - 1, a) === H[Y][a]) y--;
+      if (y === 2013 && c.since && c.team === a) y = Math.min(y, c.since);
+      if (y === 2004 && d.openByYear && d.openByYear[2004] && d.openByYear[2004][a]) y = d.openByYear[2004][a].since;
+      open[a] = { id: c.id, since: y };
+    });
+    return open;
+  }
+  function startCoaches(state, d) {
+    var Y = +state.startYear;
+    if (!Y || Y === 2013) return false;
     var H = (typeof window !== 'undefined' && window.COACH_HISTORY) || (root && root.COACH_HISTORY) || {};
-    var all = {}, next = {};
-    d.start.concat(d.early || [], d.pool).forEach(function (c) { if (!all[c.id]) all[c.id] = c; });
+    var all = {}, byName = {}, next = {};
+    d.start.concat(d.early || [], d.pool).forEach(function (c) { if (!all[c.id]) { all[c.id] = c; byName[c.name] = c; } });
+    var open = openingCoaches(d, H, Y, byName);
+    if (!open) return false;
     var seen = function (id, y) { if (id && (!next[id] || y < next[id])) next[id] = y; };
-    for (var y = Y + 1; y <= 2012; y++) Object.keys(d.openByYear[y] || {}).forEach(function (a) { seen(d.openByYear[y][a].id, y); });
-    (H.changes || []).forEach(function (c) { if (+c.season > Y && !c.interim) seen(c.inId, +c.season); });
-    d.start.forEach(function (c) { if (c.since > Y) seen(c.id, c.since); });
+    Object.keys(H).forEach(function (k) {
+      if (!/^\d{4}$/.test(k) || +k <= Y) return;
+      Object.keys(H[k]).forEach(function (a) { var c = byName[H[k][a]]; if (c) seen(c.id, +k); });
+    });
+    (H.changes || []).forEach(function (c) { if (+c.season > Y && !c.interim && byName[c['in']]) seen(byName[c['in']].id, +c.season); });
     var hired = {};
     Object.keys(open).forEach(function (a) { hired[open[a].id] = a; });
     state.coaches = {};
@@ -95,7 +114,8 @@
       } else {
         delete src.team; delete src.since;
         src.available = next[id] ? Math.min(next[id], src.available || 9999) : src.available || 1900;
-        state.coaches[id] = makeCoach(src, 'free');
+        // done coaching in real life before the start: retired
+        state.coaches[id] = makeCoach(src, src.last != null && src.last < Y && !next[id] ? 'retired' : 'free');
       }
     });
     Object.keys(open).forEach(function (a) {

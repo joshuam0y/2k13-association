@@ -84,7 +84,6 @@
   };
 
   // Seasons a new Association can open in. Other than 2012-13 they load data/start-YYYY.js on demand.
-  // Seasons a new Association can open in. Other than 2012-13 they load data/start-YYYY.js on demand.
   UI.START_YEARS = [
     { year: 2004, label: '2003-04', note: "LeBron's rookie year", file: 'data/start-2004.js' },
     { year: 2005, label: '2004-05', note: 'The Bobcats arrive, Shaq goes to Miami', file: 'data/start-2005.js' },
@@ -108,7 +107,8 @@
     { year: 2023, label: '2022-23', note: 'Jokic and the Nuggets', file: 'data/start-2023.js' },
     { year: 2024, label: '2023-24', note: "The Celtics' 18th banner", file: 'data/start-2024.js' },
     { year: 2025, label: '2024-25', note: 'SGA and the Thunder', file: 'data/start-2025.js' },
-    { year: 2026, label: '2025-26', note: 'Last season', file: 'data/start-2026.js' }
+    { year: 2026, label: '2025-26', note: 'Last season', file: 'data/start-2026.js' },
+    { year: 2027, label: '2026-27', note: 'This season, as it opened', file: 'data/start-2027.js' }
   ];
   const startLoads = {};
   UI.loadStart = function (year) {

@@ -1,4 +1,4 @@
-/* 2K13 Association: real NBA head coaches, 2003-04 through 2025-26 (cosmetic only).
+/* 2K13 Association: real NBA head coaches, 2003-04 through 2026-27 (cosmetic only).
    COACH_HISTORY[season-ending year] = { ABBR: coach on opening night }, using the game's 2012 abbreviations
    (BKN, CHA, NOH, PHX for the Nets, Bobcats/Hornets, Hornets/Pelicans and Suns in every season).
    COACH_HISTORY.changes: every mid-season change [{ date, season, team, out, in, outId, inId, reason, interim, outRecord }],
@@ -119,6 +119,14 @@
       HOU: "Ime Udoka", IND: "Rick Carlisle", LAC: "Tyronn Lue", LAL: "JJ Redick", MEM: "Tuomas Iisalo",
       MIA: "Erik Spoelstra", MIL: "Doc Rivers", MIN: "Chris Finch", NOH: "Willie Green", NYK: "Mike Brown",
       OKC: "Mark Daigneault", ORL: "Jamahl Mosley", PHI: "Nick Nurse", PHX: "Jordan Ott", POR: "Chauncey Billups",
+      SAC: "Doug Christie", SAS: "Mitch Johnson", TOR: "Darko Rajakovic", UTA: "Will Hardy", WAS: "Brian Keefe"
+    },
+    2027: {
+      ATL: "Quin Snyder", BKN: "Jordi Fernandez", BOS: "Joe Mazzulla", CHA: "Charles Lee", CHI: "Tiago Splitter",
+      CLE: "Kenny Atkinson", DAL: "Dusty May", DEN: "David Adelman", DET: "J.B. Bickerstaff", GSW: "Steve Kerr",
+      HOU: "Ime Udoka", IND: "Rick Carlisle", LAC: "Tyronn Lue", LAL: "JJ Redick", MEM: "Tuomas Iisalo",
+      MIA: "Erik Spoelstra", MIL: "Taylor Jenkins", MIN: "Chris Finch", NOH: "Jamahl Mosley", NYK: "Mike Brown",
+      OKC: "Mark Daigneault", ORL: "Sean Sweeney", PHI: "Nick Nurse", PHX: "Jordan Ott", POR: "Micah Nori",
       SAC: "Doug Christie", SAS: "Mitch Johnson", TOR: "Darko Rajakovic", UTA: "Will Hardy", WAS: "Brian Keefe"
     },
     changes: [
@@ -257,6 +265,9 @@
       "Taylor Jenkins": "jenkita99",
       "Terry Stotts": "stottte01",
       "Tiago Splitter": "splitti01",
+      "Dusty May": "maydu99",
+      "Sean Sweeney": "sweense01",
+      "Micah Nori": "norimi01",
       "Tom Thibodeau": "thibotr99",
       "Tony Brown": "brownto01",
       "Tuomas Iisalo": "iisaltu01",
