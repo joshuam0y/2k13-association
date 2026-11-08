@@ -43,17 +43,21 @@
   function init(state) {
     if (!state) return state;
     var d = data();
+    var early = false;
     if (!state.coaches) {
-      state.coaches = {};
-      d.start.forEach(function (c) { state.coaches[c.id] = makeCoach(c, 'employed'); });
-      d.pool.forEach(function (c) { state.coaches[c.id] = makeCoach(c, 'free'); });
+      early = earlyStart(state, d);
+      if (!early) {
+        state.coaches = {};
+        d.start.forEach(function (c) { state.coaches[c.id] = makeCoach(c, 'employed'); });
+        d.pool.forEach(function (c) { state.coaches[c.id] = makeCoach(c, 'free'); });
+      }
     }
     Object.keys(state.coaches).forEach(function (k) { if (state.coaches[k]) delete state.coaches[k].ovr; }); // older saves
     var teams = state.teams || {};
     Object.keys(teams).forEach(function (abbr) {
       var t = teams[abbr];
       if (t.coach && state.coaches[t.coach]) return;
-      var id = d.startByTeam[abbr] || d.startByTeam[{ NOP: 'NOH', CHH: 'CHA' }[abbr]];
+      var id = early ? null : d.startByTeam[abbr] || d.startByTeam[{ NOP: 'NOH', CHH: 'CHA' }[abbr]];
       if (id && state.coaches[id] && state.coaches[id].status !== 'retired' &&
           (!state.coaches[id].team || state.coaches[id].team === abbr)) {
         place(state, abbr, id, state.coaches[id].hiredYear || yearOf(state));
@@ -63,6 +67,41 @@
       }
     });
     return state;
+  }
+
+  // A league that opens before 2012-13: that season's real opening-night coaches get the jobs, every coach
+  // who was hired later in real life becomes available from that season, and titles count only those
+  // won before the start.
+  function earlyStart(state, d) {
+    var Y = +state.startYear, open = d.openByYear && d.openByYear[Y];
+    if (!open || !(Y < 2013)) return false;
+    var H = (typeof window !== 'undefined' && window.COACH_HISTORY) || (root && root.COACH_HISTORY) || {};
+    var all = {}, next = {};
+    d.start.concat(d.early || [], d.pool).forEach(function (c) { if (!all[c.id]) all[c.id] = c; });
+    var seen = function (id, y) { if (id && (!next[id] || y < next[id])) next[id] = y; };
+    for (var y = Y + 1; y <= 2012; y++) Object.keys(d.openByYear[y] || {}).forEach(function (a) { seen(d.openByYear[y][a].id, y); });
+    (H.changes || []).forEach(function (c) { if (+c.season > Y && !c.interim) seen(c.inId, +c.season); });
+    d.start.forEach(function (c) { if (c.since > Y) seen(c.id, c.since); });
+    var hired = {};
+    Object.keys(open).forEach(function (a) { hired[open[a].id] = a; });
+    state.coaches = {};
+    Object.keys(all).forEach(function (id) {
+      var src = copy(all[id]), won = (d.titleYears || {})[src.name] || [];
+      src.titles = won.filter(function (t) { return t < Y; }).length;
+      if (!src.titles) delete src.titles;
+      if (hired[id]) {
+        src.team = hired[id]; src.since = open[hired[id]].since; delete src.available;
+        state.coaches[id] = makeCoach(src, 'employed');
+      } else {
+        delete src.team; delete src.since;
+        src.available = next[id] ? Math.min(next[id], src.available || 9999) : src.available || 1900;
+        state.coaches[id] = makeCoach(src, 'free');
+      }
+    });
+    Object.keys(open).forEach(function (a) {
+      if (state.teams && state.teams[a] && state.coaches[open[a].id]) place(state, a, open[a].id, open[a].since);
+    });
+    return true;
   }
 
   function place(state, abbr, id, year) {
@@ -286,8 +325,8 @@
     var H = opts.hist || (typeof window !== 'undefined' && window.COACH_HISTORY) || (root && root.COACH_HISTORY);
     var year = +(state && state.year) || 2013, today = opts.today || '';
     var seq = [];
-    if (H) for (var y = 2013; y <= year; y++) {
-      var open = H[y] && H[y][abbr];
+    if (H) for (var y = 2004; y <= year; y++) {
+      var open = H[y] && (H[y][abbr] || (abbr === 'OKC' && H[y].SEA));
       if (!open) continue;
       seq.push({ season: y, name: open });
       (H.changes || []).filter(function (c) { return c.team === abbr && +c.season === y && (y < year || !today || c.date <= today); })

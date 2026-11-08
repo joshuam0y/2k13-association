@@ -27,7 +27,7 @@ const CHECK = {
   const on = a => Object.values(s.players).filter(p => p.team === a && !p.retired && !(p.stashedUntil > s.year));
   ok(s.year === Y && s.startYear === Y && s.season.year === Y, "the league opens in " + D.label);
   ok(Object.keys(s.teams).length === K.teams && Object.keys(s.teams).every(a => on(a).length >= 12 && on(a).length <= 16), K.teams + " teams with 12 to 16 players each");
-  ok(Y >= 2013 ? s.season.realSchedule : Object.values(s.season.days).reduce((n, d) => n + d.games.filter(g => g.home === K.team || g.away === K.team).length, 0) === 82, Y >= 2013 ? "the real " + D.label + " schedule" : "an 82-game schedule");
+  ok(s.season.realSchedule && Object.values(s.season.days).reduce((n, d) => n + d.games.filter(g => g.home === K.team || g.away === K.team).length, 0) === 82, "the real " + D.label + " schedule, 82 games");
   const P = id => s.players[id];
   ok(K.stars.every(([id, t]) => P(id) && P(id).team === t), "opening night: " + K.stars.map(([id, t]) => (P(id) ? P(id).name : id) + " " + t).join(", "));
   const pay = a => on(a).reduce((t, p) => t + ((p.contract && p.contract.salaries.find(x => x.year === Y) || {}).amount || 0), 0);
@@ -38,7 +38,15 @@ const CHECK = {
     ok(s.teams.BOS.picks.some(p => p.year === 2018 && p.round === 1 && p.original === "BKN"), "the Celtics own the Nets' 2018 first");
     ok(s.teams.BKN.picks.some(p => p.year === 2017 && p.round === 1 && p.swap === "BOS"), "and can swap firsts with the Nets in 2017");
   }
-  if (Y === 2008) ok(s.teams.SEA && s.teams.SEA.name === "SuperSonics" && s.teams.BKN.city === "New Jersey", "the Seattle SuperSonics and the New Jersey Nets");
+  if (Y === 2008) {
+    ok(s.teams.SEA && s.teams.SEA.name === "SuperSonics" && s.teams.BKN.city === "New Jersey", "the Seattle SuperSonics and the New Jersey Nets");
+    ok(s.teams.MIN.picks.some(p => p.year === 2009 && p.round === 1 && p.original === "BOS") && !s.teams.BOS.picks.some(p => p.year === 2009 && p.round === 1),
+      "real pick trades: Minnesota holds Boston's 2009 first from the Garnett trade");
+    const co = a => window.COACH && window.COACH.of(s, a);
+    ok(co("BOS") && co("BOS").name === "Doc Rivers" && co("MIA").name === "Pat Riley" && co("SEA").name === "P.J. Carlesimo" && co("MIA").titles === 5,
+      "the real 2007-08 coaches (Rivers, Riley with 5 titles, Carlesimo)");
+    ok(window.COACH.available(s, Y).every(c => c.name !== "Erik Spoelstra" && c.name !== "Tom Thibodeau"), "coaches hired later in real life are not on the market yet");
+  }
   if (Y === 2004) ok(!s.teams.CHA && s.teams.NOH.conf === "East", "29 teams: no Bobcats yet, New Orleans in the East");
   const cls = Object.values(s.players).filter(p => p.team === "DRAFT" && +p.draftYear === Y);
   ok(cls.length >= 30 && cls.some(p => p.id === K.cls), "the " + Y + " draft class is waiting (" + cls.length + " prospects, with " + K.cls + ")");
@@ -76,6 +84,18 @@ fs.readdirSync("data").filter(f => /^start-\d{4}\.js$/.test(f)).forEach(f => {
   const games = s ? Object.values(s.season.standings).reduce((n, x) => n + x.w + x.l, 0) / 2 : 0;
   ok(!err && sizes.every(n => n >= 11 && n <= 16) && games > 20, D.label + ": " + (err ? "ERROR " + err.message : sizes.length + " teams, " + Math.min.apply(null, sizes) + " to " + Math.max.apply(null, sizes) + " players, " + games + " games in the first week"));
 });
+// the 2011-12 lockout: the real 66-game schedule from Christmas Day
+{
+  const s = L.newLeague("BOS", { seed: 9, start: 2012 });
+  const n = Object.values(s.season.days).reduce((t, d) => t + d.games.filter(g => g.home === "BOS" || g.away === "BOS").length, 0);
+  ok(s.season.realSchedule && n === 66 && s.season.days[0].date === "2011-12-25", "2011-12: the real 66-game lockout schedule from Christmas Day (" + n + " games, opens " + s.season.days[0].date + ")");
+}
+// real contract options in the 2025-26 start
+{
+  const s = L.newLeague("BOS", { seed: 9, start: 2026 });
+  const t = s.players.tatumja01;
+  ok(t && t.contract && t.contract.options.some(o => o.year === 2030 && o.type === "player"), "real options: Tatum's 2029-30 player option");
+}
 L.useStart(2013);
 
 console.log("\n" + pass + " passed, " + fail + " failed");
