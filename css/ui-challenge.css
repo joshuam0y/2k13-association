@@ -230,3 +230,25 @@
 .ch-log li > a { display: grid; grid-template-columns: 74px 18px 70px 70px minmax(0, 1fr); gap: 6px; padding: 6px 2px; color: inherit; text-decoration: none; align-items: baseline; }
 .ch-log li > a:hover { background: var(--bg3); }
 @media (max-width: 640px) { .ch-log li > a { grid-template-columns: 62px 16px 62px 58px minmax(0, 1fr); } }
+
+/* two players (js/ui-versus.js) */
+.vs-sides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
+.vs-side, .vs-res { border: 1px solid var(--line); border-top: 3px solid var(--c1, #444); background: var(--bg2); padding: 10px 12px; min-width: 0; }
+.vs-side.on { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; }
+.vs-side-h { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.vs-side-h div { display: flex; flex-direction: column; min-width: 0; }
+.vs-side-h small { font-family: var(--display); letter-spacing: .14em; color: var(--gold); font-size: 11px; }
+.vs-side-h b { font-family: var(--display); font-size: 16px; letter-spacing: .04em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vs-side ol, .vs-res ul { margin: 8px 0 0; padding-left: 18px; font-size: 14px; }
+.vs-res ul { list-style: none; padding: 0; }
+.vs-res li { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-top: 1px solid var(--line); }
+.vs-res li small { color: var(--muted); white-space: nowrap; }
+.vs-clock { margin: 6px 0 10px; font-family: var(--display); letter-spacing: .08em; font-size: 18px; }
+.vs-clock b { color: var(--gold2); }
+.vs-rec { font-family: var(--display); font-size: 40px; font-weight: 700; margin-top: 6px; }
+.vs-out { font-size: 13px; color: var(--text2); min-height: 2.4em; }
+.vs-win { display: flex; align-items: center; gap: 16px; padding: 18px; margin-bottom: 8px; border: 1px solid var(--gold); background: linear-gradient(120deg, var(--c1, #222), #0a0a0a 70%); }
+.vs-win h1 { margin: 2px 0; font-family: var(--display); font-size: clamp(26px, 6vw, 44px); }
+.vs-win p { margin: 0; color: var(--text2); }
+.vs-games ol { margin: 0 0 12px; padding-left: 20px; line-height: 1.8; }
+@media (max-width: 560px) { .vs-sides { grid-template-columns: minmax(0, 1fr); } }

@@ -197,30 +197,32 @@
 
   // ---------- one season challenge ----------
   // cfg: { mode: 'year', year, team (franchise taken over), name (optional), picks: [ids], seed, injuries }
+  // cfg.sides (versus mode): [{ team, picks, name }, { team, picks, name }], two players in the same league
   function buildYear(cfg) {
     var d = seasonData(cfg.year);
     if (!d) throw new Error('The ' + cfg.year + ' rosters are not loaded.');
     var rng = mulberry32((cfg.seed ^ 0x2545F491) >>> 0);
-    var teams = d.teams.map(clone), T = cfg.team;
-    var user = teams.filter(function (t) { return t.abbr === T; })[0];
-    if (!user) throw new Error('Unknown team ' + T);
+    var sides = cfg.sides || [{ team: cfg.team, picks: cfg.picks, name: cfg.name }];
+    var teams = d.teams.map(clone), mine = {};
+    sides.forEach(function (sd) { if (!teams.some(function (t) { return t.abbr === sd.team; })) throw new Error('Unknown team ' + sd.team); mine[sd.team] = true; });
     var players = {}, pool = [];
     d.players.concat(d.free).forEach(function (p0) { var p = clone(p0); p.injury = null; players[p.id] = p; });
-    var picks = (cfg.picks || []).filter(function (id) { return players[id]; });
-    if (picks.length !== 5) throw new Error('Pick five players first.');
-    var picked = {};
-    picks.forEach(function (id) { picked[id] = true; });
-    var moves = [], lost = {};
-    picks.forEach(function (id, i) {
-      var p = players[id];
-      if (p.team !== T && p.team !== 'FA') { (lost[p.team] = lost[p.team] || []).push(p); }
-      p.realTeam = p.team; p.team = T; p.pick = i + 1;
+    var picked = {}, moves = [], lost = {};
+    sides.forEach(function (sd) {
+      var picks = (sd.picks || []).filter(function (id) { return players[id]; });
+      if (picks.length !== 5) throw new Error('Pick five players first.');
+      picks.forEach(function (id, i) {
+        var p = players[id];
+        picked[id] = true;
+        if (!mine[p.team] && p.team !== 'FA') { (lost[p.team] = lost[p.team] || []).push(p); }
+        p.realTeam = p.team; p.team = sd.team; p.pick = i + 1;
+      });
     });
-    // the franchise's real roster leaves
+    // the franchises' real rosters leave
     Object.keys(players).forEach(function (id) {
       var p = players[id];
       if (picked[id]) return;
-      if (p.team === T) { p.realTeam = T; p.team = 'FA'; }
+      if (mine[p.team]) { p.realTeam = p.team; p.team = 'FA'; }
       if (p.team === 'FA') pool.push(p);
     });
     pool.sort(byOvr);
@@ -236,14 +238,73 @@
         moves.push({ team: abbr, out: gone.id, outName: gone.name, inId: s.id, inName: s.name, inOvr: s.ovr });
       });
     });
-    user.autoStyle = 'challenge';
-    user.orig = { city: user.city, name: user.name };
-    if (cfg.name) { var nm = splitName(cfg.name, user); user.city = nm.city; user.name = nm.name; }
     var used = {};
     Object.keys(players).forEach(function (id) { used[players[id].name] = true; });
-    makeScrubs(T, scrubTemplates(d), rng, used).forEach(function (s) { players[s.id] = s; });
-    return finishBuild(cfg, d.year, teams, players, moves, null);
+    sides.forEach(function (sd) {
+      var user = teams.filter(function (t) { return t.abbr === sd.team; })[0];
+      user.autoStyle = 'challenge';
+      user.orig = { city: user.city, name: user.name };
+      if (sd.name) { var nm = splitName(sd.name, user); user.city = nm.city; user.name = nm.name; }
+      makeScrubs(sd.team, scrubTemplates(d), rng, used).forEach(function (s) { players[s.id] = s; });
+    });
+    var ch = finishBuild(cfg, d.year, teams, players, moves, null);
+    ch.user = sides[0].team;
+    if (sides[1]) ch.rival = sides[1].team;
+    return ch;
   }
+
+  // ---------- versus: two players, one league ----------
+  // snake order of the ten picks: A B B A A B B A A B
+  var VS_ORDER = [0, 1, 1, 0, 0, 1, 1, 0, 0, 1];
+  function vsOnClock(cfg) {
+    var n = cfg.sides[0].picks.length + cfg.sides[1].picks.length;
+    return n >= 10 ? -1 : VS_ORDER[n];
+  }
+  // Plays the season, then a best-of-seven showdown between the two on their own (home court to the better record)
+  function playVersus(cfg) {
+    var ch = buildYear(cfg), E = W.ENGINE;
+    start(ch);
+    var guard = 0;
+    while (!step(ch, 10) && guard++ < 100);
+    var A = ch.user, B = ch.rival;
+    var keep = cfg.picks;
+    cfg.picks = cfg.sides[0].picks; var a = summary(ch);
+    ch.user = B; ch.season.userTeam = B; cfg.picks = cfg.sides[1].picks;
+    var b = summary(ch);
+    ch.user = A; ch.season.userTeam = A; cfg.picks = keep;
+    var h2h = [];
+    ch.season.days.forEach(function (d) {
+      if (d.playoff) return;
+      d.games.forEach(function (g) { if (g.played && ((g.home === A && g.away === B) || (g.home === B && g.away === A))) h2h.push({ date: d.date, home: g.home, away: g.away, hs: g.hs, as: g.as }); });
+    });
+    // the showdown: a seven-game series between just the two teams
+    var sa = ch.season.standings[A], sb = ch.season.standings[B];
+    var hi = sa.w >= sb.w ? A : B, lo = hi === A ? B : A;
+    var two = { season: ch.year, teams: ch.teams.filter(function (t) { return t.abbr === A || t.abbr === B; }),
+      players: ch.league.players.filter(function (p) { return p.team === A || p.team === B; }) };
+    var rng = mulberry32((cfg.seed ^ 0x7F4A7C15) >>> 0);
+    var s2 = E.newSeason(two, { year: ch.year, realSchedule: false, playIn: false, rng: rng });
+    s2.era = ch.season.era; if (ch.season.norms) s2.norms = ch.season.norms; s2.injuries = {};
+    s2.days = [0, 1, 2, 3, 4, 5, 6].map(function (i) {
+      var hiHome = i === 0 || i === 1 || i === 4 || i === 6;
+      return { date: ch.year + '-05-' + (10 + i * 2), games: [{ id: 'vs' + (i + 1), home: hiHome ? hi : lo, away: hiHome ? lo : hi, played: false, hs: null, as: null }] };
+    });
+    var series = [], w = {}; w[A] = 0; w[B] = 0;
+    for (var i = 0; i < 7 && w[A] < 4 && w[B] < 4; i++) {
+      E.simDays(s2, 1, rng, two);
+      var g = s2.days[i].games[0];
+      w[g.hs > g.as ? g.home : g.away]++;
+      series.push({ n: i + 1, home: g.home, away: g.away, hs: g.hs, as: g.as });
+    }
+    var winner = w[A] > w[B] ? A : B;
+    var lines = {};
+    Object.keys(s2.playerStats || {}).forEach(function (id) { var l = perGame(s2.playerStats[id]); if (l && ch.players[id]) lines[id] = l; });
+    var smvp = Object.keys(lines).filter(function (id) { return ch.players[id].team === winner; })
+      .sort(function (x, y) { return (lines[y].pts + lines[y].reb + lines[y].ast) - (lines[x].pts + lines[x].reb + lines[x].ast); })[0];
+    return { cfg: cfg, label: a.label, a: a, b: b, h2h: h2h,
+      showdown: { games: series, wins: w, winner: winner, mvp: smvp ? { id: smvp, name: ch.players[smvp].name, line: lines[smvp] } : null } };
+  }
+
   function splitName(full, t) {
     full = String(full || '').trim().slice(0, 32);
     if (!full) return { city: t.city, name: t.name };
@@ -535,6 +596,7 @@
 
   // One call for tests and quick sims: cfg (+ draft for all-time) to a finished summary.
   function play(cfg, dr) {
+    if (cfg.mode === 'versus') return playVersus(cfg);
     var ch = cfg.mode === 'alltime' ? buildAllTime(cfg, dr) : buildYear(cfg);
     start(ch);
     return runAll(ch);
@@ -544,7 +606,7 @@
     SEASONS: SEASONS, ROUNDS: ROUNDS, seasonInfo: seasonInfo, seasonData: seasonData, loaded: loaded, load: load, loadAll: loadAll,
     allTimePool: allTimePool, poolSeasons: poolSeasons, eraTeam: eraTeam, buildYear: buildYear, buildAllTime: buildAllTime, newDraft: newDraft, onClock: onClock,
     draftSlot: draftSlot, draftPick: draftPick, aiPick: aiPick, simToUser: simToUser, autoDraft: autoDraft, available: available,
-    teamPicks: teamPicks, spin: spin, spinRoster: spinRoster, matchups: matchups, start: start, step: step, runAll: runAll,
+    teamPicks: teamPicks, vsOnClock: vsOnClock, playVersus: playVersus, VS_ORDER: VS_ORDER, spin: spin, spinRoster: spinRoster, matchups: matchups, start: start, step: step, runAll: runAll,
     progress: progress, summary: summary, play: play, perGame: perGame, groupOf: groupOf, primaryPos: primaryPos, rng: mulberry32
   };
   W.CHALLENGE = API;

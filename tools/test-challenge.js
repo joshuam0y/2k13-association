@@ -112,6 +112,19 @@ ok(d08.players.find(p => p.id === "duranke01").rookie, "Durant is a rookie that 
 const r08 = C.play({ mode: "year", year: 2008, team: "SEA", picks: ["garneke01", "piercpa01", "allenra02", "nashst01", "duncati01"], seed: 5, build: "free" });
 ok(r08.w + r08.l === 82 && r08.w >= 50, "a 2007-08 super team in Seattle: " + r08.w + "-" + r08.l + ", " + r08.result);
 
+// two players: same league, then a showdown
+{
+  const vcfg = { mode: "versus", year: 2008, seed: 11, injuries: true, sides: [{ team: "BOS", name: "", picks: [] }, { team: "NYK", name: "", picks: [] }] };
+  const order = [];
+  const pool = ["garneke01", "wadedw01", "paulch01", "nashst01", "bryanko01", "nowitdi01", "howardw01", "duncati01", "jamesle01", "anthoca01"];
+  pool.forEach(id => { const i = C.vsOnClock(vcfg); order.push(i); vcfg.sides[i].picks.push(id); });
+  ok(order.join("") === "0110011001" && C.vsOnClock(vcfg) === -1, "versus: snake order A B B A A B B A A B");
+  const vr = C.playVersus(vcfg);
+  const sd = vr.showdown, wins = sd.wins.BOS + sd.wins.NYK;
+  ok(vr.a.w + vr.a.l === 82 && vr.b.w + vr.b.l === 82 && vr.a.five.length === 5 && vr.b.five.length === 5, "both teams play 82 in the same league (" + vr.a.w + "-" + vr.a.l + ", " + vr.b.w + "-" + vr.b.l + ")");
+  ok(Math.max(sd.wins.BOS, sd.wins.NYK) === 4 && wins >= 4 && wins <= 7 && sd.games.length === wins && sd.mvp, "the showdown: " + sd.winner + " " + sd.wins.BOS + "-" + sd.wins.NYK + ", MVP " + (sd.mvp && sd.mvp.name));
+  ok(vr.h2h.length >= 2, "their regular season meetings (" + vr.h2h.length + ")");
+}
 // the all-time pool file: every finished season
 require("../data/challenge-pool.js");
 const pool = C.allTimePool();

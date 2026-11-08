@@ -132,6 +132,7 @@
           <div class="ch-seg">
             <button type="button" class="ch-seg-b${!isAll ? ' on' : ''}" data-mode="year"><b>ONE SEASON</b><small>The real league of one year</small></button>
             <button type="button" class="ch-seg-b${isAll ? ' on' : ''}" data-mode="alltime"><b>ALL-TIME</b><small>Vets from every season, 30 teams draft</small></button>
+            <a class="ch-seg-b" href="#/challenge/vs"><b>VERSUS</b><small>Two players, one phone, then a showdown</small></a>
           </div>
           ${isAll ? `<div class="ch-sub">ERA RULES (PACE AND THREES)</div><div class="ch-chips">${eraBtns}</div>` : `<div class="ch-chips">${seasonBtns}</div>`}
         </div>
