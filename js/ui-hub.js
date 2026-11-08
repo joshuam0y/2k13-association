@@ -730,11 +730,29 @@
   const classSort = { key: 'pick', dir: 1 };
   const CLASS_COLS = [['pick', 'PICK', ''], ['name', 'PLAYER', 'l'], ['pos', 'POS', ''], ['age', 'AGE', ''], ['ht', 'HT', 'hide-sm'], ['ovr', 'OVR', '']];
   const CLASS_ASC = ['pick', 'name', 'pos', 'age'];
+  // Drafts before the game's class files (data/draft-results.js): the real board, with each player's rating today.
+  function pastDraft(app, year, years) {
+    const rows = (window.DRAFT_RESULTS || {})[year] || [];
+    const row = r => {
+      const p = r[1] ? UI.player(r[1]) : null, live = p && !p.retired;
+      return `<tr><td>${esc(r[0])}</td>
+        <td class="l">${p ? `<a class="cl-name" href="#/player/${esc(p.id)}"><span class="cl-hs">${UI.headshot(p)}</span><span>${esc(r[2])}</span></a>` : esc(r[2])}</td>
+        <td class="l">${r[3] ? UI.logo(r[3], 20) + ' ' + esc(r[3]) : ''}</td><td class="l hide-sm">${esc(r[4] || '')}</td>
+        <td class="${live ? UI.ovrClass(p.ovr) : ''}">${live ? '<b>' + esc(p.ovr) + '</b>' : p && p.retired ? '<span class="muted">RET</span>' : '<span class="muted">-</span>'}</td></tr>`;
+    };
+    app.innerHTML = UI.header('DRAFT CLASSES', 'The real ' + year + ' draft. OVR is the player\'s rating today in this league.') +
+      `<div class="tabs year-tabs">${years.map(y => `<a href="#/classes/${y}" class="${y === year ? 'on' : ''}">${y}</a>`).join('')}</div>
+      <div class="tscroll"><table class="stats classes"><thead><tr><th>PICK</th><th class="l">PLAYER</th><th class="l">TEAM</th><th class="l hide-sm">FROM</th><th>OVR</th></tr></thead>
+      <tbody>${rows.map(row).join('')}</tbody></table></div>`;
+  }
   P.classes = function (app, arg) {
     const D = window.DRAFTS;
     if (!D || !Object.keys(D).length) { app.innerHTML = UI.header('DRAFT CLASSES') + UI.empty('DRAFT CLASSES NOT LOADED', 'The draft data file <code>data/drafts.js</code> has not loaded.'); return; }
-    const years = Object.keys(D).map(Number).sort((a, b) => a - b);
-    const year = years.includes(Number(arg)) ? Number(arg) : years[0];
+    const past = Object.keys(window.DRAFT_RESULTS || {}).map(Number).filter(y => !D[y]);
+    const years = Object.keys(D).map(Number).concat(past).sort((a, b) => a - b);
+    const want = Number(arg), first = Object.keys(D).map(Number).sort((a, b) => a - b)[0];
+    const year = years.includes(want) ? want : first;
+    if (!D[year]) { pastDraft(app, year, years); return; }
     const pickOf = p => (p.undrafted ? 999 : p.realPick || 998);
     const val = (p, k) => (k === 'pick' ? pickOf(p) : k === 'name' ? String(p.name || '') : k === 'pos' ? String(p.pos || '') : Number(p[k]) || 0);
     const sorted = () => D[year].slice().sort((a, b) => {
