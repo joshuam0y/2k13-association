@@ -4,7 +4,7 @@
 const fs = require("fs");
 global.window = global;
 console.warn = () => {};
-["data/league2012.js", "data/start-2004.js", "data/start-2008.js", "data/start-2017.js", "data/drafts.js", "data/draft-prior.js", "data/targets.js", "data/cap-history.js", "data/coaches.js",
+["data/league2012.js", "data/start-2004.js", "data/start-2007.js", "data/start-2008.js", "data/start-2017.js", "data/drafts.js", "data/draft-prior.js", "data/targets.js", "data/cap-history.js", "data/coaches.js",
   "data/coach-history.js", "data/history.js", "data/personalities.js", "data/career-prior.js", "data/alltime-prior.js", "data/picks-2012.js",
   "data/awards-prior.js", "data/schedules.js", "data/tendencies.js", "data/tendency-history.js", "data/defense-history.js", "data/logos.js",
   "js/engine.js", "js/cba.js", "js/future.js", "js/trade.js", "js/freeagency.js", "js/mood.js", "js/draft.js", "js/draft-gen.js", "js/rookies.js",
@@ -131,6 +131,16 @@ fs.readdirSync("data").filter(f => /^start-\d{4}\.js$/.test(f)).forEach(f => {
   while (s.phase !== "regular" && k++ < 120) { s.events.forEach(e => (e.resolved = true)); L.clearResolved(s); L.advance(s, "nextPhase", { auto: true }); }
   const sizes = Object.keys(s.teams).map(a => Object.values(s.players).filter(p => p.team === a && !p.retired && !(p.stashedUntil > s.year)).length);
   ok(at("brandel01") === "PHI" && at("artesro01") === "HOU" && Math.max.apply(null, sizes) <= 15, "real life summer 2008: Brand to Philadelphia, Artest to Houston; rosters at most 15");
+}
+// draft night: summer 2007, the 2006-07 season with its real ending
+{
+  const s = L.summerStart("BOS", 2007, { seed: 5 });
+  const H = s.history.seasons[s.history.seasons.length - 1];
+  ok(s.phase === "draftLottery" && s.year === 2007 && H.champion === "SAS" && H.standings.BOS.w === 24 && H.standings.DAL.w === 67,
+    "draft night 2007: the real 2006-07 ending (Spurs champions, Boston 24-58, Dallas 67-15)");
+  ok(s.players.garneke01.team === "MIN" && s.players.garneke01.careerStats.slice(-1)[0].pts === Math.round(22.4 * 76), "Garnett still in Minnesota with his real 2006-07 line");
+  s.events.forEach(e => (e.resolved = true)); L.clearResolved(s); L.advance(s, "nextPhase");
+  ok(s.draft && s.draft.order && s.draft.order.length >= 58 && s.draft.order.slice(0, 14).every(x => (H.standings[x.original || x.team].w || 0) <= 42), "the lottery runs off the real records (top picks: " + s.draft.order.slice(0, 3).map(x => x.team).join(", ") + ")");
 }
 // real contract options in the 2025-26 start
 {

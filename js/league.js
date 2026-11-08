@@ -218,6 +218,47 @@
     return state;
   }
 
+  // A league that starts at the draft (summer after season `year`, opts.realLife for what comes after): the
+  // season is played out first with real life on (the real trades happen), then given its real ending: the
+  // real records (they set the lottery), the real champion and each player's real line. The user takes
+  // over on draft night; his team was run by its front office until then.
+  function summerStart(userTeam, year, opts) {
+    opts = opts || {};
+    var base = startData(year);
+    if (!base) throw new Error("The " + (year - 1) + "-" + String(year).slice(2) + " league data is not loaded");
+    var state = newLeague(userTeam, { start: year, seed: opts.seed, realLife: !!W.REAL_MOVES });
+    var guard = 0;
+    while (state.season.phase !== "done" && guard++ < 200) {
+      state.events.forEach(function (e) { e.resolved = true; });
+      clearResolved(state);
+      advance(state, { days: state.season.phase === "regular" ? 10 : 1 });   // one day at a time once the playoffs start, so the season stops at its end
+    }
+    if (state.phase !== "regular" && state.phase !== "playoffs") throw new Error("The season ended before its real results went in");
+    var s = state.season, real = base.real || {};
+    Object.keys(real).forEach(function (a) { if (s.standings[a]) { s.standings[a].w = real[a].w; s.standings[a].l = real[a].l; } });
+    var E = mod("ENGINE"), lines = base.seasonStats || {};
+    if (E && E.emptyLine) Object.keys(lines).forEach(function (id) {
+      if (!state.players[id]) return;
+      var x = lines[id], g = x.g || 0, t = E.emptyLine(), f = (x.fgp || 45) / 100, tp = (x.tpp || 33) / 100, ft = (x.ftp || 75) / 100;
+      if (!g) return;
+      var fga = x.pts * g / (2 * f + 0.3 * tp + 0.3 * ft);   // attempts from points and the real percentages
+      t.g = g; t.gs = (s.playerStats[id] || {}).gs || 0; t.min = Math.round(x.mpg * g * 10) / 10; t.pts = Math.round(x.pts * g);
+      t.fga = Math.round(fga); t.fgm = Math.round(fga * f); t.tpa = Math.round(fga * 0.3); t.tpm = Math.round(fga * 0.3 * tp);
+      t.fta = Math.round(fga * 0.3); t.ftm = Math.round(fga * 0.3 * ft);
+      t.oreb = Math.round(x.reb * g * 0.25); t.dreb = Math.round(x.reb * g) - t.oreb; t.ast = Math.round(x.ast * g); t.stl = Math.round(x.stl * g); t.blk = Math.round(x.blk * g);
+      s.playerStats[id] = t;
+    });
+    if (base.champion && state.teams[base.champion] && s.playoffs) { s.playoffs.champion = base.champion; s.playoffs.finalsMvp = null; s.champion = base.champion; }
+    state.events.forEach(function (e) { e.resolved = true; });
+    clearResolved(state);
+    advance(state, "endPlayoffs");   // the season's end: awards, career lines, history
+    state.realLife = !!opts.realLife;
+    state.summerStart = year;
+    news(state, "Draft night " + year, "The " + (year - 1) + "-" + String(year).slice(2) + " season is in the books" +
+      (base.champion && state.teams[base.champion] ? " (the " + state.teams[base.champion].name + " won it all)" : "") + ". You take over the " + state.teams[userTeam].name + " for the draft and free agency.", []);
+    return state;
+  }
+
   // A league that starts today, in a season still being played (base.today): the rosters as they are today,
   // every game already played with its real score, each player's real totals so far and today's injuries.
   function todayRosters(state, T) {
@@ -918,7 +959,7 @@
     return state;
   }
 
-  var API = { KEY_DATES: KEY_DATES, newLeague: newLeague, advance: advance, nextPhase: nextPhase, leagueView: leagueView, resolveEvent: resolveEvent,
+  var API = { KEY_DATES: KEY_DATES, newLeague: newLeague, summerStart: summerStart, advance: advance, nextPhase: nextPhase, leagueView: leagueView, resolveEvent: resolveEvent,
     clearResolved: clearResolved, currentDate: currentDate, useStart: useStart, startData: startData, pendingEvents: pendingEvents, OFFSEASON: OFFSEASON,
     userPicksLeft: userPicksLeft, handlesContractDecisions: true, autoOn: autoOn, applyBrands: applyBrands, migrate: migrate, rosterRules: rosterRules, rosterOf: rosterOf, enforceRosters: enforceRosters, assignPicks: assignPicks };
   W.LEAGUE = API;

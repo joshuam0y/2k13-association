@@ -243,9 +243,10 @@
   };
 
   // ---------- New league: pick a team (2K13 style cards) ----------
-  let newStart = 2013, newToday = false, newQuick = null, newReal = false;   // newReal: real-life mode   // newQuick: a quick start's team, opened once its season loads   // newToday: the season being played, from today (data/start-YYYY.js today)
+  let newStart = 2013, newToday = false, newQuick = null, newReal = false, newSummer = false;   // newSummer: start at the draft before the season   // newReal: real-life mode   // newQuick: a quick start's team, opened once its season loads   // newToday: the season being played, from today (data/start-YYYY.js today)
   // one tap into a famous team's season (the user's family are Celtics fans)
   const QUICK = [
+    { label: 'SUMMER 2007', team: 'BOS', start: 2008, summer: true, note: 'Draft night 2007, before the Garnett and Allen trades: build the Big Three yourself' },
     { label: "2007-08 BIG THREE", team: 'BOS', start: 2008, note: 'Garnett, Pierce and Allen together for the first time' },
     { label: '2012-13 CELTICS', team: 'BOS', start: 2013, note: 'The last ride of Pierce and Garnett in green' },
     { label: 'BANNER 18', team: 'BOS', start: 2024, note: 'The 2023-24 champions' },
@@ -254,7 +255,10 @@
   P.new = function (app) {
     if (!UI.canPlay()) { app.innerHTML = UI.notBuilt('engine'); return; }
     // Always opening-night data: 2012-13 is LEAGUE_2012; other seasons load data/start-YYYY.js first.
-    const start = newStart;
+    // draft night: the summer before the chosen season, from the season before's file (played out with its real results)
+    const canSummer = y => y - 1 >= 2004 && y - 1 !== 2013 && UI.START_YEARS.some(x => x.year === y - 1 && x.file);
+    const summer = newSummer && canSummer(newStart);
+    const start = summer ? newStart - 1 : newStart;
     const S = start !== 2013 && window.START_LEAGUES && window.START_LEAGUES[start];
     if (start !== 2013 && !S) {
       app.innerHTML = `<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE ${esc((UI.START_YEARS.find(x => x.year === start) || {}).label || '')} LEAGUE...</div></section>`;
@@ -262,7 +266,7 @@
       return;
     }
     const L = S || UI.state.league;
-    const T = S && S.today && newToday ? S.today : null;
+    const T = !summer && S && S.today && newToday ? S.today : null;
     const seasonLbl = (start - 1) + '-' + String(start).slice(2), lastLbl = (start - 2) + '-' + String(start - 1).slice(2);
     const teamLogo = (abbr, size) => (S ? UI.logoFor(L.teams.find(t => t.abbr === abbr) || { abbr }, size) : UI.logo(abbr, size));
     const rosters = {};
@@ -273,6 +277,7 @@
     if (T) T.results.forEach(r => { const hw = r[3] > r[4]; [[r[1], hw], [r[2], !hw]].forEach(([a, w]) => { const x = nowRec[a] = nowRec[a] || [0, 0]; x[w ? 0 : 1]++; }); });
     const recOf = abbr => {
       if (T) return nowRec[abbr] ? nowRec[abbr].join('-') : '0-0';
+      if (summer) { const x = S.real && S.real[abbr]; return x ? x.w + '-' + x.l : ''; }
       const r = H && H.records && (H.records[start - 1] || H.records[String(start - 1)]);
       const x = r && r[abbr];
       return x ? (typeof x === 'string' ? x : x.w != null ? x.w + '-' + x.l : '') : '';
@@ -300,10 +305,11 @@
     const visible = f => info.filter(x => f === 'all' || x.t.conf === f || x.tier === f);
     const slots = UI.saves.list();
     const first = UI.saves.firstEmpty() || 1;
-    const seasons = UI.START_YEARS.map(s => `<button type="button" class="ch-chip${s.year === start ? ' on' : ''}" data-start="${s.year}" title="${esc(s.note || '')}">${esc(s.label)}</button>`).join('');
+    const seasons = UI.START_YEARS.map(s => `<button type="button" class="ch-chip${s.year === newStart ? ' on' : ''}" data-start="${s.year}" title="${esc(s.note || '')}">${esc(s.label)}</button>`).join('');
     app.innerHTML = `${UI.header('SELECT YOUR TEAM', 'TEAM OVR rates the whole team from its top eight players. Contenders are 81 and up, rebuilds 76 and below.')}
       <div class="ts-start ts-quick"><span class="ts-start-k">QUICK START</span><div class="ch-chips">${QUICK.map((q, i) => `<button type="button" class="ch-chip" data-quick="${i}" title="${esc(q.note)}">${UI.logo(q.team, 18)} ${esc(q.label)}</button>`).join('')}</div></div>
-      <div class="ts-start"><span class="ts-start-k">START IN</span><div class="ch-chips">${seasons}</div><span class="muted ts-start-n">${T ? 'The ' + esc(seasonLbl) + ' season from today: every game so far counts with its real score, real stats so far, today\'s rosters and injuries.' : esc((UI.START_YEARS.find(s => s.year === start) || {}).note || '') + ': the real ' + esc(seasonLbl) + ' rosters, contracts and draft picks.'}</span>${S && S.today ? `<div class="ch-chips ts-when" role="group" aria-label="When"><button type="button" class="ch-chip${T ? '' : ' on'}" data-today="0">OPENING NIGHT</button><button type="button" class="ch-chip${T ? ' on' : ''}" data-today="1">TODAY, ${esc(UI.dateLabel(S.today.date).toUpperCase())}</button></div>` : ''}</div>
+      <div class="ts-start"><span class="ts-start-k">START IN</span><div class="ch-chips">${seasons}</div><span class="muted ts-start-n">${summer ? 'Draft night ' + start + ': the ' + esc(seasonLbl) + ' season plays out with its real records, champion and stats, then you run the draft and free agency before ' + esc((newStart - 1) + '-' + String(newStart).slice(2)) + '.' : T ? 'The ' + esc(seasonLbl) + ' season from today: every game so far counts with its real score, real stats so far, today\'s rosters and injuries.' : esc((UI.START_YEARS.find(s => s.year === start) || {}).note || '') + ': the real ' + esc(seasonLbl) + ' rosters, contracts and draft picks.'}</span>
+        <div class="ch-chips ts-when" role="group" aria-label="When"><button type="button" class="ch-chip${!summer && !T ? ' on' : ''}" data-when="open">OPENING NIGHT</button>${canSummer(newStart) ? `<button type="button" class="ch-chip${summer ? ' on' : ''}" data-when="summer">DRAFT NIGHT ${newStart - 1}</button>` : ''}${!summer && S && S.today ? `<button type="button" class="ch-chip${T ? ' on' : ''}" data-when="today">TODAY, ${esc(UI.dateLabel(S.today.date).toUpperCase())}</button>` : ''}</div></div>
       <div class="ts-start ts-real"><span class="ts-start-k">REAL LIFE</span><div class="ch-chips"><button type="button" class="ch-chip${newReal ? '' : ' on'}" data-real="0">OFF</button><button type="button" class="ch-chip${newReal ? ' on' : ''}" data-real="1">ON</button></div>
         <span class="muted ts-start-n">${newReal ? 'The real trades, signings and releases happen on their real dates, as long as the players are still where real life had them. AI teams make no trades of their own, and your team is always yours.' : 'Off: AI teams make their own moves.'}</span></div>
       <div class="ts-bar">
@@ -382,11 +388,11 @@
     window.addEventListener('hashchange', () => document.body.classList.remove('ts-lock'), { once: true });
     drawGrid();
     UI.$$('[data-start]', app).forEach(b => b.addEventListener('click', () => { newStart = +b.getAttribute('data-start'); P.new(app); }));
-    UI.$$('[data-today]', app).forEach(b => b.addEventListener('click', () => { newToday = b.getAttribute('data-today') === '1'; P.new(app); }));
+    UI.$$('[data-when]', app).forEach(b => b.addEventListener('click', () => { const w = b.getAttribute('data-when'); newToday = w === 'today'; newSummer = w === 'summer'; P.new(app); }));
     UI.$$('[data-real]', app).forEach(b => b.addEventListener('click', () => { newReal = b.getAttribute('data-real') === '1'; P.new(app); }));
     UI.$$('[data-quick]', app).forEach(b => b.addEventListener('click', () => {
       const q = QUICK[+b.getAttribute('data-quick')];
-      newStart = q.start; newToday = !!q.today; newQuick = q.team; P.new(app);
+      newStart = q.start; newToday = !!q.today; newSummer = !!q.summer; newQuick = q.team; P.new(app);
     }));
     if (newQuick && byAbbr[newQuick]) { const q = newQuick; newQuick = null; open(q); }
     UI.$('#cancelBtn', app).addEventListener('click', close);
@@ -397,7 +403,7 @@
       btn.textContent = 'BUILDING THE LEAGUE...';
       await new Promise(r => setTimeout(r, 30));
       try {
-        await UI.saves.create(Number(UI.$('#saveSlot').value), UI.$('#saveName').value.trim() || 'My Association', picked, start, { today: !!T, realLife: newReal });
+        await UI.saves.create(Number(UI.$('#saveSlot').value), UI.$('#saveName').value.trim() || 'My Association', picked, start, { today: !!T, realLife: newReal, summer });
         UI.updateChrome();
         location.hash = '#/season';
       } catch (e) {
