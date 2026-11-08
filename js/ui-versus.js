@@ -83,7 +83,7 @@
       } else body = `<div class="ch-ready"><div><b>BOTH FIVES ARE SET.</b><span class="muted"> Eight scrubs fill each bench.</span></div><button type="button" class="btn btn-gold btn-big" id="vsSim">PLAY IT OUT</button></div>`;
       app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(lbl(cfg.year))} | TWO PLAYERS</div><div class="ch-top-t">THE DRAFT</div></div>
           <a class="btn btn-small" href="#/challenge/vs">SETUP</a></div>
-        <div class="vs-sides">${fives}</div>${body}`;
+        <div class="vs-sides vs-compact">${fives}</div>${body}`;
       app.querySelectorAll('[data-pos]').forEach(b => b.addEventListener('click', () => { VS.pos = b.dataset.pos; ls.set(VS); draft(app); }));
       const qi = UI.$('#vsQ');
       if (qi) qi.addEventListener('input', () => { VS.q = qi.value; ls.set(VS); const pos = qi.selectionStart; draft(app); const n = UI.$('#vsQ'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } });

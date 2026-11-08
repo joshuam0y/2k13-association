@@ -288,3 +288,13 @@
 }
 /* wide screens: every setup step spans the page (the season list fits on two rows) */
 @media (min-width: 701px) { .ch-setup { grid-template-columns: minmax(0, 1fr); } .ch-setup .ch-step { grid-column: 1 / -1; } }
+/* the two-player draft keeps both fives side by side on phones */
+@media (max-width: 560px) {
+  .vs-sides.vs-compact { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .vs-compact .vs-side { padding: 8px; }
+  .vs-compact .vs-side-h { gap: 6px; }
+  .vs-compact .vs-side-h .logo { --sz: 26px !important; }
+  .vs-compact .vs-side-h b { font-size: 13px; }
+  .vs-compact ol { padding-left: 16px; font-size: 12.5px; }
+  .vs-compact li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
