@@ -71,9 +71,21 @@
 
 /* wheel */
 .ch-wheel { text-align: center; padding: 20px 12px; border: 1px solid var(--line2); background: var(--bg2); margin: 16px 0; }
-.ch-strip { position: relative; overflow: hidden; height: 74px; margin: 0 -12px 14px; mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); }
-.ch-strip-in { display: flex; gap: 14px; padding: 10px 0; width: max-content; will-change: transform; }
-.ch-strip-mark { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--gold); transform: translateX(-1px); }
+.ch-reel { position: relative; overflow: hidden; margin: 4px -12px 14px; padding: 14px 0; background: radial-gradient(ellipse at center, rgba(245, 197, 66, .08), transparent 70%);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); }
+.ch-reel-in { display: flex; gap: 10px; width: max-content; will-change: transform; }
+.ch-card { flex: 0 0 132px; height: 132px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border-radius: 6px;
+  background: linear-gradient(160deg, var(--c1), color-mix(in srgb, var(--c1) 35%, #050505) 75%); border: 1px solid color-mix(in srgb, var(--c2) 45%, transparent);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .05), 0 6px 18px rgba(0, 0, 0, .5); transition: transform .35s, box-shadow .35s, filter .35s; }
+.ch-card b { font-family: var(--display); font-size: 15px; letter-spacing: .08em; text-transform: uppercase; color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, .7); max-width: 118px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-card small { font-family: var(--display); font-size: 11px; letter-spacing: .14em; color: rgba(255, 255, 255, .8); }
+.ch-card .logo { filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .6)); }
+.ch-reel.landed .ch-card:not(.win) { filter: brightness(.45) saturate(.6); }
+.ch-card.win.lit { transform: scale(1.08); box-shadow: 0 0 0 3px var(--gold), 0 0 34px rgba(245, 197, 66, .65); }
+.ch-reel-mark { position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; transform: translateX(-1.5px); pointer-events: none; z-index: 2; }
+.ch-reel-mark::before, .ch-reel-mark::after { content: ''; position: absolute; left: 50%; transform: translateX(-50%); border: 9px solid transparent; }
+.ch-reel-mark::before { top: 0; border-top-color: var(--gold); }
+.ch-reel-mark::after { bottom: 0; border-bottom-color: var(--gold); }
 .ch-wheel .btn-big { margin: 10px 0 4px; }
 .ch-landed { display: flex; align-items: center; gap: 14px; margin: 16px 0 6px; padding: 14px; border: 1px solid var(--gold); background: linear-gradient(90deg, color-mix(in srgb, var(--c1) 40%, var(--bg2)), var(--bg2)); }
 .ch-landed > div { flex: 1; min-width: 0; }

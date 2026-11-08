@@ -244,24 +244,61 @@
         ${CUR.respins ? '<button type="button" class="btn btn-small" id="chRespin">RE-SPIN (1 LEFT)</button>' : ''}</section>
       <ul class="ch-list">${ros.map(p => playerRow(p, teams, `<button type="button" class="btn btn-small btn-gold" data-take="${esc(p.key || p.id)}">TAKE</button>`)).join('')}</ul>`;
   }
-  function wheelStrip(teams) {
-    return `<div class="ch-strip" aria-hidden="true"><div class="ch-strip-in">${teams.concat(teams).map(t => logo(t, 54)).join('')}</div><i class="ch-strip-mark"></i></div>`;
+  // The wheel: a reel of team cards that speeds past and slows to a stop exactly on the team you got.
+  const REEL_W = 132, REEL_GAP = 10, REEL_AT = 32, REEL_N = 38;
+  function reelCard(t, season, cls) {
+    const c1 = (t.colors && t.colors[0]) || '#333', c2 = (t.colors && t.colors[1]) || '#777';
+    return `<div class="ch-card${cls ? ' ' + cls : ''}" style="--c1:${esc(c1)};--c2:${esc(c2)}">${logo(t, 58)}<b>${esc(t.name || t.abbr)}</b>${season ? `<small>${esc(seasonLabel(season))}</small>` : ''}</div>`;
   }
-  // The wheel: logos fly past and slow down, then it lands
-  function animateSpin(app, teams, done) {
-    const strip = app.querySelector('.ch-strip-in');
+  function wheelStrip(teams) {
+    const list = teams.slice(0, 9);
+    return `<div class="ch-reel" aria-hidden="true"><div class="ch-reel-in">${list.concat(list).map(t => reelCard(t)).join('')}</div><i class="ch-reel-mark"></i></div>`;
+  }
+  // lands on spin s (a { year, abbr } from C.spin); done() runs once the winning card has lit up
+  function animateSpin(app, teams, done, s, cfg) {
     const btn = UI.$('#chSpin') || UI.$('#chRespin');
     if (btn) btn.disabled = true;
-    if (!strip || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) { done(); return; }
-    let t0 = null;
-    const dur = 1500, width = strip.scrollWidth / 2;
-    function frame(ts) {
-      if (t0 == null) t0 = ts;
-      const k = Math.min(1, (ts - t0) / dur), ease = 1 - Math.pow(1 - k, 3);
-      strip.style.transform = `translateX(${-(ease * width * 1.7) % width}px)`;
-      if (k < 1) requestAnimationFrame(frame); else done();
+    let reel = app.querySelector('.ch-reel');
+    if (!reel) {
+      // a re-spin from the landed card: put a reel in its place
+      const host = app.querySelector('.ch-landed');
+      if (!host) { done(); return; }
+      host.insertAdjacentHTML('beforebegin', '<section class="ch-wheel">' + wheelStrip(teams) + '</section>');
+      reel = app.querySelector('.ch-reel');
     }
-    requestAnimationFrame(frame);
+    const strip = reel.querySelector('.ch-reel-in');
+    const alltime = cfg && cfg.mode === 'alltime';
+    const winner = s ? (alltime ? C.eraTeam(s.year, s.abbr) : null) || teams.find(t => t.abbr === s.abbr) : null;
+    if (!strip || !winner) { done(); return; }
+    const cards = [];
+    for (let i = 0; i < REEL_N; i++) {
+      if (i === REEL_AT) { cards.push(reelCard(winner, alltime ? s.year : null, 'win')); continue; }
+      let t = teams[Math.floor(Math.random() * teams.length)];
+      if (i >= REEL_AT - 1 && i <= REEL_AT + 1 && t.abbr === winner.abbr) t = teams[(teams.indexOf(t) + 1) % teams.length];
+      const yr = alltime ? C.poolSeasons()[Math.floor(Math.random() * C.poolSeasons().length)] : null;
+      cards.push(reelCard(t, yr));
+    }
+    strip.innerHTML = cards.join('');
+    strip.style.transition = 'none';
+    strip.style.transform = 'translateX(0px)';
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const view = reel.clientWidth, jitter = (Math.random() - 0.5) * REEL_W * 0.6;
+    const target = REEL_AT * (REEL_W + REEL_GAP) + REEL_W / 2 - view / 2 + jitter;
+    const land = () => {
+      const w = strip.querySelector('.ch-card.win');
+      if (w) w.classList.add('lit');
+      reel.classList.add('landed');
+      setTimeout(done, reduce ? 150 : 900);
+    };
+    if (reduce) { strip.style.transform = `translateX(${-target}px)`; land(); return; }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      strip.style.transition = 'transform 4.2s cubic-bezier(.08,.72,.12,1)';
+      strip.style.transform = `translateX(${-target}px)`;
+    }));
+    let fired = false;
+    const end = () => { if (fired) return; fired = true; land(); };
+    strip.addEventListener('transitionend', end, { once: true });
+    setTimeout(end, 4600);
   }
 
   function bindPick(app) {
@@ -291,15 +328,15 @@
     if (spinBtn) spinBtn.addEventListener('click', () => {
       const s = C.spin(cfg, CUR.used, Math.random, CUR.dr);
       if (!s) { UI.toast('No teams left to spin.', 'error'); return; }
-      animateSpin(app, seasonTeams(cfg), () => { CUR.spin = s; CUR.used.push(s.key); redraw(); });
+      animateSpin(app, seasonTeams(cfg), () => { CUR.spin = s; CUR.used.push(s.key); redraw(); }, s, cfg);
     });
     const re = UI.$('#chRespin');
     if (re) re.addEventListener('click', () => {
       if (!CUR.respins) return;
       const s = C.spin(cfg, CUR.used, Math.random, CUR.dr);
       if (!s) { UI.toast('No other teams left.', 'error'); return; }
-      CUR.respins--; CUR.spin = s; CUR.used.push(s.key);
-      redraw();
+      CUR.respins--;
+      animateSpin(app, seasonTeams(cfg), () => { CUR.spin = s; CUR.used.push(s.key); redraw(); }, s, cfg);
     });
     app.querySelectorAll('[data-take]').forEach(b => b.addEventListener('click', () => {
       const id = b.dataset.take;
