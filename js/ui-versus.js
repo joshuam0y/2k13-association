@@ -225,7 +225,7 @@
   function ovrTag(p, blind) { return blind ? '' : `<b class="ch-ovr ${UI.ovrClass(p.ovr)}">${esc(p.ovr)}</b>`; }
   function playerRow(p, teams, btn, blind) {
     const t = tOf(teams, p.team);
-    return `<li class="ch-pl"><span class="ch-pl-b"><b>${esc(p.name)}</b><small>${logo(t, 18)} ${esc(String(p.pos || '').replace(/-/g, '/'))}${p.age ? ' | ' + p.age : ''}</small></span>${ovrTag(p, blind)}${btn}</li>`;
+    return `<li class="ch-pl"><span class="ch-pl-b"><b>${esc(p.name)}</b><small>${logo(t, 18)} ${esc(C.posLabel(p))}${p.age ? ' | ' + p.age : ''}</small></span>${ovrTag(p, blind)}${btn}</li>`;
   }
   function spinFor(cfg, d, taken, avoid) {
     const left = d.teams.filter(t => d.players.some(p => p.team === t.abbr && taken.indexOf(p.id) < 0));
@@ -253,7 +253,7 @@
       const fives = cfg.sides.map((sd, i) => {
         const t = tOf(teams, sd.team), mine = sd.picks.map(id => byId[id]).filter(Boolean);
         return `<div class="vs-side${on === i ? ' on' : ''}" style="--c1:${esc(t.colors[0])}"><div class="vs-side-h">${logo(t, 36)}<div><small>${esc(who(i))}${me() === i ? ' (YOU)' : ''}</small><b>${esc(sd.name || tName(t))}</b></div></div>
-          <ol>${[0, 1, 2, 3, 4].map(k => `<li>${mine[k] ? esc(mine[k].name) + (blind ? '' : ' <b class="' + UI.ovrClass(mine[k].ovr) + '">' + esc(mine[k].ovr) + '</b>') : '<span class="muted">-</span>'}</li>`).join('')}</ol></div>`;
+          <ol>${[0, 1, 2, 3, 4].map(k => `<li>${mine[k] ? esc(mine[k].name) + ' <small class="muted">' + esc(C.posLabel(mine[k])) + '</small>' + (blind ? '' : ' <b class="' + UI.ovrClass(mine[k].ovr) + '">' + esc(mine[k].ovr) + '</b>') : '<span class="muted">-</span>'}</li>`).join('')}</ol></div>`;
       }).join('');
       const fitCard = (sd, i) => {
         if (!sd.picks.length) return '';

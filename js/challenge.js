@@ -441,8 +441,20 @@
   // ratings a little (a whole lineup at most about -8 to +3); the five then matches up by those spots.
   var SLOTS = ['PG', 'SG', 'SF', 'PF', 'C'], PIDX = { PG: 0, SG: 1, SF: 2, PF: 3, C: 4, G: 0.5, F: 2.5 };
   var PEN = [0, 1.5, 4, 7, 10];
+  // a player's second spot when his listed position has only one: from his size and game
+  function secondPos(p) {
+    var parts = String(p.pos || 'SF').toUpperCase().split(/[-\/ ,]+/).filter(function (x) { return PIDX[x] != null && x.length === 2 || x === 'C'; });
+    if (parts.length > 1) return parts[1];
+    var a = p.attrs || {}, ht = +p.ht || 79, one = parts[0] || 'SF';
+    if (one === 'PG') return 'SG';
+    if (one === 'SG') return ht >= 78 || (a.handle || 60) < 70 ? 'SF' : 'PG';
+    if (one === 'SF') return ht >= 81 || (a.dreb || 50) >= 65 ? 'PF' : 'SG';
+    if (one === 'PF') return ht >= 82 || (a.block || 50) >= 70 ? 'C' : 'SF';
+    return 'PF';
+  }
+  function posLabel(p) { var one = primaryPos(p.pos); return one + '/' + secondPos(p); }
   function posRange(p) {
-    var parts = String(p.pos || 'SF').toUpperCase().split(/[-\/ ,]+/).map(function (x) { return PIDX[x]; }).filter(function (x) { return x != null; });
+    var parts = (primaryPos(p.pos) + '-' + secondPos(p)).split('-').map(function (x) { return PIDX[x]; }).filter(function (x) { return x != null; });
     if (!parts.length) parts = [2];
     return [Math.min.apply(null, parts), Math.max.apply(null, parts)];
   }
@@ -714,7 +726,7 @@
     SEASONS: SEASONS, ROUNDS: ROUNDS, seasonInfo: seasonInfo, seasonData: seasonData, loaded: loaded, load: load, loadAll: loadAll,
     allTimePool: allTimePool, poolSeasons: poolSeasons, eraTeam: eraTeam, buildYear: buildYear, buildAllTime: buildAllTime, newDraft: newDraft, onClock: onClock,
     draftSlot: draftSlot, draftPick: draftPick, aiPick: aiPick, simToUser: simToUser, autoDraft: autoDraft, available: available,
-    teamPicks: teamPicks, lineupFit: lineupFit, SLOTS: SLOTS, vsOnClock: vsOnClock, playVersus: playVersus, VS_ORDER: VS_ORDER, spin: spin, spinRoster: spinRoster, matchups: matchups, start: start, step: step, runAll: runAll,
+    teamPicks: teamPicks, lineupFit: lineupFit, posLabel: posLabel, secondPos: secondPos, SLOTS: SLOTS, vsOnClock: vsOnClock, playVersus: playVersus, VS_ORDER: VS_ORDER, spin: spin, spinRoster: spinRoster, matchups: matchups, start: start, step: step, runAll: runAll,
     progress: progress, summary: summary, play: play, perGame: perGame, groupOf: groupOf, primaryPos: primaryPos, rng: mulberry32
   };
   W.CHALLENGE = API;
