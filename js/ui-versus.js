@@ -1,6 +1,10 @@
-// Draft Challenge, two players (#/challenge/vs): pick a season and a franchise each, take turns drafting
-// five (snake order A B B A A B B A A B) on one phone, then the two fives meet in a best-of-five series,
-// each playing all 48 minutes; positions and fit count. Logic in js/challenge.js (lineupFit, playVersus).
+// Draft Challenge, two players (#/challenge/vs): pick a season and a franchise each, then take turns: spin
+// the wheel, take one player from the team it lands on (snake order A B B A A B B A A B), until both have
+// five. The fives meet in a best-of-3, 5 or 7 series where all five play 48 minutes; positions and fit
+// count; every game can be watched on the court. Blind draft hides the ratings until the series is over.
+// Same phone, or online: the host gets a room code, the friend opens the link on his own phone (PeerJS,
+// a direct connection between the two browsers; the public PeerJS server only introduces them).
+// Logic in js/challenge.js (lineupFit, playVersus); the wheel and the lineup card come from js/ui-challenge.js.
 (function () {
   'use strict';
   const P = UI.pages, esc = UI.esc, C = window.CHALLENGE;
@@ -10,139 +14,358 @@
     get() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; } },
     set(v) { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) { /* private mode */ } }
   };
-  let VS = ls.get() || { year: 2008, teams: ['BOS', 'LAL'], names: ['', ''], cfg: null, pos: '', q: '' };
+  const FRESH = () => ({ year: 2008, teams: ['BOS', 'LAL'], names: ['', ''], opts: { bestOf: 5, blind: false }, cfg: null, shown: 0, page: 'setup', spin: null, spun: [], respins: [1, 1], pos: '', q: '' });
+  let VS = Object.assign(FRESH(), ls.get() || {});
+  VS.opts = Object.assign({ bestOf: 5, blind: false }, VS.opts || {});
   const POS = ['PG', 'SG', 'SF', 'PF', 'C'];
   const lbl = y => (y - 1) + '-' + String(y).slice(2);
   const logo = (t, n) => UI.logoFor(t || { abbr: '?' }, n);
   const tOf = (teams, a) => teams.find(t => t.abbr === a) || { abbr: a, city: a, name: '', colors: ['#333', '#777'] };
   const tName = t => ((t.city || '') + ' ' + (t.name || '')).trim();
-  const who = (i, teams) => VS.names[i] || ('PLAYER ' + (i + 1));
+  const who = i => VS.names[i] || ('PLAYER ' + (i + 1));
+  const SHARED = ['year', 'teams', 'names', 'opts', 'cfg', 'shown', 'page', 'spin', 'spun', 'respins'];
+  let APP = null;   // the page element the versus screens draw into
+
+  // ---------- online (PeerJS) ----------
+  const PEER_SRC = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
+  const NET = { role: null, code: '', status: '', err: '', peer: null, conn: null };
+  const me = () => (NET.role === 'host' ? 0 : NET.role === 'guest' ? 1 : null);   // null: same phone, both sides
+  const canAct = side => me() === null || me() === side;
+  const online = () => !!NET.role;
+  const linked = () => !!(NET.conn && NET.conn.open);
+  function loadPeer() {
+    if (window.Peer) return Promise.resolve();
+    return new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = PEER_SRC; s.onload = res; s.onerror = () => rej(new Error('Could not load the online connection. Check the internet and try again.'));
+      document.head.appendChild(s);
+    });
+  }
+  function push() {
+    ls.set(VS);
+    if (linked()) { const s = {}; SHARED.forEach(k => { s[k] = VS[k]; }); try { NET.conn.send({ t: 'state', s }); } catch (e) { /* closed */ } }
+  }
+  function onMsg(m) {
+    if (!m || typeof m !== 'object') return;
+    if (m.t === 'hello' && NET.role === 'host') { if (m.name) VS.names[1] = String(m.name).slice(0, 20); push(); route(); return; }
+    if (m.t === 'state' && m.s) { SHARED.forEach(k => { if (k in m.s) VS[k] = m.s[k]; }); ls.set(VS); route(); }
+  }
+  function wire(c) {
+    NET.conn = c;
+    c.on('open', () => { NET.status = 'connected'; NET.err = ''; if (NET.role === 'guest') c.send({ t: 'hello', name: VS.names[1] || '' }); else push(); route(); });
+    c.on('data', onMsg);
+    c.on('close', () => { NET.status = 'lost'; route(); });
+    c.on('error', () => { NET.status = 'lost'; route(); });
+  }
+  function hangUp() {
+    try { if (NET.conn) NET.conn.close(); } catch (e) { /* gone */ }
+    try { if (NET.peer) NET.peer.destroy(); } catch (e) { /* gone */ }
+    Object.assign(NET, { role: null, code: '', status: '', err: '', peer: null, conn: null });
+  }
+  const CODE_CH = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const newCode = () => Array.from({ length: 5 }, () => CODE_CH[Math.floor(Math.random() * CODE_CH.length)]).join('');
+  function host() {
+    hangUp();
+    Object.assign(NET, { role: 'host', code: newCode(), status: 'starting' });
+    route();
+    loadPeer().then(() => {
+      const peer = new window.Peer('a13vs-' + NET.code);
+      NET.peer = peer;
+      peer.on('open', () => { NET.status = 'waiting'; route(); });
+      peer.on('connection', c => { if (linked()) { c.close(); return; } wire(c); });
+      peer.on('error', e => { if (e && e.type === 'unavailable-id') { host(); return; } NET.status = 'error'; NET.err = (e && e.message) || 'The connection failed.'; route(); });
+    }).catch(e => { NET.status = 'error'; NET.err = e.message; route(); });
+  }
+  function join(code) {
+    hangUp();
+    Object.assign(NET, { role: 'guest', code: String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, ''), status: 'connecting' });
+    route();
+    loadPeer().then(() => {
+      const peer = new window.Peer();
+      NET.peer = peer;
+      peer.on('open', () => wire(peer.connect('a13vs-' + NET.code, { reliable: true })));
+      peer.on('error', e => { NET.status = 'error'; NET.err = e && e.type === 'peer-unavailable' ? 'No game with that code. Check it with your friend.' : (e && e.message) || 'The connection failed.'; route(); });
+    }).catch(e => { NET.status = 'error'; NET.err = e.message; route(); });
+  }
+  const joinLink = () => location.origin + location.pathname + '#/challenge/vs/join/' + NET.code;
+  function netBar() {
+    if (!online()) return '';
+    const st = NET.status, other = NET.role === 'host' ? who(1) : who(0);
+    const msg = st === 'connected' ? `Connected with <b>${esc(other)}</b>. You are ${esc(who(me()))}.`
+      : st === 'waiting' ? `Room <b>${esc(NET.code)}</b>: send your friend the link, then wait here.`
+      : st === 'connecting' || st === 'starting' ? 'Connecting...'
+      : st === 'code' ? 'Type the room code your friend sees on his phone.'
+      : st === 'lost' ? 'The connection dropped.' : esc(NET.err || 'Not connected.');
+    return `<div class="vs-net ${st}"><span class="vs-net-dot"></span><span>${msg}</span>
+      ${st === 'waiting' ? `<button type="button" class="btn btn-small" id="vsCopy">COPY LINK</button>` : ''}
+      ${st === 'lost' || st === 'error' ? `<button type="button" class="btn btn-small" id="vsRetry">${NET.role === 'host' ? 'NEW ROOM' : 'TRY AGAIN'}</button>` : ''}
+      <button type="button" class="btn btn-small" id="vsLeave">LEAVE</button></div>`;
+  }
+  function bindNet(app) {
+    const cp = UI.$('#vsCopy', app);
+    if (cp) cp.addEventListener('click', async () => {
+      const link = joinLink(), text = 'Draft me in the 2K13 Association. Room ' + NET.code + ': ' + link;
+      if (navigator.share) { try { await navigator.share({ text, url: link }); return; } catch (e) { /* closed */ } }
+      try { await navigator.clipboard.writeText(link); UI.toast('Link copied. Send it to your friend.'); } catch (e) { UI.toast(link); }
+    });
+    const rt = UI.$('#vsRetry', app); if (rt) rt.addEventListener('click', () => (NET.role === 'host' ? host() : join(NET.code)));
+    const lv = UI.$('#vsLeave', app); if (lv) lv.addEventListener('click', () => { hangUp(); route(); });
+  }
+
+  // ---------- routing ----------
+  function route() {
+    const target = '#/challenge/vs' + (VS.page === 'draft' ? '/draft' : VS.page === 'series' ? '/result' : '');
+    if (location.hash.split('?')[0] !== target) { location.hash = target; return; }
+    if (!APP) return;
+    if (VS.page === 'draft') draft(APP); else if (VS.page === 'series') series(APP); else setup(APP);
+  }
+  function go(page) { VS.page = page; push(); route(); window.scrollTo(0, 0); }
 
   function loadThen(app, year, fn) {
     if (C.loaded(year)) { fn(); return; }
     app.innerHTML = `<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE ${esc(lbl(year))} ROSTERS...</div></section>`;
-    C.load(year).then(fn).catch(e => { app.innerHTML = UI.empty('ROSTERS DID NOT LOAD', esc(e.message || e), '<div class="row-btns"><a class="btn" href="#/challenge/vs">BACK</a></div>'); });
+    C.load(year).then(fn).catch(e => { app.innerHTML = UI.empty('ROSTERS DID NOT LOAD', esc(e.message || e), '<div class="row-btns"><a class="btn" href="#/challenge">BACK</a></div>'); });
   }
 
+  // ---------- setup ----------
   function setup(app) {
     loadThen(app, VS.year, () => {
       const d = C.seasonData(VS.year), teams = d.teams.slice().sort((a, b) => tName(a).localeCompare(tName(b)));
       VS.teams = VS.teams.map((a, i) => teams.some(t => t.abbr === a) ? a : teams[i].abbr);
       if (VS.teams[0] === VS.teams[1]) VS.teams[1] = teams.find(t => t.abbr !== VS.teams[0]).abbr;
-      const grid = i => `<div class="ch-teams">${teams.map(t => `<button type="button" class="ch-team${VS.teams[i] === t.abbr ? ' on' : ''}" data-side="${i}" data-team="${esc(t.abbr)}"${VS.teams[1 - i] === t.abbr ? ' disabled' : ''} style="--c1:${esc(t.colors[0])}">${logo(t, 30)}<span>${esc(t.name)}</span></button>`).join('')}</div>`;
+      const boss = me() !== 1;   // the host (or the one phone) sets the season and the rules
+      const dis = c => (c ? '' : ' disabled');
+      const grid = i => `<div class="ch-teams">${teams.map(t => `<button type="button" class="ch-team${VS.teams[i] === t.abbr ? ' on' : ''}" data-side="${i}" data-team="${esc(t.abbr)}"${VS.teams[1 - i] === t.abbr || !canAct(i) ? ' disabled' : ''} style="--c1:${esc(t.colors[0])}">${logo(t, 30)}<span>${esc(t.name)}</span></button>`).join('')}</div>`;
+      const ready = !online() || linked();
       app.innerHTML = `
         <section class="ch-hero"><div class="ch-hero-k">DRAFT CHALLENGE | TWO PLAYERS</div><h1 class="ch-hero-t">YOU VS ME.</h1>
-          <p class="ch-hero-p">Pass the phone. Take turns drafting five from one season, then your fives play a best-of-five series. Nobody comes off the bench: all five play 48 minutes, so positions and fit matter.</p></section>
+          <p class="ch-hero-p">Take turns spinning the wheel and taking one player from the team it lands on, until you both have five. Then a series: nobody comes off the bench, all five play 48 minutes, so positions and fit matter.</p></section>
+        ${netBar()}
         <div class="ch-setup">
-          <div class="ch-step"><div class="ch-step-k">1 | THE SEASON</div><div class="ch-chips ch-swipe">${C.SEASONS.map(s => `<button type="button" class="ch-chip${VS.year === s.year ? ' on' : ''}" data-year="${s.year}">${esc(s.label)}</button>`).join('')}</div></div>
-          ${[0, 1].map(i => `<div class="ch-step"><div class="ch-step-k">${i + 2} | PLAYER ${i + 1}</div>
-            <label class="field"><span>NAME</span><input data-name="${i}" maxlength="20" placeholder="Player ${i + 1}" value="${esc(VS.names[i] || '')}"></label>${grid(i)}</div>`).join('')}
-          <div class="ch-go"><button type="button" class="btn btn-gold btn-big" id="vsStart">START THE DRAFT</button>
-            ${VS.cfg ? '<a class="btn" href="#/challenge/vs/draft">BACK TO OUR DRAFT</a>' : ''}<a class="btn" href="#/challenge">ONE PLAYER</a></div>
+          <div class="ch-step"><div class="ch-step-k">1 | HOW YOU PLAY</div>
+            <div class="ch-seg vs-seg3"><button type="button" class="ch-seg-b${!online() ? ' on' : ''}" data-net="local"><b>SAME PHONE</b><small>Pass it back and forth</small></button>
+              <button type="button" class="ch-seg-b${NET.role === 'host' ? ' on' : ''}" data-net="host"><b>HOST ONLINE</b><small>Get a room code for your friend</small></button>
+              <button type="button" class="ch-seg-b${NET.role === 'guest' ? ' on' : ''}" data-net="join"><b>JOIN ONLINE</b><small>Enter your friend's code</small></button></div>
+            ${NET.role === 'guest' && !linked() ? `<div class="vs-join"><label class="field"><span>ROOM CODE</span><input id="vsCode" maxlength="5" placeholder="ABCDE" value="${esc(NET.code)}" autocomplete="off" autocapitalize="characters"></label><button type="button" class="btn btn-gold" id="vsJoin">JOIN</button></div>` : ''}
+          </div>
+          <div class="ch-step"><div class="ch-step-k">2 | THE SEASON</div><div class="ch-chips ch-swipe">${C.SEASONS.map(s => `<button type="button" class="ch-chip${VS.year === s.year ? ' on' : ''}" data-year="${s.year}"${dis(boss)}>${esc(s.label)}</button>`).join('')}</div></div>
+          <div class="ch-step"><div class="ch-step-k">3 | THE RULES</div>
+            <div class="vs-rules"><div><span class="ts-start-k">SERIES</span><div class="ch-chips">${[3, 5, 7].map(n => `<button type="button" class="ch-chip${VS.opts.bestOf === n ? ' on' : ''}" data-bo="${n}"${dis(boss)}>BEST OF ${n}</button>`).join('')}</div></div>
+              <div><span class="ts-start-k">BLIND DRAFT</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.blind ? ' on' : ''}" data-blind="0"${dis(boss)}>OFF</button><button type="button" class="ch-chip${VS.opts.blind ? ' on' : ''}" data-blind="1"${dis(boss)}>ON</button></div>
+                <small class="muted">${VS.opts.blind ? 'No ratings and no fit grades until the series is over: pick on what you know.' : 'Ratings and fit grades show while you draft.'}</small></div></div></div>
+          ${[0, 1].map(i => `<div class="ch-step"><div class="ch-step-k">${i + 4} | PLAYER ${i + 1}${me() === i ? ' (YOU)' : ''}</div>
+            <label class="field"><span>NAME</span><input data-name="${i}" maxlength="20" placeholder="Player ${i + 1}" value="${esc(VS.names[i] || '')}"${dis(canAct(i))}></label>${grid(i)}</div>`).join('')}
+          <div class="ch-go">${boss ? `<button type="button" class="btn btn-gold btn-big" id="vsStart"${ready ? '' : ' disabled'}>${ready ? 'START THE DRAFT' : 'WAITING FOR PLAYER 2'}</button>` : '<p class="muted">Your friend starts the draft when you are both set.</p>'}
+            ${VS.cfg ? '<button type="button" class="btn" id="vsBack">BACK TO OUR DRAFT</button>' : ''}<a class="btn" href="#/challenge">ONE PLAYER</a></div>
         </div>`;
       UI.centerChips(app);
-      const redraw = () => { ls.set(VS); setup(app); };
+      bindNet(app);
+      const redraw = () => { push(); setup(app); };
+      app.querySelectorAll('[data-net]').forEach(b => b.addEventListener('click', () => {
+        const v = b.dataset.net;
+        if (v === 'local') hangUp();
+        else if (v === 'host' && NET.role !== 'host') host();
+        else if (v === 'join' && NET.role !== 'guest') { hangUp(); Object.assign(NET, { role: 'guest', code: '', status: 'code', err: '' }); }
+        route();
+      }));
+      const jb = UI.$('#vsJoin', app); if (jb) jb.addEventListener('click', () => { const v = UI.$('#vsCode', app).value; if (v.trim().length >= 4) join(v); });
       app.querySelectorAll('[data-year]').forEach(b => b.addEventListener('click', () => { VS.year = +b.dataset.year; redraw(); }));
+      app.querySelectorAll('[data-bo]').forEach(b => b.addEventListener('click', () => { VS.opts.bestOf = +b.dataset.bo; redraw(); }));
+      app.querySelectorAll('[data-blind]').forEach(b => b.addEventListener('click', () => { VS.opts.blind = b.dataset.blind === '1'; redraw(); }));
       app.querySelectorAll('[data-side]').forEach(b => b.addEventListener('click', () => { VS.teams[+b.dataset.side] = b.dataset.team; redraw(); }));
-      app.querySelectorAll('[data-name]').forEach(inp => inp.addEventListener('input', () => { VS.names[+inp.dataset.name] = inp.value.trim(); ls.set(VS); }));
-      UI.$('#vsStart').addEventListener('click', () => {
-        VS.cfg = { mode: 'versus', year: VS.year, injuries: true, seed: Math.floor(Math.random() * 2147483646) + 1,
+      app.querySelectorAll('[data-name]').forEach(inp => inp.addEventListener('change', () => { VS.names[+inp.dataset.name] = inp.value.trim().slice(0, 20); push(); }));
+      const bk = UI.$('#vsBack', app); if (bk) bk.addEventListener('click', () => go(C.vsOnClock(VS.cfg) >= 0 ? 'draft' : 'series'));
+      const st = UI.$('#vsStart', app);
+      if (st) st.addEventListener('click', () => {
+        VS.names = [0, 1].map(i => { const el = app.querySelector('[data-name="' + i + '"]'); return el && canAct(i) ? el.value.trim().slice(0, 20) : VS.names[i]; });
+        VS.cfg = { mode: 'versus', year: VS.year, bestOf: VS.opts.bestOf, blind: !!VS.opts.blind, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
           sides: [0, 1].map(i => ({ team: VS.teams[i], name: VS.names[i] ? VS.names[i] + "'s " + tOf(teams, VS.teams[i]).name : '', picks: [] })) };
-        VS.pos = ''; VS.q = ''; ls.set(VS);
-        location.hash = '#/challenge/vs/draft';
+        VS.spin = null; VS.spun = []; VS.respins = [1, 1]; VS.shown = 0; VS.pos = ''; VS.q = '';
+        go('draft');
       });
     });
   }
 
-  function playerRow(p, teams, btn) {
+  // ---------- the draft: a spin for every pick ----------
+  const ANIM = {};   // spins already animated on this phone
+  function ovrTag(p, blind) { return blind ? '' : `<b class="ch-ovr ${UI.ovrClass(p.ovr)}">${esc(p.ovr)}</b>`; }
+  function playerRow(p, teams, btn, blind) {
     const t = tOf(teams, p.team);
-    return `<li class="ch-pl"><span class="ch-pl-b"><b>${esc(p.name)}</b><small>${logo(t, 18)} ${esc(String(p.pos || '').replace(/-/g, '/'))}${p.age ? ' | ' + p.age : ''}</small></span>
-      <b class="ch-ovr ${UI.ovrClass(p.ovr)}">${esc(p.ovr)}</b>${btn}</li>`;
+    return `<li class="ch-pl"><span class="ch-pl-b"><b>${esc(p.name)}</b><small>${logo(t, 18)} ${esc(String(p.pos || '').replace(/-/g, '/'))}${p.age ? ' | ' + p.age : ''}</small></span>${ovrTag(p, blind)}${btn}</li>`;
   }
-
+  function spinFor(cfg, d, taken, avoid) {
+    const left = d.teams.filter(t => d.players.some(p => p.team === t.abbr && taken.indexOf(p.id) < 0));
+    let pool = left.filter(t => VS.spun.indexOf(t.abbr) < 0 && t.abbr !== avoid);
+    if (!pool.length) pool = left.filter(t => t.abbr !== avoid);
+    if (!pool.length) pool = left;
+    const t = pool[Math.floor(Math.random() * pool.length)];
+    return t ? { abbr: t.abbr, year: cfg.year, key: cfg.year + ':' + t.abbr, side: C.vsOnClock(cfg), pick: taken.length, n: Date.now() + '-' + Math.floor(Math.random() * 1e6) } : null;
+  }
   function draft(app) {
     const cfg = VS.cfg;
-    if (!cfg) { location.hash = '#/challenge/vs'; return; }
+    if (!cfg) { go('setup'); return; }
     loadThen(app, cfg.year, () => {
       const d = C.seasonData(cfg.year), teams = d.teams, byId = {};
       d.players.concat(d.free).forEach(p => { byId[p.id] = p; });
+      const blind = !!cfg.blind;
       const taken = cfg.sides[0].picks.concat(cfg.sides[1].picks), on = C.vsOnClock(cfg);
       const fives = cfg.sides.map((sd, i) => {
         const t = tOf(teams, sd.team), mine = sd.picks.map(id => byId[id]).filter(Boolean);
-        return `<div class="vs-side${on === i ? ' on' : ''}" style="--c1:${esc(t.colors[0])}"><div class="vs-side-h">${logo(t, 36)}<div><small>${esc(who(i))}</small><b>${esc(sd.name || tName(t))}</b></div></div>
-          <ol>${[0, 1, 2, 3, 4].map(k => `<li>${mine[k] ? esc(mine[k].name) + ' <b class="' + UI.ovrClass(mine[k].ovr) + '">' + esc(mine[k].ovr) + '</b>' : '<span class="muted">-</span>'}</li>`).join('')}</ol></div>`;
+        return `<div class="vs-side${on === i ? ' on' : ''}" style="--c1:${esc(t.colors[0])}"><div class="vs-side-h">${logo(t, 36)}<div><small>${esc(who(i))}${me() === i ? ' (YOU)' : ''}</small><b>${esc(sd.name || tName(t))}</b></div></div>
+          <ol>${[0, 1, 2, 3, 4].map(k => `<li>${mine[k] ? esc(mine[k].name) + (blind ? '' : ' <b class="' + UI.ovrClass(mine[k].ovr) + '">' + esc(mine[k].ovr) + '</b>') : '<span class="muted">-</span>'}</li>`).join('')}</ol></div>`;
       }).join('');
+      const fitCard = (sd, i) => {
+        if (!sd.picks.length) return '';
+        const f = C.lineupFit(sd.picks.map(id => byId[id]).filter(Boolean));
+        if (blind) { f.parts = []; f.word = ''; }
+        return UI.challengeFit(f, { compact: true, title: (who(i) + "'s lineup").toUpperCase() });
+      };
+      const spin = VS.spin && VS.spin.pick === taken.length ? VS.spin : null;
+      const mine = on >= 0 && canAct(on);
       let body = '';
-      if (on >= 0) {
-        const q = (VS.q || '').toLowerCase();
-        const list = d.players.filter(p => taken.indexOf(p.id) < 0 && (!VS.pos || C.primaryPos(p.pos) === VS.pos) && (!q || p.name.toLowerCase().indexOf(q) >= 0));
+      if (on < 0) body = `<div class="ch-ready"><div><b>BOTH FIVES ARE SET.</b><span class="muted"> Best of ${cfg.bestOf || 5}, all five play 48 minutes.</span></div><button type="button" class="btn btn-gold btn-big" id="vsSim">TO THE SERIES</button></div>`;
+      else if (!spin || !ANIM[spin.n]) {
         body = `<div class="vs-clock">ON THE CLOCK: <b>${esc(who(on))}</b> <span class="muted">(pick ${taken.length + 1} of 10)</span></div>
-          <div class="ch-filters">${[''].concat(POS).map(x => `<button type="button" class="ch-chip sm${VS.pos === x ? ' on' : ''}" data-pos="${x}">${x || 'ALL'}</button>`).join('')}
-          <input id="vsQ" placeholder="Search players" value="${esc(VS.q || '')}" autocomplete="off"></div>
-          <ul class="ch-list">${list.slice(0, 80).map(p => playerRow(p, teams, `<button type="button" class="btn btn-small btn-gold" data-add="${esc(p.id)}">TAKE</button>`)).join('')}</ul>`;
-      } else body = `<div class="ch-ready"><div><b>BOTH FIVES ARE SET.</b><span class="muted"> Best of five, all five play 48 minutes.</span></div><button type="button" class="btn btn-gold btn-big" id="vsSim">TO THE SERIES</button></div>`;
-      app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(lbl(cfg.year))} | TWO PLAYERS</div><div class="ch-top-t">THE DRAFT</div></div>
-          <a class="btn btn-small" href="#/challenge/vs">SETUP</a></div>
+          <section class="ch-wheel">${UI.challengeWheel.strip(teams)}<div class="ch-wheel-k">${spin ? 'SPINNING...' : mine ? 'YOUR SPIN' : 'WAITING FOR ' + esc(who(on)).toUpperCase() + ' TO SPIN'}</div>
+          ${mine && !spin ? '<button type="button" class="btn btn-gold btn-big" id="chSpin">SPIN THE WHEEL</button>' : ''}</section>`;
+      } else {
+        const t = tOf(teams, spin.abbr);
+        const ros = d.players.filter(p => p.team === spin.abbr && taken.indexOf(p.id) < 0);
+        body = `<div class="vs-clock">ON THE CLOCK: <b>${esc(who(on))}</b> <span class="muted">(pick ${taken.length + 1} of 10)</span></div>
+          <section class="ch-landed" style="--c1:${esc(t.colors[0])}">${logo(t, 64)}<div><div class="ch-wheel-k">THE WHEEL SAYS</div><div class="ch-landed-t">${esc(tName(t))}</div></div>
+            ${mine && VS.respins[on] > 0 ? '<button type="button" class="btn btn-small" id="chRespin">RE-SPIN (1 LEFT)</button>' : ''}</section>
+          ${mine ? '' : `<p class="muted">${esc(who(on))} is picking from the ${esc(t.name)}.</p>`}
+          <ul class="ch-list">${ros.map(p => playerRow(p, teams, mine ? `<button type="button" class="btn btn-small btn-gold" data-add="${esc(p.id)}">TAKE</button>` : '', blind)).join('')}</ul>`;
+      }
+      app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(lbl(cfg.year))} | TWO PLAYERS | BEST OF ${cfg.bestOf || 5}${blind ? ' | BLIND' : ''}</div><div class="ch-top-t">THE DRAFT</div></div>
+          <button type="button" class="btn btn-small" id="vsSetup">SETUP</button></div>
+        ${netBar()}
         <div class="vs-sides vs-compact">${fives}</div>
-        <div class="vs-fits">${cfg.sides.map((sd, i) => sd.picks.length ? UI.challengeFit(C.lineupFit(sd.picks.map(id => byId[id]).filter(Boolean)), { compact: true, title: (who(i) + "'s lineup").toUpperCase() }) : '').join('')}</div>${body}`;
-      app.querySelectorAll('[data-pos]').forEach(b => b.addEventListener('click', () => { VS.pos = b.dataset.pos; ls.set(VS); draft(app); }));
-      const qi = UI.$('#vsQ');
-      if (qi) qi.addEventListener('input', () => { VS.q = qi.value; ls.set(VS); const pos = qi.selectionStart; draft(app); const n = UI.$('#vsQ'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } });
+        <div class="vs-fits">${cfg.sides.map(fitCard).join('')}</div>${body}`;
+      bindNet(app);
+      UI.$('#vsSetup', app).addEventListener('click', () => go('setup'));
+      // a new spin on either phone: both animate it
+      if (spin && !ANIM[spin.n]) {
+        UI.challengeWheel.animate(app, teams, () => { ANIM[spin.n] = true; if (VS.spin && VS.spin.n === spin.n) draft(app); }, { year: spin.year, abbr: spin.abbr }, { mode: 'versus' });
+      }
+      const sp = UI.$('#chSpin', app);
+      if (sp) sp.addEventListener('click', () => {
+        const s = spinFor(cfg, d, taken, null);
+        if (!s) return;
+        VS.spin = s; VS.spun = VS.spun.concat([s.abbr]); push(); draft(app);
+      });
+      const re = UI.$('#chRespin', app);
+      if (re) re.addEventListener('click', () => {
+        if (!(VS.respins[on] > 0)) return;
+        const s = spinFor(cfg, d, taken, spin && spin.abbr);
+        if (!s) return;
+        VS.respins = VS.respins.slice(); VS.respins[on]--;
+        VS.spin = s; VS.spun = VS.spun.concat([s.abbr]); push(); draft(app);
+      });
       app.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => {
         const i = C.vsOnClock(VS.cfg);
-        if (i < 0) return;
-        VS.cfg.sides[i].picks.push(b.dataset.add); VS.q = ''; ls.set(VS);
+        if (i < 0 || !canAct(i)) return;
+        VS.cfg.sides[i].picks.push(b.dataset.add); VS.spin = null; push();
         draft(app); window.scrollTo(0, 0);
       }));
-      const sim = UI.$('#vsSim');
-      if (sim) sim.addEventListener('click', () => { VS.shown = 0; ls.set(VS); location.hash = '#/challenge/vs/result'; });
+      const sim = UI.$('#vsSim', app);
+      if (sim) sim.addEventListener('click', () => { VS.shown = 0; go('series'); });
     });
   }
 
-  // The series, one game at a time (VS.shown games revealed; the whole series is decided by the seed)
-  function result(app) {
+  // ---------- the series: watch each game on the court, or sim it ----------
+  let RUN = null;   // { key, r } the series with its play-by-play, from the seed
+  let WATCH = 0;    // the game being watched on this phone (1-based), 0 = none
+  let courtCtl = null;
+  function runFor(cfg) {
+    const key = JSON.stringify([cfg.seed, cfg.year, cfg.bestOf, cfg.sides.map(s => s.picks)]);
+    if (!RUN || RUN.key !== key) RUN = { key, r: C.playVersus(cfg, { pbp: true }) };
+    return RUN.r;
+  }
+  function dropCourt() { if (courtCtl) { try { courtCtl.destroy(); } catch (e) { /* gone */ } courtCtl = null; } }
+  function series(app) {
     const cfg = VS.cfg;
-    if (!cfg || C.vsOnClock(cfg) >= 0) { location.hash = '#/challenge/vs' + (cfg ? '/draft' : ''); return; }
+    if (!cfg || C.vsOnClock(cfg) >= 0) { go(cfg ? 'draft' : 'setup'); return; }
     loadThen(app, cfg.year, () => {
       let r;
-      try { r = C.playVersus(cfg); } catch (e) { app.innerHTML = UI.empty('COULD NOT PLAY IT', esc(e.message || e), '<div class="row-btns"><a class="btn" href="#/challenge/vs">BACK</a></div>'); return; }
+      try { r = runFor(cfg); } catch (e) { app.innerHTML = UI.empty('COULD NOT PLAY IT', esc(e.message || e), '<div class="row-btns"><a class="btn" href="#/challenge/vs">BACK</a></div>'); return; }
+      dropCourt();
       const shown = Math.min(r.games.length, VS.shown || 0), done = shown >= r.games.length;
+      if (WATCH && WATCH <= shown) WATCH = 0;
       const S = r.sides, idx = a => (a === S[0].abbr ? 0 : 1);
       const nm = i => cfg.sides[i].name || tName(S[i].team), whoA = a => who(idx(a));
       const w = shown ? r.games[shown - 1].wins : { [S[0].abbr]: 0, [S[1].abbr]: 0 };
-      const P = {}; S.forEach(sd => sd.five.forEach(p => { P[p.id] = p; }));
+      const PL = {}; S.forEach(sd => sd.five.forEach(p => { PL[p.id] = Object.assign({ team: sd.abbr }, p); }));
+      const blindNow = cfg.blind && !done;
+      const homeGames = { 3: 'games 1 and 3', 5: 'games 1, 2 and 5', 7: 'games 1, 2, 5 and 7' }[r.bestOf];
       const score = `<div class="vs-score">${S.map((sd, i) => `<div class="vs-score-t${done && r.winner === sd.abbr ? ' won' : ''}" style="--c1:${esc((sd.team.colors || ['#333'])[0])}">${logo(sd.team, 40)}<span><small>${esc(who(i))}</small><b>${esc(nm(i))}</b></span><strong>${w[sd.abbr]}</strong></div>`).join('<i>-</i>')}</div>`;
       const head = done
-        ? `<section class="vs-win" style="--c1:${esc((S[idx(r.winner)].team.colors || ['#333'])[0])}">${logo(S[idx(r.winner)].team, 64)}<div><div class="ch-hero-k">BEST OF FIVE</div>
+        ? `<section class="vs-win" style="--c1:${esc((S[idx(r.winner)].team.colors || ['#333'])[0])}">${logo(S[idx(r.winner)].team, 64)}<div><div class="ch-hero-k">BEST OF ${r.bestOf}</div>
             <h1>${esc(whoA(r.winner)).toUpperCase()} WINS ${r.wins[r.winner]}-${r.wins[r.winner === S[0].abbr ? S[1].abbr : S[0].abbr]}</h1>
             ${r.mvp ? `<p>Series MVP: <b>${esc(r.mvp.name)}</b> (${esc(r.mvp.line.pts + ' PTS, ' + r.mvp.line.reb + ' REB, ' + r.mvp.line.ast + ' AST')})</p>` : ''}</div></section>`
-        : `<section class="vs-next"><div class="ch-hero-k">BEST OF FIVE | ${esc(lbl(cfg.year))}</div><h1>${shown ? 'GAME ' + (shown + 1) + ' IS NEXT' : 'THE SERIES'}</h1>
-            <p class="muted">${esc(whoA(r.home))} has home court (games 1, 2 and 5). All ten players go the full 48.</p></section>`;
+        : `<section class="vs-next"><div class="ch-hero-k">BEST OF ${r.bestOf} | ${esc(lbl(cfg.year))}${cfg.blind ? ' | BLIND' : ''}</div><h1>${WATCH ? 'GAME ' + WATCH + ', LIVE' : shown ? 'GAME ' + (shown + 1) + ' IS NEXT' : 'THE SERIES'}</h1>
+            <p class="muted">${esc(whoA(r.home))} has home court (${homeGames}). First to ${r.need}. All ten players go the full 48.</p></section>`;
       const games = r.games.slice(0, shown).map(g => {
-        const t = g.top && P[g.top.id];
-        return `<li><span class="vs-g-n">GAME ${g.n}</span><span class="vs-g-s"><b class="${g.winner === g.away ? 'w' : ''}">${esc(whoA(g.away))} ${g.as}</b> @ <b class="${g.winner === g.home ? 'w' : ''}">${esc(whoA(g.home))} ${g.hs}</b>${g.ot ? ' <small>(' + (g.ot > 1 ? g.ot : '') + 'OT)</small>' : ''}</span>${t ? `<small class="muted">${esc(t.name)}: ${g.top.pts} pts, ${g.top.reb} reb, ${g.top.ast} ast</small>` : ''}</li>`;
+        const t = g.top && PL[g.top.id];
+        return `<li><span class="vs-g-n">GAME ${g.n}</span><span class="vs-g-s"><b class="${g.winner === g.away ? 'w' : ''}">${esc(whoA(g.away))} ${g.as}</b> @ <b class="${g.winner === g.home ? 'w' : ''}">${esc(whoA(g.home))} ${g.hs}</b>${g.ot ? ' <small>(' + (g.ot > 1 ? g.ot : '') + 'OT)</small>' : ''}</span>${t ? `<small class="muted">${esc(t.name)}: ${g.top.pts} pts, ${g.top.reb} reb, ${g.top.ast} ast</small>` : ''}
+          <button type="button" class="btn btn-small vs-rewatch" data-rewatch="${g.n}">WATCH</button></li>`;
       }).join('');
       const box = done ? `<section class="vs-box">${UI.header('SERIES BOX', 'Per game')}<div class="vs-sides">${S.map((sd, i) => `<div class="vs-res" style="--c1:${esc((sd.team.colors || ['#333'])[0])}"><div class="vs-side-h">${logo(sd.team, 32)}<div><small>${esc(who(i))}</small><b>${esc(nm(i))}</b></div></div>
-          <table class="vs-tbl"><thead><tr><th class="l">PLAYER</th><th>SPOT</th><th>PTS</th><th>REB</th><th>AST</th><th>FG%</th></tr></thead><tbody>${sd.five.slice().sort((a, b) => C.SLOTS.indexOf(a.slot) - C.SLOTS.indexOf(b.slot)).map(p => { const l = r.lines[p.id] || {}; return `<tr><td class="l">${esc(p.name)}</td><td>${esc(p.slot || '')}</td><td>${l.pts != null ? l.pts : '-'}</td><td>${l.reb != null ? l.reb : '-'}</td><td>${l.ast != null ? l.ast : '-'}</td><td>${l.fgp != null ? l.fgp : '-'}</td></tr>`; }).join('')}</tbody></table></div>`).join('')}</div></section>` : '';
-      app.innerHTML = `${head}${score}
+          <table class="vs-tbl"><thead><tr><th class="l">PLAYER</th><th>SPOT</th><th>OVR</th><th>PTS</th><th>REB</th><th>AST</th><th>FG%</th></tr></thead><tbody>${sd.five.slice().sort((a, b) => C.SLOTS.indexOf(a.slot) - C.SLOTS.indexOf(b.slot)).map(p => { const l = r.lines[p.id] || {}; return `<tr><td class="l">${esc(p.name)}</td><td>${esc(p.slot || '')}</td><td>${esc(p.ovr)}</td><td>${l.pts != null ? l.pts : '-'}</td><td>${l.reb != null ? l.reb : '-'}</td><td>${l.ast != null ? l.ast : '-'}</td><td>${l.fgp != null ? l.fgp : '-'}</td></tr>`; }).join('')}</tbody></table></div>`).join('')}</div></section>` : '';
+      const next = shown + 1;
+      const acts = done
+        ? `<button type="button" class="btn btn-gold" id="vsAgain">RUN IT BACK</button><button type="button" class="btn" id="vsNew">NEW MATCHUP</button>`
+        : WATCH ? `<button type="button" class="btn btn-gold" id="vsFinal">SKIP TO THE FINAL</button>`
+        : `<button type="button" class="btn btn-gold btn-big" id="vsWatch">WATCH GAME ${next}</button><button type="button" class="btn" id="vsNext">SIM GAME ${next}</button><button type="button" class="btn" id="vsAll">SIM THE REST</button>`;
+      app.innerHTML = `${head}${netBar()}${score}
+        ${WATCH ? '<div class="ct-host" id="vsCourt"></div>' : ''}
+        <div class="row-btns center ch-acts">${acts}</div>
         ${games ? `<ol class="vs-glist">${games}</ol>` : ''}
-        <div class="row-btns center ch-acts">${done ? '<button type="button" class="btn btn-gold" id="vsAgain">RUN IT BACK</button><a class="btn" href="#/challenge/vs">NEW MATCHUP</a>'
-          : `<button type="button" class="btn btn-gold btn-big" id="vsNext">PLAY GAME ${shown + 1}</button><button type="button" class="btn" id="vsAll">SIM THE REST</button>`}</div>
         ${box}
-        <div class="vs-fits">${S.map((sd, i) => UI.challengeFit(sd.fit, { compact: true, title: (who(i) + "'s lineup").toUpperCase() })).join('')}</div>`;
-      const go = n => { VS.shown = n; ls.set(VS); result(app); window.scrollTo(0, 0); };
-      const nx = UI.$('#vsNext'); if (nx) nx.addEventListener('click', () => go(shown + 1));
-      const al = UI.$('#vsAll'); if (al) al.addEventListener('click', () => go(r.games.length));
-      const ag = UI.$('#vsAgain'); if (ag) ag.addEventListener('click', () => { VS.cfg.seed = Math.floor(Math.random() * 2147483646) + 1; go(0); });
+        <div class="vs-fits">${S.map((sd, i) => { const f = blindNow ? Object.assign({}, sd.fit, { parts: [], word: '' }) : sd.fit; return UI.challengeFit(f, { compact: true, title: (who(i) + "'s lineup").toUpperCase() }); }).join('')}</div>`;
+      bindNet(app);
+      const reveal = n => { WATCH = 0; dropCourt(); VS.shown = Math.max(VS.shown || 0, n); push(); series(app); window.scrollTo(0, 0); };
+      const watch = n => {
+        WATCH = n; series(app);
+        const el = UI.$('#vsCourt', app), g = r.games[n - 1];
+        if (!el || !g || !g.res || !(window.COURT && window.COURT.available(g.res))) { if (el) el.innerHTML = '<p class="muted">The court view did not load.</p>'; return; }
+        courtCtl = window.COURT.mount(el, { game: g.res, start: 0, autoplay: true, team: a => S[idx(a)].team, player: id => PL[id] || null,
+          logo: (a, size) => logo(S[idx(a)].team, size), onEnd: () => { if (WATCH === n && n > (VS.shown || 0)) reveal(n); } });
+        if (courtCtl && UI.extras && typeof UI.extras.onLeave === 'function') UI.extras.onLeave(dropCourt);
+        el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      };
+      const $ = id => UI.$(id, app);
+      if ($('#vsWatch')) $('#vsWatch').addEventListener('click', () => watch(next));
+      if ($('#vsNext')) $('#vsNext').addEventListener('click', () => reveal(next));
+      if ($('#vsAll')) $('#vsAll').addEventListener('click', () => reveal(r.games.length));
+      if ($('#vsFinal')) $('#vsFinal').addEventListener('click', () => reveal(WATCH));
+      app.querySelectorAll('[data-rewatch]').forEach(b => b.addEventListener('click', () => {
+        const n = +b.dataset.rewatch, g = r.games[n - 1], el = document.createElement('div');
+        dropCourt(); el.className = 'ct-host'; b.closest('li').after(el);
+        courtCtl = window.COURT && window.COURT.available(g.res) ? window.COURT.mount(el, { game: g.res, start: 0, autoplay: true, team: a => S[idx(a)].team, player: id => PL[id] || null, logo: (a, size) => logo(S[idx(a)].team, size) }) : null;
+        if (!courtCtl) el.innerHTML = '<p class="muted">The court view did not load.</p>';
+      }));
+      if ($('#vsAgain')) $('#vsAgain').addEventListener('click', () => { VS.cfg.seed = Math.floor(Math.random() * 2147483646) + 1; VS.shown = 0; WATCH = 0; push(); series(app); window.scrollTo(0, 0); });
+      if ($('#vsNew')) $('#vsNew').addEventListener('click', () => { VS.cfg = null; VS.shown = 0; go('setup'); });
     });
   }
 
   const base = P.challenge;
   P.challenge = function (app, arg) {
     const part = String(arg || '').split('/');
-    if (part[0] !== 'vs') return base.apply(this, arguments);
-    if (part[1] === 'draft') return draft(app);
-    if (part[1] === 'result') return result(app);
+    if (part[0] !== 'vs') { dropCourt(); return base.apply(this, arguments); }
+    APP = app;
+    if (part[1] === 'join' && part[2]) {
+      VS.page = 'setup';
+      if (!(NET.role === 'guest' && NET.code === part[2].toUpperCase())) join(part[2]);
+      if (location.hash !== '#/challenge/vs') { history.replaceState(null, '', '#/challenge/vs'); }
+      return setup(app);
+    }
+    const page = part[1] === 'draft' ? 'draft' : part[1] === 'result' ? 'series' : 'setup';
+    if (page !== 'setup' && !VS.cfg) { VS.page = 'setup'; return setup(app); }
+    VS.page = page;
+    if (page === 'draft') return draft(app);
+    if (page === 'series') return series(app);
     return setup(app);
   };
   Object.keys(base).forEach(k => { P.challenge[k] = base[k]; });

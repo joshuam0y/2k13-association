@@ -260,10 +260,14 @@
     var n = cfg.sides[0].picks.length + cfg.sides[1].picks.length;
     return n >= 10 ? -1 : VS_ORDER[n];
   }
-  // Versus: no season. The two fives meet in a best-of-five series (2-2-1, home court on a coin flip), each
-  // playing all 48 minutes, nobody on the bench. Fit and positions count like everywhere else.
-  // Returns { cfg, label, sides: [{ team, name, five, fit }], games: [...], wins, winner, mvp, lines, home }
-  function playVersus(cfg) {
+  // Versus: no season. The two fives meet in a series (cfg.bestOf 3, 5 or 7; home court on a coin flip:
+  // 1-1-1, 2-2-1 or 2-2-1-1-1), each playing all 48 minutes, nobody on the bench. Fit and positions count
+  // like everywhere else. opts.pbp keeps every game's play-by-play (res) for the court view.
+  // Returns { cfg, label, bestOf, need, sides: [{ team, five, fit }], games: [...], wins, winner, mvp, lines, home }
+  var VS_HOME = { 3: [1, 0, 1], 5: [1, 1, 0, 0, 1], 7: [1, 1, 0, 0, 1, 0, 1] };
+  function playVersus(cfg, opts) {
+    opts = opts || {};
+    var bestOf = VS_HOME[cfg.bestOf] ? +cfg.bestOf : 5, need = Math.ceil(bestOf / 2);
     var E = W.ENGINE, d = seasonData(cfg.year);
     if (!E) throw new Error('Game engine not loaded');
     if (!d) throw new Error('The ' + cfg.year + ' rosters are not loaded.');
@@ -287,10 +291,10 @@
     var A = sides[0].abbr, B = sides[1].abbr, hi = rng() < 0.5 ? 0 : 1, lo = 1 - hi;
     var wins = {}; wins[A] = 0; wins[B] = 0;
     var games = [], tot = {};
-    for (var g = 0; g < 5 && wins[A] < 3 && wins[B] < 3; g++) {
-      var hiHome = g === 0 || g === 1 || g === 4;
+    for (var g = 0; g < bestOf && wins[A] < need && wins[B] < need; g++) {
+      var hiHome = !!VS_HOME[bestOf][g];
       var home = sides[hiHome ? hi : lo], away = sides[hiHome ? lo : hi];
-      var res = E.simGame(home.obj, away.obj, rng, { injuries: {}, norms: norms, era: era, year: cfg.year, pbp: false });
+      var res = E.simGame(home.obj, away.obj, rng, { injuries: {}, norms: norms, era: era, year: cfg.year, pbp: !!opts.pbp });
       var hs = res.home.pts, as = res.away.pts, win = hs > as ? home.abbr : away.abbr;
       wins[win]++;
       var top = null;
@@ -300,8 +304,11 @@
         x.fgm += r.fgm || 0; x.fga += r.fga || 0; x.tpm += r.tpm || 0; x.tpa += r.tpa || 0;
         if (!top || (r.pts || 0) > top.pts) top = { id: r.id, pts: r.pts || 0, reb: (r.oreb || 0) + (r.dreb || 0), ast: r.ast || 0 };
       });
-      games.push({ n: g + 1, home: home.abbr, away: away.abbr, hs: hs, as: as, winner: win, ot: res.ot || 0, top: top,
-        wins: (function () { var w = {}; w[A] = wins[A]; w[B] = wins[B]; return w; })() });
+      var gm = { n: g + 1, home: home.abbr, away: away.abbr, hs: hs, as: as, winner: win, ot: res.ot || 0, top: top,
+        wins: (function () { var w = {}; w[A] = wins[A]; w[B] = wins[B]; return w; })() };
+      if (opts.pbp) gm.res = { id: 'vs' + (g + 1), home: { abbr: res.home.abbr, pts: hs, box: res.home.box }, away: { abbr: res.away.abbr, pts: as, box: res.away.box },
+        quarters: res.quarters, ot: res.ot, pbp: res.pbp, pbx: res.pbx, pbl: res.pbl };
+      games.push(gm);
     }
     var winner = wins[A] > wins[B] ? A : B;
     var r1 = function (x) { return Math.round(x * 10) / 10; };
@@ -310,7 +317,7 @@
       fgp: x.fga ? r1(100 * x.fgm / x.fga) : null, tpp: x.tpa ? r1(100 * x.tpm / x.tpa) : null }; });
     var win5 = sides[winner === A ? 0 : 1].five;
     var mvp = win5.slice().sort(function (x, y) { var a = lines[x.id] || {}, b = lines[y.id] || {}; return ((b.pts || 0) + (b.reb || 0) + (b.ast || 0)) - ((a.pts || 0) + (a.reb || 0) + (a.ast || 0)); })[0];
-    return { cfg: cfg, label: d.label, home: sides[hi].abbr, games: games, wins: wins, winner: winner,
+    return { cfg: cfg, label: d.label, bestOf: bestOf, need: need, home: sides[hi].abbr, games: games, wins: wins, winner: winner,
       mvp: mvp ? { id: mvp.id, name: mvp.name, line: lines[mvp.id] } : null, lines: lines,
       sides: sides.map(function (sd) { return { abbr: sd.abbr, team: { abbr: sd.team.abbr, city: sd.team.city, name: sd.team.name, colors: sd.team.colors, logo: sd.team.logo, logoNoRef: sd.team.logoNoRef },
         fit: sd.fit, five: sd.five.map(function (p) { return { id: p.id, name: p.name, pos: p.pos, ovr: p.baseOvr || p.ovr, nbaId: p.nbaId || null, slot: SLOTS[p.slot] }; }) }; }) };

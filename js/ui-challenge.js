@@ -198,6 +198,8 @@
       <ul class="ch-fit-slots">${slots}</ul>${parts ? `<ul class="ch-fit-parts">${parts}</ul>` : ''}</section>`;
   }
   UI.challengeFit = fitHtml;
+  // the wheel, for js/ui-versus.js: UI.challengeWheel.strip(teams) and .animate(app, teams, done, spin, cfg)
+  UI.challengeWheel = { strip: teams => wheelStrip(teams), animate: (app, teams, done, s, cfg) => animateSpin(app, teams, done, s, cfg) };
   function slotsHtml(list, teams, removable) {
     const out = [];
     for (let i = 0; i < 5; i++) {

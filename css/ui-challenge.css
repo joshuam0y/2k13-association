@@ -352,3 +352,25 @@
   .vs-score-t { padding: 8px; gap: 6px; } .vs-score-t .logo { --sz: 28px !important; } .vs-score-t strong { font-size: 34px; }
 }
 @media (max-width: 700px) { .ch-fit-parts li { font-size: 10.5px; letter-spacing: .02em; padding: 6px 7px; gap: 4px; } .ch-fit-parts li b { letter-spacing: .04em; } }
+
+/* versus online and rules */
+.vs-net { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0; padding: 10px 12px; border: 1px solid var(--line2); background: var(--bg2); font-size: 14px; }
+.vs-net > span:nth-child(2) { flex: 1 1 200px; }
+.vs-net-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+.vs-net.connected .vs-net-dot { background: #5fd38a; box-shadow: 0 0 8px #5fd38a; }
+.vs-net.waiting .vs-net-dot, .vs-net.connecting .vs-net-dot, .vs-net.starting .vs-net-dot { background: var(--gold); animation: vsPulse 1s infinite alternate; }
+.vs-net.lost .vs-net-dot, .vs-net.error .vs-net-dot { background: #ff6b6b; }
+@keyframes vsPulse { from { opacity: .35; } to { opacity: 1; } }
+.vs-join { display: flex; gap: 10px; align-items: flex-end; margin-top: 10px; }
+.vs-join .field { flex: 1; margin: 0; }
+.vs-join input { text-transform: uppercase; letter-spacing: .3em; font-family: var(--display); font-size: 20px; }
+.vs-rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 20px; }
+.vs-rules small { display: block; margin-top: 6px; font-size: 12px; }
+.vs-glist li { position: relative; }
+.vs-rewatch { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); }
+.vs-glist .ct-host { grid-column: 1 / -1; }
+@media (max-width: 700px) {
+  .vs-seg3 { grid-template-columns: minmax(0, 1fr) !important; }
+  .vs-seg3 > .ch-seg-b { grid-column: auto !important; }
+  .vs-rules { grid-template-columns: minmax(0, 1fr); }
+}

@@ -124,6 +124,8 @@ ok(r08.w + r08.l === 82 && r08.w >= 50, "a 2007-08 super team in Seattle: " + r0
   ok(ww === 3 && n >= 3 && n <= 5 && vr.games.every(g => g.hs !== g.as), "versus: a best-of-five series (" + vr.winner + " " + vr.wins.BOS + "-" + vr.wins.NYK + ", " + n + " games)");
   const ironmen = vr.sides[0].five.concat(vr.sides[1].five).every(p => vr.lines[p.id] && vr.lines[p.id].mpg >= 47);
   ok(ironmen && vr.mvp, "all ten play the full 48 minutes (MVP " + (vr.mvp && vr.mvp.name) + ")");
+  [3, 7].forEach(bo => { const x = C.playVersus(Object.assign({}, vcfg, { bestOf: bo }), { pbp: true }); const need = Math.ceil(bo / 2);
+    ok(x.wins[x.winner] === need && x.games.length >= need && x.games.length <= bo && x.games.every(g => g.res && g.res.pbp && g.res.pbp.length > 100), "best of " + bo + ": first to " + need + " (" + x.games.length + " games, each with its play-by-play for the court)"); });
   ok(vr.sides.every(sd => sd.fit && sd.fit.slots.filter(x => x.id).length === 5 && sd.fit.parts.length === 6 && sd.five.every(p => p.slot)), "each five gets its spots and fit grades");
 }
 // fit: five centers play out of position and grade badly; a real lineup grades well
