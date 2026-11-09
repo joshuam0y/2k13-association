@@ -374,3 +374,25 @@
   .vs-seg3 > .ch-seg-b { grid-column: auto !important; }
   .vs-rules { grid-template-columns: minmax(0, 1fr); }
 }
+.ch-letters { margin: 8px 0 10px; }
+.ch-letters .ch-chip { min-width: 38px; justify-content: center; }
+
+/* versus pick clock and reactions */
+.vs-timer { position: relative; height: 30px; margin: 4px 0 10px; border: 1px solid var(--line2); background: var(--bg2); overflow: hidden; }
+.vs-timer i { position: absolute; left: 0; top: 0; bottom: 0; width: var(--w, 100%); background: linear-gradient(90deg, var(--gold), var(--gold2)); opacity: .35; transition: width .25s linear; }
+.vs-timer span { position: relative; display: flex; align-items: center; justify-content: center; height: 100%; font-family: var(--display); font-size: 17px; letter-spacing: .1em; }
+.vs-timer span::after { content: ' SEC'; font-size: 11px; margin-left: 4px; color: var(--muted); }
+.vs-timer.low i { background: #ff6b6b; opacity: .5; } .vs-timer.low span { color: #ff9a9a; }
+.vs-react { position: sticky; bottom: calc(var(--mb-h, var(--bar-h, 56px)) + 8px); z-index: 20; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 14px -4px 0; padding: 8px 6px; background: rgba(5, 5, 5, .94); border: 1px solid var(--line2); }
+.vs-react::-webkit-scrollbar { display: none; }
+.vs-react button { flex: none; min-width: 44px; height: 40px; border: 1px solid var(--line2); background: var(--bg3); color: #fff; font-size: 20px; cursor: pointer; border-radius: 20px; }
+.vs-react button.word { font-family: var(--display); font-size: 13px; letter-spacing: .1em; padding: 0 12px; }
+.vs-react button:active { transform: scale(.92); }
+.vs-bubbles { position: fixed; left: 50%; top: 96px; transform: translateX(-50%); z-index: 80; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+.vs-bubble { display: flex; flex-direction: column; align-items: center; padding: 8px 16px 10px; border-radius: 16px; background: #111; border: 1px solid var(--gold); box-shadow: 0 10px 30px rgba(0, 0, 0, .7); animation: vsPop .25s ease-out; transition: opacity .5s, transform .5s; }
+.vs-bubble small { font-family: var(--display); font-size: 11px; letter-spacing: .14em; color: var(--gold); }
+.vs-bubble b { font-size: 34px; line-height: 1.1; }
+.vs-bubble.word b { font-family: var(--display); font-size: 24px; letter-spacing: .08em; }
+.vs-bubble.mine { border-color: var(--line2); }
+.vs-bubble.go { opacity: 0; transform: translateY(-14px); }
+@keyframes vsPop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }

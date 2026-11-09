@@ -14,16 +14,16 @@
     get() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; } },
     set(v) { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) { /* private mode */ } }
   };
-  const FRESH = () => ({ year: 2008, teams: ['BOS', 'LAL'], names: ['', ''], opts: { bestOf: 5, blind: false }, cfg: null, shown: 0, page: 'setup', spin: null, spun: [], respins: [1, 1], pos: '', q: '' });
+  const FRESH = () => ({ year: 2008, teams: ['BOS', 'LAL'], names: ['', ''], opts: { bestOf: 5, blind: false, timer: 30 }, cfg: null, shown: 0, page: 'setup', spin: null, spun: [], respins: [1, 1], turn: null, pos: '', q: '' });
   let VS = Object.assign(FRESH(), ls.get() || {});
-  VS.opts = Object.assign({ bestOf: 5, blind: false }, VS.opts || {});
+  VS.opts = Object.assign({ bestOf: 5, blind: false, timer: 30 }, VS.opts || {});
   const POS = ['PG', 'SG', 'SF', 'PF', 'C'];
   const lbl = y => (y - 1) + '-' + String(y).slice(2);
   const logo = (t, n) => UI.logoFor(t || { abbr: '?' }, n);
   const tOf = (teams, a) => teams.find(t => t.abbr === a) || { abbr: a, city: a, name: '', colors: ['#333', '#777'] };
   const tName = t => ((t.city || '') + ' ' + (t.name || '')).trim();
   const who = i => VS.names[i] || ('PLAYER ' + (i + 1));
-  const SHARED = ['year', 'teams', 'names', 'opts', 'cfg', 'shown', 'page', 'spin', 'spun', 'respins'];
+  const SHARED = ['year', 'teams', 'names', 'opts', 'cfg', 'shown', 'page', 'spin', 'spun', 'respins', 'turn'];
   let APP = null;   // the page element the versus screens draw into
 
   // ---------- online (PeerJS) ----------
@@ -49,6 +49,7 @@
     if (!m || typeof m !== 'object') return;
     if (m.t === 'hello' && NET.role === 'host') { if (m.name) VS.names[1] = String(m.name).slice(0, 20); push(); route(); return; }
     if (m.t === 'state' && m.s) { SHARED.forEach(k => { if (k in m.s) VS[k] = m.s[k]; }); ls.set(VS); route(); }
+    if (m.t === 'react' && REACTS.indexOf(m.r) >= 0) bubble(m.r, String(m.name || '').slice(0, 20), false);
   }
   function wire(c) {
     NET.conn = c;
@@ -112,6 +113,34 @@
     const lv = UI.$('#vsLeave', app); if (lv) lv.addEventListener('click', () => { hangUp(); route(); });
   }
 
+  // ---------- trash talk: quick reactions that pop up on both phones (online) ----------
+  const REACTS = ['🔥', '😂', '😬', '👀', '🧱', '🐐', 'REACH', 'STEAL', 'COOKED', 'GG'];
+  let lastReact = 0;
+  function bubble(r, name, mine) {
+    let host = document.getElementById('vsBubbles');
+    if (!host) { host = document.createElement('div'); host.id = 'vsBubbles'; host.className = 'vs-bubbles'; document.body.appendChild(host); }
+    const b = document.createElement('div');
+    b.className = 'vs-bubble' + (mine ? ' mine' : '') + (/^[A-Z]/.test(r) ? ' word' : '');
+    b.innerHTML = `<small>${esc(name)}</small><b>${esc(r)}</b>`;
+    host.appendChild(b);
+    setTimeout(() => b.classList.add('go'), 2400);
+    setTimeout(() => b.remove(), 3000);
+  }
+  function reactBar() {
+    if (!linked()) return '';
+    return `<div class="vs-react" role="group" aria-label="Reactions">${REACTS.map(r => `<button type="button" data-react="${esc(r)}"${/^[A-Z]/.test(r) ? ' class="word"' : ''}>${esc(r)}</button>`).join('')}</div>`;
+  }
+  function bindReact(app) {
+    app.querySelectorAll('[data-react]').forEach(b => b.addEventListener('click', () => {
+      const now = Date.now();
+      if (now - lastReact < 1200) return;
+      lastReact = now;
+      const r = b.dataset.react, name = who(me());
+      bubble(r, name, true);
+      if (linked()) try { NET.conn.send({ t: 'react', r, name }); } catch (e) { /* closed */ }
+    }));
+  }
+
   // ---------- routing ----------
   function route() {
     const target = '#/challenge/vs' + (VS.page === 'draft' ? '/draft' : VS.page === 'series' ? '/result' : '');
@@ -129,6 +158,7 @@
 
   // ---------- setup ----------
   function setup(app) {
+    stopTick();
     loadThen(app, VS.year, () => {
       const d = C.seasonData(VS.year), teams = d.teams.slice().sort((a, b) => tName(a).localeCompare(tName(b)));
       VS.teams = VS.teams.map((a, i) => teams.some(t => t.abbr === a) ? a : teams[i].abbr);
@@ -151,6 +181,8 @@
           <div class="ch-step"><div class="ch-step-k">2 | THE SEASON</div><div class="ch-chips ch-swipe">${C.SEASONS.map(s => `<button type="button" class="ch-chip${VS.year === s.year ? ' on' : ''}" data-year="${s.year}"${dis(boss)}>${esc(s.label)}</button>`).join('')}</div></div>
           <div class="ch-step"><div class="ch-step-k">3 | THE RULES</div>
             <div class="vs-rules"><div><span class="ts-start-k">SERIES</span><div class="ch-chips">${[3, 5, 7].map(n => `<button type="button" class="ch-chip${VS.opts.bestOf === n ? ' on' : ''}" data-bo="${n}"${dis(boss)}>BEST OF ${n}</button>`).join('')}</div></div>
+              <div><span class="ts-start-k">PICK TIMER</span><div class="ch-chips">${[[30, '30 SEC'], [60, '60 SEC'], [0, 'OFF']].map(([v, l]) => `<button type="button" class="ch-chip${(VS.opts.timer || 0) === v ? ' on' : ''}" data-timer="${v}"${dis(boss)}>${l}</button>`).join('')}</div>
+                <small class="muted">${VS.opts.timer ? 'Run out of time and the wheel spins for you, or you get the best player on its team.' : 'No clock.'}</small></div>
               <div><span class="ts-start-k">BLIND DRAFT</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.blind ? ' on' : ''}" data-blind="0"${dis(boss)}>OFF</button><button type="button" class="ch-chip${VS.opts.blind ? ' on' : ''}" data-blind="1"${dis(boss)}>ON</button></div>
                 <small class="muted">${VS.opts.blind ? 'No ratings and no fit grades until the series is over: pick on what you know.' : 'Ratings and fit grades show while you draft.'}</small></div></div></div>
           ${[0, 1].map(i => `<div class="ch-step"><div class="ch-step-k">${i + 4} | PLAYER ${i + 1}${me() === i ? ' (YOU)' : ''}</div>
@@ -172,15 +204,17 @@
       app.querySelectorAll('[data-year]').forEach(b => b.addEventListener('click', () => { VS.year = +b.dataset.year; redraw(); }));
       app.querySelectorAll('[data-bo]').forEach(b => b.addEventListener('click', () => { VS.opts.bestOf = +b.dataset.bo; redraw(); }));
       app.querySelectorAll('[data-blind]').forEach(b => b.addEventListener('click', () => { VS.opts.blind = b.dataset.blind === '1'; redraw(); }));
+      app.querySelectorAll('[data-timer]').forEach(b => b.addEventListener('click', () => { VS.opts.timer = +b.dataset.timer; redraw(); }));
       app.querySelectorAll('[data-side]').forEach(b => b.addEventListener('click', () => { VS.teams[+b.dataset.side] = b.dataset.team; redraw(); }));
       app.querySelectorAll('[data-name]').forEach(inp => inp.addEventListener('change', () => { VS.names[+inp.dataset.name] = inp.value.trim().slice(0, 20); push(); }));
       const bk = UI.$('#vsBack', app); if (bk) bk.addEventListener('click', () => go(C.vsOnClock(VS.cfg) >= 0 ? 'draft' : 'series'));
       const st = UI.$('#vsStart', app);
       if (st) st.addEventListener('click', () => {
         VS.names = [0, 1].map(i => { const el = app.querySelector('[data-name="' + i + '"]'); return el && canAct(i) ? el.value.trim().slice(0, 20) : VS.names[i]; });
-        VS.cfg = { mode: 'versus', year: VS.year, bestOf: VS.opts.bestOf, blind: !!VS.opts.blind, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
+        VS.cfg = { mode: 'versus', year: VS.year, bestOf: VS.opts.bestOf, blind: !!VS.opts.blind, timer: +VS.opts.timer || 0, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
           sides: [0, 1].map(i => ({ team: VS.teams[i], name: VS.names[i] ? VS.names[i] + "'s " + tOf(teams, VS.teams[i]).name : '', picks: [] })) };
         VS.spin = null; VS.spun = []; VS.respins = [1, 1]; VS.shown = 0; VS.pos = ''; VS.q = '';
+        VS.turn = turnFor(VS.cfg, 0, 'spin');
         go('draft');
       });
     });
@@ -201,6 +235,13 @@
     const t = pool[Math.floor(Math.random() * pool.length)];
     return t ? { abbr: t.abbr, year: cfg.year, key: cfg.year + ':' + t.abbr, side: C.vsOnClock(cfg), pick: taken.length, n: Date.now() + '-' + Math.floor(Math.random() * 1e6) } : null;
   }
+  // the pick clock: { pick, phase: 'spin' | 'pick', until } shared by both phones. When it runs out the
+  // player on the clock spins (or takes the best player on the team the wheel landed on); online, the
+  // other phone steps in five seconds later if the first one is gone.
+  const SPIN_MS = 4700;
+  function turnFor(cfg, pick, phase) { return cfg && cfg.timer ? { pick, phase, until: Date.now() + cfg.timer * 1000 + (phase === 'pick' ? SPIN_MS : 0) } : null; }
+  let TICK = null;
+  function stopTick() { if (TICK) { clearInterval(TICK); TICK = null; } }
   function draft(app) {
     const cfg = VS.cfg;
     if (!cfg) { go('setup'); return; }
@@ -230,19 +271,44 @@
           ${mine && !spin ? '<button type="button" class="btn btn-gold btn-big" id="chSpin">SPIN THE WHEEL</button>' : ''}</section>`;
       } else {
         const t = tOf(teams, spin.abbr);
-        const ros = d.players.filter(p => p.team === spin.abbr && taken.indexOf(p.id) < 0);
+        const ros = UI.challengeAlpha(d.players.filter(p => p.team === spin.abbr && taken.indexOf(p.id) < 0));
         body = `<div class="vs-clock">ON THE CLOCK: <b>${esc(who(on))}</b> <span class="muted">(pick ${taken.length + 1} of 10)</span></div>
           <section class="ch-landed" style="--c1:${esc(t.colors[0])}">${logo(t, 64)}<div><div class="ch-wheel-k">THE WHEEL SAYS</div><div class="ch-landed-t">${esc(tName(t))}</div></div>
             ${mine && VS.respins[on] > 0 ? '<button type="button" class="btn btn-small" id="chRespin">RE-SPIN (1 LEFT)</button>' : ''}</section>
           ${mine ? '' : `<p class="muted">${esc(who(on))} is picking from the ${esc(t.name)}.</p>`}
           <ul class="ch-list">${ros.map(p => playerRow(p, teams, mine ? `<button type="button" class="btn btn-small btn-gold" data-add="${esc(p.id)}">TAKE</button>` : '', blind)).join('')}</ul>`;
       }
-      app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(lbl(cfg.year))} | TWO PLAYERS | BEST OF ${cfg.bestOf || 5}${blind ? ' | BLIND' : ''}</div><div class="ch-top-t">THE DRAFT</div></div>
+      const turn = on >= 0 && VS.turn && VS.turn.pick === taken.length ? VS.turn : null;
+      const clock = turn ? `<div class="vs-timer" id="vsTimer"><i style="--w:100%"></i><span>${Math.max(0, Math.ceil((turn.until - Date.now()) / 1000))}</span></div>` : '';
+      app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(lbl(cfg.year))} | TWO PLAYERS | BEST OF ${cfg.bestOf || 5}${blind ? ' | BLIND' : ''}${cfg.timer ? ' | ' + cfg.timer + ' SEC CLOCK' : ''}</div><div class="ch-top-t">THE DRAFT</div></div>
           <button type="button" class="btn btn-small" id="vsSetup">SETUP</button></div>
         ${netBar()}
         <div class="vs-sides vs-compact">${fives}</div>
-        <div class="vs-fits">${cfg.sides.map(fitCard).join('')}</div>${body}`;
-      bindNet(app);
+        <div class="vs-fits">${cfg.sides.map(fitCard).join('')}</div>${clock}${body}${reactBar()}`;
+      bindNet(app); bindReact(app);
+      // the clock
+      stopTick();
+      if (turn) {
+        const total = (cfg.timer || 30) * 1000 + (turn.phase === 'pick' ? SPIN_MS : 0);
+        const tick = () => {
+          const el = UI.$('#vsTimer', app);
+          if (!el || !VS.turn || VS.turn !== turn) { stopTick(); return; }
+          const left = turn.until - Date.now();
+          el.querySelector('span').textContent = Math.max(0, Math.ceil(left / 1000));
+          el.querySelector('i').style.setProperty('--w', Math.max(0, Math.min(100, 100 * left / total)) + '%');
+          el.classList.toggle('low', left < 10000);
+          const actor = canAct(on) ? 0 : online() ? 5000 : null;   // the player on the clock, else the other phone a bit later
+          if (actor === null || left > -actor) return;
+          stopTick();
+          if (turn.phase === 'spin' && !VS.spin) { const s2 = spinFor(cfg, d, taken, null); if (s2) { VS.spin = s2; VS.spun = VS.spun.concat([s2.abbr]); VS.turn = turnFor(cfg, taken.length, 'pick'); push(); draft(app); } }
+          else if (turn.phase === 'pick' && VS.spin && VS.spin.pick === taken.length) {
+            const pool = d.players.filter(p => p.team === VS.spin.abbr && taken.indexOf(p.id) < 0).sort((a, b) => b.ovr - a.ovr);
+            if (pool[0]) { VS.cfg.sides[on].picks.push(pool[0].id); VS.spin = null; VS.turn = turnFor(cfg, taken.length + 1, 'spin'); push(); UI.toast('Time: ' + who(on) + ' gets ' + pool[0].name + '.'); draft(app); }
+          }
+        };
+        TICK = setInterval(tick, 250);
+        tick();
+      }
       UI.$('#vsSetup', app).addEventListener('click', () => go('setup'));
       // a new spin on either phone: both animate it
       if (spin && !ANIM[spin.n]) {
@@ -252,7 +318,7 @@
       if (sp) sp.addEventListener('click', () => {
         const s = spinFor(cfg, d, taken, null);
         if (!s) return;
-        VS.spin = s; VS.spun = VS.spun.concat([s.abbr]); push(); draft(app);
+        VS.spin = s; VS.spun = VS.spun.concat([s.abbr]); VS.turn = turnFor(cfg, taken.length, 'pick'); push(); draft(app);
       });
       const re = UI.$('#chRespin', app);
       if (re) re.addEventListener('click', () => {
@@ -260,12 +326,12 @@
         const s = spinFor(cfg, d, taken, spin && spin.abbr);
         if (!s) return;
         VS.respins = VS.respins.slice(); VS.respins[on]--;
-        VS.spin = s; VS.spun = VS.spun.concat([s.abbr]); push(); draft(app);
+        VS.spin = s; VS.spun = VS.spun.concat([s.abbr]); VS.turn = turnFor(cfg, taken.length, 'pick'); push(); draft(app);
       });
       app.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => {
         const i = C.vsOnClock(VS.cfg);
         if (i < 0 || !canAct(i)) return;
-        VS.cfg.sides[i].picks.push(b.dataset.add); VS.spin = null; push();
+        VS.cfg.sides[i].picks.push(b.dataset.add); VS.spin = null; VS.turn = turnFor(VS.cfg, taken.length + 1, 'spin'); push();
         draft(app); window.scrollTo(0, 0);
       }));
       const sim = UI.$('#vsSim', app);
@@ -284,6 +350,7 @@
   }
   function dropCourt() { if (courtCtl) { try { courtCtl.destroy(); } catch (e) { /* gone */ } courtCtl = null; } }
   function series(app) {
+    stopTick();
     const cfg = VS.cfg;
     if (!cfg || C.vsOnClock(cfg) >= 0) { go(cfg ? 'draft' : 'setup'); return; }
     loadThen(app, cfg.year, () => {
@@ -322,8 +389,8 @@
         <div class="row-btns center ch-acts">${acts}</div>
         ${games ? `<ol class="vs-glist">${games}</ol>` : ''}
         ${box}
-        <div class="vs-fits">${S.map((sd, i) => { const f = blindNow ? Object.assign({}, sd.fit, { parts: [], word: '' }) : sd.fit; return UI.challengeFit(f, { compact: true, title: (who(i) + "'s lineup").toUpperCase() }); }).join('')}</div>`;
-      bindNet(app);
+        <div class="vs-fits">${S.map((sd, i) => { const f = blindNow ? Object.assign({}, sd.fit, { parts: [], word: '' }) : sd.fit; return UI.challengeFit(f, { compact: true, title: (who(i) + "'s lineup").toUpperCase() }); }).join('')}</div>${reactBar()}`;
+      bindNet(app); bindReact(app);
       const reveal = n => { WATCH = 0; dropCourt(); VS.shown = Math.max(VS.shown || 0, n); push(); series(app); window.scrollTo(0, 0); };
       const watch = n => {
         WATCH = n; series(app);
@@ -353,7 +420,7 @@
   const base = P.challenge;
   P.challenge = function (app, arg) {
     const part = String(arg || '').split('/');
-    if (part[0] !== 'vs') { dropCourt(); return base.apply(this, arguments); }
+    if (part[0] !== 'vs') { dropCourt(); stopTick(); return base.apply(this, arguments); }
     APP = app;
     if (part[1] === 'join' && part[2]) {
       VS.page = 'setup';

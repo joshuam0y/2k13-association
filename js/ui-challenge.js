@@ -23,7 +23,7 @@
   let SETUP = Object.assign({ mode: 'year', year: 2013, build: 'free', team: '', name: '', injuries: true, era: 2013 }, ls.get(KEY_SETUP) || {});
   let CUR = null;        // { cfg, used: [], respins, spin, dr }
   let RUN = null;        // the season being simmed { ch, fast, paused }
-  let VIEW = { pos: '', q: '', team: '', season: '' };
+  let VIEW = { pos: '', q: '', team: '', season: '', letter: '' };
   let ODDS = null;       // run it back 10 times
 
   // ---------- small helpers ----------
@@ -173,7 +173,7 @@
       ensureData(cfg, app, () => {
         try {
           CUR = { cfg, used: [], respins: 1, spin: null, dr: isAll ? C.newDraft(cfg) : null };
-          VIEW = { pos: '', q: '', team: '', season: '' };
+          VIEW = { pos: '', q: '', team: '', season: '', letter: '' };
           saveCur();
           location.hash = '#/challenge/pick';
         } catch (e) { UI.toast('Could not start: ' + (e && e.message ? e.message : e), 'error'); }
@@ -200,6 +200,20 @@
   UI.challengeFit = fitHtml;
   // the wheel, for js/ui-versus.js: UI.challengeWheel.strip(teams) and .animate(app, teams, done, spin, cfg)
   UI.challengeWheel = { strip: teams => wheelStrip(teams), animate: (app, teams, done, s, cfg) => animateSpin(app, teams, done, s, cfg) };
+  // Draft lists go A to Z by last name, never by rating (the order would give the ratings away). A long list
+  // shows one letter at a time (the letter bar) unless a search or a team narrows it.
+  const sortKey = n => { const w = String(n || '').split(' '); const last = w.length > 1 && /^(jr\.?|sr\.?|ii|iii|iv)$/i.test(w[w.length - 1]) ? w[w.length - 2] : w[w.length - 1]; return (last + ' ' + w.join(' ')).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); };
+  const alpha = list => list.slice().sort((a, b) => sortKey(a.name).localeCompare(sortKey(b.name)));
+  UI.challengeAlpha = alpha;
+  function byLetter(list, narrowed) {
+    const sorted = alpha(list);
+    if (narrowed || sorted.length <= 60) return { rows: sorted, bar: '' };
+    const letter = p => sortKey(p.name).charAt(0).toUpperCase();
+    const letters = [...new Set(sorted.map(letter))];
+    if (!letters.includes(VIEW.letter)) VIEW.letter = letters[0];
+    const bar = `<div class="ch-letters ch-swipe">${letters.map(l => `<button type="button" class="ch-chip sm${l === VIEW.letter ? ' on' : ''}" data-letter="${l}">${l}</button>`).join('')}</div>`;
+    return { rows: sorted.filter(p => letter(p) === VIEW.letter), bar };
+  }
   function slotsHtml(list, teams, removable) {
     const out = [];
     for (let i = 0; i < 5; i++) {
@@ -235,8 +249,8 @@
       body = `<div class="ch-filters">${[''].concat(POS).map(x => `<button type="button" class="ch-chip sm${VIEW.pos === x ? ' on' : ''}" data-pos="${x}">${x || 'ALL'}</button>`).join('')}
           <select id="chTeamF" aria-label="Team"><option value="">ALL TEAMS</option>${teams.slice().sort((a, b) => tName(a).localeCompare(tName(b))).map(t => `<option value="${esc(t.abbr)}"${VIEW.team === t.abbr ? ' selected' : ''}>${esc(tName(t))}</option>`).join('')}</select>
           <input id="chQ" placeholder="Search players" value="${esc(VIEW.q)}" autocomplete="off"></div>
-        <ul class="ch-list">${list.slice(0, 80).map(p => playerRow(p, teams, `<button type="button" class="btn btn-small btn-gold" data-add="${esc(p.id)}">ADD</button>`)).join('')}</ul>
-        ${list.length > 80 ? `<p class="muted ch-small">Top 80 of ${list.length} shown. Search or filter to find more.</p>` : list.length ? '' : '<p class="muted">Nobody matches.</p>'}`;
+        ${(() => { const L = byLetter(list, !!(q || VIEW.team)); return L.bar + `<ul class="ch-list">${L.rows.map(p => playerRow(p, teams, `<button type="button" class="btn btn-small btn-gold" data-add="${esc(p.id)}">ADD</button>`)).join('')}</ul>`; })()}
+        ${list.length ? '' : '<p class="muted">Nobody matches.</p>'}`;
     }
     app.innerHTML = `
       <div class="ch-top">${logo(me, 48)}<div><div class="ch-top-k">${esc(seasonLabel(cfg.year))} | ${esc(BUILD[cfg.build].label)}</div><div class="ch-top-t">${esc(cfg.name || tName(me))}</div></div>
@@ -256,7 +270,7 @@
         <button type="button" class="btn btn-gold btn-big" id="chSpin">SPIN THE WHEEL</button><p class="muted ch-small">${left} spin${left === 1 ? '' : 's'} left${CUR.respins ? ', one re-spin saved' : ''}.</p></section>`;
     }
     const s = CUR.spin, t = cfg.mode === 'alltime' ? (C.eraTeam(s.year, s.abbr) || teamOf(teams, s.abbr)) : teamOf(teams, s.abbr);
-    const ros = C.spinRoster(cfg, s, CUR.dr);
+    const ros = alpha(C.spinRoster(cfg, s, CUR.dr));
     return `<section class="ch-landed" style="--c1:${esc(t.colors[0])}">${logo(t, 64)}<div><div class="ch-wheel-k">THE WHEEL SAYS</div><div class="ch-landed-t">${cfg.mode === 'alltime' ? esc(seasonLabel(s.year)) + ' ' : ''}${esc(tName(t))}</div></div>
         ${CUR.respins ? '<button type="button" class="btn btn-small" id="chRespin">RE-SPIN (1 LEFT)</button>' : ''}</section>
       <ul class="ch-list">${ros.map(p => playerRow(p, teams, `<button type="button" class="btn btn-small btn-gold" data-take="${esc(p.key || p.id)}">TAKE</button>`)).join('')}</ul>`;
@@ -322,6 +336,8 @@
     const cfg = CUR.cfg;
     const redraw = () => { saveCur(); cfg.mode === 'alltime' ? drawDraft(app) : drawPick(app); };
     app.querySelectorAll('[data-pos]').forEach(b => b.addEventListener('click', () => { VIEW.pos = b.dataset.pos; redraw(); }));
+    app.querySelectorAll('[data-letter]').forEach(b => b.addEventListener('click', () => { VIEW.letter = b.dataset.letter; redraw(); }));
+    UI.centerChips(app);
     const tf = UI.$('#chTeamF');
     if (tf) tf.addEventListener('change', () => { VIEW.team = tf.value; redraw(); });
     const sf = UI.$('#chSeasonF');
@@ -397,8 +413,8 @@
       board = `<div class="ch-filters">${[''].concat(POS).map(x => `<button type="button" class="ch-chip sm${VIEW.pos === x ? ' on' : ''}" data-pos="${x}">${x || 'ALL'}</button>`).join('')}
           <select id="chSeasonF" aria-label="Season"><option value="">ALL SEASONS</option>${C.SEASONS.filter(s => C.poolSeasons().indexOf(s.year) >= 0).map(s => `<option value="${s.year}"${+VIEW.season === s.year ? ' selected' : ''}>${esc(s.label)}</option>`).join('')}</select>
           <input id="chQ" placeholder="Search players" value="${esc(VIEW.q)}" autocomplete="off"></div>
-        <ul class="ch-list">${list.slice(0, 80).map(e => playerRow(e, teams, `<button type="button" class="btn btn-small btn-gold" data-take="${esc(e.key)}">DRAFT</button>`)).join('')}</ul>
-        ${list.length > 80 ? `<p class="muted ch-small">Top 80 of ${list.length} shown.</p>` : ''}`;
+        ${(() => { const L = byLetter(list, !!q); return L.bar + `<ul class="ch-list">${L.rows.map(e => playerRow(e, teams, `<button type="button" class="btn btn-small btn-gold" data-take="${esc(e.key)}">DRAFT</button>`)).join('')}</ul>`; })()}
+        ${list.length ? '' : '<p class="muted">Nobody matches.</p>'}`;
     }
     const recent = dr.picks.slice(-10).reverse();
     app.innerHTML = `
