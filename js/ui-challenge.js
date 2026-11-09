@@ -791,10 +791,16 @@
     const oppNick = a => { const all = [].concat((r.standings && r.standings.East) || [], (r.standings && r.standings.West) || []); const t = all.find(x => x.abbr === a); return t ? String(t.name).split(' ').pop() : a; };
     const lastSeries = (r.series || [])[r.series ? r.series.length - 1 : 0];
     const extra = [top ? `${last(top.name)} put up ${Math.round(top.line.pts)} a night` : '', big && big.pts >= 45 ? `${last(big.name)} dropped ${big.pts} on the ${oppNick(big.opp)}` : ''].filter(Boolean).join(', ');
+    const pick = list => list[Math.floor(Math.random() * list.length)];
+    const real = r.mode === 'year' && r.team && r.team.real && r.team.real.w != null ? r.team.real : null;
+    const vsReal = real ? (r.w > real.w ? ` The real ${r.team.name || 'team'} only won ${real.w}.` : r.w < real.w ? ` The real ${r.team.name || 'team'} won ${real.w}, so... yeah.` : '') : '';
+    const close = r.exit === 'champion' ? pick(['Your five vs mine?', 'Beat that.', 'Your move.', 'Think you can top it?'])
+      : r.exit === 'missed' ? pick(["Your five can't do worse. Prove it:", 'Go ahead, laugh. Then try it:', 'Bet yours is worse:'])
+      : pick(['Run it back with your five:', "Bet you can't do better:", 'Your turn:', 'Think you can get further?']);
     let text;
-    if (r.exit === 'champion') text = `🏆 Built a title team out of ${r.label}: ${names}. ${r.w}-${r.l}, then ${po[0]}-${po[1]} in the playoffs.${extra ? ' ' + extra + '.' : ''} Your five vs mine?`;
-    else if (r.exit === 'missed') text = `Drafted ${names} out of ${r.label} and somehow went ${r.w}-${r.l} and missed the playoffs. 😬${extra ? ' At least ' + extra + '.' : ''} Your five can't do worse. Prove it:`;
-    else text = `Drafted ${names} out of ${r.label}. ${r.w}-${r.l}, then ${lastSeries && lastSeries.oppName ? 'the ' + lastSeries.oppName + ' sent us home in the ' + String(lastSeries.name || 'playoffs').toLowerCase() + ' (' + lastSeries.w + '-' + lastSeries.l + ')' : String(r.result || '').toLowerCase()}.${extra ? ' ' + extra + '.' : ''} Run it back with your five:`;
+    if (r.exit === 'champion') text = `${pick(['🏆 Built a title team out of', '🏆 Won it all with a five from', '🏆 Ring secured. Drafted out of'])} ${r.label}: ${names}. ${r.w}-${r.l}, then ${po[0]}-${po[1]} in the playoffs.${extra ? ' ' + extra + '.' : ''}${vsReal} ${close}`;
+    else if (r.exit === 'missed') text = `Drafted ${names} out of ${r.label} and somehow went ${r.w}-${r.l} and missed the playoffs. 😬${extra ? ' At least ' + extra + '.' : ''}${vsReal} ${close}`;
+    else text = `Drafted ${names} out of ${r.label}. ${r.w}-${r.l}, then ${lastSeries && lastSeries.oppName ? 'the ' + lastSeries.oppName + ' sent us home in the ' + String(lastSeries.name || 'playoffs').toLowerCase() + ' (' + lastSeries.w + '-' + lastSeries.l + ')' : String(r.result || '').toLowerCase()}.${extra ? ' ' + extra + '.' : ''}${vsReal} ${close}`;
     let url = location.origin + location.pathname + '#/challenge';
     if (!plain) { try { url += '/s/' + shareCode(r); } catch (e) { /* plain link */ } }
     const me = r.team && typeof r.team === 'object' ? r.team : {};

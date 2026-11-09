@@ -422,7 +422,9 @@
         const lost = r.wins[S[li].abbr], close = r.games.slice().sort((x, y) => Math.abs(x.hs - x.as) - Math.abs(y.hs - y.as))[0];
         const how = lost === 0 ? `🧹 ${who(wi)} swept ${who(li)} ${ws}` : r.games.length === r.bestOf ? `🏀 ${who(wi)} beat ${who(li)} ${ws}, all the way to a deciding game` : `🏀 ${who(wi)} beat ${who(li)} ${ws}`;
         const nail = close && Math.abs(close.hs - close.as) <= 3 ? ` Game ${close.n} came down to ${Math.abs(close.hs - close.as)}.` : '';
-        const text = `${how} in a ${lbl(cfg.year)} versus draft.${mv}${nail} ${who(li)} wants a rematch. Spin your own:`;
+        const five = S[wi].five.map(p => p.name.split(' ').pop()).join(', ');
+        const end = [`${who(li)} wants a rematch. Spin your own:`, `${who(li)} is already asking for game 2. Spin your own:`, `Think you can draft better? Spin your own:`][Math.floor(Math.random() * 3)];
+        const text = `${how} in a ${lbl(cfg.year)} versus draft. Winning five: ${five}.${mv}${nail} ${end}`;
         UI.shareResult(spec, text, location.origin + location.pathname + '#/challenge/vs', 'versus');
       });
       if ($('#vsNew')) $('#vsNew').addEventListener('click', () => { VS.cfg = null; VS.shown = 0; go('setup'); });
