@@ -301,11 +301,19 @@
     const alltime = cfg && cfg.mode === 'alltime';
     const winner = s ? (alltime ? C.eraTeam(s.year, s.abbr) : null) || teams.find(t => t.abbr === s.abbr) : null;
     if (!strip || !winner) { done(); return; }
+    // the reel deals teams like a shuffled deck: every team once per pass, never the same one twice in a row
+    const deck = [];
+    while (deck.length < REEL_N + 2) {
+      const sh = teams.slice();
+      for (let k = sh.length - 1; k > 0; k--) { const j = Math.floor(Math.random() * (k + 1)); [sh[k], sh[j]] = [sh[j], sh[k]]; }
+      if (deck.length && sh[0].abbr === deck[deck.length - 1].abbr) sh.push(sh.shift());
+      deck.push(...sh);
+    }
+    [REEL_AT - 1, REEL_AT + 1].forEach(k => { if (deck[k] && deck[k].abbr === winner.abbr) { const j = k + 3; [deck[k], deck[j]] = [deck[j], deck[k]]; } });
     const cards = [];
     for (let i = 0; i < REEL_N; i++) {
       if (i === REEL_AT) { cards.push(reelCard(winner, alltime ? s.year : null, 'win')); continue; }
-      let t = teams[Math.floor(Math.random() * teams.length)];
-      if (i >= REEL_AT - 1 && i <= REEL_AT + 1 && t.abbr === winner.abbr) t = teams[(teams.indexOf(t) + 1) % teams.length];
+      const t = deck[i];
       const yr = alltime ? C.poolSeasons()[Math.floor(Math.random() * C.poolSeasons().length)] : null;
       cards.push(reelCard(t, yr));
     }
