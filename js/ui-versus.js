@@ -418,8 +418,11 @@
         const spec = { kicker: 'VERSUS | BEST OF ' + r.bestOf + ' | ' + lbl(cfg.year), title: who(wi).toUpperCase() + ' WINS', big: ws, gold: true,
           banner: r.mvp ? 'SERIES MVP: ' + r.mvp.name.toUpperCase() : '', colors: S[wi].team.colors, logo: S[wi].team.logo,
           lines: [[who(0).slice(0, 8).toUpperCase(), S[0].five.map(p => p.name.split(' ').pop()).join(', ')], [who(1).slice(0, 8).toUpperCase(), S[1].five.map(p => p.name.split(' ').pop()).join(', ')]] };
-        const mv = r.mvp ? ` Series MVP: ${r.mvp.name} (${r.mvp.line.pts} ppg).` : '';
-        const text = `🏀 ${who(wi)} beat ${who(li)} ${ws} in a ${lbl(cfg.year)} versus draft, best of ${r.bestOf}.${mv} Think you can draft better? Spin your own:`;
+        const mv = r.mvp ? ` ${r.mvp.name} was the MVP with ${Math.round(r.mvp.line.pts)} a game.` : '';
+        const lost = r.wins[S[li].abbr], close = r.games.slice().sort((x, y) => Math.abs(x.hs - x.as) - Math.abs(y.hs - y.as))[0];
+        const how = lost === 0 ? `🧹 ${who(wi)} swept ${who(li)} ${ws}` : r.games.length === r.bestOf ? `🏀 ${who(wi)} beat ${who(li)} ${ws}, all the way to a deciding game` : `🏀 ${who(wi)} beat ${who(li)} ${ws}`;
+        const nail = close && Math.abs(close.hs - close.as) <= 3 ? ` Game ${close.n} came down to ${Math.abs(close.hs - close.as)}.` : '';
+        const text = `${how} in a ${lbl(cfg.year)} versus draft.${mv}${nail} ${who(li)} wants a rematch. Spin your own:`;
         UI.shareResult(spec, text, location.origin + location.pathname + '#/challenge/vs', 'versus');
       });
       if ($('#vsNew')) $('#vsNew').addEventListener('click', () => { VS.cfg = null; VS.shown = 0; go('setup'); });

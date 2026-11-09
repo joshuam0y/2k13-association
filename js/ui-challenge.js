@@ -784,10 +784,16 @@
   function shareNow(r, plain) {
     const last = n => String(n || '').split(' ').filter(w => !/^(jr\.?|sr\.?|ii|iii|iv)$/i.test(w)).pop();
     const ns = r.five.map(x => last(x.name)), names = ns.slice(0, -1).join(', ') + ' and ' + ns[ns.length - 1];
-    const how = r.exit === 'champion' ? 'won the whole thing 🏆' : String(r.result || '').charAt(0).toLowerCase() + String(r.result || '').slice(1);
-    const text = r.exit === 'champion'
-      ? `I drafted ${names} out of ${r.label}, went ${r.w}-${r.l} and ${how}. Think your five can beat mine? Same season, your picks:`
-      : `I drafted ${names} out of ${r.label} and went ${r.w}-${r.l} (${how}). Bet you can't do better. Same season, your picks:`;
+    // the details that make it a story: playoff record, the five's top scorer, the biggest night
+    const po = (r.series || []).reduce((t, x) => [t[0] + (x.w || 0), t[1] + (x.l || 0)], [0, 0]);
+    const top = r.five.filter(x => x.line).sort((x, y) => y.line.pts - x.line.pts)[0];
+    const big = (r.best || [])[0];
+    const lastSeries = (r.series || [])[r.series ? r.series.length - 1 : 0];
+    const extra = [top ? `${last(top.name)} put up ${Math.round(top.line.pts)} a night` : '', big && big.pts >= 45 ? `${last(big.name)} dropped ${big.pts} on ${big.opp}` : ''].filter(Boolean).join(', ');
+    let text;
+    if (r.exit === 'champion') text = `🏆 Built a title team out of ${r.label}: ${names}. ${r.w}-${r.l}, then ${po[0]}-${po[1]} in the playoffs.${extra ? ' ' + extra + '.' : ''} Your five vs mine?`;
+    else if (r.exit === 'missed') text = `Drafted ${names} out of ${r.label} and somehow went ${r.w}-${r.l} and missed the playoffs. 😬${extra ? ' At least ' + extra + '.' : ''} Your five can't do worse. Prove it:`;
+    else text = `Drafted ${names} out of ${r.label}. ${r.w}-${r.l}, then ${lastSeries && lastSeries.oppName ? 'the ' + lastSeries.oppName + ' sent us home in the ' + String(lastSeries.name || 'playoffs').toLowerCase() + ' (' + lastSeries.w + '-' + lastSeries.l + ')' : String(r.result || '').toLowerCase()}.${extra ? ' ' + extra + '.' : ''} Run it back with your five:`;
     let url = location.origin + location.pathname + '#/challenge';
     if (!plain) { try { url += '/s/' + shareCode(r); } catch (e) { /* plain link */ } }
     const me = r.team && typeof r.team === 'object' ? r.team : {};
