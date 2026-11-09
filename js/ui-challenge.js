@@ -788,8 +788,9 @@
     const po = (r.series || []).reduce((t, x) => [t[0] + (x.w || 0), t[1] + (x.l || 0)], [0, 0]);
     const top = r.five.filter(x => x.line).sort((x, y) => y.line.pts - x.line.pts)[0];
     const big = (r.best || [])[0];
+    const oppNick = a => { const all = [].concat((r.standings && r.standings.East) || [], (r.standings && r.standings.West) || []); const t = all.find(x => x.abbr === a); return t ? String(t.name).split(' ').pop() : a; };
     const lastSeries = (r.series || [])[r.series ? r.series.length - 1 : 0];
-    const extra = [top ? `${last(top.name)} put up ${Math.round(top.line.pts)} a night` : '', big && big.pts >= 45 ? `${last(big.name)} dropped ${big.pts} on ${big.opp}` : ''].filter(Boolean).join(', ');
+    const extra = [top ? `${last(top.name)} put up ${Math.round(top.line.pts)} a night` : '', big && big.pts >= 45 ? `${last(big.name)} dropped ${big.pts} on the ${oppNick(big.opp)}` : ''].filter(Boolean).join(', ');
     let text;
     if (r.exit === 'champion') text = `🏆 Built a title team out of ${r.label}: ${names}. ${r.w}-${r.l}, then ${po[0]}-${po[1]} in the playoffs.${extra ? ' ' + extra + '.' : ''} Your five vs mine?`;
     else if (r.exit === 'missed') text = `Drafted ${names} out of ${r.label} and somehow went ${r.w}-${r.l} and missed the playoffs. 😬${extra ? ' At least ' + extra + '.' : ''} Your five can't do worse. Prove it:`;
