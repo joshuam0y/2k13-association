@@ -284,7 +284,7 @@
           <button type="button" class="btn btn-small" id="vsSetup">SETUP</button></div>
         ${netBar()}
         <div class="vs-sides vs-compact">${fives}</div>
-        <div class="vs-fits">${cfg.sides.map(fitCard).join('')}</div>${clock}${body}${reactBar()}`;
+        ${clock}${body}${reactBar()}`;
       bindNet(app); bindReact(app);
       // the clock
       stopTick();
@@ -381,7 +381,7 @@
           <table class="vs-tbl"><thead><tr><th class="l">PLAYER</th><th>SPOT</th><th>OVR</th><th>PTS</th><th>REB</th><th>AST</th><th>FG%</th></tr></thead><tbody>${sd.five.slice().sort((a, b) => C.SLOTS.indexOf(a.slot) - C.SLOTS.indexOf(b.slot)).map(p => { const l = r.lines[p.id] || {}; return `<tr><td class="l">${esc(p.name)}</td><td>${esc(p.slot || '')}</td><td>${esc(p.ovr)}</td><td>${l.pts != null ? l.pts : '-'}</td><td>${l.reb != null ? l.reb : '-'}</td><td>${l.ast != null ? l.ast : '-'}</td><td>${l.fgp != null ? l.fgp : '-'}</td></tr>`; }).join('')}</tbody></table></div>`).join('')}</div></section>` : '';
       const next = shown + 1;
       const acts = done
-        ? `<button type="button" class="btn btn-gold" id="vsAgain">RUN IT BACK</button><button type="button" class="btn" id="vsNew">NEW MATCHUP</button>`
+        ? `<button type="button" class="btn btn-share" id="vsShare">${UI.shareIcon || ''}SEND THIS TO YOUR FRIENDS</button><button type="button" class="btn btn-gold" id="vsAgain">RUN IT BACK</button><button type="button" class="btn" id="vsNew">NEW MATCHUP</button>`
         : WATCH ? `<button type="button" class="btn btn-gold" id="vsFinal">SKIP TO THE FINAL</button>`
         : `<button type="button" class="btn btn-gold btn-big" id="vsWatch">WATCH GAME ${next}</button><button type="button" class="btn" id="vsNext">SIM GAME ${next}</button><button type="button" class="btn" id="vsAll">SIM THE REST</button>`;
       app.innerHTML = `${head}${netBar()}${score}
@@ -389,7 +389,7 @@
         <div class="row-btns center ch-acts">${acts}</div>
         ${games ? `<ol class="vs-glist">${games}</ol>` : ''}
         ${box}
-        <div class="vs-fits">${S.map((sd, i) => { const f = blindNow ? Object.assign({}, sd.fit, { parts: [], word: '' }) : sd.fit; return UI.challengeFit(f, { compact: true, title: (who(i) + "'s lineup").toUpperCase() }); }).join('')}</div>${reactBar()}`;
+        ${done ? `<div class="vs-fits">${S.map((sd, i) => UI.challengeFit(sd.fit, { compact: true, title: (who(i) + "'s lineup").toUpperCase() })).join('')}</div>` : ''}${reactBar()}`;
       bindNet(app); bindReact(app);
       const reveal = n => { WATCH = 0; dropCourt(); VS.shown = Math.max(VS.shown || 0, n); push(); series(app); window.scrollTo(0, 0); };
       const watch = n => {
@@ -413,6 +413,14 @@
         if (!courtCtl) el.innerHTML = '<p class="muted">The court view did not load.</p>';
       }));
       if ($('#vsAgain')) $('#vsAgain').addEventListener('click', () => { VS.cfg.seed = Math.floor(Math.random() * 2147483646) + 1; VS.shown = 0; WATCH = 0; push(); series(app); window.scrollTo(0, 0); });
+      if ($('#vsShare')) $('#vsShare').addEventListener('click', () => {
+        const wi = idx(r.winner), li = 1 - wi, ws = r.wins[r.winner] + '-' + r.wins[S[li].abbr];
+        const spec = { kicker: 'VERSUS | BEST OF ' + r.bestOf + ' | ' + lbl(cfg.year), title: who(wi).toUpperCase() + ' WINS', big: ws, gold: true,
+          banner: r.mvp ? 'SERIES MVP: ' + r.mvp.name.toUpperCase() : '', colors: S[wi].team.colors, logo: S[wi].team.logo,
+          lines: [[who(0).slice(0, 8).toUpperCase(), S[0].five.map(p => p.name.split(' ').pop()).join(', ')], [who(1).slice(0, 8).toUpperCase(), S[1].five.map(p => p.name.split(' ').pop()).join(', ')]] };
+        const text = who(wi) + ' beat ' + who(li) + ' ' + ws + ' in a 2K13 Association versus draft. Run it back:';
+        UI.shareResult(spec, text, location.origin + location.pathname + '#/challenge/vs', 'versus');
+      });
       if ($('#vsNew')) $('#vsNew').addEventListener('click', () => { VS.cfg = null; VS.shown = 0; go('setup'); });
     });
   }

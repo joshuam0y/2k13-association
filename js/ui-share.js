@@ -111,6 +111,58 @@
     return cv;
   }
 
+  // A result card for any mode (Draft Challenge, versus): { kicker, title, big, banner, gold, lines: [[label, text]],
+  // colors, logo }. Resolves to a PNG blob (null when the canvas cannot be read).
+  UI.resultCard = async function (spec) {
+    const W = 1080, H = 1350, cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d'), c1 = (spec.colors && spec.colors[0]) || '#333', c2 = (spec.colors && spec.colors[1]) || '#999';
+    if (document.fonts && document.fonts.load) { try { await Promise.all([document.fonts.load('700 40px Oswald'), document.fonts.load('500 40px Oswald')]); } catch (e) { /* system font */ } }
+    const bg = ctx.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, c1); bg.addColorStop(0.55, '#0a0a0a'); bg.addColorStop(1, '#000');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = c2; ctx.globalAlpha = 0.16; ctx.beginPath(); ctx.arc(W - 120, 170, 420, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#f5c542'; ctx.font = '700 40px Oswald, Arial, sans-serif'; ctx.fillText('2K13 ASSOCIATION', W / 2, 90);
+    ctx.fillStyle = 'rgba(255,255,255,.8)'; fit(ctx, spec.kicker || '', W - 120, 34, 500); ctx.fillText(spec.kicker || '', W / 2, 140);
+    let y = 180;
+    const lg = await loadImg(spec.logo);
+    if (lg) { const sz = 220, r = Math.min(sz / lg.width, sz / lg.height); ctx.drawImage(lg, W / 2 - lg.width * r / 2, y + (sz - lg.height * r) / 2, lg.width * r, lg.height * r); }
+    y = 470;
+    ctx.fillStyle = '#fff'; fit(ctx, spec.title || '', W - 120, 72); ctx.fillText(spec.title || '', W / 2, y);
+    if (spec.big) { ctx.font = '700 170px Oswald, Arial, sans-serif'; ctx.fillText(spec.big, W / 2, y + 175); }
+    y += spec.big ? 215 : 40;
+    if (spec.banner) {
+      ctx.fillStyle = spec.gold ? '#f5c542' : 'rgba(255,255,255,.1)'; ctx.fillRect(80, y, W - 160, 92);
+      ctx.fillStyle = spec.gold ? '#111' : '#fff'; fit(ctx, spec.banner, W - 220, 46); ctx.fillText(spec.banner, W / 2, y + 62);
+      y += 130;
+    }
+    ctx.textAlign = 'left';
+    (spec.lines || []).slice(0, 7).forEach((l, i) => {
+      const ly = y + i * 62;
+      ctx.fillStyle = 'rgba(255,255,255,.06)'; ctx.fillRect(80, ly, W - 160, 52);
+      ctx.fillStyle = '#f5c542'; ctx.font = '500 26px Oswald, Arial, sans-serif'; ctx.fillText(String(l[0] || ''), 100, ly + 36);
+      ctx.fillStyle = '#fff'; fit(ctx, String(l[1] || ''), W - 360, 30, 500); ctx.fillText(String(l[1] || ''), 250, ly + 36);
+    });
+    ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.font = '500 26px Oswald, Arial, sans-serif';
+    ctx.fillText((location.host + location.pathname.replace(/index\.html$/, '')).toUpperCase(), W / 2, H - 30);
+    return new Promise(res => { try { cv.toBlob(b => res(b), 'image/png'); } catch (e) { res(null); } });
+  };
+  // Shares a result the way phones do best: the picture plus the text and link in the share sheet (Messages,
+  // Instagram, WhatsApp...), else the text and link, else copied to the clipboard.
+  UI.shareResult = async function (spec, text, url, name) {
+    let blob = null;
+    try { blob = await UI.resultCard(spec); } catch (e) { blob = null; }
+    const file = blob ? new File([blob], (name || 'result') + '.png', { type: 'image/png' }) : null;
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], text: text + ' ' + url }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    if (navigator.share) { try { await navigator.share({ title: '2K13 Association', text, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+    const all = text + ' ' + url;
+    try { await navigator.clipboard.writeText(all); UI.toast('Copied. Paste it in a text to your friends.'); } catch (e) { UI.toast(all); }
+    if (blob && !(navigator.canShare)) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (name || 'result') + '.png'; document.body.appendChild(a); a.click(); a.remove(); }
+  };
+  UI.shareIcon = '<svg class="share-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
   P.share = function (app) {
     const f = facts();
     if (!f) { app.innerHTML = UI.header('SHARE SEASON') + UI.empty('NO SEASON YET', 'Start or load an Association to make a season card.', '<div class="row-btns"><a class="btn" href="#/new">NEW LEAGUE</a></div>'); return; }

@@ -63,6 +63,7 @@
           ${UI.tile('#/new', 'ball', 'PLAY THE ASSOCIATION', { cls: 'mt-hero', disabled: !engineOk, sub: engineOk ? 'NEW LEAGUE' : 'SIM ENGINE NOT LOADED' })}
           ${cont}
           ${UI.tile('#/challenge', 'draft', 'DRAFT CHALLENGE', { cls: 'mt-challenge mt-hot', disabled: !engineOk, sub: 'PICK FIVE, SIM A SEASON' })}
+          ${UI.tile('#/challenge/vs', 'draft', 'VERSUS', { cls: 'mt-versus mt-hot', disabled: !engineOk, sub: 'YOU VS A FRIEND, ONLINE OR ONE PHONE' })}
           ${UI.tile('#/saves', 'load', 'LOAD', { cls: 'mt-half' })}
           ${UI.tile('#/soundtrack', 'music', 'SOUNDTRACK', { cls: 'mt-half' })}
         </div>

@@ -907,3 +907,6 @@ html { scroll-padding-bottom: calc(var(--mb-h, var(--bar-h)) + 12px); }
 .share-wrap { max-width: 540px; margin: 0 auto; }
 .share-prev { aspect-ratio: 1080 / 1350; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; border: 1px solid var(--line); background: var(--bg2); }
 .share-prev img, .share-prev canvas { width: 100%; height: auto; display: block; }
+/* Draft Challenge and Versus side by side on the home screen */
+.mm-grid .mt-challenge, .mm-grid .mt-versus { grid-column: span 1; }
+.mm-grid .mt-versus { border-color: var(--gold-dim); background: radial-gradient(300px 200px at 80% 10%, rgba(95, 211, 138, .16), transparent 70%), linear-gradient(180deg, #0c140f 0%, #050505 100%); }

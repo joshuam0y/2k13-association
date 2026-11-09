@@ -396,3 +396,10 @@
 .vs-bubble.mine { border-color: var(--line2); }
 .vs-bubble.go { opacity: 0; transform: translateY(-14px); }
 @keyframes vsPop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* the share button: big and thumb-friendly */
+.btn-share { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; max-width: 520px; margin: 14px auto 6px; min-height: 56px;
+  font-size: 17px; letter-spacing: .1em; background: #fff; color: #000; border: 0; border-radius: 28px; box-shadow: 0 8px 24px rgba(0, 0, 0, .45); }
+.btn-share:hover { background: var(--gold2); color: #000; }
+.btn-share .share-i { width: 22px; height: 22px; flex: none; }
+.ch-acts .btn-share { flex-basis: 100%; }

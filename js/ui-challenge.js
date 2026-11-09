@@ -699,7 +699,8 @@
         ${series ? `<ol class="ch-series">${series}</ol>` : ''}
       </section>
       ${r.sharedFrom ? `<div class="note">${r.sharedFrom.w === r.w && r.sharedFrom.l === r.l ? 'Shared challenge: the same season your friend simmed.' : 'Shared challenge: the original run went ' + r.sharedFrom.w + '-' + r.sharedFrom.l + '. A different browser rolled the luck a little differently.'}</div>` : ''}
-      <div class="row-btns center ch-acts"><button type="button" class="btn btn-gold" id="chAgain">RUN IT BACK</button><button type="button" class="btn" id="chOdds">SIM 10 MORE SEASONS</button><button type="button" class="btn" id="chShare">SHARE</button><a class="btn" href="#/challenge">NEW CHALLENGE</a></div>
+      <button type="button" class="btn btn-share" id="chShare">${UI.shareIcon || ''}SEND THIS TO YOUR FRIENDS</button>
+      <div class="row-btns center ch-acts"><button type="button" class="btn btn-gold" id="chAgain">RUN IT BACK</button><button type="button" class="btn" id="chOdds">SIM 10 MORE SEASONS</button><a class="btn" href="#/challenge">NEW CHALLENGE</a></div>
       <div id="chOddsBox">${oddsHtml(r)}</div>
       ${UI.header('YOUR FIVE')}${r.fit ? fitHtml(r.fit) : ''}<div class="ch-cards">${fiveCards}</div>
       ${r.poBest && r.poBest.length ? `${UI.header('PLAYOFF HIGHS', 'Your five in the postseason')}<ol class="ch-best">${r.poBest.map(b => `<li><a href="#/challenge/game/${idx}/${esc(b.gid)}"><b>${b.pts}</b><span><b>${esc(b.name)}</b><small>${b.reb} reb | ${b.ast} ast | vs ${esc(b.opp)}, ${esc(UI.dateLabel ? UI.dateLabel(b.date) : b.date)}</small></span><i class="ch-go-i">BOX</i></a></li>`).join('')}</ol>` : ''}
@@ -785,9 +786,11 @@
     const text = `My ${r.label} Draft Challenge: ${names} went ${r.w}-${r.l}. ${r.exit === 'champion' ? 'NBA Champions.' : r.result + '.'} Sim the same season:`;
     let url = location.origin + location.pathname + '#/challenge';
     if (!plain) { try { url += '/s/' + shareCode(r); } catch (e) { /* plain link */ } }
-    if (navigator.share) { navigator.share({ title: 'Draft Challenge', text, url }).catch(() => {}); return; }
-    const all = text + ' ' + url;
-    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(all).then(() => UI.toast('Copied to the clipboard.')).catch(() => UI.toast(all));
-    else UI.toast(all);
+    const me = (r.teams || []).find(t => t.abbr === r.team) || {};
+    const spec = { kicker: (r.label || '') + ' DRAFT CHALLENGE', title: tName(me) || r.team, big: r.w + '-' + r.l, gold: r.exit === 'champion',
+      banner: r.exit === 'champion' ? 'NBA CHAMPIONS' : String(r.result || '').toUpperCase(), colors: me.colors, logo: me.logo,
+      lines: r.five.map(x => [C.primaryPos(x.pos), x.name + (x.line ? '   ' + x.line.pts + ' PTS' : '')]) };
+    if (UI.shareResult) { UI.shareResult(spec, text, url, 'draft-challenge'); return; }
+    if (navigator.share) navigator.share({ title: 'Draft Challenge', text, url }).catch(() => {});
   }
 })();
