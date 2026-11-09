@@ -260,49 +260,60 @@
     var n = cfg.sides[0].picks.length + cfg.sides[1].picks.length;
     return n >= 10 ? -1 : VS_ORDER[n];
   }
-  // Plays the season, then a best-of-seven showdown between the two on their own (home court to the better record)
+  // Versus: no season. The two fives meet in a best-of-five series (2-2-1, home court on a coin flip), each
+  // playing all 48 minutes, nobody on the bench. Fit and positions count like everywhere else.
+  // Returns { cfg, label, sides: [{ team, name, five, fit }], games: [...], wins, winner, mvp, lines, home }
   function playVersus(cfg) {
-    var ch = buildYear(cfg), E = W.ENGINE;
-    start(ch);
-    var guard = 0;
-    while (!step(ch, 10) && guard++ < 100);
-    var A = ch.user, B = ch.rival;
-    var keep = cfg.picks;
-    cfg.picks = cfg.sides[0].picks; var a = summary(ch);
-    ch.user = B; ch.season.userTeam = B; cfg.picks = cfg.sides[1].picks;
-    var b = summary(ch);
-    ch.user = A; ch.season.userTeam = A; cfg.picks = keep;
-    var h2h = [];
-    ch.season.days.forEach(function (d) {
-      if (d.playoff) return;
-      d.games.forEach(function (g) { if (g.played && ((g.home === A && g.away === B) || (g.home === B && g.away === A))) h2h.push({ date: d.date, home: g.home, away: g.away, hs: g.hs, as: g.as }); });
-    });
-    // the showdown: a seven-game series between just the two teams
-    var sa = ch.season.standings[A], sb = ch.season.standings[B];
-    var hi = sa.w >= sb.w ? A : B, lo = hi === A ? B : A;
-    var two = { season: ch.year, teams: ch.teams.filter(function (t) { return t.abbr === A || t.abbr === B; }),
-      players: ch.league.players.filter(function (p) { return p.team === A || p.team === B; }) };
+    var E = W.ENGINE, d = seasonData(cfg.year);
+    if (!E) throw new Error('Game engine not loaded');
+    if (!d) throw new Error('The ' + cfg.year + ' rosters are not loaded.');
+    var byId = {};
+    d.players.concat(d.free).forEach(function (p) { byId[p.id] = p; });
     var rng = mulberry32((cfg.seed ^ 0x7F4A7C15) >>> 0);
-    var s2 = E.newSeason(two, { year: ch.year, realSchedule: false, playIn: false, rng: rng });
-    s2.era = ch.season.era; if (ch.season.norms) s2.norms = ch.season.norms; s2.injuries = {};
-    s2.days = [0, 1, 2, 3, 4, 5, 6].map(function (i) {
-      var hiHome = i === 0 || i === 1 || i === 4 || i === 6;
-      return { date: ch.year + '-05-' + (10 + i * 2), games: [{ id: 'vs' + (i + 1), home: hiHome ? hi : lo, away: hiHome ? lo : hi, played: false, hs: null, as: null }] };
+    var sides = cfg.sides.map(function (sd) {
+      var t = clone(d.teams.filter(function (x) { return x.abbr === sd.team; })[0] || { abbr: sd.team, city: sd.team, name: '' });
+      t.orig = { city: t.city, name: t.name };
+      if (sd.name) { var nm = splitName(sd.name, t); t.city = nm.city; t.name = nm.name; }
+      var five = sd.picks.map(function (id, i) { var p = clone(byId[id]); p.team = sd.team; p.realTeam = byId[id].team; p.pick = i + 1; p.injury = null; return p; });
+      if (five.length !== 5) throw new Error('Pick five players first.');
+      var fit = lineupFit(five);
+      applyFit(five, fit);
+      var mins = {};
+      five.forEach(function (p) { mins[p.id] = 48; });
+      return { abbr: sd.team, team: t, five: five, fit: fit, obj: { abbr: sd.team, players: five, minutes: mins, ironman: true, strategy: null } };
     });
-    var series = [], w = {}; w[A] = 0; w[B] = 0;
-    for (var i = 0; i < 7 && w[A] < 4 && w[B] < 4; i++) {
-      E.simDays(s2, 1, rng, two);
-      var g = s2.days[i].games[0];
-      w[g.hs > g.as ? g.home : g.away]++;
-      series.push({ n: i + 1, home: g.home, away: g.away, hs: g.hs, as: g.as });
+    var norms = E.computeNorms({ season: d.year, teams: d.teams, players: d.players });
+    var era = E.eraFor(cfg.year);
+    var A = sides[0].abbr, B = sides[1].abbr, hi = rng() < 0.5 ? 0 : 1, lo = 1 - hi;
+    var wins = {}; wins[A] = 0; wins[B] = 0;
+    var games = [], tot = {};
+    for (var g = 0; g < 5 && wins[A] < 3 && wins[B] < 3; g++) {
+      var hiHome = g === 0 || g === 1 || g === 4;
+      var home = sides[hiHome ? hi : lo], away = sides[hiHome ? lo : hi];
+      var res = E.simGame(home.obj, away.obj, rng, { injuries: {}, norms: norms, era: era, year: cfg.year, pbp: false });
+      var hs = res.home.pts, as = res.away.pts, win = hs > as ? home.abbr : away.abbr;
+      wins[win]++;
+      var top = null;
+      res.home.box.concat(res.away.box).forEach(function (r) {
+        var x = tot[r.id] || (tot[r.id] = { g: 0, min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0 });
+        x.g++; x.min += r.min || 0; x.pts += r.pts || 0; x.reb += (r.oreb || 0) + (r.dreb || 0); x.ast += r.ast || 0; x.stl += r.stl || 0; x.blk += r.blk || 0;
+        x.fgm += r.fgm || 0; x.fga += r.fga || 0; x.tpm += r.tpm || 0; x.tpa += r.tpa || 0;
+        if (!top || (r.pts || 0) > top.pts) top = { id: r.id, pts: r.pts || 0, reb: (r.oreb || 0) + (r.dreb || 0), ast: r.ast || 0 };
+      });
+      games.push({ n: g + 1, home: home.abbr, away: away.abbr, hs: hs, as: as, winner: win, ot: res.ot || 0, top: top,
+        wins: (function () { var w = {}; w[A] = wins[A]; w[B] = wins[B]; return w; })() });
     }
-    var winner = w[A] > w[B] ? A : B;
+    var winner = wins[A] > wins[B] ? A : B;
+    var r1 = function (x) { return Math.round(x * 10) / 10; };
     var lines = {};
-    Object.keys(s2.playerStats || {}).forEach(function (id) { var l = perGame(s2.playerStats[id]); if (l && ch.players[id]) lines[id] = l; });
-    var smvp = Object.keys(lines).filter(function (id) { return ch.players[id].team === winner; })
-      .sort(function (x, y) { return (lines[y].pts + lines[y].reb + lines[y].ast) - (lines[x].pts + lines[x].reb + lines[x].ast); })[0];
-    return { cfg: cfg, label: a.label, a: a, b: b, h2h: h2h,
-      showdown: { games: series, wins: w, winner: winner, mvp: smvp ? { id: smvp, name: ch.players[smvp].name, line: lines[smvp] } : null } };
+    Object.keys(tot).forEach(function (id) { var x = tot[id], n = x.g || 1; lines[id] = { g: x.g, mpg: r1(x.min / n), pts: r1(x.pts / n), reb: r1(x.reb / n), ast: r1(x.ast / n), stl: r1(x.stl / n), blk: r1(x.blk / n),
+      fgp: x.fga ? r1(100 * x.fgm / x.fga) : null, tpp: x.tpa ? r1(100 * x.tpm / x.tpa) : null }; });
+    var win5 = sides[winner === A ? 0 : 1].five;
+    var mvp = win5.slice().sort(function (x, y) { var a = lines[x.id] || {}, b = lines[y.id] || {}; return ((b.pts || 0) + (b.reb || 0) + (b.ast || 0)) - ((a.pts || 0) + (a.reb || 0) + (a.ast || 0)); })[0];
+    return { cfg: cfg, label: d.label, home: sides[hi].abbr, games: games, wins: wins, winner: winner,
+      mvp: mvp ? { id: mvp.id, name: mvp.name, line: lines[mvp.id] } : null, lines: lines,
+      sides: sides.map(function (sd) { return { abbr: sd.abbr, team: { abbr: sd.team.abbr, city: sd.team.city, name: sd.team.name, colors: sd.team.colors, logo: sd.team.logo, logoNoRef: sd.team.logoNoRef },
+        fit: sd.fit, five: sd.five.map(function (p) { return { id: p.id, name: p.name, pos: p.pos, ovr: p.baseOvr || p.ovr, nbaId: p.nbaId || null, slot: SLOTS[p.slot] }; }) }; }) };
   }
 
   function splitName(full, t) {
@@ -415,13 +426,103 @@
     return finishBuild(cfg, 2013, teams, players, [], dr);
   }
 
+  // ---------- lineup fit: position and how the five go together ----------
+  // Each drafted five is put in the spots PG, SG, SF, PF, C that cost the least (a player away from his
+  // position loses ground: guarding quicker players when he plays smaller, size and boards when bigger), and
+  // the team is graded on what a lineup needs: someone to run it, shooting, rim protection, rebounding,
+  // perimeter defense and not too many players who need the ball. The grades move every player's
+  // ratings a little (a whole lineup at most about -8 to +3); the five then matches up by those spots.
+  var SLOTS = ['PG', 'SG', 'SF', 'PF', 'C'], PIDX = { PG: 0, SG: 1, SF: 2, PF: 3, C: 4, G: 0.5, F: 2.5 };
+  var PEN = [0, 1.5, 4, 7, 10];
+  function posRange(p) {
+    var parts = String(p.pos || 'SF').toUpperCase().split(/[-\/ ,]+/).map(function (x) { return PIDX[x]; }).filter(function (x) { return x != null; });
+    if (!parts.length) parts = [2];
+    return [Math.min.apply(null, parts), Math.max.apply(null, parts)];
+  }
+  function slotPen(p, k) {
+    var r = posRange(p), d = k < r[0] ? r[0] - k : k > r[1] ? k - r[1] : 0;
+    var i = Math.floor(d), f = d - i;
+    return i >= 4 ? PEN[4] : PEN[i] + (PEN[i + 1] - PEN[i]) * f;
+  }
+  function attr(p, k) { return p.attrs && p.attrs[k] != null ? +p.attrs[k] : 50; }
+  function grade(v, cuts, pts, words) { for (var i = 0; i < cuts.length; i++) if (v >= cuts[i]) return { v: pts[i], word: words[i] }; return { v: pts[pts.length - 1], word: words[words.length - 1] }; }
+  function lineupFit(five) {
+    five = five.filter(Boolean).slice(0, 5);
+    // the best spots: every way to put the players in PG to C (open spots while drafting stay empty)
+    var best = null, start = five.slice();
+    while (start.length < 5) start.push(null);
+    (function perm(arr, k) {
+      if (k === arr.length) {
+        var cost = 0;
+        arr.forEach(function (p, i) { if (p) cost += slotPen(p, i) * (1 + (p.ovr || 70) / 200); });
+        if (!best || cost < best.cost) best = { cost: cost, order: arr.slice() };
+        return;
+      }
+      for (var i = k; i < arr.length; i++) { var t = arr[k]; arr[k] = arr[i]; arr[i] = t; perm(arr, k + 1); t = arr[k]; arr[k] = arr[i]; arr[i] = t; }
+    })(start, 0);
+    var order = best.order;
+    var slots = [];
+    order.forEach(function (p, i) { slots.push(p ? { id: p.id, name: p.name, pos: primaryPos(p.pos), slot: SLOTS[i], k: i, pen: Math.round(slotPen(p, i) * 10) / 10 } : { id: null, slot: SLOTS[i], k: i, pen: 0 }); });
+    var parts = [];
+    if (five.length >= 5) {
+      var max = function (fn) { return Math.max.apply(null, five.map(fn)); };
+      var hand = max(function (p) { return attr(p, 'handle') * 0.6 + attr(p, 'pass') * 0.4; });
+      parts.push(Object.assign({ k: 'PLAYMAKING' }, grade(hand, [85, 76, 66], [1, 0, -2, -4], ['GREAT', 'GOOD', 'THIN', 'NOBODY'])));
+      var sh = 0; five.forEach(function (p) { var t = attr(p, 'three'); sh += t >= 75 ? 1 : t >= 70 ? 0.5 : 0; });
+      parts.push(Object.assign({ k: 'SHOOTING' }, grade(sh, [4, 3, 2, 1], [1, 0.5, 0, -1.5, -3], ['GREAT', 'GOOD', 'OK', 'CRAMPED', 'NONE'])));
+      var rim = max(function (p) { return attr(p, 'block') * 0.5 + attr(p, 'intD') * 0.5; });
+      parts.push(Object.assign({ k: 'RIM PROTECTION' }, grade(rim, [80, 70, 60], [0.5, 0, -1.5, -3], ['GREAT', 'GOOD', 'SOFT', 'NONE'])));
+      var dr = five.map(function (p) { return attr(p, 'dreb'); }).sort(function (a, b) { return b - a; }).slice(0, 3);
+      parts.push(Object.assign({ k: 'REBOUNDING' }, grade((dr[0] + dr[1] + dr[2]) / 3, [70, 58, 48], [0.5, 0, -1.5, -3], ['GREAT', 'GOOD', 'SMALL', 'BAD'])));
+      var pd = order.slice(0, 3).map(function (p) { return attr(p, 'perD'); });
+      parts.push(Object.assign({ k: 'PERIMETER D' }, grade((pd[0] + pd[1] + pd[2]) / 3, [76, 62], [0.5, 0, -1], ['GREAT', 'GOOD', 'LEAKY'])));
+      var cooks = five.filter(function (p) { return (attr(p, 'mid') + attr(p, 'three') + attr(p, 'close')) / 3 >= 78 && attr(p, 'handle') >= 74 && (p.ovr || 0) >= 86; }).length;
+      parts.push(Object.assign({ k: 'BALL SHARING' }, grade(-cooks, [-2, -3], [0, -0.5, -1.5], ['FINE', 'CROWDED', 'TOO MANY'])));
+    }
+    var team = 0; parts.forEach(function (x) { team += x.v; });
+    team = clamp(team, -8, 3);
+    var outOf = slots.filter(function (x) { return x.pen >= 1.5; }).length;
+    if (five.length < 5) return { slots: slots, parts: [], team: 0, word: '', partial: true };
+    var word = outOf >= 3 || team < -3 ? 'BAD FIT' : team >= 1.5 && !outOf ? 'GREAT FIT' : team >= 0 && outOf <= 1 ? 'GOOD FIT' : 'SOME HOLES';
+    return { slots: slots, parts: parts, team: team, word: word };
+  }
+  // moves the five's ratings by their fit (on the league's own copies)
+  var INSIDE = ['intD', 'dreb', 'oreb', 'block', 'strength', 'post'], OUTSIDE = ['perD', 'speed', 'handle'];
+  function applyFit(five, fit) {
+    var byId = {};
+    fit.slots.forEach(function (x) { if (x.id) byId[x.id] = x; });
+    five.forEach(function (p) {
+      var x = byId[p.id];
+      if (!x) return;
+      var r = posRange(p), g = fit.team * 0.6, pen = x.pen;
+      p.slot = x.k;
+      if (p.attrs) {
+        var a = p.attrs;
+        Object.keys(a).forEach(function (k) { if (typeof a[k] === 'number') a[k] = clamp(Math.round(a[k] + g), 25, 99); });
+        (x.k < r[0] ? OUTSIDE : x.k > r[1] ? INSIDE : []).forEach(function (k) { if (a[k] != null) a[k] = clamp(Math.round(a[k] - pen * 1.4), 25, 99); });
+      }
+      p.baseOvr = p.ovr;
+      p.ovr = clamp(Math.round(p.ovr + g - pen * 0.6), 30, 99);
+    });
+  }
+
   function finishBuild(cfg, year, teams, players, moves, dr) {
+    // the drafted fives (picks) play where they fit best
+    var fits = {};
+    teams.forEach(function (t) {
+      var five = Object.keys(players).map(function (id) { return players[id]; }).filter(function (p) { return p.team === t.abbr && p.pick; })
+        .sort(function (a, b) { return a.pick - b.pick; });
+      if (five.length !== 5) return;
+      var f = lineupFit(five);
+      applyFit(five, f);
+      fits[t.abbr] = f;
+    });
     var list = [];
     var known = {};
     teams.forEach(function (t) { known[t.abbr] = true; });
     Object.keys(players).forEach(function (id) { var p = players[id]; if (known[p.team]) list.push(p); });
     var eraYear = cfg.mode === 'alltime' ? +(cfg.era || 2013) : year;
-    return { cfg: cfg, year: year, eraYear: eraYear, user: cfg.team, teams: teams, players: players, moves: moves,
+    return { cfg: cfg, year: year, eraYear: eraYear, user: cfg.team, teams: teams, players: players, moves: moves, fits: fits,
       league: { season: year, teams: teams, players: list }, draft: dr ? { order: dr.order, picks: dr.picks } : null };
   }
 
@@ -588,7 +689,7 @@
       poBest: best.filter(function (b) { return b.playoff; }).slice(0, 5), log: log,
       awards: awards ? { mvp: award(awards.mvp), dpoy: award(awards.dpoy), roy: award(awards.roy), smoy: award(awards.smoy),
         fmvp: award(typeof fmvp === 'object' && fmvp ? fmvp.id : fmvp) } : null,
-      standings: standings, leaders: leaders, moves: ch.moves || [], picks: (ch.cfg.picks || []).slice(), cfg: clone(ch.cfg),
+      standings: standings, leaders: leaders, moves: ch.moves || [], picks: (ch.cfg.picks || []).slice(), cfg: clone(ch.cfg), fit: ch.fits && ch.fits[ch.user] || null,
       teams: ch.teams.map(function (t) { return { abbr: t.abbr, city: t.city, name: t.name, colors: t.colors, logo: t.logo, logoNoRef: t.logoNoRef, conf: t.conf }; }),
       draft: ch.draft ? ch.draft.picks.map(function (x) { var e = ch.players[x.key]; return { n: x.n, team: x.team, key: x.key, name: e ? e.name : x.key, label: e ? e.label : '', ovr: e ? e.ovr : 0 }; }) : null
     };
@@ -606,7 +707,7 @@
     SEASONS: SEASONS, ROUNDS: ROUNDS, seasonInfo: seasonInfo, seasonData: seasonData, loaded: loaded, load: load, loadAll: loadAll,
     allTimePool: allTimePool, poolSeasons: poolSeasons, eraTeam: eraTeam, buildYear: buildYear, buildAllTime: buildAllTime, newDraft: newDraft, onClock: onClock,
     draftSlot: draftSlot, draftPick: draftPick, aiPick: aiPick, simToUser: simToUser, autoDraft: autoDraft, available: available,
-    teamPicks: teamPicks, vsOnClock: vsOnClock, playVersus: playVersus, VS_ORDER: VS_ORDER, spin: spin, spinRoster: spinRoster, matchups: matchups, start: start, step: step, runAll: runAll,
+    teamPicks: teamPicks, lineupFit: lineupFit, SLOTS: SLOTS, vsOnClock: vsOnClock, playVersus: playVersus, VS_ORDER: VS_ORDER, spin: spin, spinRoster: spinRoster, matchups: matchups, start: start, step: step, runAll: runAll,
     progress: progress, summary: summary, play: play, perGame: perGame, groupOf: groupOf, primaryPos: primaryPos, rng: mulberry32
   };
   W.CHALLENGE = API;

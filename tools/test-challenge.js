@@ -120,10 +120,20 @@ ok(r08.w + r08.l === 82 && r08.w >= 50, "a 2007-08 super team in Seattle: " + r0
   pool.forEach(id => { const i = C.vsOnClock(vcfg); order.push(i); vcfg.sides[i].picks.push(id); });
   ok(order.join("") === "0110011001" && C.vsOnClock(vcfg) === -1, "versus: snake order A B B A A B B A A B");
   const vr = C.playVersus(vcfg);
-  const sd = vr.showdown, wins = sd.wins.BOS + sd.wins.NYK;
-  ok(vr.a.w + vr.a.l === 82 && vr.b.w + vr.b.l === 82 && vr.a.five.length === 5 && vr.b.five.length === 5, "both teams play 82 in the same league (" + vr.a.w + "-" + vr.a.l + ", " + vr.b.w + "-" + vr.b.l + ")");
-  ok(Math.max(sd.wins.BOS, sd.wins.NYK) === 4 && wins >= 4 && wins <= 7 && sd.games.length === wins && sd.mvp, "the showdown: " + sd.winner + " " + sd.wins.BOS + "-" + sd.wins.NYK + ", MVP " + (sd.mvp && sd.mvp.name));
-  ok(vr.h2h.length >= 2, "their regular season meetings (" + vr.h2h.length + ")");
+  const n = vr.games.length, ww = vr.wins[vr.winner];
+  ok(ww === 3 && n >= 3 && n <= 5 && vr.games.every(g => g.hs !== g.as), "versus: a best-of-five series (" + vr.winner + " " + vr.wins.BOS + "-" + vr.wins.NYK + ", " + n + " games)");
+  const ironmen = vr.sides[0].five.concat(vr.sides[1].five).every(p => vr.lines[p.id] && vr.lines[p.id].mpg >= 47);
+  ok(ironmen && vr.mvp, "all ten play the full 48 minutes (MVP " + (vr.mvp && vr.mvp.name) + ")");
+  ok(vr.sides.every(sd => sd.fit && sd.fit.slots.filter(x => x.id).length === 5 && sd.fit.parts.length === 6 && sd.five.every(p => p.slot)), "each five gets its spots and fit grades");
+}
+// fit: five centers play out of position and grade badly; a real lineup grades well
+{
+  const P = C.seasonData(2008).players, o = id => P.find(p => p.id === id);
+  const bigs = C.lineupFit(["howardw01", "duncati01", "onealsh01", "garneke01", "nowitdi01"].map(o));
+  const good = C.lineupFit(["nashst01", "bryanko01", "jamesle01", "garneke01", "duncati01"].map(o));
+  ok(bigs.word === "BAD FIT" && bigs.slots.filter(x => x.pen >= 1.5).length >= 3 && good.word === "GREAT FIT", "fit: five bigs " + bigs.word + ", Nash-Kobe-LeBron-Garnett-Duncan " + good.word);
+  const r1 = C.play({ mode: "year", year: 2008, team: "SEA", picks: ["howardw01", "duncati01", "onealsh01", "garneke01", "nowitdi01"], seed: 3, build: "free" });
+  ok(r1.fit && r1.fit.word === "BAD FIT", "a season result carries the lineup fit (" + r1.w + "-" + r1.l + ")");
 }
 // the all-time pool file: every finished season
 require("../data/challenge-pool.js");

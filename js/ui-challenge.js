@@ -41,7 +41,6 @@
     if (!p || !p.nbaId) return `<img class="${k} hs-fallback" src="${UI.faceSvg(color || '#444')}" alt="">`;
     return `<img class="${k}" src="https://cdn.nba.com/headshots/nba/latest/260x190/${esc(p.nbaId)}.png" data-c="${esc(color || '#444')}" alt="" loading="lazy" onerror="UI.faceFallback(this)">`;
   }
-  const realLine = st => st ? `${st.pts} / ${st.reb} / ${st.ast}` : '';
   const ord = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
   const pct = v => v == null ? '-' : v.toFixed(1);
   function saveCur() {
@@ -185,6 +184,20 @@
   // =====================================================================
   // One season: pick five
   // =====================================================================
+  // The lineup card: where each pick plays and how the five fit (js/challenge.js lineupFit). Shared with js/ui-versus.js.
+  const lastName = n => { const w = String(n || '').split(' '); return w.length > 1 && /^(jr\.?|sr\.?|ii|iii|iv)$/i.test(w[w.length - 1]) ? w[w.length - 2] : w[w.length - 1]; };
+  const FIT_CLS = v => (v > 0 ? 'up' : v < 0 ? 'down' : 'ok');
+  function fitHtml(fit, opts) {
+    if (!fit) return '';
+    opts = opts || {};
+    const slots = fit.slots.map(x => x.id
+      ? `<li class="${x.pen >= 1.5 ? 'off' : ''}" title="${esc(x.name)}"><i>${x.slot}</i><b>${esc(lastName(x.name))}</b>${x.pen >= 1.5 ? `<small>natural ${esc(x.pos)}</small>` : ''}</li>`
+      : `<li class="open"><i>${x.slot}</i><b class="muted">open</b></li>`).join('');
+    const parts = fit.parts.map(x => `<li class="${FIT_CLS(x.v)}"><span>${esc(x.k)}</span><b>${esc(x.word)}</b></li>`).join('');
+    return `<section class="ch-fit${opts.compact ? ' compact' : ''}"><div class="ch-fit-h"><span class="ch-fit-k">${esc(opts.title || 'LINEUP')}</span>${fit.word ? `<b class="ch-fit-w ${fit.team >= 0.5 && !/BAD|HOLES/.test(fit.word) ? 'up' : /BAD/.test(fit.word) ? 'down' : 'ok'}">${esc(fit.word)}</b>` : '<span class="muted ch-small">Pick five to see how they fit</span>'}</div>
+      <ul class="ch-fit-slots">${slots}</ul>${parts ? `<ul class="ch-fit-parts">${parts}</ul>` : ''}</section>`;
+  }
+  UI.challengeFit = fitHtml;
   function slotsHtml(list, teams, removable) {
     const out = [];
     for (let i = 0; i < 5; i++) {
@@ -201,7 +214,7 @@
   function playerRow(p, teams, btn) {
     const from = p.from || p.team;
     const t = p.season && p.season !== 2013 && C.eraTeam(p.season, from) || teamOf(teams, from);
-    return `<li class="ch-pl">${face(p, (t.colors || ['#444'])[0])}<span class="ch-pl-b"><b>${esc(p.name)}</b><small>${logo(t, 18)} ${esc(C.primaryPos(p.pos))}${p.age ? ' | ' + p.age : ''}${p.label ? ' | ' + esc(p.label) : ''}${p.stats ? '<span class="ch-real">' + esc(realLine(p.stats)) + ' <i>PTS / REB / AST</i></span>' : ''}</small></span>
+    return `<li class="ch-pl">${face(p, (t.colors || ['#444'])[0])}<span class="ch-pl-b"><b>${esc(p.name)}</b><small>${logo(t, 18)} ${esc(String(p.pos || '').replace(/-/g, '/'))}${p.age ? ' | ' + p.age : ''}${p.label ? ' | ' + esc(p.label) : ''}</small></span>
       <span class="ch-ovr ${UI.ovrClass(p.ovr)}">${p.ovr}</span>${btn || ''}</li>`;
   }
 
@@ -227,6 +240,7 @@
       <div class="ch-top">${logo(me, 48)}<div><div class="ch-top-k">${esc(seasonLabel(cfg.year))} | ${esc(BUILD[cfg.build].label)}</div><div class="ch-top-t">${esc(cfg.name || tName(me))}</div></div>
         <a class="btn btn-small" href="#/challenge">SETUP</a></div>
       ${slotsHtml(mine, teams, cfg.build === 'free')}
+      ${mine.length ? fitHtml(C.lineupFit(mine)) : ''}
       ${full ? `<div class="ch-ready"><div><b>YOUR FIVE IS SET.</b><span class="muted"> Eight scrubs fill the bench.</span></div><button type="button" class="btn btn-gold btn-big" id="chSim">SIM THE SEASON</button></div>` : ''}
       ${body}`;
     bindPick(app);
@@ -389,6 +403,7 @@
       <div class="ch-top">${logo(me, 48)}<div><div class="ch-top-k">ALL-TIME | ${esc(BUILD[cfg.build].label)} | ${esc(seasonLabel(cfg.era))} RULES</div><div class="ch-top-t">${esc(cfg.name || tName(me))}</div></div>
         <a class="btn btn-small" href="#/challenge">SETUP</a></div>
       ${slotsHtml(mine, teams, false)}
+      ${mine.length ? fitHtml(C.lineupFit(mine)) : ''}
       ${full ? `<div class="ch-ready"><div><b>THE DRAFT IS DONE.</b><span class="muted"> 30 teams, five each, scrub benches everywhere.</span></div><button type="button" class="btn btn-gold btn-big" id="chSim">SIM THE SEASON</button></div>` : clock}
       ${board}
       ${full ? leagueBoard(dr, teams) : recent.length ? `<section>${UI.header('LATEST PICKS')}<ol class="ch-feed">${recent.map(x => { const e = dr.pool.find(q => q.key === x.key); const t = teamOf(teams, x.team); return `<li><span class="ch-feed-n">#${x.n}</span>${logo(t, 22)}<b>${esc(e.name)}</b><small class="muted">${esc(short(e.season))} | ${e.ovr}</small></li>`; }).join('')}</ol></section>` : ''}`;
@@ -640,7 +655,7 @@
           ${x.tags.length ? `<div class="ch-tags">${x.tags.map(g => `<span class="ch-tag${/MVP/.test(g) ? ' gold' : ''}">${esc(g)}</span>`).join('')}</div>` : ''}</div></header>
         ${line(x.line)}
         ${x.po ? `<div class="ch-po"><small>PLAYOFFS</small> ${x.po.pts} pts | ${x.po.reb} reb | ${x.po.ast} ast in ${x.po.g} games</div>` : ''}
-        ${x.real ? `<div class="ch-real-line"><small>REAL ${esc(x.label || seasonLabel(r.year))}</small> ${x.real.pts} pts | ${x.real.reb} reb | ${x.real.ast} ast | ${x.real.mpg} min</div>` : ''}
+
       </article>`;
     }).join('');
     const series = r.series.map(s => { const t = teamOf(teams, s.opp); return `<li class="${s.won ? 'w' : 'l'}"><small>${esc(s.name.toUpperCase())}</small>${logo(t, 24)}<b>${s.won ? 'W' : 'L'} ${s.w}-${s.l}</b><span>${esc(t.name)}</span></li>`; }).join('');
@@ -660,7 +675,7 @@
       ${r.sharedFrom ? `<div class="note">${r.sharedFrom.w === r.w && r.sharedFrom.l === r.l ? 'Shared challenge: the same season your friend simmed.' : 'Shared challenge: the original run went ' + r.sharedFrom.w + '-' + r.sharedFrom.l + '. A different browser rolled the luck a little differently.'}</div>` : ''}
       <div class="row-btns center ch-acts"><button type="button" class="btn btn-gold" id="chAgain">RUN IT BACK</button><button type="button" class="btn" id="chOdds">SIM 10 MORE SEASONS</button><button type="button" class="btn" id="chShare">SHARE</button><a class="btn" href="#/challenge">NEW CHALLENGE</a></div>
       <div id="chOddsBox">${oddsHtml(r)}</div>
-      ${UI.header('YOUR FIVE')}<div class="ch-cards">${fiveCards}</div>
+      ${UI.header('YOUR FIVE')}${r.fit ? fitHtml(r.fit) : ''}<div class="ch-cards">${fiveCards}</div>
       ${r.poBest && r.poBest.length ? `${UI.header('PLAYOFF HIGHS', 'Your five in the postseason')}<ol class="ch-best">${r.poBest.map(b => `<li><a href="#/challenge/game/${idx}/${esc(b.gid)}"><b>${b.pts}</b><span><b>${esc(b.name)}</b><small>${b.reb} reb | ${b.ast} ast | vs ${esc(b.opp)}, ${esc(UI.dateLabel ? UI.dateLabel(b.date) : b.date)}</small></span><i class="ch-go-i">BOX</i></a></li>`).join('')}</ol>` : ''}
       ${r.best.length ? `${UI.header('BEST NIGHTS', 'Regular season')}<ol class="ch-best">${r.best.map(b => `<li>${b.gid ? `<a href="#/challenge/game/${idx}/${esc(b.gid)}">` : '<span class="ch-best-a">'}<b>${b.pts}</b><span><b>${esc(b.name)}</b><small>${b.reb} reb | ${b.ast} ast | ${b.playoff ? 'playoffs ' : ''}vs ${esc(b.opp)}, ${esc(UI.dateLabel ? UI.dateLabel(b.date) : b.date)}</small></span>${b.gid ? '<i class="ch-go-i">BOX</i></a>' : '</span>'}</li>`).join('')}</ol>` : ''}
       ${UI.header('AROUND THE LEAGUE')}

@@ -412,7 +412,7 @@
   function makeState(p, n) {
     var rp = rawProfile(p), zp = zProfile(rp, n);
     var s = {
-      p: p, id: p.id, name: p.name || String(p.id), ovr: rp.ovr, group: posGroup(p.pos), rank: posRank(p.pos),
+      p: p, id: p.id, name: p.name || String(p.id), ovr: rp.ovr, group: posGroup(p.pos), rank: p.slot != null ? +p.slot : posRank(p.pos),   // p.slot: the spot he plays (Draft Challenge fit)
       a: rp.a, z: zp.z, offZ: zp.offZ, makeZ: zp.makeZ, ovrZ: zp.ovrZ, ovrSoft: zp.ovrSoft, shares: zp.shares, usage: usageOf(zp, n),
       target: 0, sec: 0, energy: 1, fouls: 0, out: false, onCourt: false, starter: false,
       injuryAt: -1, injury: null, need: 0, astTend: null, foulTend: 1, gen: true,
@@ -542,7 +542,7 @@
     });
     var tot = 0;
     roster.forEach(function (s) { tot += s.target; });
-    if (tot > 0) roster.forEach(function (s) { s.target = Math.min(mins ? 46 : 42, s.target * 240 / tot); });
+    if (tot > 0) roster.forEach(function (s) { s.target = Math.min(mins ? (team.ironman ? 48 : 46) : 42, s.target * 240 / tot); });
     // Injury rolls for this game: about 0.15% to 0.4% per player, by durability and minutes
     roster.forEach(function (s) {
       if (s.target <= 0) return;
@@ -552,7 +552,7 @@
       if (rng() < p) s.injuryAt = Math.floor(rng() * REG_SECONDS);
     });
     return { abbr: team.abbr, side: side, roster: roster, all: all, lineup: [], teamFouls: 0, late2: 0, pts: 0, lastSub: -999,
-      strat: readStrategy(team.strategy) };
+      strat: readStrategy(team.strategy), iron: !!team.ironman };   // iron: five who play all 48 (Draft Challenge versus), they tire about half as fast
   }
 
   // Team strategy: sliders 0..100 with 50 neutral, turned into -1..1 (0 = neutral)
@@ -739,7 +739,7 @@
         t.roster.forEach(function (s) {
           if (s.onCourt) {
             s.sec += sec;
-            var drain = (0.0125 - s.z.stamina * 0.0016) * (1 + T.starDrain * Math.max(0, s.usage - 1)) / 60;
+            var drain = (0.0125 - s.z.stamina * 0.0016) * (1 + T.starDrain * Math.max(0, s.usage - 1)) / 60 * (t.iron ? 0.45 : 1);
             s.energy = Math.max(0.4, s.energy - drain * sec);
           } else {
             s.energy = Math.min(1, s.energy + 0.034 / 60 * sec);
