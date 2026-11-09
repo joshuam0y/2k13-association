@@ -782,8 +782,12 @@
     loadFor(r.cfg).then(() => shareNow(r)).catch(() => shareNow(r, true));
   }
   function shareNow(r, plain) {
-    const names = r.five.map(x => x.name).join(', ');
-    const text = `My ${r.label} Draft Challenge: ${names} went ${r.w}-${r.l}. ${r.exit === 'champion' ? 'NBA Champions.' : r.result + '.'} Sim the same season:`;
+    const last = n => String(n || '').split(' ').filter(w => !/^(jr\.?|sr\.?|ii|iii|iv)$/i.test(w)).pop();
+    const ns = r.five.map(x => last(x.name)), names = ns.slice(0, -1).join(', ') + ' and ' + ns[ns.length - 1];
+    const how = r.exit === 'champion' ? 'won the whole thing 🏆' : String(r.result || '').charAt(0).toLowerCase() + String(r.result || '').slice(1);
+    const text = r.exit === 'champion'
+      ? `I drafted ${names} out of ${r.label}, went ${r.w}-${r.l} and ${how}. Think your five can beat mine? Same season, your picks:`
+      : `I drafted ${names} out of ${r.label} and went ${r.w}-${r.l} (${how}). Bet you can't do better. Same season, your picks:`;
     let url = location.origin + location.pathname + '#/challenge';
     if (!plain) { try { url += '/s/' + shareCode(r); } catch (e) { /* plain link */ } }
     const me = r.team && typeof r.team === 'object' ? r.team : {};

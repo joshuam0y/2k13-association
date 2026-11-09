@@ -418,7 +418,8 @@
         const spec = { kicker: 'VERSUS | BEST OF ' + r.bestOf + ' | ' + lbl(cfg.year), title: who(wi).toUpperCase() + ' WINS', big: ws, gold: true,
           banner: r.mvp ? 'SERIES MVP: ' + r.mvp.name.toUpperCase() : '', colors: S[wi].team.colors, logo: S[wi].team.logo,
           lines: [[who(0).slice(0, 8).toUpperCase(), S[0].five.map(p => p.name.split(' ').pop()).join(', ')], [who(1).slice(0, 8).toUpperCase(), S[1].five.map(p => p.name.split(' ').pop()).join(', ')]] };
-        const text = who(wi) + ' beat ' + who(li) + ' ' + ws + ' in a 2K13 Association versus draft. Run it back:';
+        const mv = r.mvp ? ` Series MVP: ${r.mvp.name} (${r.mvp.line.pts} ppg).` : '';
+        const text = `🏀 ${who(wi)} beat ${who(li)} ${ws} in a ${lbl(cfg.year)} versus draft, best of ${r.bestOf}.${mv} Think you can draft better? Spin your own:`;
         UI.shareResult(spec, text, location.origin + location.pathname + '#/challenge/vs', 'versus');
       });
       if ($('#vsNew')) $('#vsNew').addEventListener('click', () => { VS.cfg = null; VS.shown = 0; go('setup'); });
