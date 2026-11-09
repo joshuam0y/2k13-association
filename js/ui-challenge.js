@@ -786,8 +786,8 @@
     const text = `My ${r.label} Draft Challenge: ${names} went ${r.w}-${r.l}. ${r.exit === 'champion' ? 'NBA Champions.' : r.result + '.'} Sim the same season:`;
     let url = location.origin + location.pathname + '#/challenge';
     if (!plain) { try { url += '/s/' + shareCode(r); } catch (e) { /* plain link */ } }
-    const me = (r.teams || []).find(t => t.abbr === r.team) || {};
-    const spec = { kicker: (r.label || '') + ' DRAFT CHALLENGE', title: tName(me) || r.team, big: r.w + '-' + r.l, gold: r.exit === 'champion',
+    const me = r.team && typeof r.team === 'object' ? r.team : {};
+    const spec = { kicker: (r.label || '') + ' DRAFT CHALLENGE', title: tName(me) || 'MY FIVE', big: r.w + '-' + r.l, gold: r.exit === 'champion',
       banner: r.exit === 'champion' ? 'NBA CHAMPIONS' : String(r.result || '').toUpperCase(), colors: me.colors, logo: me.logo,
       lines: r.five.map(x => [C.primaryPos(x.pos), x.name + (x.line ? '   ' + x.line.pts + ' PTS' : '')]) };
     if (UI.shareResult) { UI.shareResult(spec, text, url, 'draft-challenge'); return; }
