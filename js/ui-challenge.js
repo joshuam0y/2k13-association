@@ -249,7 +249,7 @@
   const REEL_W = 132, REEL_GAP = 10, REEL_AT = 32, REEL_N = 38;
   function reelCard(t, season, cls) {
     const c1 = (t.colors && t.colors[0]) || '#333', c2 = (t.colors && t.colors[1]) || '#777';
-    return `<div class="ch-card${cls ? ' ' + cls : ''}" style="--c1:${esc(c1)};--c2:${esc(c2)}">${logo(t, 58)}<b>${esc(t.name || t.abbr)}</b>${season ? `<small>${esc(seasonLabel(season))}</small>` : ''}</div>`;
+    return `<div class="ch-rcard${cls ? ' ' + cls : ''}" style="--c1:${esc(c1)};--c2:${esc(c2)}">${logo(t, 58)}<b>${esc(t.name || t.abbr)}</b>${season ? `<small>${esc(seasonLabel(season))}</small>` : ''}</div>`;
   }
   function wheelStrip(teams) {
     const list = teams.slice(0, 9);
@@ -286,7 +286,7 @@
     const view = reel.clientWidth, jitter = (Math.random() - 0.5) * REEL_W * 0.6;
     const target = REEL_AT * (REEL_W + REEL_GAP) + REEL_W / 2 - view / 2 + jitter;
     const land = () => {
-      const w = strip.querySelector('.ch-card.win');
+      const w = strip.querySelector('.ch-rcard.win');
       if (w) w.classList.add('lit');
       reel.classList.add('landed');
       setTimeout(done, reduce ? 150 : 900);
