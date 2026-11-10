@@ -189,14 +189,17 @@
   // the full name has to match too: a Washington Bullets team must not wear the Wizards logo
   UI.LOGO_CITY = {ATL: /^Atlanta Hawks$/, BKN: /^(New Jersey|Brooklyn) Nets$/, CHA: /^Charlotte (Bobcats|Hornets)$/, CHI: /^Chicago Bulls$/, CLE: /^Cleveland Cavaliers$/, DAL: /^Dallas Mavericks$/, DEN: /^Denver Nuggets$/, DET: /^Detroit Pistons$/, GSW: /^(Golden State|San Francisco) Warriors$/, HOU: /^Houston Rockets$/, IND: /^Indiana Pacers$/, LAC: /^Los Angeles Clippers$/, LAL: /^Los Angeles Lakers$/, MEM: /^Memphis Grizzlies$/, MIA: /^Miami Heat$/, MIL: /^Milwaukee Bucks$/, MIN: /^Minnesota Timberwolves$/, NOH: /^New Orleans (Hornets|Pelicans)$/, NJN: /^New Jersey Nets$/, NYK: /^New York Knicks$/, OKC: /^Oklahoma City Thunder$/, ORL: /^Orlando Magic$/, PHI: /^Philadelphia 76ers$/, PHX: /^Phoenix Suns$/, POR: /^Portland Trail Blazers$/, SAC: /^Sacramento Kings$/, SAS: /^San Antonio Spurs$/, SEA: /^Seattle SuperSonics$/, TOR: /^Toronto Raptors$/, UTA: /^Utah Jazz$/, WAS: /^Washington Wizards$/};
   // a logo for any team in any season: its own file, a historic one (data/team-logos.js, by city and name), or the franchise's earliest
-  // file for the three marks that have hardly changed (Celtics, Bulls, Knicks); never a modern logo on a different-looking old team
+  // file for the three marks that have hardly changed (Celtics, Bulls, Knicks); a continuing franchise with no logo of that era wears its most recent real one
   const STABLE_MARK = { BOS: 1, CHI: 1, NYK: 1 };
   UI.logoSrc = t => {
     if (t.logo) return t.logo;
     const full = ((t.city || '') + ' ' + (t.name || '')).trim();
     if (window.TEAM_LOGOS && window.TEAM_LOGOS[full]) return window.TEAM_LOGOS[full];
-    const list = UI.LOGO_FILES[t.abbr];
-    return STABLE_MARK[t.abbr] && list && list.length && UI.LOGO_CITY[t.abbr] && UI.LOGO_CITY[t.abbr].test(full) ? 'assets/logos/' + list[0] : '';
+    const fr = window.CHALLENGE && window.CHALLENGE.franchise ? window.CHALLENGE.franchise(t.abbr) : t.abbr;
+    const list = UI.LOGO_FILES[t.abbr] || UI.LOGO_FILES[fr];
+    if (STABLE_MARK[t.abbr] && list && list.length && UI.LOGO_CITY[t.abbr] && UI.LOGO_CITY[t.abbr].test(full)) return 'assets/logos/' + list[0];
+    // a team that still exists, in a season before its oldest logo file: wear the franchise's most recent real logo
+    return list && list.length ? 'assets/logos/' + list[list.length - 1] : '';
   };
   UI.logoFor = function (t, size) {
     const c1 = (t.colors && t.colors[0]) || '#333';

@@ -35,6 +35,7 @@
   function teamOf(list, abbr) { return (list || []).find(t => t.abbr === abbr) || { abbr, city: abbr, name: '', colors: ['#333', '#777'], logo: null }; }
   function tName(t) { return ((t.city || '') + ' ' + (t.name || '')).trim(); }
   function logo(t, size) {
+    if (!t.logo && UI.logoSrc) { const src = UI.logoSrc(t); if (src) t = Object.assign({}, t, { logo: src }); }
     const c1 = (t.colors && t.colors[0]) || '#333', c2 = (t.colors && t.colors[1]) || '#999';
     const img = t.logo ? `<img src="${esc(t.logo)}" alt="" loading="lazy"${t.logoNoRef ? ' referrerpolicy="no-referrer"' : ''} onerror="this.parentNode.classList.add('nologo');this.remove()">` : '';
     return `<span class="logo${t.logo ? '' : ' nologo'}${UI.darkLogo && UI.darkLogo(t) ? ' dark' : ''}" style="--c1:${esc(c1)};--c2:${esc(c2)};--sz:${size || 40}px" title="${esc(tName(t))}">${img}<b>${esc(t.abbr)}</b></span>`;
