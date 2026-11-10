@@ -19,7 +19,9 @@
     cfg: null, teams: [], picks: [], who: 0, hand: false, spin: null, spun: [], respins: [], seeds: [], rounds: [], cur: null, champ: -1 });
   let TN = Object.assign(FRESH(), ls.get() || {});
   TN.opts = Object.assign({ timer: 24, cap: 0, bestOf: 1, seeding: 'random', ratings: true }, TN.opts || {});
-  const save = () => ls.set(TN);
+  const HOOK = { pages: {} };   // filled in by the online tournament (js/ui-tournament-online.js)
+  const save = () => { if (HOOK.on) { if (HOOK.save) HOOK.save(TN); } else ls.set(TN); };
+  const ctl = () => !HOOK.on || !!HOOK.host;   // online, only the host runs the bracket
   let APP = null;
 
   // ---------- small helpers ----------
@@ -164,13 +166,14 @@
     const app = APP;
     stopTick(); dropCourt();
     window.scrollTo(0, 0);
+    if (HOOK.on && HOOK.pages[TN.page]) { HOOK.pages[TN.page](app); return; }
     if (TN.page === 'draft' && TN.cfg) draft(app);
     else if (TN.page === 'bracket' && TN.rounds.length) bracketPage(app);
     else if (TN.page === 'match' && TN.cur) matchPage(app);
     else if (TN.page === 'champ' && TN.champ >= 0) champPage(app);
     else { TN.page = 'setup'; setup(app); }
   }
-  function go(page) { TN.page = page; save(); render(); }
+  function go(page) { TN.page = page; if (page !== 'match') TN.watch = null; save(); render(); }
 
   // ---------- setup ----------
   function setup(app) {
@@ -202,7 +205,7 @@
             <div><span class="ts-start-k">RATINGS</span><div class="ch-chips">${[[true, 'ON'], [false, 'OFF']].map(([v, l]) => `<button type="button" class="ch-chip${(o.ratings !== false) === v ? ' on' : ''}" data-rate="${v}">${l}</button>`).join('')}</div></div>
             <div><span class="ts-start-k">SALARY CAP</span><div class="ch-chips">${UI.challengeCap.CAPS.map(v => `<button type="button" class="ch-chip${(o.cap || 0) === v ? ' on' : ''}" data-cap="${v}">${v ? '$' + v + 'M' : 'OFF'}</button>`).join('')}</div></div>
           </div></div>
-        <div class="ch-go"><button type="button" class="btn btn-gold btn-big" id="tnStart">START THE DRAFT</button><a class="btn" href="#/home">HOME</a></div>
+        <div class="ch-go"><button type="button" class="btn btn-gold btn-big" id="tnStart">START THE DRAFT</button><a class="btn" href="#/challenge/tournament/online">PLAY ONLINE</a><a class="btn" href="#/home">HOME</a></div>
       </div>`;
     UI.centerChips(app);
     const readNames = () => { app.querySelectorAll('[data-name]').forEach(inp => { TN.names[+inp.dataset.name] = inp.value.trim().slice(0, 20); }); };
@@ -375,6 +378,7 @@
     UI.$('#tnCpuGo', app).addEventListener('click', () => { TN.cpu = false; startBracket(B); });
   }
   function quit() {
+    if (HOOK.on) { HOOK.quit(); return; }
     if (!window.confirm('Quit this tournament? Everything drafted so far is lost.')) return;
     ls.del(); TN = FRESH(); RUNS_CLEAR(); render();
   }
@@ -403,7 +407,7 @@
       const B = board(TN.cfg), cr = curRound();
       const cols = TN.rounds.map((round, r) => `<div class="tn-col"><div class="tn-col-k">${roundName(r)}<small>BEST OF ${round[0].bestOf}</small></div>
         <div class="tn-col-b">${round.map((m, i) => `<div class="tn-match${m.done ? ' done' : ''}${ready(m) && !m.done ? ' live' : ''}">${slot(m, 0, r)}${slot(m, 1, r)}
-          <div class="tn-match-a">${ready(m) && !m.done ? `<button type="button" class="btn btn-small btn-gold" data-watch="${r}:${i}">WATCH</button><button type="button" class="btn btn-small" data-sim="${r}:${i}">SIM</button>`
+          <div class="tn-match-a">${ready(m) && !m.done && !ctl() ? '<span class="muted">UP NEXT</span>' : ready(m) && !m.done ? `<button type="button" class="btn btn-small btn-gold" data-watch="${r}:${i}">WATCH</button><button type="button" class="btn btn-small" data-sim="${r}:${i}">SIM</button>`
             : m.done ? `<button type="button" class="btn btn-small" data-open="${r}:${i}">BOX SCORES</button>` : '<span class="muted">WAITING</span>'}</div></div>`).join('')}</div></div>`).join('');
       const rosters = TN.seeds.map((p, s) => {
         const t = teamOf(p), five = TN.picks[p].map(id => B.byId[id]).filter(Boolean);
@@ -414,6 +418,7 @@
       app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(lblC(TN.cfg))} | ${TN.n} TEAMS | BEST OF ${TN.opts.bestOf}${TN.cfg.cap ? ' | $' + TN.cfg.cap + 'M CAP' : ''}</div><div class="ch-top-t">THE BRACKET</div></div>
           <button type="button" class="btn btn-small" id="tnQuit">NEW</button></div>
         <div class="row-btns center ch-acts tn-acts">${over ? '<button type="button" class="btn btn-gold btn-big" id="tnCrown">THE CHAMPION</button>'
+          : !ctl() ? '<p class="muted">The host runs the bracket. Everyone watches the same games.</p>'
           : `<button type="button" class="btn btn-gold" id="tnRound">SIM ${esc(roundName(cr))}</button><button type="button" class="btn" id="tnAll">SIM THE WHOLE THING</button>`}</div>
         <div class="tn-bracket" style="--rounds:${TN.rounds.length}">${cols}</div>
         <section class="tn-rosters">${UI.header('THE FIVES', 'Tap to open')}${rosters}</section>`;
@@ -427,7 +432,7 @@
       app.querySelectorAll('[data-sim]').forEach(b => b.addEventListener('click', () => { const [r, i] = pr(b.dataset.sim); simMatch(r, i); after(); }));
       app.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => { const [r, i] = pr(b.dataset.open); TN.cur = { r, i }; WATCH = 0; go('match'); }));
       app.querySelectorAll('[data-watch]').forEach(b => b.addEventListener('click', () => {
-        const [r, i] = pr(b.dataset.watch); TN.cur = { r, i }; WATCH = (TN.rounds[r][i].shown || 0) + 1; AUTO = true; go('match');
+        const [r, i] = pr(b.dataset.watch); TN.cur = { r, i }; WATCH = (TN.rounds[r][i].shown || 0) + 1; AUTO = true; TN.watch = { r, i, n: WATCH }; go('match');
       }));
     });
   }
@@ -473,7 +478,8 @@
           ${g.res ? `<details class="vs-gbox"><summary>BOX SCORE</summary>${['away', 'home'].map(k => gameBox(S, g.res[k], { who: 'PLAYER ' + (pOf(g.res[k].abbr) + 1), name: nm(pOf(g.res[k].abbr)) })).join('')}</details>` : ''}</li>`;
       }).join('');
       const next = shown + 1;
-      const acts = done
+      const acts = !ctl() && !done ? '<p class="muted">The host runs the games. Everyone watches together.</p>'
+        : done
         ? `<button type="button" class="btn btn-gold btn-big" id="tnBack">${final ? 'THE CHAMPION' : 'BACK TO THE BRACKET'}</button>`
         : WATCH ? '<button type="button" class="btn btn-gold" id="tnFinal">SKIP TO THE END OF THIS GAME</button>'
         : `<button type="button" class="btn btn-gold btn-big" id="tnWatch">WATCH GAME ${next}</button><button type="button" class="btn" id="tnNext">SIM GAME ${next}</button>${res.bestOf > 1 ? '<button type="button" class="btn" id="tnRest">SIM THE REST</button>' : ''}<button type="button" class="btn" id="tnBack">BRACKET</button>`;
@@ -485,19 +491,20 @@
       const $ = id => UI.$(id, app);
       const mountCourt = (el, g, onEnd) => {
         if (!el || !g || !g.res || !(window.COURT && window.COURT.available(g.res))) { if (el) el.innerHTML = '<p class="muted">The court view did not load.</p>'; return null; }
-        return window.COURT.mount(el, { game: g.res, start: 0, autoplay: true, team: a => tm(a), player: id => PL[id] || null, logo: (a, size) => logo(tm(a), size), onEnd });
+        return window.COURT.mount(el, { game: g.res, start: 0, autoplay: true, team: a => tm(a), player: id => PL[id] || null, logo: (a, size) => logo(tm(a), size), onEnd, onControl: (k, v) => { if (HOOK.on && HOOK.court) HOOK.court(WATCH, k, v); } });
       };
       // reveals up to game n; the last one closes the series and moves the winner on
       const reveal = n => {
-        WATCH = 0; dropCourt();
+        WATCH = 0; dropCourt(); TN.watch = null;
         m.shown = Math.max(m.shown || 0, n);
         if (m.shown >= res.games.length) { if (window.SFX) window.SFX.play('crowd'); finish(ri, mi); }
         save(); matchPage(app); window.scrollTo(0, 0);
       };
       const watch = n => {
-        WATCH = n; matchPage(app);
+        WATCH = n; if (ctl()) { TN.watch = { r: ri, i: mi, n }; save(); }
+        matchPage(app);
         const el = UI.$('#vsCourt', app);
-        courtCtl = mountCourt(el, res.games[n - 1], () => { if (WATCH === n && n > (m.shown || 0)) reveal(n); });
+        courtCtl = mountCourt(el, res.games[n - 1], () => { if (WATCH === n && n > (m.shown || 0) && ctl()) reveal(n); });
         if (courtCtl && UI.extras && typeof UI.extras.onLeave === 'function') UI.extras.onLeave(dropCourt);
         if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
       };
@@ -528,13 +535,21 @@
           <p class="muted">${esc(tName(t))}. Runner-up: ${esc(nm(runnerUp))}.</p>
           <ol class="tn-champ-five">${five.map(q => `<li><b>${esc(q.name)}</b><small>${esc(C.posLabel(q))}${B.era && q.season ? ' | ' + short(q.season) : ''}</small>${ovrTag(q)}</li>`).join('')}</ol>
           <ul class="tn-path">${path}</ul>
-          <div class="row-btns center ch-acts"><button type="button" class="btn btn-gold btn-big" id="tnNew">NEW TOURNAMENT</button><button type="button" class="btn" id="tnBracket">SEE THE BRACKET</button><button type="button" class="btn" id="tnFinalBox">FINAL BOX SCORES</button></div></section>`;
+          <div class="row-btns center ch-acts">${ctl() ? '<button type="button" class="btn btn-gold btn-big" id="tnNew">NEW TOURNAMENT</button>' : '<button type="button" class="btn btn-gold btn-big" id="tnLeave">LEAVE ROOM</button>'}<button type="button" class="btn" id="tnBracket">SEE THE BRACKET</button><button type="button" class="btn" id="tnFinalBox">FINAL BOX SCORES</button></div></section>`;
       if (window.SFX) { try { window.SFX.play('crowd'); } catch (e) { /* no sound */ } }
-      UI.$('#tnNew', app).addEventListener('click', () => { ls.del(); TN = FRESH(); RUNS_CLEAR(); render(); });
+      const nw = UI.$('#tnNew', app); if (nw) nw.addEventListener('click', () => { if (HOOK.on) { HOOK.again(); return; } ls.del(); TN = FRESH(); RUNS_CLEAR(); render(); });
+      const lv = UI.$('#tnLeave', app); if (lv) lv.addEventListener('click', quit);
       UI.$('#tnBracket', app).addEventListener('click', () => go('bracket'));
       UI.$('#tnFinalBox', app).addEventListener('click', () => { TN.cur = { r: TN.rounds.length - 1, i: 0 }; WATCH = 0; go('match'); });
     });
   }
+
+  // what the online tournament drives: the same bracket, match and champion screens on every phone
+  window.TOURNAMENT.api = { hook: HOOK, get: () => TN, render, save, ensure, board, rosterOf, spinFor, aiChoose, ovrTag, startBracket, teamOf, tName, logo, lblC, short, lbl,
+    ALL_YEARS, decOf, shuffle, CPU_NAMES, clearRuns: RUNS_CLEAR, nm, f1,
+    nm2: nm, mount(app) { APP = app; render(); },
+    swap(obj) { TN = Object.assign(FRESH(), obj || ls.get() || {}); TN.opts = Object.assign({ timer: 24, cap: 0, bestOf: 1, seeding: 'random', ratings: true }, TN.opts || {}); RUNS_CLEAR(); WATCH = 0; AUTO = false; dropCourt(); },
+    setWatch(n) { WATCH = n; AUTO = true; }, court: () => courtCtl, watchN: () => WATCH };
 
   const prev = P.challenge;
   P.challenge = function (app, arg) {

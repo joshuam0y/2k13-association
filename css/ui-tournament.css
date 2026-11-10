@@ -74,3 +74,15 @@
 .tn-cpu-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .tn-cpu-c ol { margin: 8px 0 0; padding-left: 18px; font-size: 13px; }
 .tn-cpu-c ol li { margin: 3px 0; }
+
+.tn-seats { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
+.tn-seat { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--line, #333); border-radius: 6px; }
+.tn-seat.on { background: rgba(255,255,255,.04); }
+.tn-seat.me { border-color: var(--gold, #d4af37); }
+.tn-seat b { flex: 1; }
+.tn-seat small { color: var(--gold, #d4af37); letter-spacing: .1em; font-size: 10px; }
+.tn-live { width: 8px; height: 8px; border-radius: 50%; background: #3ddc84; flex: none; }
+.tn-live.off { background: #888; }
+.tn-pips { display: inline-flex; gap: 3px; }
+.tn-pips u { width: 12px; height: 6px; background: #444; border-radius: 2px; }
+.tn-pips u.on { background: var(--gold, #d4af37); }

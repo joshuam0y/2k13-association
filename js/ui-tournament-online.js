@@ -1,0 +1,513 @@
+// Online Tournament (#/challenge/tournament/online): 4 or 8 teams, every human drafts on their own phone at
+// the same time, the host phone runs the bracket and everyone watches the same games. The host is the
+// authority: guests send actions (spin, take), the host checks them, changes the state and sends the whole
+// state back. Messages travel over the same encrypted MQTT relay as Head to Head (key made from the room
+// code). A guest keeps an id on the phone, so reopening the link takes the same seat back; the host keeps
+// the room on the phone and can resume it. The bracket, match and champion screens are the hot-seat ones
+// from js/ui-tournament.js (api hook), with the buttons only on the host phone.
+(function () {
+  'use strict';
+  const P = UI.pages, esc = UI.esc, C = window.CHALLENGE;
+  const T = window.TOURNAMENT, A = T && T.api;
+  if (!C || !A || typeof P.challenge !== 'function') return;
+  const HOOK = A.hook, TN = () => A.get();
+  const MQTT_SRC = 'https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js';
+  const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081'];
+  const SPIN_MS = 4700;
+  const SHARED = ['page', 'n', 'humans', 'names', 'ai', 'seats', 'live', 'opts', 'skip', 'cfg', 'teams', 'picks', 'seeds', 'rounds', 'cur', 'champ', 'rating', 'watch', 'spins', 'respins', 'spun', 'clk', 'hnow'];
+  const store = k => ({
+    get() { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } },
+    set(v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode */ } },
+    del() { try { localStorage.removeItem(k); } catch (e) { /* private mode */ } }
+  });
+  const lsHost = store('a13-tn-host'), lsRoom = store('a13-tn-room'), lsName = store('a13-tn-name');
+  const CID = (() => { try { let c = localStorage.getItem('a13-tn-cid'); if (!c) { c = Math.random().toString(36).slice(2, 12); localStorage.setItem('a13-tn-cid', c); } return c; } catch (e) { return Math.random().toString(36).slice(2, 12); } })();
+  const NET = { role: null, code: '', status: '', err: '', client: null, key: null, me: '', peerSeen: 0, timers: [] };
+  const SEEN = {};
+  let APP = null, OFF = 0, SIG = '', LAST = { page: '', mine: '' }, PEND = '', TICK = null, ON = false;
+  const ANIM = {};
+  const mySeat = () => (NET.role === 'host' ? 0 : TN().seats.indexOf(CID));
+  const flat = () => [].concat.apply([], TN().picks);
+  const cleanName = (v, i) => String(v || '').trim().slice(0, 20) || 'PLAYER ' + (i + 1);
+  const fresh = (name) => ({ page: 'lobby', n: 4, humans: 0, ai: [], names: [name], seats: [CID], live: [true], opts: { timer: 24, cap: 0, bestOf: 1, seeding: 'random', ratings: true }, skip: [], cfg: null, teams: [], picks: [], seeds: [], rounds: [], cur: null, champ: -1, rating: null, watch: null, spins: [], respins: [], spun: [], clk: [], hnow: 0 });
+
+  // ---------- the relay ----------
+  function loadMqtt() {
+    if (window.mqtt) return Promise.resolve();
+    return new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = MQTT_SRC; s.onload = res; s.onerror = () => rej(new Error('Could not load the online connection. Check the internet and try again.'));
+      document.head.appendChild(s);
+    });
+  }
+  const topic = () => 'a13tn/v1/' + NET.code;
+  async function keyFor(code) {
+    const raw = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('2k13-association-tournament:' + code));
+    return crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
+  }
+  async function seal(obj) {
+    const iv = crypto.getRandomValues(new Uint8Array(12)), data = new TextEncoder().encode(JSON.stringify(obj));
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, NET.key, data));
+    const all = new Uint8Array(iv.length + ct.length); all.set(iv); all.set(ct, iv.length);
+    let b = ''; all.forEach(x => { b += String.fromCharCode(x); });
+    return btoa(b);
+  }
+  async function open64(txt) {
+    const all = Uint8Array.from(atob(txt), c => c.charCodeAt(0));
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: all.slice(0, 12) }, NET.key, all.slice(12));
+    return JSON.parse(new TextDecoder().decode(pt));
+  }
+  function send(obj) {
+    if (!NET.client || !NET.key) return;
+    seal(Object.assign({ from: NET.me, role: NET.role, cid: CID }, obj)).then(txt => { try { NET.client.publish(topic(), txt, { qos: 1 }); } catch (e) { /* reconnecting */ } }).catch(() => {});
+  }
+  function push() {
+    if (NET.role !== 'host' || !NET.client) return;
+    const t = TN(); t.hnow = Date.now();
+    const s = {}; SHARED.forEach(k => { s[k] = t[k]; });
+    send({ t: 'state', s });
+  }
+  function saveHost() {
+    const t = TN(), s = {}; SHARED.forEach(k => { s[k] = t[k]; });
+    lsHost.set({ code: NET.code, s });
+  }
+  function hangUp() {
+    NET.timers.forEach(t => clearInterval(t)); NET.timers = [];
+    try { if (NET.client) NET.client.end(true); } catch (e) { /* gone */ }
+    Object.assign(NET, { role: null, code: '', status: '', err: '', client: null, key: null, peerSeen: 0 });
+    stopTick(); HOOK.host = false;
+  }
+  function connect(role, code) {
+    NET.timers.forEach(t => clearInterval(t)); NET.timers = [];
+    try { if (NET.client) NET.client.end(true); } catch (e) { /* gone */ }
+    Object.assign(NET, { role, code, status: 'connecting', err: '', client: null, peerSeen: 0, me: Math.random().toString(36).slice(2, 10) });
+    HOOK.host = role === 'host';
+    refreshNet();
+    Promise.all([loadMqtt(), keyFor(code)]).then(([, key]) => {
+      NET.key = key;
+      const tryBroker = i => {
+        if (NET.code !== code) return;
+        const client = window.mqtt.connect(BROKERS[i % BROKERS.length], { clientId: 'a13tn_' + NET.me + '_' + i, clean: true, connectTimeout: 7000, reconnectPeriod: 2000, keepalive: 20 });
+        NET.client = client;
+        let up = false;
+        const giveUp = setTimeout(() => { if (!up && NET.client === client && i < BROKERS.length * 2 - 1) { try { client.end(true); } catch (e) { /* gone */ } tryBroker(i + 1); } }, 9000);
+        client.on('connect', () => {
+          up = true; clearTimeout(giveUp);
+          client.subscribe(topic(), { qos: 1 }, () => {
+            if (NET.role === 'host') { NET.status = 'ready'; push(); } else { NET.status = NET.status === 'connected' ? 'connected' : 'connecting'; hello(); }
+            refreshNet();
+          });
+        });
+        client.on('message', (t, buf) => { open64(buf.toString()).then(onMsg).catch(() => {}); });
+        client.on('error', () => { /* mqtt.js retries on its own */ });
+      };
+      tryBroker(0);
+      let beat = 0;
+      NET.timers.push(setInterval(() => {
+        if (!NET.client || NET.code !== code) return;
+        if (NET.role === 'host') {
+          send({ t: 'ping', hn: Date.now() });
+          beat++; if (beat % 5 === 0) push();
+          const t = TN(), live = t.seats.map((c, i) => i === 0 || Date.now() - (SEEN[c] || 0) < 15000);
+          if (JSON.stringify(live) !== JSON.stringify(t.live)) { t.live = live; push(); soft(); }
+        } else {
+          if (NET.status !== 'connected') hello(); else send({ t: 'ping' });
+          if (NET.status === 'connected' && Date.now() - NET.peerSeen > 15000) { NET.status = 'lost'; refreshNet(); }
+        }
+      }, 4000));
+      if (role === 'host') NET.timers.push(setInterval(clockCheck, 500));
+      if (role === 'guest') setTimeout(() => { if (NET.code === code && NET.status === 'connecting') { NET.err = 'No answer from room ' + code + ' yet. Check the code, and that the host still has the room open. Still trying...'; refreshNet(); } }, 20000);
+    }).catch(e => { NET.status = 'error'; NET.err = e.message || 'The connection failed.'; refreshNet(); });
+  }
+  const hello = () => send({ t: 'hello', name: lsName.get() || '' });
+  const CODE_CH = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const newCode = () => Array.from({ length: 5 }, () => CODE_CH[Math.floor(Math.random() * CODE_CH.length)]).join('');
+  const joinLink = () => location.origin + location.pathname + '#/challenge/tournament/join/' + NET.code;
+
+  function onMsg(m) {
+    if (!m || typeof m !== 'object' || m.from === NET.me) return;
+    if (m.t === 'court') {
+      const c = A.court();
+      if (c && A.watchN() === m.n) { if (m.k === 'speed') c.setSpeed(+m.v || 1); else if (m.k === 'play') c.play(); else if (m.k === 'pause') c.pause(); else if (m.k === 'skip') c.skipQuarter(); }
+      return;
+    }
+    if (NET.role === 'host') {
+      if (m.role !== 'guest' || !m.cid) return;
+      SEEN[m.cid] = Date.now();
+      if (m.t === 'hello') onHello(m);
+      else if (m.t === 'act') { const seat = TN().seats.indexOf(m.cid); if (seat >= 0 && m.a) hostAct(seat, m.a); }
+      return;
+    }
+    if (m.role !== 'host') return;
+    NET.peerSeen = Date.now();
+    if (NET.status !== 'connected') { NET.status = 'connected'; NET.err = ''; lsRoom.set({ code: NET.code, at: Date.now() }); refreshNet(); }
+    if (m.t === 'ping' && m.hn) OFF = m.hn - Date.now();
+    else if (m.t === 'full' && m.to === CID) { NET.status = 'error'; NET.err = 'That room is full, or the draft already started. Ask the host.'; refreshNet(); }
+    else if (m.t === 'state' && m.s) onState(m.s);
+  }
+  function onHello(m) {
+    const t = TN();
+    let i = t.seats.indexOf(m.cid);
+    if (i < 0) {
+      if (t.page !== 'lobby' || t.seats.length >= t.n) { send({ t: 'full', to: m.cid }); return; }
+      t.seats.push(m.cid); i = t.seats.length - 1; t.names[i] = cleanName(m.name, i); t.live[i] = true;
+    } else if (t.page === 'lobby' && m.name) t.names[i] = cleanName(m.name, i);
+    A.save(); changed();
+  }
+
+  // ---------- state coming in (guests) and redrawing without disturbing what is playing ----------
+  function mySig() { const t = TN(), w = mySeat(); return JSON.stringify([t.picks[w], t.spins[w], t.respins[w], t.clk[w]]); }
+  function changed() {
+    const t = TN(), mine = mySig();
+    if (!APP) return;
+    if (t.page === 'draft' && LAST.page === 'draft' && mine === LAST.mine) updateProg();
+    else if (t.page === 'lobby' && LAST.page === 'lobby') lobby(APP);
+    else if (t.page === 'entry') entry(APP);
+    else A.render();
+    LAST = { page: t.page, mine };
+  }
+  function soft() { if (!APP) return; const t = TN(); if (t.page === 'lobby') lobby(APP); else if (t.page === 'draft') updateProg(); }
+  function onState(s) {
+    const t = TN();
+    if (s.hnow) OFF = s.hnow - Date.now();
+    const sig = JSON.stringify(s, (k, v) => (k === 'hnow' || k === 'live' ? undefined : v));
+    SHARED.forEach(k => { if (k in s) t[k] = s[k]; });
+    if (sig === SIG) { soft(); return; }
+    SIG = sig;
+    if (t.page === 'match' && t.watch && t.cur && t.watch.r === t.cur.r && t.watch.i === t.cur.i) A.setWatch(t.watch.n);
+    changed();
+  }
+
+  // ---------- host: the draft rules ----------
+  const load = (years, fn) => {
+    const todo = years.filter(y => y && !C.loaded(y));
+    if (!todo.length) { fn(); return; }
+    Promise.all(todo.map(y => C.load(y))).then(fn).catch(() => {});
+  };
+  const setClk = (seat, phase) => { const t = TN(); t.clk[seat] = t.cfg && t.cfg.timer ? { phase, until: Date.now() + t.cfg.timer * 1000 + (phase === 'pick' ? SPIN_MS : 0) } : null; };
+  function newSpin(seat, avoid) {
+    const t = TN(); t.who = seat;
+    const s = A.spinFor(t.cfg, A.board(t.cfg), flat(), avoid);
+    if (s) { t.spins[seat] = s; t.spun.push(s.key); setClk(seat, 'pick'); }
+  }
+  function humansDone() { const t = TN(); return t.seats.every((_, i) => t.picks[i].length >= 5); }
+  function fill(seat) {
+    const t = TN(), cfg = t.cfg, B = A.board(cfg);
+    let tries = 0; t.who = seat;
+    while (t.picks[seat].length < 5 && tries++ < 80) {
+      const five = t.picks[seat].map(id => B.byId[id]).filter(Boolean);
+      const s = A.spinFor(cfg, B, flat(), null);
+      if (s) t.spun.push(s.key);
+      let pick = s && A.aiChoose(cfg.cap, five, A.rosterOf(B, s.key, flat()));
+      if (!pick && tries > 40) pick = A.aiChoose(cfg.cap, five, B.players.filter(p => !B.takenSet(flat()).has(B.base(p))).slice(0, 400));
+      if (pick) t.picks[seat].push(pick.id);
+    }
+    t.spins[seat] = null; t.clk[seat] = null;
+  }
+  function afterChange() {
+    const t = TN();
+    if (t.page === 'draft' && humansDone()) {
+      for (let i = t.seats.length; i < t.n; i++) fill(i);
+      A.startBracket(A.board(t.cfg));
+      LAST = { page: t.page, mine: mySig() };
+      return;
+    }
+    A.save(); changed();
+  }
+  function hostAct(seat, a) {
+    const t = TN(), cfg = t.cfg;
+    if (t.page !== 'draft' || !cfg || seat < 0 || seat >= t.seats.length || t.picks[seat].length >= 5) return;
+    const s = t.spins[seat];
+    if (a.k === 'spin') { if (s) return; newSpin(seat, null); }
+    else if (a.k === 'respin' || a.k === 'free') {
+      if (!s) return;
+      if (a.k === 'respin') { if (!(t.respins[seat] > 0)) return; t.respins[seat]--; }
+      newSpin(seat, s.key);
+    } else if (a.k === 'take') {
+      if (!s) return;
+      load(!cfg.year && s.year !== 2013 ? [s.year] : [], () => {
+        const cur = t.spins[seat]; if (!cur || cur.n !== s.n) return;
+        const B = A.board(cfg), p = B.byId[a.id];
+        if (!p || !A.rosterOf(B, cur.key, flat()).some(x => x.id === a.id)) return;
+        const five = t.picks[seat].map(id => B.byId[id]).filter(Boolean);
+        if (cfg.cap && !C.capFits(cfg.cap, five, p)) return;
+        t.picks[seat].push(a.id); t.spins[seat] = null; setClk(seat, 'spin');
+        afterChange();
+      });
+      return;
+    } else return;
+    afterChange();
+  }
+  // the shot clock runs on the host: when it runs out the wheel spins itself, then the best fit is taken
+  function clockCheck() {
+    const t = TN();
+    if (NET.role !== 'host' || t.page !== 'draft' || !t.cfg || !t.cfg.timer) return;
+    t.seats.forEach((_, seat) => {
+      const c = t.clk[seat];
+      if (!c || t.picks[seat].length >= 5 || c.until > Date.now()) return;
+      c.until = Date.now() + 3000;   // guard while a roster loads
+      const s = t.spins[seat];
+      if (!s) { hostAct(seat, { k: 'spin' }); return; }
+      load(!t.cfg.year && s.year !== 2013 ? [s.year] : [], () => {
+        const B = A.board(t.cfg), five = t.picks[seat].map(id => B.byId[id]).filter(Boolean);
+        const pool = A.rosterOf(B, s.key, flat()).filter(p => C.capFits(t.cfg.cap, five, p)).sort((x, y) => y.ovr - x.ovr);
+        hostAct(seat, pool[0] ? { k: 'take', id: pool[0].id } : { k: 'free' });
+      });
+    });
+  }
+  function act(a) { if (NET.role === 'host') hostAct(0, a); else send({ t: 'act', a }); }
+
+  // ---------- pages ----------
+  const netBar = () => {
+    if (!NET.role) return '';
+    const st = NET.status, host = NET.role === 'host';
+    const msg = st === 'connected' ? 'Connected to the host.'
+      : st === 'ready' ? `Room <b>${esc(NET.code)}</b>: send the link to your friends.`
+      : st === 'lost' ? 'Lost the host. Reconnecting on its own when they are back...'
+      : st === 'error' ? esc(NET.err || 'Not connected.') : (NET.err ? esc(NET.err) : 'Connecting...');
+    return `<div class="vs-net ${st === 'ready' ? 'waiting' : st}"><span class="vs-net-dot"></span><span>${msg}</span>
+      ${host && NET.code ? '<button type="button" class="btn btn-small" id="tnCopy">COPY LINK</button>' : ''}
+      ${st === 'lost' || st === 'error' ? '<button type="button" class="btn btn-small" id="tnRetry">TRY AGAIN</button>' : ''}
+      <button type="button" class="btn btn-small" id="tnLeaveRoom">LEAVE</button></div>`;
+  };
+  function refreshNet() {
+    const el = document.getElementById('tnNet');
+    if (!el) return;
+    el.innerHTML = netBar();
+    const cp = el.querySelector('#tnCopy');
+    if (cp) cp.addEventListener('click', async () => {
+      const link = joinLink(), text = 'Join my tournament on Starting Five. Room ' + NET.code + ': ' + link;
+      if (navigator.share) { try { await navigator.share({ text, url: link }); return; } catch (e) { /* closed */ } }
+      try { await navigator.clipboard.writeText(link); UI.toast('Link copied. Send it around.'); } catch (e) { UI.toast(link); }
+    });
+    const rt = el.querySelector('#tnRetry'); if (rt) rt.addEventListener('click', () => connect(NET.role, NET.code));
+    const lv = el.querySelector('#tnLeaveRoom'); if (lv) lv.addEventListener('click', () => HOOK.quit());
+  }
+  function leave() {
+    hangUp(); SIG = ''; LAST = { page: '', mine: '' };
+    A.swap({ page: 'entry' });
+    if (APP) A.render();
+  }
+  HOOK.quit = () => {
+    if (!window.confirm(NET.role === 'host' ? 'Close the room? Everyone is dropped. You can resume it from the online screen.' : 'Leave the room? You can rejoin with the same link.')) return;
+    leave();
+  };
+  HOOK.again = () => {
+    const t = TN();
+    Object.assign(t, { page: 'lobby', cfg: null, teams: [], picks: [], seeds: [], rounds: [], cur: null, champ: -1, rating: null, watch: null, spins: [], respins: [], spun: [], clk: [], ai: [], humans: 0 });
+    t.names = t.names.slice(0, t.seats.length); A.clearRuns();
+    A.save(); changed();
+  };
+  HOOK.save = () => { if (NET.role === 'host') { saveHost(); push(); } };
+  HOOK.court = (n, k, v) => send({ t: 'court', n, k, v });
+  HOOK.pages.entry = app => entry(app);
+  HOOK.pages.lobby = app => lobby(app);
+  HOOK.pages.draft = app => draft(app);
+
+  function entry(app) {
+    const saved = lsHost.get(), room = lsRoom.get(), name = lsName.get() || '';
+    app.innerHTML = `
+      <section class="ch-hero"><div class="ch-hero-k">DRAFT CHALLENGE | ONLINE TOURNAMENT</div><h1 class="ch-hero-t">EVERYONE, YOUR OWN PHONE.</h1>
+        <p class="ch-hero-p">Four or eight teams. One phone hosts and runs the bracket, everyone else joins with a room code. You all draft at the same time on your own phones, then watch every game together.</p></section>
+      <div id="tnNet">${netBar()}</div>
+      <div class="ch-setup tn-setup">
+        <div class="ch-step"><div class="ch-step-k">1 | YOUR NAME</div><label class="field"><span>NAME</span><input id="tnNm" maxlength="20" placeholder="Your name" value="${esc(name)}" autocomplete="off"></label></div>
+        <div class="ch-step"><div class="ch-step-k">2 | HOST A ROOM</div>
+          <div class="ch-go"><button type="button" class="btn btn-gold btn-big" id="tnHost">HOST A ROOM</button>${saved && saved.code ? '<button type="button" class="btn" id="tnResume">RESUME YOUR ROOM ' + esc(saved.code) + '</button>' : ''}</div></div>
+        <div class="ch-step"><div class="ch-step-k">3 | OR JOIN ONE</div>
+          <div class="vs-join"><label class="field"><span>ROOM CODE</span><input id="tnCode" maxlength="5" placeholder="ABCDE" value="${esc(PEND || '')}" autocomplete="off" autocapitalize="characters"></label><button type="button" class="btn btn-gold" id="tnJoin">JOIN</button></div>
+          ${room && room.code ? '<div class="ch-go"><button type="button" class="btn" id="tnRejoin">REJOIN ROOM ' + esc(room.code) + '</button></div>' : ''}</div>
+        <div class="ch-go"><a class="btn" href="#/challenge/tournament">ONE PHONE INSTEAD</a><a class="btn" href="#/home">HOME</a></div>
+      </div>`;
+    refreshNet();
+    const nm = () => { const v = UI.$('#tnNm', app).value.trim().slice(0, 20); lsName.set(v); return v; };
+    UI.$('#tnHost', app).addEventListener('click', () => {
+      const v = nm() || 'HOST';
+      A.swap(fresh(v)); LAST = { page: '', mine: '' }; SIG = '';
+      connect('host', newCode()); A.render();
+    });
+    const rs = UI.$('#tnResume', app);
+    if (rs) rs.addEventListener('click', () => { A.swap(saved.s); LAST = { page: '', mine: '' }; connect('host', saved.code); A.render(); });
+    const go = code => {
+      const c = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (c.length < 4) { UI.toast('Type the room code', 'error'); return; }
+      if (!nm()) { UI.toast('Type your name first', 'error'); return; }
+      SIG = ''; connect('guest', c);
+    };
+    UI.$('#tnJoin', app).addEventListener('click', () => go(UI.$('#tnCode', app).value));
+    const rj = UI.$('#tnRejoin', app); if (rj) rj.addEventListener('click', () => go(room.code));
+  }
+
+  function lobby(app) {
+    const t = TN(), o = t.opts, host = NET.role === 'host', n = t.n, me = mySeat();
+    const ds = host ? '' : ' disabled';
+    const chips = (list, cur, attr, dis) => list.map(([v, l]) => `<button type="button" class="ch-chip${cur === v ? ' on' : ''}" data-${attr}="${v}"${host && !(dis && dis(v)) ? '' : ' disabled'}>${l}</button>`).join('');
+    const decs = [...new Set(A.ALL_YEARS.map(A.decOf))], ch = A.ALL_YEARS.filter(y => t.skip.indexOf(y) < 0);
+    const seats = Array.from({ length: n }, (_, i) => t.seats[i]
+      ? `<li class="tn-seat on"><i class="tn-live ${t.live[i] === false ? 'off' : 'on'}"></i><b>${esc(t.names[i] || 'PLAYER ' + (i + 1))}</b>${i === me ? '<small>YOU</small>' : ''}${host && i > 0 ? `<button type="button" class="btn btn-small" data-kick="${i}">REMOVE</button>` : ''}</li>`
+      : `<li class="tn-seat"><span class="muted">${i < 2 ? 'WAITING FOR A PLAYER' : 'OPEN (an AI team if nobody joins)'}</span></li>`).join('');
+    const scroll = window.scrollY;
+    app.innerHTML = `
+      <section class="ch-hero"><div class="ch-hero-k">ONLINE TOURNAMENT | ROOM ${esc(NET.code)}</div><h1 class="ch-hero-t">THE LOBBY.</h1>
+        <p class="ch-hero-p">${host ? 'Send the link to your friends. When everyone is in, set the rules and start the draft. Empty seats become AI teams.' : 'You are in. The host sets the rules and starts the draft.'}</p></section>
+      <div id="tnNet">${netBar()}</div>
+      <div class="ch-setup tn-setup">
+        <div class="ch-step"><div class="ch-step-k">1 | WHO IS IN (${t.seats.length} OF ${n})</div><ul class="tn-seats">${seats}</ul>
+          <div class="ch-chips">${chips([[4, '4 TEAMS'], [8, '8 TEAMS']], n, 'n', v => t.seats.length > v)}</div></div>
+        <div class="ch-step"><div class="ch-step-k">2 | THE SEASON</div>
+          ${host ? `<div class="row-btns vs-seas-all"><button type="button" class="btn btn-small${!t.skip.length ? ' on' : ''}" data-seas="all">ALL</button><button type="button" class="btn btn-small" data-seas="none">CLEAR</button>
+            ${decs.map(d => `<button type="button" class="btn btn-small${A.ALL_YEARS.filter(y => A.decOf(y) === d).every(y => t.skip.indexOf(y) < 0) ? ' on' : ''}" data-dec="${d}">${d + 1}S</button>`).join('')}</div>
+          <div class="vs-seas">${C.SEASONS.map(s => `<button type="button" class="ch-chip${t.skip.indexOf(s.year) < 0 ? ' on' : ''}" data-yr="${s.year}">${esc(s.label)}</button>`).join('')}</div>` : ''}
+          <small class="muted">${!ch.length ? 'Pick at least one season.' : ch.length === 1 ? 'One season: the whole ' + esc(A.lbl(ch[0])) + ' league.' : ch.length + ' seasons on. Every spin lands on a team and a season from them. Nobody can be drafted twice.'}</small></div>
+        <div class="ch-step"><div class="ch-step-k">3 | THE RULES</div>
+          <div class="tn-rules">
+            <div><span class="ts-start-k">EACH ROUND</span><div class="ch-chips">${chips([[1, 'BEST OF 1'], [3, 'BEST OF 3']], o.bestOf, 'bo')}</div></div>
+            <div><span class="ts-start-k">SEEDING</span><div class="ch-chips">${chips([['random', 'RANDOM'], ['rating', 'BY TEAM RATING']], o.seeding, 'seed')}</div></div>
+            <div><span class="ts-start-k">SHOT CLOCK</span><div class="ch-chips">${chips([[24, '24 SEC'], [0, 'OFF']], o.timer ? 24 : 0, 'timer')}</div></div>
+            <div><span class="ts-start-k">RATINGS</span><div class="ch-chips">${[[true, 'ON'], [false, 'OFF']].map(([v, l]) => `<button type="button" class="ch-chip${(o.ratings !== false) === v ? ' on' : ''}" data-rate="${v}"${ds}>${l}</button>`).join('')}</div></div>
+            <div><span class="ts-start-k">SALARY CAP</span><div class="ch-chips">${UI.challengeCap.CAPS.map(v => `<button type="button" class="ch-chip${(o.cap || 0) === v ? ' on' : ''}" data-cap="${v}"${ds}>${v ? '$' + v + 'M' : 'OFF'}</button>`).join('')}</div></div>
+          </div></div>
+        <div class="ch-go">${host ? `<button type="button" class="btn btn-gold btn-big" id="tnGo"${t.seats.length >= 2 && NET.status === 'ready' ? '' : ' disabled'}>${t.seats.length >= 2 ? 'START THE DRAFT' : 'WAITING FOR A FRIEND'}</button>` : '<p class="muted">Waiting for the host to start.</p>'}<a class="btn" href="#/home">HOME</a></div>
+      </div>`;
+    window.scrollTo(0, scroll);
+    UI.centerChips(app); refreshNet();
+    if (!host) return;
+    const edit = fn => { fn(); A.save(); lobby(app); };
+    app.querySelectorAll('[data-n]').forEach(b => b.addEventListener('click', () => edit(() => { t.n = +b.dataset.n; })));
+    app.querySelectorAll('[data-kick]').forEach(b => b.addEventListener('click', () => edit(() => { const i = +b.dataset.kick; t.seats.splice(i, 1); t.names.splice(i, 1); t.live.splice(i, 1); })));
+    app.querySelectorAll('[data-yr]').forEach(b => b.addEventListener('click', () => edit(() => { const y = +b.dataset.yr, i = t.skip.indexOf(y); if (i >= 0) t.skip.splice(i, 1); else t.skip.push(y); })));
+    app.querySelectorAll('[data-dec]').forEach(b => b.addEventListener('click', () => edit(() => {
+      const ys = A.ALL_YEARS.filter(y => A.decOf(y) === +b.dataset.dec), allOn = ys.every(y => t.skip.indexOf(y) < 0);
+      t.skip = allOn ? [...new Set(t.skip.concat(ys))] : t.skip.filter(y => ys.indexOf(y) < 0);
+    })));
+    app.querySelectorAll('[data-seas]').forEach(b => b.addEventListener('click', () => edit(() => { t.skip = b.dataset.seas === 'all' ? [] : A.ALL_YEARS.slice(); })));
+    app.querySelectorAll('[data-bo]').forEach(b => b.addEventListener('click', () => edit(() => { o.bestOf = +b.dataset.bo; })));
+    app.querySelectorAll('[data-seed]').forEach(b => b.addEventListener('click', () => edit(() => { o.seeding = b.dataset.seed; })));
+    app.querySelectorAll('[data-timer]').forEach(b => b.addEventListener('click', () => edit(() => { o.timer = +b.dataset.timer; })));
+    app.querySelectorAll('[data-rate]').forEach(b => b.addEventListener('click', () => edit(() => { o.ratings = b.dataset.rate === 'true'; })));
+    app.querySelectorAll('[data-cap]').forEach(b => b.addEventListener('click', () => edit(() => { o.cap = +b.dataset.cap; })));
+    const go = UI.$('#tnGo', app);
+    if (go) go.addEventListener('click', () => {
+      const c = A.ALL_YEARS.filter(y => t.skip.indexOf(y) < 0);
+      if (!c.length) { UI.toast('Switch on at least one season', 'error'); return; }
+      const year = c.length === 1 ? c[0] : 0;
+      const cfg = { mode: 'versus', year, seasons: c.length > 1 && c.length < A.ALL_YEARS.length ? c : null, bestOf: o.bestOf, blind: false, cap: +o.cap || 0, timer: o.timer ? 24 : 0, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1 };
+      A.ensure(app, cfg, () => {
+        const d = C.seasonData(year || 2013), hn = t.seats.length, bots = A.shuffle(A.CPU_NAMES.slice());
+        t.cfg = cfg;
+        t.names = Array.from({ length: t.n }, (_, i) => (i < hn ? cleanName(t.names[i], i) : bots[i - hn]));
+        t.ai = t.names.map((_, i) => i >= hn); t.humans = hn;
+        t.teams = A.shuffle(d.teams.map(x => x.abbr)).slice(0, t.n);
+        t.picks = t.names.map(() => []); t.respins = t.names.map(() => 1); t.spins = t.names.map(() => null); t.spun = [];
+        t.clk = t.names.map(() => null); t.seats.forEach((_, i) => setClk(i, 'spin'));
+        t.rounds = []; t.seeds = []; t.cur = null; t.champ = -1; t.watch = null; t.page = 'draft';
+        A.clearRuns(); A.save(); LAST = { page: '', mine: '' }; A.render(); LAST = { page: 'draft', mine: mySig() };
+      });
+    });
+  }
+
+  // ---------- the draft: every human spins and picks on their own phone ----------
+  function stopTick() { if (TICK) { clearInterval(TICK); TICK = null; } }
+  function progHtml() {
+    const t = TN(), host = NET.role === 'host', me = mySeat();
+    return `<ul class="tn-seats tn-prog">${t.seats.map((c, i) => {
+      const k = t.picks[i].length;
+      return `<li class="tn-seat on${i === me ? ' me' : ''}"><i class="tn-live ${t.live[i] === false ? 'off' : 'on'}"></i><b>${esc(t.names[i])}</b><span class="tn-pips">${[0, 1, 2, 3, 4].map(j => `<u class="${j < k ? 'on' : ''}"></u>`).join('')}</span>${k >= 5 ? '<small>LOCKED IN</small>' : host && i !== me ? `<button type="button" class="btn btn-small" data-fill="${i}">CPU TAKES OVER</button>` : ''}</li>`;
+    }).join('')}</ul>`;
+  }
+  function updateProg() {
+    const el = document.getElementById('tnProg');
+    if (!el) return;
+    el.innerHTML = progHtml(); bindProg(el);
+  }
+  function bindProg(el) {
+    el.querySelectorAll('[data-fill]').forEach(b => b.addEventListener('click', () => {
+      const i = +b.dataset.fill;
+      if (!window.confirm('Let the CPU finish the draft for ' + TN().names[i] + '?')) return;
+      fill(i); afterChange();
+    }));
+  }
+  function draft(app) {
+    stopTick();
+    const t = TN(), cfg = t.cfg, w = mySeat();
+    if (!cfg) return;
+    A.ensure(app, cfg, () => {
+      const B = A.board(cfg), teams = B.teams, byId = B.byId;
+      if (w < 0) { app.innerHTML = UI.empty('YOU ARE NOT IN THIS DRAFT', 'Ask the host for the link to the next one.', '<div class="row-btns"><button type="button" class="btn" id="tnOut">LEAVE</button></div>'); UI.$('#tnOut', app).addEventListener('click', leave); return; }
+      const k = t.picks[w].length, tm = A.teamOf(w), five = t.picks[w].map(id => byId[id]).filter(Boolean);
+      const spin = t.spins[w] && t.spins[w].pick === k ? t.spins[w] : null;
+      const meta = `${esc(A.lblC(cfg))} | ${t.n} TEAMS | BEST OF ${t.opts.bestOf}${cfg.timer ? ' | ' + cfg.timer + ' SEC CLOCK' : ''}${cfg.cap ? ' | $' + cfg.cap + 'M CAP' : ''}`;
+      let body = '';
+      if (k >= 5) body = '<div class="ch-ready"><div><b>YOU ARE LOCKED IN.</b><span class="muted"> The bracket starts when everyone is done.</span></div></div>';
+      else if (!spin || !ANIM[spin.n]) {
+        body = `<section class="ch-wheel">${UI.challengeWheel.strip(teams)}<div class="ch-wheel-k">${spin ? 'SPINNING...' : 'YOUR SPIN'}</div>${spin ? '' : '<button type="button" class="btn btn-gold btn-big" id="chSpin">SPIN THE WHEEL</button>'}</section>`;
+      } else if (B.era && spin.year !== 2013 && !C.loaded(spin.year)) {
+        body = `<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE ${esc(A.lbl(spin.year))} ROSTER...</div></section>`;
+        C.load(spin.year).then(() => { const cs = TN().spins[w]; if (cs && cs.n === spin.n) draft(app); }).catch(() => UI.toast('That roster did not load. Try a re-spin.', 'error'));
+      } else {
+        const st = B.teamFor(spin.abbr, spin.year), ros = UI.challengeAlpha(A.rosterOf(B, spin.key, flat()));
+        const none = cfg.cap && !ros.some(p => C.capFits(cfg.cap, five, p));
+        const row = p => { const pt = B.teamFor(p.team, p.season); return `<li class="ch-pl"><span class="ch-pl-b"><b>${esc(p.name)}</b><small>${A.logo(pt, 18)} ${esc(C.posLabel(p))}${B.era && p.season ? ' | ' + A.short(p.season) : p.age ? ' | ' + p.age : ''}</small></span>${cfg.cap ? UI.challengeCap.priceTag(p) : ''}${A.ovrTag(p)}${UI.challengeCap.btn(cfg.cap, five, p, `<button type="button" class="btn btn-small btn-gold" data-add="${esc(p.id)}">TAKE</button>`)}</li>`; };
+        body = `<section class="ch-landed" style="--c1:${esc(st.colors[0])}">${A.logo(st, 64)}<div><div class="ch-wheel-k">THE WHEEL SAYS</div><div class="ch-landed-t">${B.era ? esc(A.lbl(spin.year)) + ' ' : ''}${esc(A.tName(st))}</div></div>
+            ${t.respins[w] > 0 ? '<button type="button" class="btn btn-small" id="chRespin">RE-SPIN (1 LEFT)</button>' : ''}</section>
+          ${cfg.cap ? UI.challengeCap.bar(cfg.cap, five) : ''}
+          ${none ? '<div class="ch-ready"><div><b>NOBODY HERE FITS UNDER YOUR CAP.</b><span class="muted"> Spin again, on the house.</span></div><button type="button" class="btn btn-gold" id="tnFree">SPIN AGAIN</button></div>' : ''}
+          <ul class="ch-list">${ros.map(row).join('')}</ul>`;
+      }
+      const fit = five.length ? UI.challengeFit(C.lineupFit(five), { compact: true, title: (t.names[w] + "'s lineup").toUpperCase() }) : '';
+      const clk = t.clk[w] && k < 5;
+      app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${meta}</div><div class="ch-top-t">THE DRAFT</div></div><button type="button" class="btn btn-small" id="tnQuit">LEAVE</button></div>
+        <div id="tnNet">${netBar()}</div>
+        <div id="tnProg">${progHtml()}</div>
+        <div class="vs-side tn-me" style="--c1:${esc(tm.colors[0])}"><div class="vs-side-h">${A.logo(tm, 36)}<div><small>${esc(t.names[w])} | YOU</small><b>${esc(A.tName(tm))}</b>${cfg.cap ? ' <small class="vs-pay">' + UI.challengeCap.money(C.capState(cfg.cap, five).spent) + ' of $' + cfg.cap + 'M</small>' : ''}</div></div>
+          <ol>${[0, 1, 2, 3, 4].map(i => `<li>${five[i] ? esc(five[i].name) + ' <small class="muted">' + esc(C.posLabel(five[i])) + (B.era && five[i].season ? ' ' + A.short(five[i].season) : '') + '</small> <b class="ch-ovr ' + UI.ovrClass(five[i].ovr) + '">' + esc(five[i].ovr) + '</b>' : '<span class="muted">-</span>'}</li>`).join('')}</ol></div>
+        ${k < 5 ? `<div class="vs-clock">PICK <b>${k + 1}</b> OF 5</div>` : ''}
+        ${clk ? `<div class="vs-timer" id="vsTimer"><i style="--w:100%"></i><span>${cfg.timer}</span></div>` : ''}
+        ${body}${fit}`;
+      refreshNet(); bindProg(UI.$('#tnProg', app));
+      UI.$('#tnQuit', app).addEventListener('click', () => HOOK.quit());
+      if (spin && !ANIM[spin.n]) UI.challengeWheel.animate(app, teams, () => { ANIM[spin.n] = true; const cs = TN().spins[w]; if (cs && cs.n === spin.n) draft(app); }, { year: spin.year, abbr: spin.abbr }, { mode: B.era ? 'alltime' : 'versus' });
+      const once = (id, a) => { const b = UI.$(id, app); if (b) b.addEventListener('click', () => { b.disabled = true; act(a); }); };
+      once('#chSpin', { k: 'spin' }); once('#chRespin', { k: 'respin' }); once('#tnFree', { k: 'free' });
+      app.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => {
+        const p = byId[b.dataset.add];
+        if (cfg.cap && p && !C.capFits(cfg.cap, five, p)) { UI.toast('That contract does not fit under the cap.', 'error'); return; }
+        app.querySelectorAll('[data-add]').forEach(x => { x.disabled = true; });
+        if (window.SFX) window.SFX.play('chime');
+        act({ k: 'take', id: b.dataset.add });
+        window.scrollTo(0, 0);
+      }));
+      if (clk) {
+        const total = cfg.timer * 1000 + (t.clk[w].phase === 'pick' ? SPIN_MS : 0);
+        TICK = setInterval(() => {
+          const el = UI.$('#vsTimer', app), c = TN().clk[w];
+          if (!el || !c) { stopTick(); return; }
+          const left = c.until - (Date.now() + OFF);
+          el.querySelector('span').textContent = Math.max(0, Math.ceil(left / 1000));
+          el.querySelector('i').style.setProperty('--w', Math.max(0, Math.min(100, 100 * left / total)) + '%');
+          el.classList.toggle('low', left < 10000);
+        }, 250);
+      }
+    });
+  }
+
+  // ---------- routing ----------
+  function enter(app, part) {
+    APP = app;
+    if (!ON) { ON = true; HOOK.on = true; A.swap({ page: 'entry' }); SIG = ''; LAST = { page: '', mine: '' }; }
+    if (part[1] === 'join' && part[2]) {
+      PEND = part[2].toUpperCase().replace(/[^A-Z0-9]/g, '');
+      history.replaceState(null, '', '#/challenge/tournament/online');
+      if (!(NET.role === 'guest' && NET.code === PEND) && lsName.get() && PEND.length >= 4) { SIG = ''; A.swap({ page: 'entry' }); connect('guest', PEND); }
+    }
+    A.mount(app);
+  }
+  const prev = P.challenge;
+  P.challenge = function (app, arg) {
+    const part = String(arg || '').split('/');
+    if (part[0] === 'tournament' && (part[1] === 'online' || part[1] === 'join')) return enter(app, part);
+    if (ON) { ON = false; hangUp(); HOOK.on = false; HOOK.host = false; A.swap(null); }
+    return prev.apply(this, arguments);
+  };
+  Object.keys(prev).forEach(k => { P.challenge[k] = prev[k]; });
+})();

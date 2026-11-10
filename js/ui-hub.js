@@ -66,6 +66,7 @@
           ${UI.tile('#/new', 'ball', 'THE ASSOCIATION', { cls: 'mt-assoc', disabled: !engineOk, sub: 'A FULL FRANCHISE' })}
           ${cont}
           ${UI.tile('#/challenge/tournament', 'draft', 'TOURNAMENT', { cls: 'mt-tn', disabled: !engineOk, sub: '4 OR 8 FRIENDS, ONE PHONE, ONE BRACKET' })}
+          ${UI.tile('#/challenge/tournament/online', 'draft', 'ONLINE TOURNAMENT', { cls: 'mt-tn', disabled: !engineOk, sub: 'EVERYONE ON THEIR OWN PHONE' })}
           ${UI.tile('#/saves', 'load', 'LOAD', { cls: 'mt-half' })}
           ${UI.tile('#/soundtrack', 'music', 'SOUNDTRACK', { cls: 'mt-half' })}
         </div>
@@ -248,14 +249,6 @@
 
   // ---------- New league: pick a team (2K13 style cards) ----------
   let newStart = 2013, newToday = false, newQuick = null, newReal = false, newSummer = false;   // newSummer: start at the draft before the season   // newReal: real-life mode   // newQuick: a quick start's team, opened once its season loads   // newToday: the season being played, from today (data/start-YYYY.js today)
-  // one tap into a famous team's season (the user's family are Celtics fans)
-  const QUICK = [
-    { label: 'SUMMER 2007', team: 'BOS', start: 2008, summer: true, note: 'Draft night 2007, before the Garnett and Allen trades: build the Big Three yourself' },
-    { label: "2007-08 BIG THREE", team: 'BOS', start: 2008, note: 'Garnett, Pierce and Allen together for the first time' },
-    { label: '2012-13 CELTICS', team: 'BOS', start: 2013, note: 'The last ride of Pierce and Garnett in green' },
-    { label: 'BANNER 18', team: 'BOS', start: 2024, note: 'The 2023-24 champions' },
-    { label: "TODAY'S CELTICS", team: 'BOS', start: 2027, today: true, note: '2026-27 from today, real results so far' }
-  ];
   P.new = function (app) {
     if (!UI.canPlay()) { app.innerHTML = UI.notBuilt('engine'); return; }
     // Always opening-night data: 2012-13 is LEAGUE_2012; other seasons load data/start-YYYY.js first.
@@ -311,7 +304,6 @@
     const first = UI.saves.firstEmpty() || 1;
     const seasons = UI.START_YEARS.map(s => `<button type="button" class="ch-chip${s.year === newStart ? ' on' : ''}" data-start="${s.year}" title="${esc(s.note || '')}">${esc(s.label)}</button>`).join('');
     app.innerHTML = `${UI.header('SELECT YOUR TEAM', 'TEAM OVR rates the whole team from its top eight players. Contenders are 81 and up, rebuilds 76 and below.')}
-      <div class="ts-start ts-quick"><span class="ts-start-k">QUICK START</span><div class="ch-chips ch-swipe">${QUICK.map((q, i) => `<button type="button" class="ch-chip" data-quick="${i}" title="${esc(q.note)}">${UI.logo(q.team, 18)} ${esc(q.label)}</button>`).join('')}</div></div>
       <div class="ts-start"><span class="ts-start-k">START IN</span><div class="ch-chips ch-swipe">${seasons}</div><span class="muted ts-start-n">${summer ? 'Draft night ' + start + ': the ' + esc(seasonLbl) + ' season plays out with its real records, champion and stats, then you run the draft and free agency before ' + esc((newStart - 1) + '-' + String(newStart).slice(2)) + '.' : T ? 'The ' + esc(seasonLbl) + ' season from today: every game so far counts with its real score, real stats so far, today\'s rosters and injuries.' : esc((UI.START_YEARS.find(s => s.year === start) || {}).note || '') + ': the real ' + esc(seasonLbl) + ' rosters, contracts and draft picks.'}</span>
         <div class="ch-chips ch-swipe ts-when" role="group" aria-label="When"><button type="button" class="ch-chip${!summer && !T ? ' on' : ''}" data-when="open">OPENING NIGHT</button>${canSummer(newStart) ? `<button type="button" class="ch-chip${summer ? ' on' : ''}" data-when="summer">DRAFT NIGHT ${newStart - 1}</button>` : ''}${!summer && S && S.today ? `<button type="button" class="ch-chip${T ? ' on' : ''}" data-when="today">TODAY, ${esc(UI.dateLabel(S.today.date).toUpperCase())}</button>` : ''}</div></div>
       <div class="ts-start ts-real"><span class="ts-start-k">REAL LIFE</span><div class="ch-chips"><button type="button" class="ch-chip${newReal ? '' : ' on'}" data-real="0">OFF</button><button type="button" class="ch-chip${newReal ? ' on' : ''}" data-real="1">ON</button></div>
@@ -395,11 +387,6 @@
     UI.$$('[data-when]', app).forEach(b => b.addEventListener('click', () => { const w = b.getAttribute('data-when'); newToday = w === 'today'; newSummer = w === 'summer'; P.new(app); }));
     UI.centerChips(app);
     UI.$$('[data-real]', app).forEach(b => b.addEventListener('click', () => { newReal = b.getAttribute('data-real') === '1'; P.new(app); }));
-    UI.$$('[data-quick]', app).forEach(b => b.addEventListener('click', () => {
-      const q = QUICK[+b.getAttribute('data-quick')];
-      newStart = q.start; newToday = !!q.today; newSummer = !!q.summer; newQuick = q.team; P.new(app);
-    }));
-    if (newQuick && byAbbr[newQuick]) { const q = newQuick; newQuick = null; open(q); }
     UI.$('#cancelBtn', app).addEventListener('click', close);
     UI.$('#startBtn', app).addEventListener('click', async () => {
       if (!picked) return;
