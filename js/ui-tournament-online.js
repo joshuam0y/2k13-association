@@ -27,7 +27,7 @@
   const SEEN = {};
   let APP = null, OFF = 0, SIG = '', LAST = { page: '', mine: '' }, PEND = '', TICK = null, ON = false;
   const ANIM = {};
-  const mySeat = () => TN().seats.indexOf(CID);
+  const mySeat = () => ((TN() || {}).seats || []).indexOf(CID);
   const flat = () => [].concat.apply([], TN().picks);
   const cleanName = (v, i) => String(v || '').trim().slice(0, 20) || 'PLAYER ' + (i + 1);
   const fresh = (name) => ({ page: 'lobby', n: 4, humans: 0, ai: [], names: [name], seats: [CID], live: [true], opts: { timer: 24, cap: 0, bestOf: 1, seeding: 'random', ratings: true, order: 'turns' }, skip: [], cfg: null, teams: [], picks: [], seeds: [], rounds: [], cur: null, champ: -1, rating: null, watch: null, spins: [], respins: [], spun: [], clk: [], hnow: 0, epoch: 0, hostCid: CID });
@@ -117,7 +117,7 @@
           if (NET.status === 'connected' && quiet > 15000) { NET.status = 'lost'; refreshNet(); }
           // the host is gone: the lowest seat still here takes the room over (each seat waits a little longer than the one before)
           const seat = mySeat();
-          if (SIG && seat >= 0 && NET.peerSeen && quiet > 20000 + 8000 * seat && TN().page !== 'entry') takeOver(false);
+          if (SIG && seat >= 0 && NET.peerSeen && quiet > 20000 + 8000 * seat && TN() && TN().page !== 'entry') takeOver(false);
         }
       }, 4000));
       NET.timers.push(setInterval(clockCheck, 500));
