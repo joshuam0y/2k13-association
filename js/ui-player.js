@@ -153,7 +153,8 @@
   }
 
   // ---------- awards ----------
-  const ORDER = ['Champion', 'MVP', 'Finals MVP', 'DPOY', 'ROY', '6MOY', 'MIP', 'Scoring Champion',
+  const ORDER = ['Champion', 'MVP', 'Finals MVP', 'DPOY', 'ROY', '6MOY', 'MIP', 'Scoring Champion', 'Rebounding Champion', 'Assists Champion',
+    'Steals Champion', 'Blocks Champion', 'Three-Point Champion',
     'All-NBA 1st Team', 'All-NBA 2nd Team', 'All-NBA 3rd Team', 'All-Defensive 1st Team', 'All-Defensive 2nd Team',
     'All-Defensive 3rd Team', 'All-Rookie 1st Team', 'All-Rookie 2nd Team', 'All-Rookie 3rd Team', 'All-Star'];
   const FULL = {
@@ -162,7 +163,8 @@
   };
   // Header badges: short label per award family (All-NBA and All-Defensive teams count together).
   const BADGE = [['Champion', 'Champion'], ['MVP', 'MVP'], ['Finals MVP', 'Finals MVP'], ['DPOY', 'DPOY'], ['ROY', 'ROY'],
-    ['6MOY', '6MOY'], ['MIP', 'MIP'], ['Scoring Champion', 'Scoring Champ'], [/^All-NBA/, 'All-NBA'], [/^All-Defensive/, 'All-Defense'], ['All-Star', 'All-Star']];
+    ['6MOY', '6MOY'], ['MIP', 'MIP'], ['Scoring Champion', 'Scoring Champ'], ['Rebounding Champion', 'Rebounding Champ'], ['Assists Champion', 'Assists Champ'],
+    ['Steals Champion', 'Steals Champ'], ['Blocks Champion', 'Blocks Champ'], ['Three-Point Champion', '3PT Champ'], [/^All-NBA/, 'All-NBA'], [/^All-Defensive/, 'All-Defense'], ['All-Star', 'All-Star']];
   const rankOf = a => { const i = ORDER.indexOf(a); return i < 0 ? ORDER.length : i; };
   const major = a => rankOf(a) <= 7;
 
@@ -199,6 +201,9 @@
     };
     const prior = window.AWARDS_PRIOR && Array.isArray(window.AWARDS_PRIOR[p.id]) ? window.AWARDS_PRIOR[p.id] : [];
     prior.forEach(a => add(a.year, a.award));
+    // the real stat titles before the save started (data/stat-leaders.js)
+    const g0 = UI.state.game;
+    if (window.AWARDS && window.AWARDS.realTitles) window.AWARDS.realTitles(p.id, (g0 && +g0.startYear) || 2013).forEach(a => add(a.year, a.award));
     (Array.isArray(p.awards) ? p.awards : []).forEach(a => {
       if (a && typeof a === 'object') add(a.year, a.award || a.name);
       else if (typeof a === 'string') add(null, a);

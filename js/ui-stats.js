@@ -378,13 +378,20 @@
   }
 
   // ---------- ROOKIES ----------
-  let baseMap = null;
+  // The league the save opened with: the 2012-13 league file, or the start file of another season
+  // (data/start-YYYY.js), so a 2007-08 save counts its rookies from 2007-08 on.
+  const startYear = () => { const g = game(); return (g && +g.startYear) || (UI.state.league && UI.state.league.season) || 2013; };
+  let baseMap = null, baseKey = null;
   function baseOf(id) {
-    if (!baseMap) { baseMap = {}; ((UI.state.league && UI.state.league.players) || []).forEach(p => { baseMap[p.id] = p; }); }
+    const y = startYear();
+    if (!baseMap || baseKey !== y) {
+      baseMap = {}; baseKey = y;
+      const S = y !== 2013 && window.START_LEAGUES && window.START_LEAGUES[y];
+      ((S ? S.players : UI.state.league && UI.state.league.players) || []).forEach(p => { baseMap[p.id] = p; });
+    }
     return baseMap[id] || null;
   }
-  const startYear = () => (UI.state.league && UI.state.league.season) || 2013;
-  // A rookie in the first season of the save: in the October 2012 league with no NBA seasons before.
+  // A rookie in the first season of the save: in the opening-night league with no NBA seasons before.
   function initialRookie(p) {
     const b = baseOf(p.id);
     if (!b) return false;
@@ -435,7 +442,22 @@
       return { year: +d.year, pick: +d.pick, round: d.round || (+d.pick <= 30 ? 1 : 2), team: d.team || '' };
     }
     if (PICKS[p.id]) return PICKS[p.id];
+    const real = realPick(p.id);
+    if (real) return real;
     return { undrafted: true, year: p.draftYear != null ? +p.draftYear : null, round: 0, pick: 999 };
+  }
+  // the real draft (data/draft-results.js, 1995 to 2012; window.DRAFTS for the classes after) for players
+  // already in the league when the save started
+  let realPicks = null;
+  function realPick(id) {
+    if (!realPicks) {
+      realPicks = {};
+      const R = window.DRAFT_RESULTS || {};
+      Object.keys(R).forEach(y => (R[y] || []).forEach(r => { if (r[1]) realPicks[r[1]] = { year: +y, pick: r[0], round: r[0] <= 30 ? 1 : 2, team: r[3] || '' }; }));
+      const D = window.DRAFTS || {};
+      Object.keys(D).forEach(y => (D[y] || []).forEach(x => { if (x && x.id && x.realPick && !realPicks[x.id]) realPicks[x.id] = { year: +y, pick: x.realPick, round: x.realPick <= 30 ? 1 : 2, team: x.draftTeam || '' }; }));
+    }
+    return realPicks[id] || null;
   }
   const draftText = d => (d.undrafted ? 'UNDRAFTED' : d.year + ' #' + d.pick + (d.team ? ' ' + d.team : ''));
   let draftOvrMap = null;

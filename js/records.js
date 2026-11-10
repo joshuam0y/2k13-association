@@ -118,10 +118,12 @@
   // ---------------------------------------------------------------------------
   // Career totals: real seasons before 2012-13 plus the save
   // ---------------------------------------------------------------------------
-  var priorCache = {};
+  var priorCache = {}, priorSrc = null;
   function prior(id) {
+    var A = glob('ALLTIME_PRIOR');
+    if (A !== priorSrc) { priorCache = {}; priorSrc = A; }   // another start year swapped the table in (LEAGUE.useStart)
     if (priorCache[id]) return priorCache[id];
-    var A = glob('ALLTIME_PRIOR'), a = A && A.active && A.active[id];
+    var a = A && A.active && A.active[id];
     var out;
     if (a) out = { r: a[0].slice(), p: a[1].slice(), exact: true };
     else {
@@ -205,11 +207,34 @@
     return keepTop(list.map(function (x) { return x.slice(); }), n || LG_N).map(entry);
   }
   function entry(x) { return { v: x[0], id: x[1], date: x[2], team: x[3], opp: x[4], gid: x[5] }; }
-  // the real NBA single-game records before 2012-13 (regular season), checked on Basketball-Reference
-  function realGames(stat) {
-    var A = glob('ALLTIME_PRIOR');
-    return ((A && A.games) || []).filter(function (g) { return g[0] === stat; })
-      .map(function (g) { return { v: g[1], id: g[2], name: g[3], date: g[4], team: g[5], opp: g[6], real: true }; });
+  // the day the real record book stops for this save: the opening of its first season (or the day a league
+  // started in the middle of a season), so a 2003-04 league never shows Kobe's 81 or Bam Adebayo's 83
+  function realCut(state) {
+    if (state && state.startDate) return String(state.startDate);
+    var y = state && +state.startYear || 2013;
+    return (y - 1) + '-10-01';
+  }
+  // "2012-13" style label of the season the real record book runs up to
+  function realLabel(state) {
+    var y = state && +state.startYear || 2013;
+    return (y - 1) + '-' + String(y).slice(2);
+  }
+  // the real NBA's best single games before this save started: data/real-games.js (every era, regular season
+  // and playoffs), the 2012-13 list in data/alltime-prior.js when that file is missing. Up to 6 games, plus
+  // ties at the 6th value (10 at most). -> [{ v, id, name, date, team, opp, real: true }]
+  function realGames(stat, ph, state) {
+    ph = ph || 'r';
+    var cut = realCut(state), out = [];
+    var G = glob('REAL_GAMES');
+    if (G) G.forEach(function (g) { if (g[0] === ph && g[1] === stat && g[5] < cut) out.push({ v: g[2], id: g[3] || null, name: g[4], date: g[5], team: g[6], opp: g[7], real: true }); });
+    else if (ph === 'r') {
+      var A = glob('ALLTIME_PRIOR');
+      ((A && A.games) || []).forEach(function (g) { if (g[0] === stat && g[4] < cut) out.push({ v: g[1], id: g[2] || null, name: g[3], date: g[4], team: g[5], opp: g[6], real: true }); });
+    }
+    out.sort(function (a, b) { return b.v - a.v || (a.date < b.date ? -1 : a.date > b.date ? 1 : 0); });
+    if (out.length <= 6) return out;
+    var sixth = out[5].v;
+    return out.filter(function (x, i) { return i < 6 || x.v === sixth; }).slice(0, 10);
   }
   // this season's best games (or a finished season's top games from the archive)
   function seasonHighs(state, ph, stat, year) {
@@ -253,7 +278,7 @@
   var RECORDS = {
     HI: HI, TOT: TOT, LABEL: LABEL, SHORT: SHORT, SINCE: SINCE, PO_KEYS: PO_KEYS,
     archive: archive, careerHighs: careerHighs, totals: totals, prior: prior, board: board, cutoff: cutoff, rankOf: rankOf,
-    singleGame: singleGame, realGames: realGames, seasonHighs: seasonHighs, trackingSince: trackingSince, passes: passes,
+    singleGame: singleGame, realGames: realGames, realCut: realCut, realLabel: realLabel, seasonHighs: seasonHighs, trackingSince: trackingSince, passes: passes,
     comma: comma, ord: ord
   };
   if (typeof window !== 'undefined') window.RECORDS = RECORDS;

@@ -225,6 +225,11 @@
       if (tot.g) return { g: tot.g, ppg: tot.pts / tot.g, rpg: tot.reb / tot.g, apg: tot.ast / tot.g };
     }
     if (year === 2013 && p.stats && p.stats.g) return { g: p.stats.g, ppg: p.stats.pts || 0, rpg: p.stats.reb || 0, apg: p.stats.ast || 0 };
+    // the first season of a league that started in another year: his real season before (CAREER_PRIOR,
+    // per game lines; the first row of a traded player is his season total)
+    var CP = (typeof window !== 'undefined' && window.CAREER_PRIOR) || (root && root.CAREER_PRIOR) || null;
+    var real = CP && (CP[p.id] || []).filter(function (x) { return x && x.year === year - 1 && x.g; })[0];
+    if (real) return { g: real.g, ppg: real.pts || 0, rpg: real.reb || 0, apg: real.ast || 0 };
     return null;
   }
   function previousOvr(state, p) {
@@ -421,6 +426,41 @@
   }
 
   // Writes awards onto players (player.awards) and coaches (coach.awards). Returns the same result.
+  // ---------------------------------------------------------------------------
+  // Stat titles: the per game leaders in points, rebounds, assists, steals and blocks (70% of the team's
+  // games, 65 games from 2023-24 on, or the old total minimums: 1400 points, 800 rebounds, 400 assists,
+  // 125 steals, 100 blocks) and the most threes made. statTitles(state) for the season in the save,
+  // realTitles(id, before) for the real seasons before the save (data/stat-leaders.js).
+  // ---------------------------------------------------------------------------
+  var TITLES = { pts: 'Scoring Champion', reb: 'Rebounding Champion', ast: 'Assists Champion', stl: 'Steals Champion', blk: 'Blocks Champion', tpm: 'Three-Point Champion' };
+  var TITLE_MIN = { pts: 1400, reb: 800, ast: 400, stl: 125, blk: 100 };
+  function statTitles(state) {
+    var sm = statsMap(state), ps = players(state), G = teamGames(state), out = {};
+    var need = yearOf(state) >= 2024 ? Math.ceil(G * 65 / 82) : Math.ceil(G * 0.7);
+    Object.keys(TITLES).forEach(function (k) {
+      var best = null, bv = -1;
+      Object.keys(sm).forEach(function (id) {
+        var t = sm[id], p = ps[id];
+        if (!p || !t || !t.g) return;
+        var tot = k === 'reb' ? (t.oreb || 0) + (t.dreb || 0) + (t.reb || 0) : (t[k] || 0);
+        var v = k === 'tpm' ? tot : tot / t.g;
+        if (k !== 'tpm' && t.g < need && tot < TITLE_MIN[k] * G / 82) return;
+        if (v > bv) { bv = v; best = id; }
+      });
+      if (best && bv > 0) out[k] = best;
+    });
+    return out;
+  }
+  function realTitles(id, before) {
+    var L = (typeof window !== 'undefined' && window.STAT_LEADERS) || (root && root.STAT_LEADERS) || null, out = [];
+    if (!L || !id) return out;
+    Object.keys(L).forEach(function (y) {
+      if (+y >= (before || 2013)) return;
+      Object.keys(TITLES).forEach(function (k) { if (L[y][k] && L[y][k][0] === id) out.push({ year: +y, award: TITLES[k] }); });
+    });
+    return out;
+  }
+
   function record(state, res) {
     if (!res) return res;
     var ps = players(state), y = res.year;
@@ -440,6 +480,9 @@
       (c.awards = c.awards || []).push({ year: y, award: 'COY', team: res.coy.team });
     }
     if (res.finalsMvp) give(res.finalsMvp, 'Finals MVP');
+    var titles = res.titles || statTitles(state);
+    Object.keys(titles).forEach(function (k) { if (TITLES[k]) give(titles[k], TITLES[k]); });
+    res.titles = titles;
     return res;
   }
 
@@ -637,6 +680,9 @@
   var AWARDS = {
     season: season,
     record: record,
+    statTitles: statTitles,
+    realTitles: realTitles,
+    TITLES: TITLES,
     allStars: allStars,
     recordAllStars: recordAllStars,
     allStarFormat: allStarFormat,

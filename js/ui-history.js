@@ -423,7 +423,7 @@
       ${UI.header('PAST WINNERS', 'Seasons played in this Association.')}
       ${past ? `<div class="tscroll"><table class="stats fr-past"><thead><tr><th class="l">SEASON</th>${cols.map((k, i) => `<th class="l${i > 1 ? ' hide-sm' : ''}">${SHORT[k[0]]}</th>`).join('')}</tr></thead><tbody>${past}</tbody></table></div>`
         : '<p class="muted">No seasons finished yet. Winners are added at the end of every season.</p>'}
-      ${mv.length ? `${UI.header('MVPS BEFORE 2012', 'The real winners, from the league\'s history.')}
+      ${mv.length ? `${UI.header('MVPS BEFORE ' + beforeLabel(s), 'The real winners, from the league\'s history.')}
         <div class="tscroll fr-short"><table class="stats"><thead><tr><th class="l">SEASON</th><th class="l">MVP</th><th class="l">TEAM</th></tr></thead><tbody>${mv.slice(0, 15).map(m =>
           `<tr><td class="l">${esc(fr.seasonLabel(m.year))}</td><td class="l">${m.id && playerOf(s, m.id) ? fr.plink(playerOf(s, m.id)) : esc(m.name)}</td><td class="l">${m.abbr && s.teams[m.abbr] ? `<span class="fr-st-team">${fr.logo(m.abbr, 22)} ${esc(m.team || m.abbr)}</span>` : esc(m.team || '')}</td></tr>`).join('')}</tbody></table></div>
         <a class="more" href="#/history/prior">ALL PAST MVPS AND CHAMPIONS</a>` : ''}`;
@@ -432,6 +432,8 @@
   // =====================================================================
   // HISTORY
   // =====================================================================
+  // the season this save opened in ("2003-04"; 2012-13 for the game's own league)
+  const beforeLabel = st => (window.RECORDS && window.RECORDS.realLabel ? window.RECORDS.realLabel(st) : '2012-13');
   const HTABS = [['', 'SEASONS'], ['records', 'RECORDS'], ['hof', 'HALL OF FAME'], ['jerseys', 'RETIRED JERSEYS'], ['prior', 'BEFORE 2012']];
 
   P.history = function (app, arg) {
@@ -442,7 +444,7 @@
     const head = a.split('/')[0];
     const tab = HTABS.some(t => t[0] === head) ? head : '';
     const content = { '': seasonsTab, records: allTimeTab, hof: hofTab, jerseys: jerseysTab, prior: priorTab }[tab](s, a.split('/').slice(1));
-    app.innerHTML = `${fr.subnav('history')}${UI.header('LEAGUE HISTORY', 'Champions, records and legends of this Association and the years before it.')}${fr.tabs('history', HTABS, tab)}${content}`;
+    app.innerHTML = `${fr.subnav('history')}${UI.header('LEAGUE HISTORY', 'Champions, records and legends of this Association and the years before it.')}${fr.tabs('history', HTABS.map(t => t[0] === 'prior' ? [t[0], 'BEFORE ' + beforeLabel(s)] : t), tab)}${content}`;
   };
 
   function champOf(h) { return UI.abbrOf ? UI.abbrOf(h.champion) : h.champion; }
@@ -566,7 +568,7 @@
     return p ? fr.plink(p) : esc(x.name || x.id || '?');
   }
   function gameRow(s, x, i, R, stat) {
-    return `<li class="${i === 0 ? 'top' : ''}${x.real ? ' rc-real' : ''}"><span class="rc-rank">${i + 1}</span><span class="rc-n">${who(s, x)}<small>${x.team ? esc(x.team) + ' vs ' + esc(x.opp) + ', ' : ''}${gameDate(x.date)}${x.real ? ' | Real NBA, before 2012-13' : ' | This Association'}</small></span><b>${esc(x.v)} <small>${esc(R.SHORT[stat])}</small></b></li>`;
+    return `<li class="${i === 0 ? 'top' : ''}${x.real ? ' rc-real' : ''}"><span class="rc-rank">${i + 1}</span><span class="rc-n">${who(s, x)}<small>${x.team ? esc(x.team) + ' vs ' + esc(x.opp) + ', ' : ''}${gameDate(x.date)}${x.real ? ' | Real NBA, before ' + esc(R.realLabel(s)) : ' | This Association'}</small></span><b>${esc(x.v)} <small>${esc(R.SHORT[stat])}</small></b></li>`;
   }
   function trackedNote(R, s) {
     const y = R.trackingSince(s);
@@ -595,11 +597,11 @@
         return `<a class="rc-card${k === stat ? ' on' : ''}" href="#/history/records/game/${ph}/${k}"><small>${esc(R.LABEL[k])}</small><b>${best ? esc(best.v) : '-'}</b><span>${best ? esc((playerOf(s, best.id) || {}).name || best.id) : 'No games yet'}</span></a>`;
       }).join('');
       const list = R.singleGame(s, ph, stat, 10);
-      const real = ph === 'r' ? R.realGames(stat) : [];
+      const real = R.realGames(stat, ph, s);
       return `${ctl}${UI.header('SINGLE-GAME RECORDS', esc(phLabel) + ' games in this Association. ' + trackedNote(R, s))}<div class="rc-cards">${cards}</div>
         ${UI.header('MOST ' + R.LABEL[stat] + ' IN A GAME', '')}
         ${list.length ? `<ol class="rc-list">${list.map((x, i) => gameRow(s, x, i, R, stat)).join('')}</ol>` : `<p class="muted">No ${ph === 'p' ? 'playoff ' : ''}games recorded ${esc(trackedNote(R, s).replace(/^Since/, 'since').replace(/\.$/, ''))} yet.</p>`}
-        ${real.length ? `${UI.header('ALL-TIME TOP GAMES', 'The real NBA before 2012-13 and this Association together. A game from your save that reaches the list takes its place.')}<ol class="rc-list">${allTime(real, list).map((x, i) => gameRow(s, x, i, R, stat)).join('')}</ol>` : ''}
+        ${real.length ? `${UI.header('ALL-TIME TOP GAMES', 'The real NBA before ' + esc(R.realLabel(s)) + ' and this Association together. A game from your save that reaches the list takes its place.')}<ol class="rc-list">${allTime(real, list).map((x, i) => gameRow(s, x, i, R, stat)).join('')}</ol>` : ''}
         ${R.SINCE[stat] && ph === 'r' ? `<p class="pk-note">${esc(sinceNote(R, stat))}</p>` : ''}`;
     }
     if (sub === 'season') {
@@ -616,7 +618,7 @@
     const cut = R.cutoff(ph, stat);
     const rows = list.map((x, i) => {
       const rank = sub === 'active' ? (x.v >= cut ? all.findIndex(y => y.id === x.id) + 1 : null) : i + 1;
-      const tag = x.real ? `<small>${esc(x.from - 1)}-${esc(String(x.to).slice(2))} | Real NBA, retired before 2012-13</small>` : x.p && x.p.retired ? '<small>Retired</small>' : '<small class="rc-act">Active</small>';
+      const tag = x.real ? `<small>${esc(x.from - 1)}-${esc(String(x.to).slice(2))} | Real NBA, retired before ${esc(R.realLabel(s))}</small>` : x.p && x.p.retired ? '<small>Retired</small>' : '<small class="rc-act">Active</small>';
       return `<li class="${i === 0 ? 'top' : ''}${x.real ? ' rc-real' : ''}"><span class="rc-rank">${sub === 'active' ? i + 1 : rank}</span><span class="rc-n">${x.p ? fr.plink(x.p) : esc(x.name)}${tag}</span><b>${int(x.v)}${sub === 'active' && rank ? `<small>${esc(R.ord(rank))} all-time</small>` : ''}</b></li>`;
     }).join('');
     const title = (sub === 'active' ? 'ACTIVE LEADERS: ' : 'ALL-TIME: ') + R.LABEL[stat];
@@ -706,7 +708,7 @@
         <td class="l">${m ? esc(m.name) + (m.team ? ` <small class="muted">${esc(m.abbr || m.team)}</small>` : '') : '<span class="muted">-</span>'}</td></tr>`;
     }).join('');
     const tl = Object.keys(titles).sort((a, b) => titles[b] - titles[a]).slice(0, 12);
-    return `${tl.length ? `${UI.header('MOST TITLES', 'Before the 2012-13 season')}<div class="fr-titles">${tl.map(t => `<span>${known(t) ? fr.logo(t, 30) : ''}<b>${titles[t]}</b><small>${esc(t)}</small></span>`).join('')}</div>` : ''}
+    return `${tl.length ? `${UI.header('MOST TITLES', 'Before the ' + esc(window.RECORDS && window.RECORDS.realLabel ? window.RECORDS.realLabel(s) : '2012-13') + ' season')}<div class="fr-titles">${tl.map(t => `<span>${known(t) ? fr.logo(t, 30) : ''}<b>${titles[t]}</b><small>${esc(t)}</small></span>`).join('')}</div>` : ''}
       ${UI.header('CHAMPIONS AND MVPS', 'The real NBA, year by year.')}
       ${rows ? `<div class="tscroll"><table class="stats"><thead><tr><th class="l">SEASON</th><th class="l">CHAMPION</th><th class="l hide-sm">RUNNER-UP</th><th class="l hide-sm">FINALS MVP</th><th class="l">MVP</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="muted">The history file has no champions or MVPs listed.</p>'}`;
   }

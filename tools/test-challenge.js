@@ -40,7 +40,7 @@ const ms = Date.now() - t0;
 ok(r.w + r.l === 82, "82 games: " + r.w + "-" + r.l + " in " + ms + " ms, " + r.result);
 const mpg = r.five.map(x => x.line ? x.line.mpg : 0);
 ok(r.five.every(x => x.line && x.line.reb > 0) && r.five.every(x => !x.line || x.line.mpg >= 33), "the five play big minutes: " + r.five.map(x => x.name + " " + (x.line ? x.line.mpg + " mpg " + x.line.pts + " ppg" : "no games")).join(", "));
-ok(r.bench.every(x => !x.line || x.line.mpg < 20), "the bench plays little: " + r.bench.map(x => x.line ? x.line.mpg : 0).join(", "));
+ok(r.bench.filter(x => x.line && x.line.mpg >= 20).length <= 1 && r.bench.every(x => !x.line || x.line.mpg < 27), "the bench plays little (one may fill in for an injured starter): " + r.bench.map(x => x.line ? x.line.mpg : 0).join(", "));
 ok(typeof r.result === "string" && !dash.test(JSON.stringify(r)), "result text with no long dashes");
 ok(r.standings.East.length === 15 && r.standings.West.length === 15, "standings for both conferences");
 ok(r.champion && r.awards && r.awards.mvp, "champion " + r.champion.abbr + ", MVP " + r.awards.mvp.name);

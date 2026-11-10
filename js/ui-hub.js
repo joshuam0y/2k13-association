@@ -520,6 +520,7 @@
   }
 
   P.team = function (app, abbr) {
+    if (!abbr) abbr = UI.userTeam() || '';   // #/team on its own (the menu's My Team): the user's team
     const t = UI.team(abbr);
     const known = abbr === 'FA' || UI.teams().some(x => x.abbr === abbr);
     if (!known) { app.innerHTML = UI.empty('TEAM NOT FOUND', 'There is no team with the code ' + esc(abbr) + '.', '<a class="btn" href="#/teams">ALL ROSTERS</a>'); return; }
