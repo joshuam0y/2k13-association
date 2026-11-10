@@ -477,3 +477,11 @@
 .vs-rival-mini { margin: 4px 0 10px; text-align: center; font-family: var(--display); letter-spacing: .06em; font-size: 14px; }
 .vs-rival-mini span { color: var(--gold); letter-spacing: .14em; font-size: 11px; margin-right: 6px; }
 .vs-rival-mini b { color: #fff; }
+
+/* versus seasons: tap to switch each one on or off */
+.vs-seas-all { align-items: center; gap: 6px; margin: 4px 0 8px; }
+.vs-seas-all .btn.on { border-color: var(--gold); color: var(--gold); }
+.vs-seas-all .muted { font-size: 12px; margin-left: 4px; }
+.vs-seas { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px; margin-bottom: 6px; }
+.vs-seas .ch-chip { justify-content: center; text-align: center; padding-left: 4px; padding-right: 4px; }
+.vs-seas .ch-chip:not(.on) { opacity: .45; text-decoration: line-through; }

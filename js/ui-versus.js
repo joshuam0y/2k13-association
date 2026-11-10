@@ -17,6 +17,17 @@
   const FRESH = () => ({ year: 2008, teams: ['BOS', 'LAL'], names: ['', ''], opts: { bestOf: 5, blind: false, timer: 30 }, cfg: null, shown: 0, page: 'setup', spin: null, spun: [], respins: [1, 1], turn: null, pos: '', q: '' });
   let VS = Object.assign(FRESH(), ls.get() || {});
   VS.opts = Object.assign({ bestOf: 5, blind: false, timer: 30 }, VS.opts || {});
+  // the seasons in play: every season but the ones switched off (VS.skip). One season left is a one-season
+  // draft (cfg.year); more is the era spin over just those (cfg.year 0, cfg.seasons)
+  const ALL_YEARS = C.SEASONS.map(s => s.year);
+  if (!Array.isArray(VS.skip)) VS.skip = VS.year ? ALL_YEARS.filter(y => y !== VS.year) : [];
+  const chosen = () => ALL_YEARS.filter(y => VS.skip.indexOf(y) < 0);
+  const inPlay = (cfg, y) => !cfg.seasons || cfg.seasons.indexOf(+y) >= 0;
+  const lblC = cfg => {
+    if (cfg.year || !cfg.seasons) return lbl(cfg.year);
+    const s = cfg.seasons.slice().sort((a, b) => a - b), run = s.every((y, i) => !i || y === s[i - 1] + 1);
+    return run ? lbl(s[0]) + ' TO ' + lbl(s[s.length - 1]) : s.length + ' SEASONS';
+  };
   const POS = ['PG', 'SG', 'SF', 'PF', 'C'];
   const lbl = y => (y ? (y - 1) + '-' + String(y).slice(2) : 'EVERY SEASON');   // y 0: era spin, every season
   const logo = (t, n) => UI.logoFor(t || { abbr: '?' }, n);
@@ -66,7 +77,7 @@
       <p class="muted">Series won. Games: ${esc(a)} ${R.games[a] || 0}, ${esc(b)} ${R.games[b] || 0}.${sw ? ' Sweeps: ' + esc(sw) + '.' : ''} ${esc(streak)}</p>
       <div class="vs-rival-log">${R.log.slice(0, 8).map(x => `<span class="${x.w === a ? 'a' : 'b'}">${esc(x.w.split(' ')[0])} ${esc(x.s)}<small>${esc(x.y ? short(x.y) : 'ALL')}</small></span>`).join('')}</div></section>`;
   }
-  const SHARED = ['year', 'teams', 'names', 'opts', 'cfg', 'shown', 'watch', 'page', 'spin', 'spun', 'respins', 'turn'];
+  const SHARED = ['year', 'skip', 'teams', 'names', 'opts', 'cfg', 'shown', 'watch', 'page', 'spin', 'spun', 'respins', 'turn'];
   let APP = null;   // the page element the versus screens draw into
 
   // ---------- online (an encrypted relay) ----------
@@ -319,8 +330,9 @@
               <button type="button" class="ch-seg-b${NET.role === 'guest' ? ' on' : ''}" data-net="join"><b>JOIN ONLINE</b><small>Enter your friend's code</small></button></div>
             ${NET.role === 'guest' && !linked() ? `<div class="vs-join"><label class="field"><span>ROOM CODE</span><input id="vsCode" maxlength="5" placeholder="ABCDE" value="${esc(NET.code)}" autocomplete="off" autocapitalize="characters"></label><button type="button" class="btn btn-gold" id="vsJoin">JOIN</button></div>` : ''}
           </div>
-          <div class="ch-step"><div class="ch-step-k">2 | THE SEASON</div><div class="ch-chips ch-swipe"><button type="button" class="ch-chip vs-era${!VS.year ? ' on' : ''}" data-year="0"${dis(boss)}>EVERY SEASON</button>${C.SEASONS.map(s => `<button type="button" class="ch-chip${VS.year === s.year ? ' on' : ''}" data-year="${s.year}"${dis(boss)}>${esc(s.label)}</button>`).join('')}</div>
-            ${!VS.year ? '<small class="muted">Era spin: every spin lands on a team and a season, from 2003-04 to 2025-26. Nobody can be drafted twice, even from different seasons.</small>' : ''}</div>
+          <div class="ch-step"><div class="ch-step-k">2 | THE SEASON</div><div class="row-btns vs-seas-all"><button type="button" class="btn btn-small${!VS.skip.length ? ' on' : ''}" data-seas="all"${dis(boss)}>ALL</button><button type="button" class="btn btn-small" data-seas="none"${dis(boss)}>CLEAR</button><span class="muted">${chosen().length} of ${ALL_YEARS.length} on</span></div>
+            <div class="vs-seas">${C.SEASONS.map(s => `<button type="button" class="ch-chip${VS.skip.indexOf(s.year) < 0 ? ' on' : ''}" data-yr="${s.year}"${dis(boss)}>${esc(s.label)}</button>`).join('')}</div>
+            <small class="muted">${!chosen().length ? 'Pick at least one season.' : chosen().length === 1 ? 'One season: the whole ' + esc(lbl(chosen()[0])) + ' league.' : 'Every spin lands on a team and a season from the ones on. Nobody can be drafted twice, even from different seasons. Tap a season to switch it off.'}</small></div>
           <div class="ch-step"><div class="ch-step-k">3 | THE RULES</div>
             <div class="vs-rules"><div><span class="ts-start-k">SERIES</span><div class="ch-chips">${[3, 5, 7].map(n => `<button type="button" class="ch-chip${VS.opts.bestOf === n ? ' on' : ''}" data-bo="${n}"${dis(boss)}>BEST OF ${n}</button>`).join('')}</div></div>
               <div><span class="ts-start-k">PICK TIMER</span><div class="ch-chips">${[[30, '30 SEC'], [60, '60 SEC'], [0, 'OFF']].map(([v, l]) => `<button type="button" class="ch-chip${(VS.opts.timer || 0) === v ? ' on' : ''}" data-timer="${v}"${dis(boss)}>${l}</button>`).join('')}</div>
@@ -344,7 +356,9 @@
         route();
       }));
       const jb = UI.$('#vsJoin', app); if (jb) jb.addEventListener('click', () => { const v = UI.$('#vsCode', app).value; if (v.trim().length >= 4) join(v); });
-      app.querySelectorAll('[data-year]').forEach(b => b.addEventListener('click', () => { VS.year = +b.dataset.year; redraw(); }));
+      const setYear = () => { const c = chosen(); VS.year = c.length === 1 ? c[0] : 0; };
+      app.querySelectorAll('[data-yr]').forEach(b => b.addEventListener('click', () => { const y = +b.dataset.yr, i = VS.skip.indexOf(y); if (i >= 0) VS.skip.splice(i, 1); else VS.skip.push(y); setYear(); redraw(); }));
+      app.querySelectorAll('[data-seas]').forEach(b => b.addEventListener('click', () => { VS.skip = b.dataset.seas === 'all' ? [] : ALL_YEARS.slice(); setYear(); redraw(); }));
       app.querySelectorAll('[data-bo]').forEach(b => b.addEventListener('click', () => { VS.opts.bestOf = +b.dataset.bo; redraw(); }));
       app.querySelectorAll('[data-blind]').forEach(b => b.addEventListener('click', () => { VS.opts.blind = b.dataset.blind === '1'; redraw(); }));
       app.querySelectorAll('[data-timer]').forEach(b => b.addEventListener('click', () => { VS.opts.timer = +b.dataset.timer; redraw(); }));
@@ -354,7 +368,10 @@
       const st = UI.$('#vsStart', app);
       if (st) st.addEventListener('click', () => {
         VS.names = [0, 1].map(i => { const el = app.querySelector('[data-name="' + i + '"]'); return el && canAct(i) ? el.value.trim().slice(0, 20) : VS.names[i]; });
-        VS.cfg = { mode: 'versus', year: VS.year, bestOf: VS.opts.bestOf, blind: !!VS.opts.blind, timer: +VS.opts.timer || 0, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
+        const ch = chosen();
+        if (!ch.length) { UI.toast('Switch on at least one season', 'error'); return; }
+        VS.year = ch.length === 1 ? ch[0] : 0;
+        VS.cfg = { mode: 'versus', year: VS.year, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null, bestOf: VS.opts.bestOf, blind: !!VS.opts.blind, timer: +VS.opts.timer || 0, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
           sides: [0, 1].map(i => ({ team: VS.teams[i], name: VS.names[i] ? VS.names[i] + "'s " + tOf(teams, VS.teams[i]).name : '', picks: [] })) };
         VS.spin = null; VS.spun = []; VS.respins = [1, 1]; VS.shown = 0; VS.pos = ''; VS.q = '';
         VS.turn = turnFor(VS.cfg, 0, 'spin');
@@ -370,11 +387,11 @@
   // nobody twice even from different seasons). A spin lands on a group: season:team.
   function board(cfg) {
     const era = !cfg.year, d = C.seasonData(era ? 2013 : cfg.year), teams = d.teams, byId = {};
-    const players = era ? C.allTimePool().map(e => Object.assign({}, e, { id: e.key, team: e.from })) : d.players.slice();
+    const players = era ? C.allTimePool().filter(e => inPlay(cfg, e.season)).map(e => Object.assign({}, e, { id: e.key, team: e.from })) : d.players.slice();
     players.forEach(p => { byId[p.id] = p; });
     // every season: a landed season's full rosters join once its file is loaded (keys id@season)
-    if (era) C.poolSeasons().forEach(y => {
-      if (y !== 2013 && !C.loaded(y)) return;
+    if (era) ALL_YEARS.forEach(y => {
+      if (!inPlay(cfg, y) || y !== 2013 && !C.loaded(y)) return;
       const sd = C.seasonData(y);
       if (sd) sd.players.forEach(q => { const k = q.id + '@' + y; if (byId[k]) return; const e = Object.assign({}, q, { id: k, key: k, base: q.id, from: q.team, season: y }); byId[k] = e; players.push(e); });
     });
@@ -392,7 +409,9 @@
   }
   function spinFor(cfg, B, taken, avoid) {
     const tk = B.takenSet(taken), groups = {};
-    if (B.era && window.CHALLENGE_POOL && window.CHALLENGE_POOL.teams) Object.keys(window.CHALLENGE_POOL.teams).forEach(y => (window.CHALLENGE_POOL.teams[y] || []).forEach(t => { groups[y + ':' + t.abbr] = { abbr: t.abbr, year: +y, key: y + ':' + t.abbr }; }));
+    const PT = window.CHALLENGE_POOL && window.CHALLENGE_POOL.teams;
+    // a season the pool does not cover (the newest) spins on the teams of the one before it
+    if (B.era && PT) (cfg.seasons || Object.keys(PT).map(Number)).forEach(y => (PT[y] || PT[y - 1] || []).forEach(t => { groups[y + ':' + t.abbr] = { abbr: t.abbr, year: +y, key: y + ':' + t.abbr }; }));
     else B.players.forEach(p => { if (tk.has(B.base(p))) return; const k = B.groupKey(p); if (!groups[k]) groups[k] = { abbr: p.team, year: B.era ? p.season : cfg.year, key: k }; });
     const keys = Object.keys(groups);
     let pool = keys.filter(k => VS.spun.indexOf(k) < 0 && k !== avoid);
@@ -450,7 +469,7 @@
       }
       const turn = on >= 0 && VS.turn && VS.turn.pick === taken.length ? VS.turn : null;
       const clock = turn ? `<div class="vs-timer" id="vsTimer"><i style="--w:100%"></i><span>${Math.max(0, Math.ceil((turn.until - Date.now()) / 1000))}</span></div>` : '';
-      app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(lbl(cfg.year))} | TWO PLAYERS | BEST OF ${cfg.bestOf || 5}${blind ? ' | BLIND' : ''}${cfg.timer ? ' | ' + cfg.timer + ' SEC CLOCK' : ''}</div><div class="ch-top-t">THE DRAFT</div></div>
+      app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(lblC(cfg))} | TWO PLAYERS | BEST OF ${cfg.bestOf || 5}${blind ? ' | BLIND' : ''}${cfg.timer ? ' | ' + cfg.timer + ' SEC CLOCK' : ''}</div><div class="ch-top-t">THE DRAFT</div></div>
           <button type="button" class="btn btn-small" id="vsSetup">SETUP</button></div>
         ${netBar()}
         <div class="vs-sides vs-compact">${fives}</div>
@@ -548,7 +567,7 @@
         ? `<section class="vs-win" style="--c1:${esc((S[idx(r.winner)].team.colors || ['#333'])[0])}">${logo(S[idx(r.winner)].team, 64)}<div><div class="ch-hero-k">BEST OF ${r.bestOf}</div>
             <h1>${esc(whoA(r.winner)).toUpperCase()} WINS ${r.wins[r.winner]}-${r.wins[r.winner === S[0].abbr ? S[1].abbr : S[0].abbr]}</h1>
             ${r.mvp ? `<p>Series MVP: <b>${esc(r.mvp.name)}</b> (${esc(f1(r.mvp.line.pts) + ' PTS, ' + f1(r.mvp.line.reb) + ' REB, ' + f1(r.mvp.line.ast) + ' AST')})</p>` : ''}</div></section>`
-        : `<section class="vs-next"><div class="ch-hero-k">BEST OF ${r.bestOf} | ${esc(lbl(cfg.year))}${cfg.blind ? ' | BLIND' : ''}</div><h1>${WATCH ? 'GAME ' + WATCH + ', LIVE' : shown ? 'GAME ' + (shown + 1) + ' IS NEXT' : 'THE SERIES'}</h1>
+        : `<section class="vs-next"><div class="ch-hero-k">BEST OF ${r.bestOf} | ${esc(lblC(cfg))}${cfg.blind ? ' | BLIND' : ''}</div><h1>${WATCH ? 'GAME ' + WATCH + ', LIVE' : shown ? 'GAME ' + (shown + 1) + ' IS NEXT' : 'THE SERIES'}</h1>
             <p class="muted">${esc(whoA(r.home))} has home court (${homeGames}). First to ${r.need}. All ten players go the full 48.</p></section>`;
       const gameBox = side => {
         const i = idx(side.abbr), rows = side.box || [], sum = k => rows.reduce((s, x) => s + (+x[k] || 0), 0), ms = (m, a) => m + '-' + a;
@@ -606,7 +625,7 @@
       if ($('#vsAgain')) $('#vsAgain').addEventListener('click', () => { VS.cfg.seed = Math.floor(Math.random() * 2147483646) + 1; VS.shown = 0; WATCH = 0; VS.watch = null; push(); series(app); window.scrollTo(0, 0); });
       if ($('#vsShare')) $('#vsShare').addEventListener('click', () => {
         const wi = idx(r.winner), li = 1 - wi, ws = r.wins[r.winner] + '-' + r.wins[S[li].abbr];
-        const spec = { kicker: 'VERSUS | BEST OF ' + r.bestOf + ' | ' + lbl(cfg.year), title: who(wi).toUpperCase() + ' WINS', big: ws, gold: true,
+        const spec = { kicker: 'VERSUS | BEST OF ' + r.bestOf + ' | ' + lblC(cfg), title: who(wi).toUpperCase() + ' WINS', big: ws, gold: true,
           banner: r.mvp ? 'SERIES MVP: ' + r.mvp.name.toUpperCase() : '', colors: S[wi].team.colors, logo: S[wi].team.logo,
           lines: [[who(0).slice(0, 8).toUpperCase(), S[0].five.map(p => p.name.split(' ').pop()).join(', ')], [who(1).slice(0, 8).toUpperCase(), S[1].five.map(p => p.name.split(' ').pop()).join(', ')]] };
         const mv = r.mvp ? ` ${r.mvp.name} was the MVP with ${f1(r.mvp.line.pts)} a game.` : '';
@@ -616,7 +635,7 @@
         const five = S[wi].five.map(p => p.name.split(' ').pop()).join(', ');
         const end = [`${who(li)} wants a rematch. Spin your own:`, `${who(li)} is already asking for game 2. Spin your own:`, `Think you can draft better? Spin your own:`][Math.floor(Math.random() * 3)];
         const riv = R && R.log.length > 1 ? ' ' + rivalLead(R) + ' in our rivalry.' : '';
-        const text = `${how} in a ${lbl(cfg.year)} versus draft. Winning five: ${five}.${mv}${nail}${riv} ${end}`;
+        const text = `${how} in a ${lblC(cfg)} versus draft. Winning five: ${five}.${mv}${nail}${riv} ${end}`;
         UI.shareResult(spec, text, location.origin + location.pathname + '#/challenge/vs', 'versus');
       });
       if ($('#vsRivalReset')) $('#vsRivalReset').addEventListener('click', () => {
