@@ -109,6 +109,7 @@
     else B.players.forEach(p => { if (tk.has(B.base(p))) return; const k = B.groupKey(p); if (!groups[k]) groups[k] = { abbr: p.team, year: B.era ? p.season : cfg.year, key: k }; });
     const keys = Object.keys(groups);
     let pool = keys.filter(k => TN.spun.indexOf(k) < 0 && k !== avoid);
+    if (B.era) { const got = {}; TN.spun.forEach(k => { got[C.franchise(String(k).split(':')[1])] = 1; }); const fresh = pool.filter(k => !got[C.franchise(k.split(':')[1])]); if (fresh.length) pool = fresh; }   // never two years of one franchise while others are left
     if (!pool.length) pool = keys.filter(k => k !== avoid);
     if (!pool.length) pool = keys;
     const g = groups[pool[Math.floor(Math.random() * pool.length)]];

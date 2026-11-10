@@ -434,6 +434,11 @@
 
   // Wheel: a random team (one season) or team-season (all-time) that still has someone to take.
   // used: spins already taken (keys 'year:abbr').
+  // the franchise behind a team abbreviation across the eras (the Bulls are the Bulls in every season; the Warriors from Philadelphia on)
+  var FRANCHISE = { PHW: 'GSW', SFW: 'GSW', MNL: 'LAL', ROC: 'SAC', CIN: 'SAC', KCO: 'SAC', KCK: 'SAC', SYR: 'PHI', FTW: 'DET', MLH: 'ATL', STL: 'ATL', TRI: 'ATL',
+    CHP: 'WAS', CHZ: 'WAS', BAL: 'WAS', CAP: 'WAS', WSB: 'WAS', SDR: 'HOU', BUF: 'LAC', SDC: 'LAC', NOJ: 'UTA', NYN: 'BKN', NJN: 'BKN', SEA: 'OKC',
+    CHH: 'NOH', NOP: 'NOH', VAN: 'MEM' };
+  function franchise(abbr) { return FRANCHISE[abbr] || abbr; }
   function spin(cfg, used, rng, dr) {
     var opts = [];
     if (cfg.mode === 'alltime') {
@@ -449,6 +454,12 @@
       });
     }
     if (!opts.length) return null;
+    // an all-seasons draft never lands on the same franchise twice (two Bulls years) while other franchises are left
+    if (cfg.mode === 'alltime') {
+      var got = {}; used.forEach(function (k) { got[franchise(String(k).split(':')[1])] = 1; });
+      var fresh = opts.filter(function (o) { return !got[franchise(o.abbr)]; });
+      if (fresh.length) opts = fresh;
+    }
     return opts[Math.floor(rng() * opts.length)];
   }
   function spinRoster(cfg, s, dr) {
@@ -797,7 +808,7 @@
     SEASONS: SEASONS, ROUNDS: ROUNDS, seasonInfo: seasonInfo, seasonData: seasonData, loaded: loaded, load: load, loadAll: loadAll,
     allTimePool: allTimePool, poolSeasons: poolSeasons, eraTeam: eraTeam, buildYear: buildYear, buildAllTime: buildAllTime, newDraft: newDraft, onClock: onClock,
     draftSlot: draftSlot, draftPick: draftPick, aiPick: aiPick, simToUser: simToUser, autoDraft: autoDraft, available: available,
-    teamPicks: teamPicks, lineupFit: lineupFit, posLabel: posLabel, secondPos: secondPos, SLOTS: SLOTS, vsOnClock: vsOnClock, playVersus: playVersus, VS_ORDER: VS_ORDER, spin: spin, spinRoster: spinRoster, matchups: matchups, start: start, step: step, runAll: runAll,
+    teamPicks: teamPicks, lineupFit: lineupFit, posLabel: posLabel, secondPos: secondPos, SLOTS: SLOTS, vsOnClock: vsOnClock, playVersus: playVersus, VS_ORDER: VS_ORDER, spin: spin, franchise: franchise, spinRoster: spinRoster, matchups: matchups, start: start, step: step, runAll: runAll,
     progress: progress, summary: summary, play: play, perGame: perGame, groupOf: groupOf, primaryPos: primaryPos, rng: mulberry32
   };
   W.CHALLENGE = API;

@@ -335,11 +335,23 @@
     yrs.forEach(y => (PT[y] || PT[y - 1] || []).forEach(t => out.push({ t, y })));
     return out;
   }
+  // n reel cards of real team-seasons (the seasons switched on), every franchise once per pass and never the one in `except`
+  function eraReel(cfg, n, except) {
+    const by = {};
+    eraDeck(cfg).forEach(x => { const f = C.franchise(x.t.abbr); if (f !== except) (by[f] = by[f] || []).push(x); });
+    const frs = Object.keys(by), out = [];
+    if (!frs.length) return null;
+    while (out.length < n) {
+      const pass = frs.slice();
+      for (let k = pass.length - 1; k > 0; k--) { const j = Math.floor(Math.random() * (k + 1)); [pass[k], pass[j]] = [pass[j], pass[k]]; }
+      if (out.length && pass.length > 1 && C.franchise(out[out.length - 1].t.abbr) === pass[0]) pass.push(pass.shift());
+      pass.forEach(f => out.push(by[f][Math.floor(Math.random() * by[f].length)]));
+    }
+    return out.slice(0, n);
+  }
   function wheelStrip(teams, cfg) {
-    const deck = eraDeck(cfg);
-    if (deck.length) {
-      const pick = [], used = {};
-      for (let g = 0; g < 400 && pick.length < 9; g++) { const x = deck[Math.floor(Math.random() * deck.length)], k = x.t.abbr + x.y; if (!used[k]) { used[k] = 1; pick.push(x); } }
+    const pick = eraReel(cfg, 9, null);
+    if (pick) {
       return `<div class="ch-reel" aria-hidden="true"><div class="ch-reel-in">${pick.concat(pick).map(x => reelCard(x.t, x.y)).join('')}</div><i class="ch-reel-mark"></i></div>`;
     }
     const list = teams.slice(0, 9);
@@ -372,16 +384,10 @@
       deck.push(...sh);
     }
     [REEL_AT - 1, REEL_AT + 1].forEach(k => { if (deck[k] && deck[k].abbr === winner.abbr) { const j = k + 3; [deck[k], deck[j]] = [deck[j], deck[k]]; } });
-    const cards = [], eras = eraDeck(cfg);
-    let last = null;
+    const cards = [], seq = eraReel(cfg, REEL_N, C.franchise(winner.abbr));
     for (let i = 0; i < REEL_N; i++) {
-      if (i === REEL_AT) { cards.push(reelCard(winner, alltime ? s.year : null, 'win')); last = { t: winner, y: s.year }; continue; }
-      if (eras.length) {   // an all-seasons draft: real team-seasons from the seasons switched on, never two alike in a row
-        let x = eras[Math.floor(Math.random() * eras.length)];
-        for (let g = 0; g < 6 && last && x.t.abbr === last.t.abbr && x.y === last.y; g++) x = eras[Math.floor(Math.random() * eras.length)];
-        if (i === REEL_AT - 1 || i === REEL_AT + 1) { for (let g = 0; g < 8 && x.t.abbr === winner.abbr && x.y === s.year; g++) x = eras[Math.floor(Math.random() * eras.length)]; }
-        last = x; cards.push(reelCard(x.t, x.y)); continue;
-      }
+      if (i === REEL_AT) { cards.push(reelCard(winner, alltime ? s.year : null, 'win')); continue; }
+      if (seq) { cards.push(reelCard(seq[i].t, seq[i].y)); continue; }
       const t = deck[i];
       cards.push(reelCard(t, null));
     }
