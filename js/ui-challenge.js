@@ -440,8 +440,10 @@
     const landed = sp => {
       if (cfg.mode !== 'alltime' || !CUR.dr || !sp || !sp.year) { redraw(); return; }
       if (!C.loaded(sp.year)) app.innerHTML = `<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE ${esc(seasonLabel(sp.year))} ROSTER...</div></section>`;
-      C.load(sp.year).then(() => { C.extendPool(CUR.dr, sp.year); redraw(); }).catch(() => redraw());
+      C.load(sp.year).then(() => { C.extendPool(CUR.dr, sp.year); redraw(); }).catch(() => { CUR.dr.ext = CUR.dr.ext || {}; CUR.dr.ext[sp.year] = true; redraw(); });
     };
+    // a spin that landed before this page knew about full rosters (a draft in progress, or a reload): upgrade it now
+    if (cfg.mode === 'alltime' && CUR.dr && CUR.spin && CUR.spin.year && !(CUR.dr.ext && CUR.dr.ext[CUR.spin.year])) { landed(CUR.spin); return; }
     app.querySelectorAll('[data-pos]').forEach(b => b.addEventListener('click', () => { VIEW.pos = b.dataset.pos; redraw(); }));
     app.querySelectorAll('[data-letter]').forEach(b => b.addEventListener('click', () => { VIEW.letter = b.dataset.letter; redraw(); }));
     UI.centerChips(app);
