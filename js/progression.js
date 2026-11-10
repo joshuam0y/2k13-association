@@ -728,7 +728,7 @@
       if (rp != null && rp < NON_STAR_PEAK && p.pot > NON_STAR_MAX) p.pot = Math.max(p.ovr, NON_STAR_MAX);
       p.formBase = p.ovr;
       if (p.ovr !== before) out.changes.push({ id: id, from: before, to: p.ovr });
-      if (p.team !== 'DRAFT') report.players[id] = [shown, p.ovr, p.age];
+      if (p.team !== 'DRAFT') { report.players[id] = [shown, p.ovr, p.age]; p.ovrMove = { d: p.ovr - shown, year: next, day: 0 }; }   // the arrow next to his rating
       // Stashed players keep their overseas status until they arrive
       if (p.stashedUntil && p.stashedUntil > next) p.injury = { type: 'Playing overseas', games: 999 };
     });
@@ -878,7 +878,7 @@
       var before = p.ovr;
       setOvr(p, p.ovr + (nf - form), { keepPot: true });
       p.form = form + (p.ovr - before);
-      if (p.ovr !== before) { p.formLast = { d: p.ovr - before, day: state.day || 0, year: state.year }; out.push({ id: id, from: before, to: p.ovr }); }
+      if (p.ovr !== before) { var mv = p.ovrMove && p.ovrMove.year === state.year ? p.ovrMove : { d: 0, year: state.year }; mv.d += p.ovr - before; mv.day = state.day || 0; p.ovrMove = mv; p.formLast = { d: p.ovr - before, day: state.day || 0, year: state.year }; out.push({ id: id, from: before, to: p.ovr }); }
     });
     return out;
   }

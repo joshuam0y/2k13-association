@@ -425,7 +425,7 @@
             <a class="btn" id="pkCompare" href="#/player/${encodeURIComponent(p.id)}/compare">COMPARE</a>
           </div>
         </div>
-        <div class="pk-ovr"><b>${esc(p.ovr == null ? '-' : p.ovr)}</b><small>OVERALL</small></div>
+        <div class="pk-ovr"><b>${esc(p.ovr == null ? '-' : p.ovr)}</b>${(() => { const mv = p.ovrMove, g0 = UI.state.game; return mv && mv.d && g0 && mv.year === g0.year ? `<i class="pk-mv ${mv.d > 0 ? 'up' : 'down'}" title="${mv.d > 0 ? 'Up' : 'Down'} ${Math.abs(mv.d)} this season (development and form)">${Math.abs(mv.d)}</i>` : ''; })()}<small>OVERALL</small></div>
       </section>
       <nav class="pk-tabs" role="tablist">${tabs.map(([k, l]) => `<a href="#/player/${encodeURIComponent(p.id)}/${k}" data-tab="${k}" role="tab" class="${k === tab ? 'on' : ''}" aria-selected="${k === tab}">${l}</a>`).join('')}</nav>
       <div class="pk-panel" id="pkPanel"></div>`;
