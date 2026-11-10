@@ -366,7 +366,7 @@
   function animateSpin(app, teams, done, s, cfg) {
     const btn = UI.$('#chSpin') || UI.$('#chRespin');
     if (btn) btn.disabled = true;
-    SPINNING = Date.now() + 7500;   // the longest a spin can take, in case it never reports back
+    SPINNING = Date.now() + 8500;   // the longest a spin can take, in case it never reports back
     let reel = app.querySelector('.ch-reel');
     if (!reel) {
       // a re-spin from the landed card: put a reel in its place
@@ -412,7 +412,7 @@
     if (reduce) { strip.style.transform = `translateX(${-target}px)`; land(); return; }
     requestAnimationFrame(() => requestAnimationFrame(() => {
       view = reel.clientWidth || view; target = REEL_AT * (REEL_W + REEL_GAP) + REEL_W / 2 - view / 2 + jitter;   // measured once the layout is settled
-      strip.style.transition = 'transform 4.2s cubic-bezier(.08,.72,.12,1)';
+      strip.style.transition = 'transform 5s cubic-bezier(.4,.3,.5,1)';   // keeps moving until near the end, then rolls to a stop
       strip.style.transform = `translateX(${-target}px)`;
     }));
     let fired = false;
@@ -431,7 +431,7 @@
     }
     // only the reel's own slide ends the spin (a card's small transition bubbling up used to cut it short)
     strip.addEventListener('transitionend', e => { if (e.target === strip && e.propertyName === 'transform') end(); });
-    setTimeout(end, 4600);
+    setTimeout(end, 5600);
   }
 
   function bindPick(app) {
