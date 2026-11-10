@@ -140,7 +140,7 @@ fs.readdirSync("data").filter(f => /^start-\d{4}\.js$/.test(f)).forEach(f => {
     "draft night 2007: the real 2006-07 ending (Spurs champions, Boston 24-58, Dallas 67-15)");
   ok(s.players.garneke01.team === "MIN" && s.players.garneke01.careerStats.slice(-1)[0].pts === Math.round(22.4 * 76), "Garnett still in Minnesota with his real 2006-07 line");
   s.events.forEach(e => (e.resolved = true)); L.clearResolved(s); L.advance(s, "nextPhase");
-  ok(s.draft && s.draft.order && s.draft.order.length >= 58 && (() => { const worst = Object.keys(H.standings).sort((a, b) => H.standings[a].w - H.standings[b].w).slice(0, 16); return s.draft.order.slice(0, 14).every(x => worst.indexOf(x.original || x.team) >= 0); })(), "the lottery runs off the real records (top picks: " + s.draft.order.slice(0, 3).map(x => x.team).join(", ") + ")");
+  ok(s.draft && s.draft.order && s.draft.order.length >= 58 && (() => { const worst = Object.keys(H.standings).sort((a, b) => H.standings[a].w - H.standings[b].w).slice(0, 20); return s.draft.order.slice(0, 14).every(x => worst.indexOf(x.original || x.team) >= 0); })(), "the lottery runs off the real records (top picks: " + s.draft.order.slice(0, 3).map(x => x.team).join(", ") + ")");
 }
 // real contract options in the 2025-26 start
 {

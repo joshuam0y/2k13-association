@@ -1,12 +1,12 @@
 /* About, Contact, FAQ, Privacy, Terms and Disclaimer pages. They need no league, so they open from the
    home footer and the INFO group in the menu. Routes: #/about #/contact #/faq #/privacy #/terms #/disclaimer.
-   Set CONTACT_FORM to a form service endpoint (for example https://formspree.io/f/xxxx) to show the form. */
+   CONTACT_FORM posts to FormSubmit, which emails the owner (the first message needs a one time activation click in that inbox). */
 (function () {
   'use strict';
   const UI = window.UI;
   if (!UI) return;
   const P = UI.pages = UI.pages || {};
-  const CONTACT_FORM = '';
+  const CONTACT_FORM = 'https://formsubmit.co/jmoy2077@gmail.com';
   const REPO = 'https://github.com/joshuam0y/2k13-association';
   const UPDATED = 'November 10, 2026';
 
@@ -63,7 +63,7 @@
       <label>Your name<input name="name" required maxlength="80" autocomplete="name"></label>
       <label>Your email (so I can reply)<input name="email" type="email" required maxlength="120" autocomplete="email"></label>
       <label>Message<textarea name="message" required rows="5" maxlength="2000"></textarea></label>
-      <input type="text" name="_gotcha" tabindex="-1" autocomplete="off" style="display:none">
+      <input type="hidden" name="_subject" value="Message from the site contact form"><input type="hidden" name="_template" value="table"><input type="hidden" name="_next" value="https://joshuam0y.github.io/2k13-association/#/contact"><input type="text" name="_honey" tabindex="-1" autocomplete="off" style="display:none">
       <button class="btn btn-gold" type="submit">SEND</button></form>`;
   }
 
