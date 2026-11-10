@@ -42,7 +42,7 @@
   const hum = () => (TN.humans > 0 ? Math.min(TN.humans, TN.n) : TN.n);
   const humDone = () => (TN.ai && TN.ai.length ? TN.ai.filter(a => !a).length : TN.n);
   const aiTag = i => (isAI(i) ? ' <i class="tn-ai">AI</i>' : '');
-  const CPU_NAMES = ['CPU Chris', 'CPU Dana', 'Bot Bobby', 'CPU Mo', 'Bot Brenda', 'CPU Gary', 'Bot Tina', 'CPU Steve', 'Bot Nadia', 'CPU Kev', 'Bot Rita', 'CPU Dwayne'];
+  const CPU_NAMES = ['CPU LeBron', 'CPU Jordan', 'CPU Kobe', 'CPU Curry', 'CPU Magic', 'CPU Bird', 'CPU Shaq', 'CPU Kareem', 'CPU Wilt', 'CPU Russell', 'CPU Duncan', 'CPU Dirk', 'CPU Durant', 'CPU Jokic', 'CPU Giannis', 'CPU Luka', 'CPU Wemby', 'CPU Hakeem', 'CPU Iverson', 'CPU Kawhi'];
   const grpOf = p => { const x = String(p.pos || 'SF').toUpperCase().split(/[-\/ ,]/)[0]; return x === 'PG' || x === 'SG' || x === 'G' ? 'G' : x === 'C' || x === 'PF' || x === 'F' ? 'B' : 'W'; };
   // best fit with a little randomness: rating, a nudge for a missing position group, a penalty for a crowded one, price weighed under a cap
   function aiChoose(cap, five, ros, rnd) {
