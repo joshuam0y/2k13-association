@@ -631,6 +631,8 @@
       // Remove any in-season streak before developing
       if (p.form) { setOvr(p, p.ovr - p.form, { keepPot: true }); }
       p.form = 0;
+      // most of what a long injury took comes back over the summer (about 60%)
+      if (p.injPen) { setOvr(p, p.ovr + Math.ceil(p.injPen * 0.6), { keepPot: true }); p.injPen = 0; }
       var before = p.ovr;
       var seasonAge = p.age || 22;
       p.age = seasonAge + 1;

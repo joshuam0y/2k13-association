@@ -537,6 +537,22 @@
     state.day = state.season.day || state.day + days;
     // injuries to the user's players become events, and so do returns (see userInjuries below)
     var inj = state.season.injuries || {};
+    // a long injury costs rating points for real (about 40% never come back; the rest returns in the offseason):
+    // 20+ games -1, 45+ -2, 90+ -3, 150+ (a torn ACL and worse) -4. Shown as a red arrow next to his rating.
+    safe("injuryRating", function () {
+      for (var iid in inj) {
+        var q = state.players[iid], ij = inj[iid];
+        if (injBefore[iid] || !q || q.retired || !ij || !(ij.games >= 20) || /overseas/i.test(ij.type || "") || !mod("PROG") || !W.PROG.setOvr) continue;
+        var pen = ij.games >= 150 ? 4 : ij.games >= 90 ? 3 : ij.games >= 45 ? 2 : 1, was = q.ovr;
+        W.PROG.setOvr(q, q.ovr - pen, { keepPot: true });
+        var got = was - q.ovr;
+        if (got > 0) {
+          q.injPen = (q.injPen || 0) + got;
+          var mv = q.ovrMove && q.ovrMove.year === state.year ? q.ovrMove : { d: 0, year: state.year };
+          mv.d -= got; mv.day = state.day || 0; q.ovrMove = mv;
+        }
+      }
+    });
     for (var id in inj) if (!injBefore[id] && state.players[id] && state.players[id].team === state.userTeam && inj[id].games > 0) {
       var iev = injuryEvent(state, id, inj[id]);
       if (autoOn(state, "injuryAlerts")) state.events.push(iev);
