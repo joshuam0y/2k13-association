@@ -624,7 +624,7 @@
     if (tot > 0) roster.forEach(function (s) { s.target = Math.min(mins ? (team.ironman ? 48 : 46) : 42, s.target * 240 / tot); });
     // Injury rolls for this game: about 0.15% to 0.4% per player, by durability and minutes
     roster.forEach(function (s) {
-      if (s.target <= 0) return;
+      if (s.target <= 0 || team.ironman) return;   // an ironman five (Draft Challenge) never gets hurt
       var d = clamp(s.a.durability, 25, 99);
       var p = 0.004 - 0.0025 * (d - 25) / 74;
       p *= clamp(s.target / 26, 0.5, 1.4);
@@ -861,7 +861,7 @@
     }
 
     function foulOutCheck(team, s) {
-      if (s.fouls >= 6 && !s.out) { s.out = true; log(team, s.name + ' fouls out', PBX.FOULOUT, s); }
+      if (s.fouls >= 6 && !s.out && !team.iron) { s.out = true; log(team, s.name + ' fouls out', PBX.FOULOUT, s); }
     }
 
     function shootFT(off, shooter, count) {
@@ -1455,6 +1455,8 @@
     return by;
   }
 
+  // a Draft Challenge five plays every minute
+  function ironMinutes(list) { var m = {}; (list || []).forEach(function (p) { m[p.id] = 48; }); return m; }
   function teamObj(season, league, by, abbr) {
     var lt = null;
     (league.teams || []).forEach(function (t) { if (t.abbr === abbr) lt = t; });
@@ -1463,7 +1465,8 @@
       abbr: abbr,
       players: by[abbr] || [],
       starters: (lineups && lineups.starters) || (lt && lt.starters) || null,
-      minutes: (lineups && lineups.minutes) || null,
+      minutes: (lineups && lineups.minutes) || (lt && lt.ironman ? ironMinutes(by[abbr]) : null),
+      ironman: !!(lt && lt.ironman),
       strategy: (lt && lt.strategy) || (season.strategies && season.strategies[abbr]) || null,
       autoStyle: (lt && lt.autoStyle) || null,
       playHurt: lt ? lt.playHurt !== false : true,

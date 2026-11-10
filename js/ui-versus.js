@@ -544,7 +544,8 @@
         if (i < 0 || !canAct(i)) return;
         const p = byId[b.dataset.add];
         if (VS.cfg.cap && p && !C.capFits(VS.cfg.cap, VS.cfg.sides[i].picks.map(id => byId[id]).filter(Boolean), p)) { UI.toast('That contract does not fit under the cap.', 'error'); return; }
-        VS.cfg.sides[i].picks.push(b.dataset.add); VS.spin = null; VS.turn = turnFor(VS.cfg, taken.length + 1, 'spin'); push();
+        VS.cfg.sides[i].picks.push(b.dataset.add);
+        if (window.SFX) window.SFX.play('chime'); VS.spin = null; VS.turn = turnFor(VS.cfg, taken.length + 1, 'spin'); push();
         draft(app); window.scrollTo(0, 0);
       }));
       const sim = UI.$('#vsSim', app);
@@ -624,7 +625,7 @@
         ${done ? `<div class="vs-fits">${S.map((sd, i) => UI.challengeFit(sd.fit, { compact: true, title: (who(i) + "'s lineup").toUpperCase() })).join('')}</div>` : ''}${reactBar()}`;
       if (keep) { const ph = UI.$('#vsCourt', app); if (ph) ph.replaceWith(keep); }
       bindNet(app); bindReact(app);
-      const reveal = n => { WATCH = 0; VS.watch = null; dropCourt(); VS.shown = Math.max(VS.shown || 0, n); push(); series(app); window.scrollTo(0, 0); };
+      const reveal = n => { if (n >= r.games.length && (VS.shown || 0) < n && window.SFX) window.SFX.play('crowd'); WATCH = 0; VS.watch = null; dropCourt(); VS.shown = Math.max(VS.shown || 0, n); push(); series(app); window.scrollTo(0, 0); };
       const watch = n => {
         WATCH = n; series(app);
         const el = UI.$('#vsCourt', app), g = r.games[n - 1];

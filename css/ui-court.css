@@ -141,3 +141,4 @@
 
 /* the live page hides its text-mode parts in court view (a display rule must not bring them back) */
 #lvControls[hidden], #lvGrid[hidden], #lvCourt[hidden] { display: none !important; }
+.ct-sfx.on { border-color: var(--gold); color: var(--gold); }

@@ -245,14 +245,11 @@
         moves.push({ team: abbr, out: gone.id, outName: gone.name, inId: s.id, inName: s.name, inOvr: s.ovr });
       });
     });
-    var used = {};
-    Object.keys(players).forEach(function (id) { used[players[id].name] = true; });
     sides.forEach(function (sd) {
       var user = teams.filter(function (t) { return t.abbr === sd.team; })[0];
-      user.autoStyle = 'challenge';
+      user.autoStyle = 'challenge'; user.ironman = true;   // just the five: all 48 minutes, never hurt, no bench
       user.orig = { city: user.city, name: user.name };
       if (sd.name) { var nm = splitName(sd.name, user); user.city = nm.city; user.name = nm.name; }
-      makeScrubs(sd.team, scrubTemplates(d), rng, used).forEach(function (s) { players[s.id] = s; });
     });
     var ch = finishBuild(cfg, d.year, teams, players, moves, null);
     ch.user = sides[0].team;
@@ -363,7 +360,9 @@
       var at = order.indexOf(cfg.team), to = clamp(cfg.slot, 1, order.length) - 1;
       order[at] = order[to]; order[to] = cfg.team;
     }
-    return { cfg: cfg, order: order, picks: [], taken: {}, pool: allTimePool(), spins: [], respins: 1 };
+    var pool = allTimePool().filter(function (e) { return !cfg.seasons || cfg.seasons.indexOf(e.season) >= 0; });
+    if (pool.length < order.length * ROUNDS) throw new Error('Not enough players in those seasons for ' + order.length + ' teams of five. Switch on more seasons.');
+    return { cfg: cfg, order: order, picks: [], taken: {}, pool: pool, spins: [], respins: 1 };
   }
   function draftSlot(dr, n) {
     var N = dr.order.length, r = Math.floor(n / N), k = n % N;
@@ -460,11 +459,9 @@
   function buildAllTime(cfg, dr) {
     var base = seasonData(2013);
     var rng = mulberry32((cfg.seed ^ 0x2545F491) >>> 0);
-    var teams = base.teams.map(clone), players = {}, used = {};
-    var tpl = scrubTemplates(base);
-    dr.pool.forEach(function (e) { used[e.name] = true; });
+    var teams = base.teams.map(clone), players = {};
     teams.forEach(function (t) {
-      t.autoStyle = 'challenge'; t.real = null;
+      t.autoStyle = 'challenge'; t.real = null; t.ironman = true;   // every team is its five, all 48 minutes
       t.orig = { city: t.city, name: t.name };
       if (t.abbr === cfg.team && cfg.name) { var nm = splitName(cfg.name, t); t.city = nm.city; t.name = nm.name; }
       teamPicks(dr, t.abbr).forEach(function (e, i) {
@@ -472,7 +469,6 @@
         p.id = e.key; p.team = t.abbr; p.realTeam = e.from; p.pick = i + 1; p.injury = null;
         players[p.id] = p;
       });
-      makeScrubs(t.abbr, tpl, rng, used).forEach(function (s) { players[s.id] = s; });
     });
     cfg.picks = teamPicks(dr, cfg.team).map(function (e) { return e.key; });
     return finishBuild(cfg, 2013, teams, players, [], dr);

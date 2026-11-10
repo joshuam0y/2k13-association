@@ -217,6 +217,7 @@
           <button type="button" class="btn btn-small ct-play" aria-label="Pause">PAUSE</button>
           ${[1, 2, 4].map(s => `<button type="button" class="btn btn-small ct-spd${s === 1 ? ' on' : ''}" data-speed="${s}">${s}X</button>`).join('')}
           <button type="button" class="btn btn-small ct-skip" aria-label="Skip to the end of the quarter">SKIP QTR</button>
+          ${window.SFX ? `<button type="button" class="btn btn-small ct-sfx${window.SFX.on ? ' on' : ''}" aria-label="Sound effects">${window.SFX.on ? 'SOUND ON' : 'SOUND OFF'}</button>` : ''}
         </div>
         <div class="ct-floor-list" aria-label="On the floor"></div>
       </div>`;
@@ -663,8 +664,20 @@
     }
 
     // ---------- running ----------
+    // the sound of a play (js/sfx.js), only when the game is being watched play by play, not skipped through
+    function sound(ev) {
+      const S = window.SFX;
+      if (!S || !ev) return;
+      if (ev.k === 'make') S.play(ev.pts === 3 ? 'three' : 'swish');
+      else if (ev.k === 'miss') S.play('rim');
+      else if (ev.k === 'ft') S.play(ev.made ? 'swish' : 'rim');
+      else if (ev.k === 'sfoul' || ev.k === 'pf') S.play('whistle');
+      else if (ev.k === 'end') S.play('buzzer');
+      else if (ev.k === 'final') { S.play('buzzer'); setTimeout(() => S.play('crowd'), 500); }
+    }
     function fire(i) {
       if (i < st.done) return;
+      const few = i - st.done < 3;
       for (let j = st.done; j <= i && j < evs.length; j++) {
         const ev = evs[j];
         st.done = j + 1;
@@ -672,6 +685,7 @@
         if (typeof opts.onStep === 'function') { try { opts.onStep(j); } catch (e) { console.warn('[court] onStep failed', e); } }
       }
       const ev = evs[Math.min(i, evs.length - 1)];
+      if (few) sound(ev);
       drawScore(); drawLine(ev);
       if (st.sel) card();
     }
@@ -810,6 +824,8 @@
     $('.ct-play').addEventListener('click', () => { st.playing = !st.playing; syncControls(); wake(); told(st.playing ? 'play' : 'pause'); });
     el.querySelectorAll('.ct-spd').forEach(b => b.addEventListener('click', () => { st.speed = Number(b.getAttribute('data-speed')) || 1; syncControls(); told('speed', st.speed); }));
     $('.ct-skip').addEventListener('click', () => { skipQuarter(); told('skip'); });
+    const sfxB = $('.ct-sfx');
+    if (sfxB) sfxB.addEventListener('click', () => { window.SFX.set(!window.SFX.on); sfxB.classList.toggle('on', window.SFX.on); sfxB.textContent = window.SFX.on ? 'SOUND ON' : 'SOUND OFF'; });
 
     function onResize() {
       const want = el.clientWidth && el.clientWidth < NARROW ? 'v' : 'h';

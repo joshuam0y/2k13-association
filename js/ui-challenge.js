@@ -118,6 +118,7 @@
     const decOf = y => (y - 1) - (y - 1) % 10, decs = [...new Set(C.SEASONS.map(x => decOf(x.year)))];
     const dec = decs.indexOf(+s.decade) >= 0 ? +s.decade : decOf(isAll ? 2013 : s.year);
     const decBtns = decs.length > 1 ? `<div class="ch-chips ch-decades">${decs.map(d => `<button type="button" class="ch-chip sm${d === dec ? ' on' : ''}" data-decade="${d}">${d}s</button>`).join('')}</div>` : '';
+    const skip = Array.isArray(s.skip) ? s.skip : [];
     const seasonBtns = C.SEASONS.filter(x => decs.length < 2 || decOf(x.year) === dec).map(x => {
       const off = x.ready === false;
       return `<button type="button" class="ch-chip${!isAll && s.year === x.year ? ' on' : ''}" data-year="${x.year}"${off ? ' disabled' : ''}>${esc(x.label)}${off ? '<small>SOON</small>' : ''}</button>`;
@@ -127,7 +128,7 @@
       <section class="ch-hero">
         <div class="ch-hero-k">DRAFT CHALLENGE</div>
         <h1 class="ch-hero-t">PICK FIVE. SIM A SEASON.</h1>
-        <p class="ch-hero-p">Build a starting five, drop them on a franchise with a bench of scrubs and see how far they go. Your five play 38 to 40 minutes a night. Separate from your Association saves.</p>
+        <p class="ch-hero-p">Build a starting five, drop them on a franchise and see how far they go. Just the five: they play all 48 minutes of every game and never get hurt a night. Separate from your Association saves.</p>
       </section>
       <div class="ch-setup">
         <div class="ch-step"><div class="ch-step-k">1 | THE POOL</div>
@@ -136,7 +137,10 @@
             <button type="button" class="ch-seg-b${isAll ? ' on' : ''}" data-mode="alltime"><b>ALL-TIME</b><small>Vets from every season, 30 teams draft</small></button>
             <a class="ch-seg-b" href="#/challenge/vs"><b>VERSUS</b><small>Two players, one phone, then a showdown</small></a>
           </div>
-          ${isAll ? `<div class="ch-sub">ERA RULES (PACE AND THREES)</div><div class="ch-chips ch-swipe">${eraBtns}</div>` : `${decBtns}<div class="ch-chips ch-swipe">${seasonBtns}</div>`}
+          ${isAll ? `<div class="ch-sub">SEASONS IN THE POOL <span class="muted">(${C.SEASONS.length - skip.length} of ${C.SEASONS.length} on)</span></div>
+            <div class="row-btns vs-seas-all"><button type="button" class="btn btn-small${!skip.length ? ' on' : ''}" data-askip="all">ALL</button><button type="button" class="btn btn-small" data-askip="none">CLEAR</button>${decs.length > 1 ? decs.map(d => { const ys = C.SEASONS.filter(x => decOf(x.year) === d).map(x => x.year), n = ys.filter(y => skip.indexOf(y) < 0).length; return `<button type="button" class="btn btn-small${n === ys.length ? ' on' : n ? ' part' : ''}" data-adec="${d}">${d}s</button>`; }).join('') : ''}</div>
+            <div class="vs-seas">${C.SEASONS.map(x => `<button type="button" class="ch-chip${skip.indexOf(x.year) < 0 ? ' on' : ''}" data-ayr="${x.year}">${esc(x.label)}</button>`).join('')}</div>
+            <div class="ch-sub">ERA RULES (PACE AND THREES)</div><div class="ch-chips ch-swipe">${eraBtns}</div>` : `${decBtns}<div class="ch-chips ch-swipe">${seasonBtns}</div>`}
         </div>
         <div class="ch-step"><div class="ch-step-k">2 | HOW YOU BUILD</div>
           <div class="ch-seg">${Object.keys(BUILD).map(k => `<button type="button" class="ch-seg-b${s.build === k ? ' on' : ''}" data-build="${k}"><b>${BUILD[k].label}</b><small>${esc(isAll && k === 'free' ? 'Snake draft: take anyone left when you are up.' : isAll ? 'When you are up, the wheel picks a team and season.' : BUILD[k].note)}</small></button>`).join('')}</div>
@@ -146,7 +150,7 @@
           ${ready ? `<div class="ch-teams">${teams.map(t => `<button type="button" class="ch-team${s.team === t.abbr ? ' on' : ''}" data-team="${esc(t.abbr)}" style="--c1:${esc(t.colors[0])}">${logo(t, 34)}<span>${esc(t.name)}</span></button>`).join('')}</div>` : '<p class="muted">Loading teams...</p>'}
           <div class="ch-row">
             <label class="field"><span>TEAM NAME (OPTIONAL)</span><input id="chName" maxlength="32" placeholder="${esc(s.team ? tName(teamOf(teams, s.team)) : 'Keep the real name')}" value="${esc(s.name || '')}"></label>
-            <div class="field"><span>INJURIES</span><div class="ch-seg ch-seg-sm"><button type="button" class="ch-seg-b${s.injuries ? ' on' : ''}" data-inj="1"><b>ON</b></button><button type="button" class="ch-seg-b${!s.injuries ? ' on' : ''}" data-inj="0"><b>OFF</b></button></div></div>
+            ${isAll ? '' : `<div class="field"><span>INJURIES (OTHER TEAMS)</span><div class="ch-seg ch-seg-sm"><button type="button" class="ch-seg-b${s.injuries ? ' on' : ''}" data-inj="1"><b>ON</b></button><button type="button" class="ch-seg-b${!s.injuries ? ' on' : ''}" data-inj="0"><b>OFF</b></button></div></div>`}
             <div class="field"><span>RATINGS</span><div class="ch-seg ch-seg-sm"><button type="button" class="ch-seg-b${s.ratings !== false || s.cap ? ' on' : ''}" data-rat="1"><b>ON</b></button><button type="button" class="ch-seg-b${s.ratings === false && !s.cap ? ' on' : ''}" data-rat="0"${s.cap ? ' disabled title="The salary cap prices give the ratings away"' : ''}><b>OFF</b></button></div></div>
             <div class="field"><span>SALARY CAP</span><div class="ch-seg ch-seg-sm">${CAPS.map(v => `<button type="button" class="ch-seg-b${(s.cap || 0) === v ? ' on' : ''}" data-cap="${v}"><b>${v ? '$' + v + 'M' : 'OFF'}</b></button>`).join('')}</div></div>
           </div>
@@ -164,6 +168,13 @@
       if (!C.loaded(SETUP.year)) C.load(SETUP.year).then(() => drawSetup(app)).catch(e => UI.toast(e.message, 'error'));
       redraw();
     }));
+    // all-time seasons on and off (SETUP.skip): a season, a decade, all or none
+    app.querySelectorAll('[data-ayr]').forEach(b => b.addEventListener('click', () => { const y = +b.dataset.ayr, k = (SETUP.skip = SETUP.skip || []).indexOf(y); if (k >= 0) SETUP.skip.splice(k, 1); else SETUP.skip.push(y); redraw(); }));
+    app.querySelectorAll('[data-adec]').forEach(b => b.addEventListener('click', () => {
+      const ys = C.SEASONS.filter(x => decOf(x.year) === +b.dataset.adec).map(x => x.year), cur = SETUP.skip || [], allOn = ys.every(y => cur.indexOf(y) < 0);
+      SETUP.skip = allOn ? [...new Set(cur.concat(ys))] : cur.filter(y => ys.indexOf(y) < 0); redraw();
+    }));
+    app.querySelectorAll('[data-askip]').forEach(b => b.addEventListener('click', () => { SETUP.skip = b.dataset.askip === 'all' ? [] : C.SEASONS.map(x => x.year); redraw(); }));
     app.querySelectorAll('[data-decade]').forEach(b => b.addEventListener('click', () => { SETUP.decade = +b.dataset.decade; redraw(); }));
     app.querySelectorAll('[data-era]').forEach(b => b.addEventListener('click', () => { SETUP.era = +b.dataset.era; redraw(); }));
     app.querySelectorAll('[data-build]').forEach(b => b.addEventListener('click', () => { SETUP.build = b.dataset.build; redraw(); }));
@@ -177,7 +188,7 @@
     UI.$('#chStart').addEventListener('click', () => {
       if (!SETUP.team) return;
       const cfg = { mode: SETUP.mode, year: isAll ? 2013 : SETUP.year, build: SETUP.build, team: SETUP.team, name: (SETUP.name || '').trim(),
-        injuries: SETUP.injuries, era: SETUP.era || 2013, cap: +SETUP.cap || 0, noRatings: SETUP.ratings === false && !SETUP.cap, seed: Math.floor(Math.random() * 2147483646) + 1, picks: [] };
+        injuries: SETUP.injuries, era: SETUP.era || 2013, cap: +SETUP.cap || 0, seasons: isAll && (SETUP.skip || []).length ? C.SEASONS.map(x => x.year).filter(y => SETUP.skip.indexOf(y) < 0) : null, noRatings: SETUP.ratings === false && !SETUP.cap, seed: Math.floor(Math.random() * 2147483646) + 1, picks: [] };
       ensureData(cfg, app, () => {
         try {
           CUR = { cfg, used: [], respins: 1, spin: null, dr: isAll ? C.newDraft(cfg) : null };
@@ -278,7 +289,7 @@
       ${slotsHtml(mine, teams, cfg.build === 'free')}
       ${capBar(cfg.cap, mine)}
       ${mine.length && !noR() ? fitHtml(C.lineupFit(mine)) : ''}
-      ${full ? `<div class="ch-ready"><div><b>YOUR FIVE IS SET.</b><span class="muted"> Eight scrubs fill the bench.</span></div><button type="button" class="btn btn-gold btn-big" id="chSim">SIM THE SEASON</button></div>` : ''}
+      ${full ? `<div class="ch-ready"><div><b>YOUR FIVE IS SET.</b><span class="muted"> They play all 48, every night.</span></div><button type="button" class="btn btn-gold btn-big" id="chSim">SIM THE SEASON</button></div>` : ''}
       ${body}`;
     bindPick(app);
   }
@@ -364,7 +375,19 @@
       strip.style.transform = `translateX(${-target}px)`;
     }));
     let fired = false;
-    const end = () => { if (fired) return; fired = true; land(); };
+    const end = () => { if (fired) return; fired = true; if (window.SFX) window.SFX.play('land'); land(); };
+    // a click for every card that passes the pointer, slowing down with the reel
+    if (window.SFX && window.SFX.on) {
+      let lastCard = null;
+      const clicks = () => {
+        if (fired) return;
+        const m = new DOMMatrixReadOnly(getComputedStyle(strip).transform), at = Math.floor((-m.m41 + view / 2) / (REEL_W + REEL_GAP));
+        if (lastCard !== null && at !== lastCard) window.SFX.play('tick');
+        lastCard = at;
+        requestAnimationFrame(clicks);
+      };
+      requestAnimationFrame(clicks);
+    }
     strip.addEventListener('transitionend', end, { once: true });
     setTimeout(end, 4600);
   }
@@ -391,6 +414,7 @@
       if (cfg.picks.length >= 5) return;
       if (cfg.cap) { const d = C.seasonData(cfg.year), p = d.players.concat(d.free).find(x => x.id === b.dataset.add); if (p && !C.capFits(cfg.cap, myFive(cfg), p)) { UI.toast('That contract does not fit under the cap.', 'error'); return; } }
       cfg.picks.push(b.dataset.add);
+      if (window.SFX) window.SFX.play('chime');
       redraw();
       if (cfg.picks.length === 5) window.scrollTo({ top: 0, behavior: 'smooth' });
     }));
@@ -422,6 +446,7 @@
         if (p && !C.capFits(cfg.cap, myFive(cfg), p)) { UI.toast('That contract does not fit under the cap.', 'error'); return; }
         cfg.picks.push(id); CUR.spin = null;
       }
+      if (window.SFX) window.SFX.play('chime');
       redraw();
     }));
     const sim = UI.$('#chSim');
@@ -465,7 +490,7 @@
       ${slotsHtml(mine, teams, false)}
       ${capBar(cfg.cap, mine)}
       ${mine.length && !noR() ? fitHtml(C.lineupFit(mine)) : ''}
-      ${full ? `<div class="ch-ready"><div><b>THE DRAFT IS DONE.</b><span class="muted"> 30 teams, five each, scrub benches everywhere.</span></div><button type="button" class="btn btn-gold btn-big" id="chSim">SIM THE SEASON</button></div>` : clock}
+      ${full ? `<div class="ch-ready"><div><b>THE DRAFT IS DONE.</b><span class="muted"> 30 teams, five each, everybody plays all 48.</span></div><button type="button" class="btn btn-gold btn-big" id="chSim">SIM THE SEASON</button></div>` : clock}
       ${board}
       ${full ? leagueBoard(dr, teams) : recent.length ? `<section>${UI.header('LATEST PICKS')}<ol class="ch-feed">${recent.map(x => { const e = dr.pool.find(q => q.key === x.key); const t = teamOf(teams, x.team); return `<li><span class="ch-feed-n">#${x.n}</span>${logo(t, 22)}<b>${esc(e.name)}</b><small class="muted">${esc(short(e.season))} | ${e.ovr}</small></li>`; }).join('')}</ol></section>` : ''}`;
     bindPick(app);
@@ -559,6 +584,7 @@
     const r = C.summary(ch);
     if (RUN.shared) r.sharedFrom = RUN.shared;
     RUN = null;
+    if (window.SFX) window.SFX.play(r.exit === 'champion' ? 'crowd' : 'buzzer');
     keepResult(r);
     ls.del(KEY_CUR);
     CUR = null;
@@ -747,8 +773,6 @@
         <div class="ch-leaders">${[['pts', 'POINTS'], ['reb', 'REBOUNDS'], ['ast', 'ASSISTS']].map(([k, l]) => `<div><h4>${l}</h4><ol>${(r.leaders[k] || []).map(x => `<li class="${x.mine ? 'me' : ''}"><span>${esc(x.name)}${x.season ? ' <small class="muted">' + esc(short(x.season)) + '</small>' : ''}</span><b>${x.v}</b></li>`).join('')}</ol></div>`).join('')}</div>
       </div>
       ${UI.header('STANDINGS', r.mode === 'year' ? 'Gray number: the real record' : '')}<div class="ch-stands">${stand('East')}${stand('West')}</div>
-      ${r.moves && r.moves.length ? `${UI.header('WHO REPLACED YOUR PICKS')}<ul class="ch-moves">${r.moves.map(m => `<li>${logo(teamOf(teams, m.team), 22)}<span>Lost <b>${esc(m.outName)}</b>, signed <b>${esc(m.inName)}</b> (${m.inOvr})</span></li>`).join('')}</ul>` : ''}
-      ${benchRows ? `${UI.header('THE SCRUBS')}<div class="tscroll"><table class="stats"><thead><tr><th class="l">PLAYER</th><th>POS</th><th>OVR</th><th>G</th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th></tr></thead><tbody>${benchRows}</tbody></table></div>` : ''}
       <details class="ch-logbox"><summary>GAME LOG (${r.log.length} GAMES) | TAP A GAME FOR THE BOX SCORE</summary><ol class="ch-log">${log}</ol></details>`;
     UI.$('#chAgain').addEventListener('click', () => rerun(r));
     UI.$('#chShare').addEventListener('click', () => share(r));
