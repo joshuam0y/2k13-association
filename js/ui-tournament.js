@@ -15,7 +15,7 @@
     del() { try { localStorage.removeItem(KEY); } catch (e) { /* private mode */ } }
   };
   const ALL_YEARS = C.SEASONS.map(s => s.year);
-  const FRESH = () => ({ v: 1, page: 'setup', n: 4, names: [], skip: [], opts: { timer: 24, cap: 0, bestOf: 1, seeding: 'random', ratings: true },
+  const FRESH = () => ({ v: 1, page: 'setup', n: 4, humans: 0, ai: [], cpu: false, names: [], skip: [], opts: { timer: 24, cap: 0, bestOf: 1, seeding: 'random', ratings: true },
     cfg: null, teams: [], picks: [], who: 0, hand: false, spin: null, spun: [], respins: [], seeds: [], rounds: [], cur: null, champ: -1 });
   let TN = Object.assign(FRESH(), ls.get() || {});
   TN.opts = Object.assign({ timer: 24, cap: 0, bestOf: 1, seeding: 'random', ratings: true }, TN.opts || {});
@@ -37,6 +37,29 @@
   const tOf = (teams, a) => teams.find(t => t.abbr === a) || { abbr: a, city: a, name: '', colors: ['#333', '#777'] };
   const tName = t => ((t.city || '') + ' ' + (t.name || '')).trim();
   const nm = i => (i >= 0 && TN.names[i]) || (i >= 0 ? 'PLAYER ' + (i + 1) : 'TBD');
+  // AI slots: old saved tournaments have no ai flags, so everyone there is human
+  const isAI = i => i >= 0 && !!(TN.ai && TN.ai[i]);
+  const hum = () => (TN.humans > 0 ? Math.min(TN.humans, TN.n) : TN.n);
+  const humDone = () => (TN.ai && TN.ai.length ? TN.ai.filter(a => !a).length : TN.n);
+  const aiTag = i => (isAI(i) ? ' <i class="tn-ai">AI</i>' : '');
+  const CPU_NAMES = ['CPU Chris', 'CPU Dana', 'Bot Bobby', 'CPU Mo', 'Bot Brenda', 'CPU Gary', 'Bot Tina', 'CPU Steve', 'Bot Nadia', 'CPU Kev', 'Bot Rita', 'CPU Dwayne'];
+  const grpOf = p => { const x = String(p.pos || 'SF').toUpperCase().split(/[-\/ ,]/)[0]; return x === 'PG' || x === 'SG' || x === 'G' ? 'G' : x === 'C' || x === 'PF' || x === 'F' ? 'B' : 'W'; };
+  // best fit with a little randomness: rating, a nudge for a missing position group, a penalty for a crowded one, price weighed under a cap
+  function aiChoose(cap, five, ros, rnd) {
+    const cnt = { G: 0, W: 0, B: 0 }; five.forEach(q => { cnt[grpOf(q)]++; });
+    let best = null, bs = -1e9;
+    ros.forEach(p => {
+      if (cap && !C.capFits(cap, five, p)) return;
+      const g = grpOf(p);
+      let sc = (+p.ovr || 0) + (rnd || Math.random)() * 4;
+      if (cnt[g] >= 2) sc -= 6 * (cnt[g] - 1);
+      if (five.length >= 2 && cnt[g] === 0) sc += 3;
+      if ((p.age || 27) >= 35) sc -= 2;
+      if (cap && C.capState) sc -= 0.1 * (C.capState(cap, five.concat([p])).spent - C.capState(cap, five).spent);
+      if (sc > bs) { bs = sc; best = p; }
+    });
+    return best;
+  }
   const f1 = v => (v == null ? '-' : (+v).toFixed(1));
   const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   const rounds = () => (TN.n === 8 ? 3 : 2);
@@ -158,11 +181,14 @@
     const ch = chosen();
     app.innerHTML = `
       <section class="ch-hero"><div class="ch-hero-k">DRAFT CHALLENGE | TOURNAMENT</div><h1 class="ch-hero-t">LAST FIVE STANDING.</h1>
-        <p class="ch-hero-p">Four or eight friends, one phone. Everybody drafts five with the wheel, passing the phone along. Then a bracket: winner moves on, all five play 48 minutes, and every game can be watched on the court.</p></section>
+        <p class="ch-hero-p">Four or eight teams, one phone. Humans draft five with the wheel, passing the phone along, and AI teams can fill any empty seats. Then a bracket: winner moves on, all five play 48 minutes, and every game can be watched on the court.</p></section>
       <div class="ch-setup tn-setup">
         <div class="ch-step"><div class="ch-step-k">1 | PLAYERS</div>
-          <div class="ch-chips">${chips([[4, '4 PLAYERS'], [8, '8 PLAYERS']], n, 'n')}</div>
-          <div class="tn-names">${names.map((v, i) => `<label class="field"><span>PLAYER ${i + 1}</span><input data-name="${i}" maxlength="20" placeholder="Player ${i + 1}" value="${esc(v)}" autocomplete="off"></label>`).join('')}</div></div>
+          <div class="ch-chips">${chips([[4, '4 TEAMS'], [8, '8 TEAMS']], n, 'n')}</div>
+          <div class="ts-start-k tn-hk">HUMAN PLAYERS</div>
+          <div class="ch-chips">${chips(Array.from({ length: n }, (_, i) => [i + 1, String(i + 1)]), hum(), 'hum')}</div>
+          <small class="muted">${hum() < n ? (n - hum()) + ' AI team' + (n - hum() > 1 ? 's' : '') + ' fill the rest of the bracket and draft on their own.' : 'Everyone is human. Pick fewer to add AI teams.'}</small>
+          <div class="tn-names">${names.slice(0, hum()).map((v, i) => `<label class="field"><span>PLAYER ${i + 1}</span><input data-name="${i}" maxlength="20" placeholder="Player ${i + 1}" value="${esc(v)}" autocomplete="off"></label>`).join('')}</div></div>
         <div class="ch-step"><div class="ch-step-k">2 | THE SEASON</div>
           <div class="row-btns vs-seas-all"><button type="button" class="btn btn-small${!TN.skip.length ? ' on' : ''}" data-seas="all">ALL</button><button type="button" class="btn btn-small" data-seas="none">CLEAR</button>
             ${decs.map(d => `<button type="button" class="btn btn-small${ALL_YEARS.filter(y => decOf(y) === d).every(y => TN.skip.indexOf(y) < 0) ? ' on' : ''}" data-dec="${d}">${d + 1}S</button>`).join('')}</div>
@@ -181,7 +207,8 @@
     UI.centerChips(app);
     const readNames = () => { app.querySelectorAll('[data-name]').forEach(inp => { TN.names[+inp.dataset.name] = inp.value.trim().slice(0, 20); }); };
     const redraw = () => { readNames(); save(); setup(app); };
-    app.querySelectorAll('[data-n]').forEach(b => b.addEventListener('click', () => { TN.n = +b.dataset.n; redraw(); }));
+    app.querySelectorAll('[data-n]').forEach(b => b.addEventListener('click', () => { const was = hum() === TN.n; TN.n = +b.dataset.n; TN.humans = was ? TN.n : Math.min(hum(), TN.n); redraw(); }));
+    app.querySelectorAll('[data-hum]').forEach(b => b.addEventListener('click', () => { TN.humans = +b.dataset.hum; redraw(); }));
     app.querySelectorAll('[data-name]').forEach(inp => inp.addEventListener('change', () => { readNames(); save(); }));
     app.querySelectorAll('[data-yr]').forEach(b => b.addEventListener('click', () => { const y = +b.dataset.yr, i = TN.skip.indexOf(y); if (i >= 0) TN.skip.splice(i, 1); else TN.skip.push(y); redraw(); }));
     app.querySelectorAll('[data-dec]').forEach(b => b.addEventListener('click', () => {
@@ -203,7 +230,9 @@
       ensure(app, cfg, () => {
         const d = C.seasonData(year || 2013);
         TN.cfg = cfg;
-        TN.names = Array.from({ length: TN.n }, (_, i) => TN.names[i] || ('PLAYER ' + (i + 1)));
+        const hn = hum(), bots = shuffle(CPU_NAMES.slice());
+        TN.names = Array.from({ length: TN.n }, (_, i) => (i < hn ? (TN.names[i] || ('PLAYER ' + (i + 1))) : bots[i - hn]));
+        TN.ai = TN.names.map((_, i) => i >= hn); TN.cpu = false;
         TN.teams = shuffle(d.teams.map(t => t.abbr)).slice(0, TN.n);
         TN.picks = TN.names.map(() => []);
         TN.respins = TN.names.map(() => 1);
@@ -222,13 +251,14 @@
     ensure(app, cfg, () => {
       const B = board(cfg), teams = B.teams, byId = B.byId, w = TN.who, mineIds = TN.picks[w], k = mineIds.length;
       const t = teamOf(w), five = mineIds.map(id => byId[id]).filter(Boolean);
-      const meta = `${esc(lblC(cfg))} | ${TN.n} PLAYERS | BEST OF ${TN.opts.bestOf}${cfg.timer ? ' | ' + cfg.timer + ' SEC CLOCK' : ''}${cfg.cap ? ' | $' + cfg.cap + 'M CAP' : ''}`;
+      const meta = `${esc(lblC(cfg))} | ${TN.n} TEAMS | BEST OF ${TN.opts.bestOf}${cfg.timer ? ' | ' + cfg.timer + ' SEC CLOCK' : ''}${cfg.cap ? ' | $' + cfg.cap + 'M CAP' : ''}`;
+      if (TN.cpu) { cpuPage(app, B); return; }
       if (TN.hand) {
         const done = TN.picks.map((l, i) => i < w ? `<li><b>${esc(nm(i))}</b><small class="muted">locked in</small></li>` : '').join('');
         app.innerHTML = `<section class="tn-pass" style="--c1:${esc(t.colors[0])}">
             <div class="ch-hero-k">${meta}</div>${logo(t, 84)}
             <div class="tn-pass-k">PASS THE PHONE TO</div><h1 class="tn-pass-n">${esc(nm(w)).toUpperCase()}</h1>
-            <p class="muted">${esc(tName(t))}. Player ${w + 1} of ${TN.n}. Five spins, one re-spin. Everyone else look away.</p>
+            <p class="muted">${esc(tName(t))}. Player ${w + 1} of ${humDone()}. Five spins, one re-spin. Everyone else look away.</p>
             <button type="button" class="btn btn-gold btn-big" id="tnReady">I AM ${esc(nm(w)).toUpperCase()}, LET'S GO</button>
             ${done ? `<ul class="tn-locked">${done}</ul>` : ''}
             <button type="button" class="btn btn-small" id="tnQuit">QUIT TOURNAMENT</button></section>`;
@@ -256,8 +286,8 @@
       }
       const fit = five.length ? UI.challengeFit(C.lineupFit(five), { compact: true, title: (nm(w) + "'s lineup").toUpperCase() }) : '';
       app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${meta}</div><div class="ch-top-t">THE DRAFT</div></div><button type="button" class="btn btn-small" id="tnQuit">QUIT</button></div>
-        <div class="tn-dots">${TN.names.map((_, i) => `<i class="${i < w ? 'done' : i === w ? 'on' : ''}" title="${esc(nm(i))}"></i>`).join('')}</div>
-        <div class="vs-side tn-me" style="--c1:${esc(t.colors[0])}"><div class="vs-side-h">${logo(t, 36)}<div><small>${esc(nm(w))} | PLAYER ${w + 1} OF ${TN.n}</small><b>${esc(tName(t))}</b>${cfg.cap ? ' <small class="vs-pay">' + UI.challengeCap.money(C.capState(cfg.cap, five).spent) + ' of $' + cfg.cap + 'M</small>' : ''}</div></div>
+        <div class="tn-dots">${TN.names.slice(0, humDone()).map((_, i) => `<i class="${i < w ? 'done' : i === w ? 'on' : ''}" title="${esc(nm(i))}"></i>`).join('')}</div>
+        <div class="vs-side tn-me" style="--c1:${esc(t.colors[0])}"><div class="vs-side-h">${logo(t, 36)}<div><small>${esc(nm(w))} | PLAYER ${w + 1} OF ${humDone()}</small><b>${esc(tName(t))}</b>${cfg.cap ? ' <small class="vs-pay">' + UI.challengeCap.money(C.capState(cfg.cap, five).spent) + ' of $' + cfg.cap + 'M</small>' : ''}</div></div>
           <ol>${[0, 1, 2, 3, 4].map(i => `<li>${five[i] ? esc(five[i].name) + ' <small class="muted">' + esc(C.posLabel(five[i])) + (B.era && five[i].season ? ' ' + short(five[i].season) : '') + '</small> <b class="' + UI.ovrClass(five[i].ovr) + '">' + esc(five[i].ovr) + '</b>' : '<span class="muted">-</span>'}</li>`).join('')}</ol></div>
         <div class="vs-clock">PICK <b>${k + 1}</b> OF 5</div>
         ${cfg.timer ? `<div class="vs-timer" id="vsTimer"><i style="--w:100%"></i><span>${cfg.timer}</span></div>` : ''}
@@ -277,7 +307,8 @@
         TN.picks[w].push(id); TN.spin = null;
         if (window.SFX) window.SFX.play('chime');
         if (TN.picks[w].length >= 5) {
-          if (w + 1 < TN.n) { TN.who = w + 1; TN.hand = true; UI.toast(nm(w) + ' is locked in. Pass the phone.'); save(); draft(app); }
+          if (w + 1 < humDone()) { TN.who = w + 1; TN.hand = true; UI.toast(nm(w) + ' is locked in. Pass the phone.'); save(); draft(app); }
+          else if (humDone() < TN.n) { runAI(B); TN.cpu = true; TN.spin = null; save(); draft(app); }
           else startBracket(B);
           return;
         }
@@ -313,6 +344,36 @@
       }
     });
   }
+  // the AI teams draft with the same wheel, pool, cap and season rules, no pass-the-phone screen
+  function runAI(B) {
+    const cfg = TN.cfg, keepWho = TN.who;
+    for (let i = humDone(); i < TN.n; i++) {
+      TN.who = i;
+      let tries = 0;
+      while (TN.picks[i].length < 5 && tries++ < 80) {
+        const five = TN.picks[i].map(id => B.byId[id]).filter(Boolean);
+        const s = spinFor(cfg, B, flat(), null);
+        if (s) TN.spun.push(s.key);
+        let pick = s && aiChoose(cfg.cap, five, rosterOf(B, s.key, flat()));
+        if (!pick && tries > 40) pick = aiChoose(cfg.cap, five, B.players.filter(p => !B.takenSet(flat()).has(B.base(p))).slice(0, 400));
+        if (pick) TN.picks[i].push(pick.id);
+      }
+    }
+    TN.who = keepWho;
+  }
+  function cpuPage(app, B) {
+    const cards = [];
+    for (let i = humDone(); i < TN.n; i++) {
+      const t = teamOf(i), five = TN.picks[i].map(id => B.byId[id]).filter(Boolean);
+      cards.push(`<li class="tn-cpu-c" style="--c1:${esc((t.colors || ['#333'])[0])};--d:${cards.length * 0.35}s"><div class="tn-cpu-h">${logo(t, 30)}<b>${esc(nm(i))}${aiTag(i)}</b><small>${esc(t.name)}</small></div>
+        <ol>${five.map(q => `<li>${esc(q.name)} <small class="muted">${esc(C.posLabel(q))}${B.era && q.season ? ' ' + short(q.season) : ''}</small> ${ovrTag(q)}</li>`).join('')}</ol></li>`);
+    }
+    app.innerHTML = `<section class="tn-cpu"><div class="ch-hero-k">${esc(lblC(TN.cfg))} | ${TN.n} TEAMS</div><h1 class="tn-cpu-t">CPU DRAFTING<span class="tn-dotsa"><i>.</i><i>.</i><i>.</i></span></h1>
+      <p class="muted">The AI teams spun the wheel and picked their fives${TN.cfg.cap ? ' under the $' + TN.cfg.cap + 'M cap' : ''}.</p>
+      <ul class="tn-cpu-l">${cards.join('')}</ul>
+      <button type="button" class="btn btn-gold btn-big" id="tnCpuGo">TO THE BRACKET</button></section>`;
+    UI.$('#tnCpuGo', app).addEventListener('click', () => { TN.cpu = false; startBracket(B); });
+  }
   function quit() {
     if (!window.confirm('Quit this tournament? Everything drafted so far is lost.')) return;
     ls.del(); TN = FRESH(); RUNS_CLEAR(); render();
@@ -335,7 +396,7 @@
     const i = side ? m.b : m.a;
     if (i < 0) return `<div class="tn-slot tbd"><span class="tn-seed">-</span><span class="tn-nm">TBD</span><b class="tn-w"></b></div>`;
     const t = teamOf(i), win = m.done && m.winner === i, lose = m.done && m.winner !== i;
-    return `<div class="tn-slot${win ? ' won' : ''}${lose ? ' lost' : ''}" style="--c1:${esc((t.colors || ['#333'])[0])}"><span class="tn-seed">${TN.seeds.indexOf(i) + 1}</span>${logo(t, 24)}<span class="tn-nm"><b>${esc(nm(i))}</b><small>${esc(t.name)}</small></span><b class="tn-w">${m.done ? m.wins[side] : ''}</b></div>`;
+    return `<div class="tn-slot${win ? ' won' : ''}${lose ? ' lost' : ''}" style="--c1:${esc((t.colors || ['#333'])[0])}"><span class="tn-seed">${TN.seeds.indexOf(i) + 1}</span>${logo(t, 24)}<span class="tn-nm"><b>${esc(nm(i))}${aiTag(i)}</b><small>${esc(t.name)}</small></span><b class="tn-w">${m.done ? m.wins[side] : ''}</b></div>`;
   }
   function bracketPage(app) {
     ensure(app, TN.cfg, () => {
@@ -346,11 +407,11 @@
             : m.done ? `<button type="button" class="btn btn-small" data-open="${r}:${i}">BOX SCORES</button>` : '<span class="muted">WAITING</span>'}</div></div>`).join('')}</div></div>`).join('');
       const rosters = TN.seeds.map((p, s) => {
         const t = teamOf(p), five = TN.picks[p].map(id => B.byId[id]).filter(Boolean);
-        return `<details class="tn-roster" style="--c1:${esc((t.colors || ['#333'])[0])}"><summary>${logo(t, 24)}<b>#${s + 1} ${esc(nm(p))}</b><small>${esc(t.name)} | ${f1(TN.rating && TN.rating[p])} AVG</small></summary>
+        return `<details class="tn-roster" style="--c1:${esc((t.colors || ['#333'])[0])}"><summary>${logo(t, 24)}<b>#${s + 1} ${esc(nm(p))}${aiTag(p)}</b><small>${esc(t.name)} | ${f1(TN.rating && TN.rating[p])} AVG</small></summary>
           <ul>${five.map(q => `<li>${esc(q.name)} <small class="muted">${esc(C.posLabel(q))}${B.era && q.season ? ' ' + short(q.season) : ''}</small> <b class="tn-ovr ${UI.ovrClass(q.ovr)}">${esc(q.ovr)}</b></li>`).join('')}</ul></details>`;
       }).join('');
       const over = TN.champ >= 0;
-      app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(lblC(TN.cfg))} | ${TN.n} PLAYERS | BEST OF ${TN.opts.bestOf}${TN.cfg.cap ? ' | $' + TN.cfg.cap + 'M CAP' : ''}</div><div class="ch-top-t">THE BRACKET</div></div>
+      app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(lblC(TN.cfg))} | ${TN.n} TEAMS | BEST OF ${TN.opts.bestOf}${TN.cfg.cap ? ' | $' + TN.cfg.cap + 'M CAP' : ''}</div><div class="ch-top-t">THE BRACKET</div></div>
           <button type="button" class="btn btn-small" id="tnQuit">NEW</button></div>
         <div class="row-btns center ch-acts tn-acts">${over ? '<button type="button" class="btn btn-gold btn-big" id="tnCrown">THE CHAMPION</button>'
           : `<button type="button" class="btn btn-gold" id="tnRound">SIM ${esc(roundName(cr))}</button><button type="button" class="btn" id="tnAll">SIM THE WHOLE THING</button>`}</div>
@@ -397,7 +458,7 @@
       const w = shown ? res.games[shown - 1].wins : { [A]: 0, [Bt]: 0 };
       const PL = {}; S.forEach(sd => sd.five.forEach(p => { PL[p.id] = Object.assign({ team: sd.abbr }, p); }));
       const tm = abbr => S.find(s => s.abbr === abbr).team;
-      const score = `<div class="vs-score">${[m.a, m.b].map((p, k) => `<div class="vs-score-t${done && m.winner === p ? ' won' : ''}" style="--c1:${esc((teamOf(p).colors || ['#333'])[0])}">${logo(teamOf(p), 40)}<span><small>#${TN.seeds.indexOf(p) + 1} SEED</small><b>${esc(nm(p))}</b></span><strong>${w[TN.teams[p]]}</strong></div>`).join('<i>-</i>')}</div>`;
+      const score = `<div class="vs-score">${[m.a, m.b].map((p, k) => `<div class="vs-score-t${done && m.winner === p ? ' won' : ''}" style="--c1:${esc((teamOf(p).colors || ['#333'])[0])}">${logo(teamOf(p), 40)}<span><small>#${TN.seeds.indexOf(p) + 1} SEED</small><b>${esc(nm(p))}${aiTag(p)}</b></span><strong>${w[TN.teams[p]]}</strong></div>`).join('<i>-</i>')}</div>`;
       const final = ri === TN.rounds.length - 1;
       const head = done
         ? `<section class="vs-win" style="--c1:${esc((teamOf(m.winner).colors || ['#333'])[0])}">${logo(teamOf(m.winner), 64)}<div><div class="ch-hero-k">${roundName(ri)} | BEST OF ${res.bestOf}</div>
@@ -463,7 +524,7 @@
       const final = TN.rounds[TN.rounds.length - 1][0], runnerUp = final.a === c ? final.b : final.a;
       app.innerHTML = `<section class="tn-champ" style="--c1:${esc((t.colors || ['#d4af37'])[0])}">
           <div class="ch-hero-k">${esc(lblC(TN.cfg))} | ${TN.n} PLAYER TOURNAMENT</div>${logo(t, 110)}
-          <div class="tn-champ-k">CHAMPION</div><h1 class="tn-champ-n">${esc(nm(c)).toUpperCase()}</h1>
+          <div class="tn-champ-k">CHAMPION</div><h1 class="tn-champ-n">${esc(nm(c)).toUpperCase()}${aiTag(c)}</h1>
           <p class="muted">${esc(tName(t))}. Runner-up: ${esc(nm(runnerUp))}.</p>
           <ol class="tn-champ-five">${five.map(q => `<li><b>${esc(q.name)}</b><small>${esc(C.posLabel(q))}${B.era && q.season ? ' | ' + short(q.season) : ''}</small>${ovrTag(q)}</li>`).join('')}</ol>
           <ul class="tn-path">${path}</ul>

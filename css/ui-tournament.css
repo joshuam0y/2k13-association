@@ -60,3 +60,17 @@
 .mm-grid .mt-tn .mt-l { font-size: clamp(22px, 3vw, 30px); color: var(--gold2); }
 
 .tn-noR .tn-ovr, .tn-noR .ch-ovr { display: none !important; }
+.tn-hk { margin-top: 12px; }
+.tn-ai { display: inline-block; font-style: normal; font-size: 9px; letter-spacing: .12em; padding: 1px 5px; margin-left: 5px; border: 1px solid var(--gold-dim); color: var(--gold); border-radius: 3px; vertical-align: middle; }
+.tn-cpu { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; padding: 20px 12px; }
+.tn-cpu-t { font-family: var(--display); letter-spacing: .08em; margin: 0; }
+.tn-dotsa i { font-style: normal; animation: tn-blink 1.2s infinite; }
+.tn-dotsa i:nth-child(2) { animation-delay: .2s; }
+.tn-dotsa i:nth-child(3) { animation-delay: .4s; }
+@keyframes tn-blink { 0%, 60%, 100% { opacity: .2; } 30% { opacity: 1; } }
+.tn-cpu-l { list-style: none; padding: 0; margin: 0; width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; text-align: left; }
+.tn-cpu-c { padding: 10px; border: 1px solid var(--gold-dim); border-left: 4px solid var(--c1, #d4af37); background: var(--bg2); opacity: 0; animation: tn-cpuin .4s ease forwards; animation-delay: var(--d, 0s); }
+@keyframes tn-cpuin { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.tn-cpu-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tn-cpu-c ol { margin: 8px 0 0; padding-left: 18px; font-size: 13px; }
+.tn-cpu-c ol li { margin: 3px 0; }
