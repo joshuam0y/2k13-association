@@ -34,7 +34,7 @@
   function logo(t, size) {
     const c1 = (t.colors && t.colors[0]) || '#333', c2 = (t.colors && t.colors[1]) || '#999';
     const img = t.logo ? `<img src="${esc(t.logo)}" alt="" loading="lazy"${t.logoNoRef ? ' referrerpolicy="no-referrer"' : ''} onerror="this.parentNode.classList.add('nologo');this.remove()">` : '';
-    return `<span class="logo${t.logo ? '' : ' nologo'}" style="--c1:${esc(c1)};--c2:${esc(c2)};--sz:${size || 40}px" title="${esc(tName(t))}">${img}<b>${esc(t.abbr)}</b></span>`;
+    return `<span class="logo${t.logo ? '' : ' nologo'}${UI.darkLogo && UI.darkLogo(t) ? ' dark' : ''}" style="--c1:${esc(c1)};--c2:${esc(c2)};--sz:${size || 40}px" title="${esc(tName(t))}">${img}<b>${esc(t.abbr)}</b></span>`;
   }
   function face(p, color, cls) {
     const k = 'hs ' + (cls || '');
@@ -672,7 +672,7 @@
     const realT = r.mode === 'year' && me.real;
     const conf = me.conf;
     const seedTxt = r.confRank ? ord(r.confRank) + ' in the ' + conf : '';
-    const line = x => x ? `<div class="ch-line">${[['PTS', x.pts], ['REB', x.reb], ['AST', x.ast], ['STL', x.stl], ['BLK', x.blk], ['FG%', pct(x.fgp)], ['3P%', pct(x.tpp)], ['MIN', x.mpg]].map(([k, v]) => `<span><b>${v}</b><small>${k}</small></span>`).join('')}</div>` : '<div class="muted ch-small">Did not play.</div>';
+    const line = x => x ? `<div class="ch-line">${[['PTS', pct(x.pts)], ['REB', pct(x.reb)], ['AST', pct(x.ast)], ['STL', pct(x.stl)], ['BLK', pct(x.blk)], ['FG%', pct(x.fgp)], ['3P%', pct(x.tpp)], ['MIN', pct(x.mpg)]].map(([k, v]) => `<span><b>${v}</b><small>${k}</small></span>`).join('')}</div>` : '<div class="muted ch-small">Did not play.</div>';
     const fiveCards = r.five.map(x => {
       const from = x.from;
       const t = x.fromTeam || teamOf(teams, from);
@@ -688,7 +688,7 @@
     const aw = r.awards || {};
     const awardRow = (k, label) => { const a = aw[k]; if (!a) return ''; const t = teamOf(teams, a.team); return `<li class="${a.mine ? 'me' : ''}"><small>${label}</small>${logo(t, 22)}<b>${esc(a.name)}</b>${a.season ? `<span class="muted">${esc(short(a.season))}</span>` : ''}${a.line ? `<span class="muted">${a.line.pts} / ${a.line.reb} / ${a.line.ast}</span>` : ''}</li>`; };
     const stand = c => `<div class="ch-stand"><h4>${c.toUpperCase()}</h4><ol>${r.standings[c].map((x, i) => `<li class="${x.abbr === me.abbr ? 'me' : ''}${i === 7 ? ' cut' : ''}"><span class="ch-feed-n">${i + 1}</span>${logo(teamOf(teams, x.abbr), 20)}<span class="ch-stand-n">${esc(x.abbr === me.abbr ? tName(me) : x.name)}</span><b>${x.w}-${x.l}</b>${r.mode === 'year' && x.real ? `<small class="muted" title="Real record">${x.real.w}-${x.real.l}</small>` : ''}</li>`).join('')}</ol></div>`;
-    const benchRows = r.bench.filter(b => b.line && b.line.g).map(b => `<tr><td class="l">${esc(b.name)}</td><td>${esc(b.pos)}</td><td>${b.ovr}</td><td>${b.line.g}</td><td>${b.line.mpg}</td><td>${b.line.pts}</td><td>${b.line.reb}</td><td>${b.line.ast}</td></tr>`).join('');
+    const benchRows = r.bench.filter(b => b.line && b.line.g).map(b => `<tr><td class="l">${esc(b.name)}</td><td>${esc(b.pos)}</td><td>${b.ovr}</td><td>${b.line.g}</td><td>${pct(b.line.mpg)}</td><td>${pct(b.line.pts)}</td><td>${pct(b.line.reb)}</td><td>${pct(b.line.ast)}</td></tr>`).join('');
     const log = r.log.map(g => `<li class="${g.won ? 'w' : 'l'}${g.playoff ? ' po' : ''}"><a href="#/challenge/game/${idx}/${esc(g.id)}"><span class="ch-log-d">${esc(UI.dateLabel ? UI.dateLabel(g.date) : g.date)}</span><b>${g.won ? 'W' : 'L'}</b><span>${g.us}-${g.them}</span><span>${g.home ? 'vs' : 'at'} ${esc(g.opp)}</span><small class="muted">${esc(g.top)}</small></a></li>`).join('');
     app.innerHTML = `
       <section class="ch-res ${r.exit === 'champion' ? 'champ' : ''}" style="--c1:${esc(me.colors[0])};--c2:${esc(me.colors[1] || me.colors[0])}">
@@ -790,7 +790,7 @@
     const big = (r.best || [])[0];
     const oppNick = a => { const all = [].concat((r.standings && r.standings.East) || [], (r.standings && r.standings.West) || []); const t = all.find(x => x.abbr === a); return t ? String(t.name).split(' ').pop() : a; };
     const lastSeries = (r.series || [])[r.series ? r.series.length - 1 : 0];
-    const extra = [top ? `${last(top.name)} put up ${Math.round(top.line.pts)} a night` : '', big && big.pts >= 45 ? `${last(big.name)} dropped ${big.pts} on the ${oppNick(big.opp)}` : ''].filter(Boolean).join(', ');
+    const extra = [top ? `${last(top.name)} put up ${top.line.pts.toFixed(1)} a night` : '', big && big.pts >= 45 ? `${last(big.name)} dropped ${big.pts} on the ${oppNick(big.opp)}` : ''].filter(Boolean).join(', ');
     const pick = list => list[Math.floor(Math.random() * list.length)];
     const real = r.mode === 'year' && r.team && r.team.real && r.team.real.w != null ? r.team.real : null;
     const vsReal = real ? (r.w > real.w ? ` The real ${r.team.name || 'team'} only won ${real.w}.` : r.w < real.w ? ` The real ${r.team.name || 'team'} won ${real.w}, so... yeah.` : '') : '';
@@ -806,7 +806,7 @@
     const me = r.team && typeof r.team === 'object' ? r.team : {};
     const spec = { kicker: (r.label || '') + ' DRAFT CHALLENGE', title: tName(me) || 'MY FIVE', big: r.w + '-' + r.l, gold: r.exit === 'champion',
       banner: r.exit === 'champion' ? 'NBA CHAMPIONS' : String(r.result || '').toUpperCase(), colors: me.colors, logo: me.logo,
-      lines: r.five.map(x => [C.primaryPos(x.pos), x.name + (x.line ? '   ' + x.line.pts + ' PTS' : '')]) };
+      lines: r.five.map(x => [C.primaryPos(x.pos), x.name + (x.line ? '   ' + x.line.pts.toFixed(1) + ' PTS' : '')]) };
     if (UI.shareResult) { UI.shareResult(spec, text, url, 'draft-challenge'); return; }
     if (navigator.share) navigator.share({ title: 'Draft Challenge', text, url }).catch(() => {});
   }

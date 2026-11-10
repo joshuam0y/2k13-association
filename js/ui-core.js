@@ -146,12 +146,14 @@
     return startLoads[year];
   };
   // A logo from a team object (for teams outside the loaded league, like another start year's)
+  // logos that are mostly black (the Brooklyn Nets, the Spurs) vanish on the dark page
+  UI.darkLogo = t => !!t.logo && /logos\/(BKN|SAS)-/.test(t.logo);
   UI.logoFor = function (t, size) {
     const c1 = (t.colors && t.colors[0]) || '#333';
     const c2 = (t.colors && t.colors[1]) || '#999';
     const style = `--c1:${c1};--c2:${c2};--sz:${size || 40}px`;
     const img = t.logo ? `<img src="${UI.esc(t.logo)}" alt="" loading="lazy"${t.logoNoRef || /wikia|nocookie/.test(t.logo) ? ' referrerpolicy="no-referrer"' : ''} onerror="this.parentNode.classList.add('nologo');this.remove()">` : '';
-    return `<span class="logo${t.logo ? '' : ' nologo'}" style="${style}" title="${UI.esc(((t.city || '') + ' ' + (t.name || '')).trim())}">${img}<b>${UI.esc(t.abbr)}</b></span>`;
+    return `<span class="logo${t.logo ? '' : ' nologo'}${UI.darkLogo(t) ? ' dark' : ''}" style="${style}" title="${UI.esc(((t.city || '') + ' ' + (t.name || '')).trim())}">${img}<b>${UI.esc(t.abbr)}</b></span>`;
   };
 
   UI.logo = function (abbr, size) {
@@ -160,7 +162,7 @@
     const c2 = (t.colors && t.colors[1]) || '#999';
     const style = `--c1:${c1};--c2:${c2};--sz:${size || 40}px`;
     const img = t.logo ? `<img src="${UI.esc(t.logo)}" alt="" loading="lazy"${t.logoNoRef || /wikia|nocookie/.test(t.logo) ? ' referrerpolicy="no-referrer"' : ''} onerror="this.parentNode.classList.add('nologo');this.remove()">` : '';
-    return `<span class="logo${t.logo ? '' : ' nologo'}" style="${style}" title="${UI.esc(UI.teamName(abbr))}">${img}<b>${UI.esc(t.abbr)}</b></span>`;
+    return `<span class="logo${t.logo ? '' : ' nologo'}${UI.darkLogo(t) ? ' dark' : ''}" style="${style}" title="${UI.esc(UI.teamName(abbr))}">${img}<b>${UI.esc(t.abbr)}</b></span>`;
   };
 
   // ---------- headshots ----------

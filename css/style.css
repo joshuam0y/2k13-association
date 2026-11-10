@@ -930,3 +930,6 @@ html { scroll-padding-bottom: calc(var(--mb-h, var(--bar-h)) + 12px); }
 .fr-chem li.up { border-left-color: #5fd38a; } .fr-chem li.down { border-left-color: #ff7b7b; }
 .fr-chem p { grid-column: 1 / -1; margin: 2px 0 0; font-size: 12.5px; }
 @media (max-width: 600px) { .fr-chem { grid-template-columns: minmax(0, 1fr); } .fr-chem ul { grid-template-columns: minmax(0, 1fr); } }
+/* black logos (Nets, Spurs): a light disc behind them so they show on the dark page */
+.logo.dark { border-radius: 50%; background: radial-gradient(circle, #f4f4f4 0 62%, #cfcfcf 100%); box-shadow: 0 0 0 1px rgba(255, 255, 255, .25); }
+.logo.dark img { width: 80%; height: 80%; }

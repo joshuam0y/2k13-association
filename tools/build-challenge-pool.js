@@ -4,7 +4,7 @@
 const fs = require("fs");
 global.window = global;
 console.warn = () => {};
-["data/league2012.js", "data/career-prior.js", "data/tendencies.js", "js/engine.js", "js/challenge.js"].forEach(f => require("../" + f));
+["data/league2012.js", "data/pos-history.js", "data/career-prior.js", "data/tendencies.js", "js/engine.js", "js/challenge.js"].forEach(f => require("../" + f));
 const C = window.CHALLENGE, E = window.ENGINE, PER = 48;
 const out = { teams: {}, players: [] };
 C.SEASONS.forEach(s => {

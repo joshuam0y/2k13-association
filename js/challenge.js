@@ -48,6 +48,13 @@
     if (!info) return false;
     return +year === 2013 ? !!W.LEAGUE_2012 : info.start ? !!(W.START_LEAGUES && W.START_LEAGUES[year]) : !!(W.ERA_ROSTERS && W.ERA_ROSTERS[year]);
   }
+  // a real player's real position that season (data/pos-history.js), while his real career covers it
+  function realPos(id, year) {
+    var rows = W.POS_HISTORY && W.POS_HISTORY[id], pos = null;
+    if (!rows || rows[0][0] > year || rows[rows.length - 1][0] < year) return null;
+    for (var i = 0; i < rows.length; i++) if (rows[i][0] <= year) pos = rows[i][1];
+    return pos;
+  }
   function seasonData(year) {
     year = +year;
     if (cache[year]) return cache[year];
@@ -65,7 +72,7 @@
     var players = [], free = [];
     src.players.forEach(function (p0) {
       if (p0.stashedUntil) return;
-      var p = { id: p0.id, name: p0.name, team: p0.team, pos: p0.pos, age: p0.age, ht: p0.ht, wt: p0.wt, ovr: p0.ovr, attrs: p0.attrs,
+      var p = { id: p0.id, name: p0.name, team: p0.team, pos: (year !== 2013 && realPos(p0.id, year)) || p0.pos, age: p0.age, ht: p0.ht, wt: p0.wt, ovr: p0.ovr, attrs: p0.attrs,
         nbaId: p0.nbaId || null, stats: lines[p0.id] || p0.stats || null, season: year };
       if (p0.tend) p.tend = p0.tend;
       if (info.start) p.rookie = !(startCareer[p0.id] && startCareer[p0.id].length);
@@ -308,14 +315,14 @@
     for (var g = 0; g < bestOf && wins[A] < need && wins[B] < need; g++) {
       var hiHome = !!VS_HOME[bestOf][g];
       var home = sides[hiHome ? hi : lo], away = sides[hiHome ? lo : hi];
-      var res = E.simGame(home.obj, away.obj, rng, { injuries: {}, norms: norms, era: era, year: cfg.year, pbp: !!opts.pbp });
+      var res = E.simGame(home.obj, away.obj, rng, { injuries: {}, norms: norms, era: era, year: cfg.year, pbp: !!opts.pbp, sizeMatters: true });
       var hs = res.home.pts, as = res.away.pts, win = hs > as ? home.abbr : away.abbr;
       wins[win]++;
       var top = null;
       res.home.box.concat(res.away.box).forEach(function (r) {
-        var x = tot[r.id] || (tot[r.id] = { g: 0, min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0 });
+        var x = tot[r.id] || (tot[r.id] = { g: 0, min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0 });
         x.g++; x.min += r.min || 0; x.pts += r.pts || 0; x.reb += (r.oreb || 0) + (r.dreb || 0); x.ast += r.ast || 0; x.stl += r.stl || 0; x.blk += r.blk || 0;
-        x.fgm += r.fgm || 0; x.fga += r.fga || 0; x.tpm += r.tpm || 0; x.tpa += r.tpa || 0;
+        x.fgm += r.fgm || 0; x.fga += r.fga || 0; x.tpm += r.tpm || 0; x.tpa += r.tpa || 0; x.tov += r.tov || 0; x.ftm += r.ftm || 0; x.fta += r.fta || 0;
         if (!top || (r.pts || 0) > top.pts) top = { id: r.id, pts: r.pts || 0, reb: (r.oreb || 0) + (r.dreb || 0), ast: r.ast || 0 };
       });
       var gm = { n: g + 1, home: home.abbr, away: away.abbr, hs: hs, as: as, winner: win, ot: res.ot || 0, top: top,
@@ -328,7 +335,7 @@
     var r1 = function (x) { return Math.round(x * 10) / 10; };
     var lines = {};
     Object.keys(tot).forEach(function (id) { var x = tot[id], n = x.g || 1; lines[id] = { g: x.g, mpg: r1(x.min / n), pts: r1(x.pts / n), reb: r1(x.reb / n), ast: r1(x.ast / n), stl: r1(x.stl / n), blk: r1(x.blk / n),
-      fgp: x.fga ? r1(100 * x.fgm / x.fga) : null, tpp: x.tpa ? r1(100 * x.tpm / x.tpa) : null }; });
+      tov: r1(x.tov / n), tpm: r1(x.tpm / n), fgp: x.fga ? r1(100 * x.fgm / x.fga) : null, tpp: x.tpa ? r1(100 * x.tpm / x.tpa) : null, ftp: x.fta ? r1(100 * x.ftm / x.fta) : null }; });
     var win5 = sides[winner === A ? 0 : 1].five;
     var mvp = win5.slice().sort(function (x, y) { var a = lines[x.id] || {}, b = lines[y.id] || {}; return ((b.pts || 0) + (b.reb || 0) + (b.ast || 0)) - ((a.pts || 0) + (a.reb || 0) + (a.ast || 0)); })[0];
     return { cfg: cfg, label: everyEra ? 'Every season' : d.label, bestOf: bestOf, need: need, home: sides[hi].abbr, games: games, wins: wins, winner: winner,
@@ -460,7 +467,7 @@
     var parts = String(p.pos || 'SF').toUpperCase().split(/[-\/ ,]+/).filter(function (x) { return PIDX[x] != null && x.length === 2 || x === 'C'; });
     if (parts.length > 1) return parts[1];
     var a = p.attrs || {}, ht = +p.ht || 79, one = parts[0] || 'SF';
-    if (one === 'PG') return 'SG';
+    if (one === 'PG') return ht >= 80 ? 'SF' : 'SG';   // a 6-8 point guard (Ben Simmons) also plays the wing
     if (one === 'SG') return ht >= 78 || (a.handle || 60) < 70 ? 'SF' : 'PG';
     if (one === 'SF') return ht >= 81 || (a.dreb || 50) >= 65 ? 'PF' : 'SG';
     if (one === 'PF') return ht >= 82 || (a.block || 50) >= 70 ? 'C' : 'SF';

@@ -419,3 +419,33 @@
 .vs-chat-list li.mine span { background: #2a2208; border: 1px solid var(--gold-dim); }
 .vs-chat-form { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--line); }
 .vs-chat-form input { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border-radius: 20px; border: 1px solid var(--line2); background: var(--bg2); color: #fff; font-size: 16px; }
+
+/* the series screen, condensed for phone and computer */
+.vs-next { padding: 4px 0 0; }
+.vs-next h1 { font-size: clamp(24px, 5vw, 36px); margin: 0 0 2px; }
+.vs-next p { margin: 0; font-size: 13px; }
+.vs-win { padding: 12px 14px; gap: 12px; }
+.vs-win h1 { font-size: clamp(22px, 5vw, 36px); }
+.vs-score { margin: 8px 0; }
+.vs-score-t { padding: 8px 10px; }
+.vs-score-t strong { font-size: 36px; }
+.vs-acts { margin: 6px 0 10px; gap: 6px; flex-wrap: nowrap; }
+.vs-acts .btn { flex: 1 1 0; min-width: 0; padding-left: 8px; padding-right: 8px; white-space: nowrap; }
+.vs-acts .btn-big { flex: 1.4 1 0; }
+.vs-glist { gap: 4px; margin-bottom: 8px; }
+.vs-glist li { padding: 7px 10px; padding-right: 84px; }
+.vs-box .vs-sides { margin: 6px 0; gap: 8px; }
+.vs-tbl-w { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.vs-tbl { font-size: 12px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.vs-tbl th, .vs-tbl td { padding: 4px 3px; white-space: nowrap; }
+.vs-tbl th { font-size: 10px; letter-spacing: .08em; }
+.vs-tbl .l { position: sticky; left: 0; background: var(--bg2, #141414); max-width: 120px; }
+.vs-fits { gap: 8px; }
+.vs-box .vs-sides { grid-template-columns: minmax(0, 1fr); }   /* the wide box tables stack, each full width */
+@media (min-width: 900px) { .vs-tbl { font-size: 13px; } }
+@media (max-width: 560px) {
+  .vs-acts { flex-wrap: wrap; }
+  .vs-acts .btn-big { flex: 1 1 100%; }
+  .vs-next p { font-size: 12px; }
+  .vs-glist li { padding: 6px 8px; padding-right: 76px; font-size: 13px; }
+}

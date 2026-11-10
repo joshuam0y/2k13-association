@@ -491,7 +491,7 @@
     var s = {
       p: p, id: p.id, name: p.name || String(p.id), ovr: rp.ovr, group: posGroup(p.pos), rank: p.slot != null ? +p.slot : posRank(p.pos),   // p.slot: the spot he plays (Draft Challenge fit)
       a: rp.a, z: zp.z, offZ: zp.offZ, makeZ: zp.makeZ, ovrZ: zp.ovrZ, ovrSoft: zp.ovrSoft, shares: zp.shares, usage: usageOf(zp, n),
-      target: 0, sec: 0, energy: 1, fouls: 0, out: false, onCourt: false, starter: false,
+      target: 0, sec: 0, energy: 1, fouls: 0, out: false, onCourt: false, starter: false, ht: +p.ht || 79,
       injuryAt: -1, injury: null, need: 0, astTend: null, foulTend: 1, gen: true,
       box: emptyLine(), blk36: 0.77, stl36: 1.16, fMake: 0, fUse: 1
     };
@@ -755,6 +755,14 @@
       t.lineup.forEach(function (p) { s += p.z[key] - fz(p); });
       return s / Math.max(1, t.lineup.length);
     }
+    // Versus (opts.sizeMatters): the bigger five wins more boards, and a shooter taller than his man scores
+    // more inside (a smaller one shoots over less), in inches
+    var SIZE = !!opts.sizeMatters;
+    function lineupHt(t) {
+      var s = 0;
+      t.lineup.forEach(function (p) { s += p.ht; });
+      return s / Math.max(1, t.lineup.length);
+    }
     function lineupOvr(t) {
       var s = 0;
       t.lineup.forEach(function (p) { s += p.ovr - fz(p) * n.ovrSd * 0.5; });
@@ -873,6 +881,7 @@
       var p = T.orebBase + T.minorK * (0.03 * lineupZ(off, 'oreb') - 0.03 * lineupZ(def, 'dreb')) + T.stratCrash * off.strat.crash;
       if (shotType === 'three') p -= 0.015;
       if (blocked) p += 0.04;
+      if (SIZE) p += 0.012 * clamp(lineupHt(off) - lineupHt(def), -5, 5);
       p = clamp(p, 0.12, 0.45);
       if (rng() < p) {
         var r = pickBy(off.lineup, function (s) {
@@ -978,6 +987,7 @@
       var pMake = T.makeBase[type] + T.makeOff[type] * offZ - T.makeDef[type] * defZ +
         T.makeOvr * ((shooter.ovrSoft - fz(shooter)) - (dfd.ovrSoft - fz(dfd))) + edge + off.form + shooter.fMake;
       if (putbackBy) pMake += 0.04;
+      if (SIZE) pMake += (type === 'close' || type === 'post' ? 0.01 : 0.004) * clamp(shooter.ht - dfd.ht, -6, 6);
       pMake += off.plan.make[type];
       if (trans) pMake += T.stratTrans * trans;   // transition chances after the other team crashed the glass
       if (clock < 2 && rng() < 0.5) pMake *= 0.4; // end of quarter heave
