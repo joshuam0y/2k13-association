@@ -149,11 +149,19 @@
     return pk.year + ' ' + rd + ' (' + pk.original + (pr ? ', ' + pr : '') + ')';
   };
 
+  // trade value in stars (js/trade.js stars: 0.5 to 5)
+  F.starsHtml = function (n) {
+    if (n == null || isNaN(n)) return '';
+    let out = '';
+    for (let i = 1; i <= 5; i++) out += `<i class="${n >= i ? 'on' : n >= i - 0.5 ? 'half' : ''}">&#9733;</i>`;
+    return `<span class="ftx-stars" title="Trade value: ${n} of 5 stars" aria-label="Trade value ${n} of 5 stars">${out}</span>`;
+  };
+  F.stars = function (st, p) { const X = window.TRADE; return X && X.stars ? F.try('TRADE.stars', () => X.stars(st, p.id), null) : null; };
   F.mini = function (p, opts) {
     opts = opts || {};
     const ovr = p.ovr || 0;
     return `<span class="ft-hs">${UI.headshot(p)}</span>
-      <span class="ft-main"><b class="ft-name">${esc(p.name)}</b>
+      <span class="ft-main"><b class="ft-name">${esc(p.name)}</b>${opts.stars != null ? F.starsHtml(opts.stars) : ''}
         <span class="ft-meta">${opts.meta != null ? opts.meta : esc(p.pos || '') + ' | ' + esc(p.age || '-') + ' YRS'}</span></span>
       <span class="ft-ovr ${UI.ovrClass(ovr)}">${ovr}</span>`;
   };
@@ -182,6 +190,11 @@
     .ftx-ba td { text-align: right; padding: 3px 4px; border-top: 1px solid var(--line); white-space: nowrap; }
     .ftx-ba td.up { color: #ff9b9b; } .ftx-ba td.down { color: #7fd99a; }
     .ftx-ba td.bad { color: #ff9b9b; font-weight: 700; }
+    .ftx-stars { display: inline-flex; gap: 1px; margin-left: 6px; vertical-align: 1px; font-style: normal; }
+    .ftx-stars i { font-style: normal; font-size: 11px; color: #3a3a40; line-height: 1; }
+    .ftx-stars i.on { color: var(--gold2); }
+    .ftx-stars i.half { background: linear-gradient(90deg, var(--gold2) 50%, #3a3a40 50%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .ftx-small { font-size: 12.5px; margin: 6px 0 0; }
     .ftx-tag2 { display: inline-block; font-size: 10px; letter-spacing: .08em; padding: 1px 5px; border: 1px solid var(--line2); color: var(--text2); margin-left: 4px; white-space: nowrap; }
     .ftx-tradebtn { display: inline-block; margin-left: 6px; padding: 1px 7px; border: 1px solid var(--gold-dim); color: var(--gold2); font-family: var(--display); font-size: 11px; letter-spacing: .1em; text-decoration: none; white-space: nowrap; }
     .ftx-tradebtn:hover { background: var(--gold); color: #000; }
@@ -353,7 +366,7 @@
       const x = removable ? `<button type="button" class="ftx-x" data-act="toggle" data-side="${esc(abbr)}" data-kind="player" data-id="${esc(id)}" aria-label="Remove">&times;</button>` : '';
       const tb = !removable && !noTradeLink && p && p.team !== st.userTeam && st.teams[p.team] ? `<a class="ftx-tradebtn" href="#/trade/for/${esc(p.id)}" title="Build a new trade for him">TRADE</a>` : '';
       const add = mark && mark === id ? '<span class="ftx-addtag">THEY ALSO WANT</span>' : '';
-      items.push(p ? `<li><b class="${UI.ovrClass(p.ovr || 0)}">${p.ovr || '-'}</b> <a href="#/player/${esc(p.id)}">${esc(p.name)}</a>${add} <small>${esc(p.pos || '')} | ${esc(p.age || '-')} yrs | ${F.money(F.salary(p, F.capYear(st)))} | ${esc(F.contractText(p, st))}</small>${tb}${x}</li>` : `<li>${esc(id)}</li>`);
+      items.push(p ? `<li><b class="${UI.ovrClass(p.ovr || 0)}">${p.ovr || '-'}</b> <a href="#/player/${esc(p.id)}">${esc(p.name)}</a>${F.starsHtml(F.stars(st, p))}${add} <small>${esc(p.pos || '')} | ${esc(p.age || '-')} yrs | ${F.money(F.salary(p, F.capYear(st)))} | ${esc(F.contractText(p, st))}</small>${tb}${x}</li>` : `<li>${esc(id)}</li>`);
     });
     (g.picks || []).forEach(pk => {
       const x = removable ? `<button type="button" class="ftx-x" data-act="toggle" data-side="${esc(abbr)}" data-kind="pick" data-id="${esc(F.pickKey(pk))}" aria-label="Remove">&times;</button>` : '';
@@ -365,7 +378,8 @@
   function tabs(st, on) {
     const n = offers(st).length;
     const blk = blockIds(st).length;
-    return `<nav class="tabs"><a href="#/trade${deal.partner ? '/' + esc(deal.partner) : ''}" class="${on === 'build' ? 'on' : ''}">MAKE A TRADE</a>
+    return `<nav class="tabs"><a href="#/trade${deal.partner ? '/' + esc(deal.partner) : ''}" class="${on === 'build' ? 'on' : ''}">PROPOSE A TRADE</a>
+      <a href="#/trade/finder" class="${on === 'finder' ? 'on' : ''}">TRADE FINDER</a>
       <a href="#/trade/block" class="${on === 'block' ? 'on' : ''}">TRADING BLOCK${blk ? ' (' + blk + ')' : ''}</a>
       <a href="#/trade/offers" class="${on === 'offers' ? 'on' : ''}">OFFERS${n ? '<span class="ftx-badge" id="ftxOfferBadge">' + n + '</span>' : ''}</a></nav>`;
   }
@@ -409,7 +423,7 @@
       (got.length ? 'Welcome ' + got.join(', ') + ' to the ' + UI.team(user).name + '.' : 'The deal is done.');
     // the block drops anyone who left
     const t = st.teams[user];
-    if (Array.isArray(t.tradeBlock)) t.tradeBlock = t.tradeBlock.filter(id => onBlockStill(st, id));   // players and picks that left drop off
+    ['tradeBlock', 'finderSel'].forEach(k => { if (Array.isArray(t[k])) t[k] = t[k].filter(id => onBlockStill(st, id)); });   // players and picks that left drop off
     shopRes = null; take = null;
     await F.save();
     UI.toast('Trade complete. Saved.');
@@ -427,7 +441,7 @@
       const stash = p.stashedUntil && p.stashedUntil > st.year ? ` | <span class="ft-stash">Overseas until ${p.stashedUntil}</span>` : '';
       const meta = `${esc(p.pos || '')} | ${esc(p.age || '-')} YRS | ${F.money(F.salary(p, yr))} | ${esc(F.contractText(p, st))}${stash} ${UI.injuryBadge(p)}`;
       const ask = isUser ? '' : `<button type="button" class="btn btn-small ftx-ask" data-act="take" data-id="${esc(p.id)}" title="Ask what the ${esc(UI.team(abbr).name)} want for him">WHAT WOULD IT TAKE</button>`;
-      return `<div class="ftx-prow"><button type="button" class="ft-item${on ? ' on' : ''}" data-act="toggle" data-side="${esc(abbr)}" data-kind="player" data-id="${esc(p.id)}" aria-pressed="${on}">${F.mini(p, { meta })}</button>${ask}</div>`;
+      return `<div class="ftx-prow"><button type="button" class="ft-item${on ? ' on' : ''}" data-act="toggle" data-side="${esc(abbr)}" data-kind="player" data-id="${esc(p.id)}" aria-pressed="${on}">${F.mini(p, { meta, stars: F.stars(st, p) })}</button>${ask}</div>`;
     }).join('');
     const prow = picks.map(pk => {
       const k = F.pickKey(pk), on = s.picks.has(k);
@@ -458,7 +472,8 @@
     const p = take.pid ? st.players[take.pid] : null;
     const pk = take.pick ? pickObj(st, deal.partner, take.pick) : null;
     const nm = p ? p.name : pk ? 'the ' + F.pickLabel(pk, deal.partner) + ' pick' : take.pick ? 'that pick' : 'him';
-    if (take.error) return `<div class="ft-answer bad"><div class="ft-k">WHAT WOULD IT TAKE</div><p>${esc(take.error)}</p></div>`;
+    if (take.error) return `<div class="ft-answer bad"><div class="ft-k">${take.counter ? 'COUNTEROFFER' : 'WHAT WOULD IT TAKE'}</div><p>${esc(take.error)}</p></div>`;
+    if (take.counter && !take.list.length) return `<div class="ft-answer bad" id="ftxNoDeal"><div class="ft-k">NO COUNTEROFFER</div><p>The ${esc(UI.team(deal.partner).name)} will not do any version of this with what you have. Try the Trade Finder or a different target.</p></div>`;
     if (!take.list.length) {
       const X = F.fn('TRADE', 'explain');
       const why = X ? F.try('TRADE.explain', () => X.explain(st, { mode: 'finder', user: st.userTeam, partner: deal.partner, ids: take.pid ? [take.pid] : [], picks: pk ? [pk] : [] }), '') : '';
@@ -467,6 +482,8 @@
     noTradeLink = true;
     const cards = take.list.map((t, i) => offerCard(st, t, deal.partner, [`<button type="button" class="btn btn-gold btn-small" data-act="takeDo" data-i="${i}">MAKE THIS TRADE</button>`, `<button type="button" class="btn btn-small" data-act="takeLoad" data-i="${i}">EDIT IT</button>`], 'PACKAGE ' + (i + 1), (take.meta && take.meta[i]) || {})).join('');
     noTradeLink = false;
+    if (take.counter) return `<div class="ftx-finds">${UI.header('THEIR COUNTEROFFER', 'What the ' + esc(UI.team(deal.partner).name) + ' would do instead, closest to your offer first')}
+      ${cards}</div>`;
     return `<div class="ftx-finds">${UI.header('WHAT WOULD IT TAKE: ' + esc(nm.toUpperCase()), 'Packages the ' + esc(UI.team(deal.partner).name) + ' would accept')}
       ${cards}</div>`;
   }
@@ -507,7 +524,7 @@
     else if (!ans) verdict = `<div class="ftx-verdict"><div class="ft-k">${esc(who)}</div><p>The trade AI has not loaded.</p></div>`;
     else verdict = `<div class="ftx-verdict ${ans.accepts ? 'ok' : 'bad'}"><div class="ftx-yes">${ans.accepts ? 'YES' : 'NO'}</div>
       <div><div class="ft-k">${esc(who)} ${ans.accepts ? 'WOULD ACCEPT' : 'SAY NO'}</div><p>${esc(ans.message || '')}</p></div>
-      ${ans.accepts ? '<button type="button" class="btn btn-gold" data-act="execute">MAKE TRADE</button>' : ''}</div>`;
+      ${ans.accepts ? '<button type="button" class="btn btn-gold" data-act="execute">MAKE TRADE</button>' : ans.legal && youGet && youGive && !closed ? '<button type="button" class="btn btn-gold" data-act="counter">ASK FOR A COUNTEROFFER</button>' : ''}</div>`;
     const cbaHtml = chk ? (chk.ok ? '<div class="ft-cba ok"><b>CBA OK</b> Salaries and rosters work under the ' + esc(st.year - 1) + '-' + String(st.year).slice(2) + ' rules.</div>'
       : `<div class="ft-cba bad"><b>BREAKS THE RULES</b><ul>${chk.reasons.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`) : '';
     const teams = UI.teams().filter(t => t.abbr !== user && st.teams[t.abbr]);
@@ -552,6 +569,23 @@
         if (err) UI.toast(err, 'error'); else resetDeal(user, partner);
         renderBuild(app, st, yr);
         window.scrollTo(0, 0);
+      } else if (act === 'counter') {
+        // their counteroffer: the packages they would take for what you asked, closest to what you offered
+        const Fd = F.fn('TRADE', 'finder');
+        if (!Fd) return;
+        b.disabled = true; b.textContent = 'THEY ARE THINKING...';
+        await new Promise(r => setTimeout(r, 20));
+        try {
+          const g = tr.give[partner] || {}, mine = tr.give[user] || {};
+          const r = Fd.finder(st, user, partner, g.players || [], { wantPicks: g.picks || [] });
+          const arr = (Array.isArray(r) ? r : (r && Array.isArray(r.proposals) ? r.proposals : [])).map(x => (x && x.trade) || x).filter(t => t && t.give && Array.isArray(t.teams));
+          const offered = new Set((mine.players || []).concat((mine.picks || []).map(F.pickKey)));
+          const score = t => { const gg = t.give[user] || {}; const ids = (gg.players || []).concat((gg.picks || []).map(F.pickKey)); const keep = ids.filter(x => offered.has(x)).length; return keep * 3 - (ids.length - keep); };
+          arr.sort((x, y) => score(y) - score(x));
+          take = { counter: true, pid: null, pick: null, list: arr.slice(0, 3), meta: arr.slice(0, 3).map(() => ({ kindLabel: 'counteroffer' })) };
+        } catch (e) { console.warn('TRADE.finder', e); take = { counter: true, list: [], error: 'Could not ask: ' + (e && e.message ? e.message : e) }; }
+        renderBuild(app, st, yr);
+        const el = app.querySelector('.ftx-finds, .ft-answer'); if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
       } else if (act === 'take' || act === 'takePick') {
         const id = b.getAttribute('data-id');
         const pid = act === 'take' ? id : null, pkey = act === 'takePick' ? id : null;
@@ -607,10 +641,12 @@
 
   // ---------- trading block ----------
   // the block: player ids and pick keys ("2014-1-CLE") the user still holds (older saves hold only players)
-  function blockIds(st) {
-    const t = st.teams[st.userTeam];
-    if (!t || !Array.isArray(t.tradeBlock)) return [];
-    return t.tradeBlock.filter(id => onBlockStill(st, id));
+  // two lists: tradeBlock (the trading block: players the user wants to move, AI teams call about them) and
+  // finderSel (the Trade Finder's pick: ask every team right now what it would give)
+  function blockIds(st, key) {
+    const t = st.teams[st.userTeam], k = key || 'tradeBlock';
+    if (!t || !Array.isArray(t[k])) return [];
+    return t[k].filter(id => onBlockStill(st, id));
   }
   function onBlockStill(st, id) {
     const user = st.userTeam;
@@ -619,9 +655,13 @@
   }
   const blockName = (st, id) => st.players[id] ? st.players[id].name : (pickObj(st, st.userTeam, id) ? F.pickLabel(pickObj(st, st.userTeam, id), st.userTeam) + ' pick' : id);
 
-  function renderBlock(app, st) {
+  // mode 'finder' (Trade Finder: ask every team now) or 'block' (the trading block: teams call over time)
+  function renderBlock(app, st, mode) {
+    mode = mode === 'block' ? 'block' : 'finder';
+    const KEY = mode === 'block' ? 'tradeBlock' : 'finderSel';
+    const onTag = mode === 'block' ? 'ON THE BLOCK' : 'IN THE DEAL', offTag = mode === 'block' ? 'PUT ON THE BLOCK' : 'ADD';
     const user = st.userTeam, team = st.teams[user];
-    const block = blockIds(st);
+    const block = blockIds(st, KEY);
     const closed = tradeClosed(st);
     const canShop = !!F.fn('TRADE', 'shop');
     const yr = F.capYear(st);
@@ -630,7 +670,7 @@
     const roster = F.teamPlayers(st, user).map(p => {
       const on = block.indexOf(p.id) >= 0;
       const meta = `${esc(p.pos || '')} | ${esc(p.age || '-')} YRS | ${F.money(F.salary(p, yr))} | ${esc(F.contractText(p, st))} ${UI.injuryBadge(p)}`;
-      return `<button type="button" class="ft-item ftx-blk${on ? ' on' : ''}" data-act="block" data-id="${esc(p.id)}" aria-pressed="${on}">${F.mini(p, { meta })}<span class="ftx-tag">${on ? 'ON THE BLOCK' : 'ADD TO BLOCK'}</span></button>`;
+      return `<button type="button" class="ft-item ftx-blk${on ? ' on' : ''}" data-act="block" data-id="${esc(p.id)}" aria-pressed="${on}">${F.mini(p, { meta, stars: F.stars(st, p) })}<span class="ftx-tag">${on ? onTag : offTag}</span></button>`;
     }).join('');
     const pickRows = teamPicks(st, user).map(pk => {
       const k = F.pickKey(pk), on = block.indexOf(k) >= 0, pr = F.protText(pk), ls = liveSlot(st, pk, user);
@@ -639,7 +679,7 @@
       return `<button type="button" class="ft-item ft-pick ftx-blk${on ? ' on' : ''}" data-act="block" data-id="${esc(k)}" aria-pressed="${on}">
         <span class="ft-pick-yr">${ls ? '#' + esc(ls.overall) : esc(pk.year)}<small>${ls ? esc(pk.year) : pk.round === 1 ? '1ST' : '2ND'}</small></span>
         <span class="ft-main"><b class="ft-name">${esc(F.pickLabel(pk, user))}</b><span class="ft-meta">${meta}</span></span>
-        <span class="ftx-tag">${on ? 'ON THE BLOCK' : 'ADD TO BLOCK'}</span></button>`;
+        <span class="ftx-tag">${on ? onTag : offTag}</span></button>`;
     }).join('');
     const names = block.map(id => blockName(st, id));
     let results = '';
@@ -654,20 +694,31 @@
         `<button type="button" class="btn btn-gold" data-act="shopDo" data-i="${i}">ACCEPT</button>`,
         `<button type="button" class="btn" data-act="shopEdit" data-i="${i}">EDIT IN TRADE SCREEN</button>`], o.extra ? 'BIGGER DEAL' : 'OFFER FROM', { kindLabel: o.kindLabel, extra: o.extra })).join('')}</div>`;
 
-    app.innerHTML = `${UI.header('TRADES', 'Put players on the block, then ask every team what they would give.')}
-      ${tabs(st, 'block')}
+    const calls = mode === 'block' ? offers(st).filter(x => { const tr = offerTrade(x.e); return tr && offerValid(st, tr) && ((tr.give[user] && tr.give[user].players) || []).some(id => block.indexOf(id) >= 0); }) : [];
+    const blockTop = mode === 'block'
+      ? `<section class="ft-deal ftx-blockbar">
+          <div><div class="ft-k">ON THE BLOCK</div>
+            <p class="ftx-blocknames">${block.length ? names.map(esc).join(', ') : '<span class="muted">Nobody yet. Tap players below to put them on the block.</span>'}</p>
+            <p class="muted ftx-small">Teams call with offers for these players as the season goes, more often than usual, and they stretch a little to make it work. Offers land in OFFERS.</p></div>
+          <div class="row-btns"><button type="button" class="btn btn-gold" data-act="ring" ${!block.length || closed ? 'disabled' : ''}>SHOP THEM NOW</button>
+            ${calls.length ? `<a class="btn" href="#/trade/offers">${calls.length} OFFER${calls.length > 1 ? 'S' : ''} FOR THEM</a>` : ''}
+            ${block.length ? '<button type="button" class="btn" data-act="blockClear">CLEAR BLOCK</button>' : ''}</div>
+        </section>`
+      : `<section class="ft-deal ftx-blockbar">
+          <div><div class="ft-k">IN THE DEAL</div>
+            <p class="ftx-blocknames">${block.length ? names.map(esc).join(', ') : '<span class="muted">Nobody yet. Tap players or picks below.</span>'}</p></div>
+          <div class="row-btns"><button type="button" class="btn btn-gold" data-act="shop" ${!block.length || closed || !canShop ? 'disabled' : ''}>FIND TRADES</button>
+            ${block.length ? '<button type="button" class="btn" data-act="blockClear">CLEAR</button>' : ''}</div>
+        </section>`;
+    app.innerHTML = `${UI.header(mode === 'block' ? 'TRADING BLOCK' : 'TRADE FINDER', mode === 'block' ? 'Players you want to move. Teams come to you.' : 'Pick what you would give, then ask all 29 teams what they would offer.')}
+      ${tabs(st, mode)}
       ${doneHtml()}
       ${closed ? `<div class="note">${esc(closed)}</div>` : ''}
-      <section class="ft-deal ftx-blockbar">
-        <div><div class="ft-k">ON THE BLOCK</div>
-          <p class="ftx-blocknames">${block.length ? names.map(esc).join(', ') : '<span class="muted">Nobody yet. Click players below to add them.</span>'}</p></div>
-        <div class="row-btns"><button type="button" class="btn btn-gold" data-act="shop" ${!block.length || closed || !canShop ? 'disabled' : ''}>FIND TRADES</button>
-          ${block.length ? '<button type="button" class="btn" data-act="blockClear">CLEAR BLOCK</button>' : ''}</div>
-      </section>
-      <div id="ftxResults">${results}</div>
-      ${UI.header('YOUR ROSTER', 'Click a player to put him on the block or take him off.')}
+      ${blockTop}
+      <div id="ftxResults">${mode === 'finder' ? results : ''}</div>
+      ${UI.header('YOUR ROSTER', mode === 'block' ? 'Tap a player to put him on the block or take him off. Stars: his trade value.' : 'Tap a player to add him or take him out. Stars: his trade value.')}
       <div class="ft-list ftx-blocklist">${roster}</div>
-      ${UI.header('YOUR DRAFT PICKS', 'Picks can go on the block too, alone or with players.')}
+      ${UI.header('YOUR DRAFT PICKS', mode === 'block' ? 'Picks can go on the block too.' : 'Picks can go in too, alone or with players.')}
       <div class="ft-list ftx-blocklist" id="ftxBlockPicks">${pickRows || '<p class="muted">You hold no tradable picks.</p>'}</div>`;
     app.onchange = null;
     app.onclick = async ev => {
@@ -676,22 +727,30 @@
       const act = b.getAttribute('data-act');
       if (act === 'block') {
         const id = b.getAttribute('data-id');
-        const cur = blockIds(st);
-        team.tradeBlock = cur.indexOf(id) >= 0 ? cur.filter(x => x !== id) : cur.concat([id]);
+        const cur = blockIds(st, KEY);
+        team[KEY] = cur.indexOf(id) >= 0 ? cur.filter(x => x !== id) : cur.concat([id]);
         F.save();
-        renderBlock(app, st);
+        renderBlock(app, st, mode);
       } else if (act === 'blockClear') {
-        team.tradeBlock = []; shopRes = null; F.save(); renderBlock(app, st);
+        team[KEY] = []; shopRes = null; F.save(); renderBlock(app, st, mode);
+      } else if (act === 'ring') {
+        // calls right now: a few AI offers for the block (they also keep coming as the season goes)
+        const X = window.TRADE;
+        let n = 0;
+        if (X && X.aiOffers) for (let k = 0; k < 3; k++) (F.try('TRADE.aiOffers', () => X.aiOffers(st, F.rng(st), { force: true }), []) || []).forEach(o => { st.events.push({ type: 'tradeOffer', offer: o, quiet: true }); n++; });
+        F.save();
+        UI.toast(n ? n + ' team' + (n > 1 ? 's' : '') + ' called. See OFFERS.' : 'Nobody bit right now. Teams keep calling as the season goes.');
+        renderBlock(app, st, mode);
       } else if (act === 'shop') {
         b.disabled = true; b.textContent = 'ASKING ALL 29 TEAMS...';
         await new Promise(r => setTimeout(r, 30));
         try {
-          const list = window.TRADE.shop(st, user, blockIds(st)) || [];
+          const list = window.TRADE.shop(st, user, blockIds(st, KEY)) || [];
           // shown by team (no ranking, so the offers keep their suspense), plain offers before bigger deals
           const nm = a => UI.teamName(a);
           shopRes = { key, list: list.filter(o => o && o.trade && o.from).sort((a, b) => nm(a.from).localeCompare(nm(b.from)) || (!!a.extra - !!b.extra)) };
         } catch (e) { console.warn('TRADE.shop', e); shopRes = { key, list: [], error: 'Could not ask the other teams: ' + (e && e.message ? e.message : e) }; }
-        renderBlock(app, st);
+        renderBlock(app, st, mode);
         const el = UI.$('#ftxResults', app); if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
       } else if (act === 'shopDo' || act === 'shopEdit') {
         const o = shopRes && shopRes.list[Number(b.getAttribute('data-i'))];
@@ -706,7 +765,7 @@
         b.disabled = true;
         const err = await runTrade(st, o.trade);
         if (err) { UI.toast(err, 'error'); shopRes = null; }
-        renderBlock(app, st);
+        renderBlock(app, st, mode);
         window.scrollTo(0, 0);
       }
     };
@@ -850,16 +909,17 @@
     if (!st) { app.innerHTML = F.noLeague(); return; }
     const user = st.userTeam;
     if (deal.user !== user) resetDeal(user, null);
-    if (arg === 'block') { renderBlock(app, st); return; }
+    if (arg === 'block') { renderBlock(app, st, 'block'); return; }
+    if (arg === 'finder') { renderBlock(app, st, 'finder'); return; }
     if (String(arg || '').indexOf('blockadd/') === 0) {
       const key = String(arg).slice(9), t = st.teams[user];
       if (onBlockStill(st, key)) {
-        t.tradeBlock = blockIds(st).filter(x => x !== key).concat([key]);
+        t.finderSel = blockIds(st, 'finderSel').filter(x => x !== key).concat([key]);
         shopRes = null;
         F.save();
       } else UI.toast('That pick or player is no longer yours to trade.', 'error');
-      try { history.replaceState(null, '', location.pathname + location.search + '#/trade/block'); } catch (e) { /* ignore */ }
-      renderBlock(app, st);
+      try { history.replaceState(null, '', location.pathname + location.search + '#/trade/finder'); } catch (e) { /* ignore */ }
+      renderBlock(app, st, 'finder');
       const b = UI.$('[data-act="shop"]', app);
       if (b && !b.disabled && onBlockStill(st, key)) b.click();   // find trades right away
       return;

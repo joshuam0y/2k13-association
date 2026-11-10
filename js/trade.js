@@ -825,6 +825,11 @@
     var a = forAbbr || p.team;
     return round2(parts(ctx, playerId, a).total);
   }
+  // Trade value in stars, 0.5 to 5 in half steps, on a log scale of the value (LeBron in 2012-13 is about
+  // 121 = 5 stars, a solid starter about 14 = 3, the median player 1, a late second-round pick 0.5)
+  function starsOf(v) { var x = 0.5 + 4.5 * Math.log(1 + Math.max(0, +v || 0)) / Math.log(121); return Math.max(0.5, Math.min(5, Math.round(x * 2) / 2)); }
+  function stars(state, playerId, forAbbr) { return starsOf(value(state, playerId, forAbbr)); }
+  function pickStars(state, pick, forAbbr) { return starsOf(pickValue(state, pick, forAbbr)); }
   function pickValue(state, pick, forAbbr) {
     ensureDirections(state);
     var ctx = makeCtx(state);
@@ -1447,9 +1452,10 @@
     var off = OFFSEASON.indexOf(state.phase) >= 0, day = state.day || 0;
     if (!opts.force) {
       if (off) { if (m.lastOfferPhase === state.phase) return []; }
-      else if (m.lastOfferDay != null && m.lastOfferPhase === state.phase && day - m.lastOfferDay < (hot ? OFFER_GAP_HOT : OFFER_GAP)) return [];
+      else if (m.lastOfferDay != null && m.lastOfferPhase === state.phase && day - m.lastOfferDay < (hot ? OFFER_GAP_HOT : OFFER_GAP) * ((state.teams[user].tradeBlock || []).length ? 0.5 : 1)) return [];
     }
     var p = off ? 0.3 : hot ? 0.85 : 0.6;   // js/league.js asks on about 8% of days; the gap above caps the rate
+    if ((state.teams[user].tradeBlock || []).length) p = Math.min(0.95, p + 0.25);   // a trading block gets more calls
     if (!opts.force && rng() >= p) return [];
     var ctx = makeCtx(state);
     var ai = Object.keys(state.teams).filter(function (a) { return a !== user; });
@@ -1458,6 +1464,9 @@
       .sort(function (a, b) { return state.players[b].ovr - state.players[a].ovr; });
     var star = {};
     mine.forEach(function (id, i) { var q = state.players[id]; if (i < 2 || q.ovr >= 85 || parts(ctx, id, user).talent >= 20) star[id] = 1; });
+    // the user's trading block: those players draw the calls, stars included, and teams stretch a little for them
+    var blk = {};
+    (state.teams[user].tradeBlock || []).forEach(function (id) { if (state.players[id] && state.players[id].team === user) { blk[id] = 1; delete star[id]; } });
     for (var tries = 0; tries < 6; tries++) {
       var T = weighted(ai, function (a) { var dd = dirOf(ctx, a); return dd === "contend" ? 3 : dd === "neutral" ? 2 : 1; }, rng);
       var tdir = dirOf(ctx, T);
@@ -1469,6 +1478,7 @@
         var q = state.players[id], vT = parts(ctx, id, T).total, vU = parts(ctx, id, user).total;
         var w = Math.max(0.2, (vT - vU) + 0.2 * vT);
         var rem = remaining(q, ctx.year);
+        if (blk[id]) w *= 10;                                           // on the block: the phone rings
         if (star[id]) w *= 0.08;                                        // stars: rare
         else if (q.ovr >= 66) w *= 1.4;                                 // role players: the usual ask
         if (rem.length === 1 && tdir !== "rebuild") w *= 1.4;           // expiring deals
@@ -1496,7 +1506,7 @@
           spec: spec, topN: spec ? 6 : 9, pickN: spec ? 4 : 5, maxTries: spec ? 15 : 80,
           rOk: isStar ? function (e) { return e.gain >= 0.06 * e.outValue + 0.5; }
             : function (e) { return e.gain >= -(0.1 * e.outValue + 0.5) && e.gain <= 0.25 * e.outValue + 1.5; },
-          gOk: function (e) { return e.margin >= 0; },
+          gOk: blk[tgt.id] ? function (e) { return e.margin >= -(0.05 * e.outValue + 0.3); } : function (e) { return e.margin >= 0; },
           score: isStar ? function (eR) { return eR.gain; } : function (eR) { return -Math.abs(eR.gain + 0.04 * eR.outValue); },
           jitter: function () { return rng() * 0.3; }
         });
@@ -1843,7 +1853,7 @@
     validate: function (state, trade) { return validate(state, trade); },
     expired: function (state, p) { return expired(state, p); },
     describe: describe, updateDirections: updateDirections, windowOpen: windowOpen, pickId: pickId,
-    shop: shop, pickText: pickText, protectionText: protectionText,
+    shop: shop, pickText: pickText, protectionText: protectionText, stars: stars, pickStars: pickStars, starsOf: starsOf,
     // draft night and trade screen helpers
     pickLabel: pickLabel, slotForEntry: slotForEntry, entryForSlot: entryForSlot, pickUsed: pickUsed,
     deadline: deadline, deadlineMD: deadlineMD, explain: explain, fairness: fairness, KIND_LABEL: KIND_LABEL, askForMore: askForMore, draftNightTrade: draftNightTrade, liveDraft: liveDraft
