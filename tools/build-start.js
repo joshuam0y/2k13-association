@@ -178,6 +178,23 @@ function build(Y) {
   era(2004);
   const P04 = global.START_LEAGUES[2004].prior, awards = {};
   Object.keys(P04.awards || {}).forEach(id => { const l = P04.awards[id].filter(x => x.year < Y); if (l.length) awards[id] = l; });
+  // the full honors of everyone on the board: Basketball-Reference's per-season awards column (tools/awards-cache.json),
+  // the champions and Finals MVPs (data/history.js), the scoring titles (the era files' per-game lines)
+  const AWF = path.join(ROOT, 'tools', 'awards-cache.json'), AC = fs.existsSync(AWF) ? JSON.parse(fs.readFileSync(AWF, 'utf8')) : {};
+  const TOK = { AS: 'All-Star', NBA1: 'All-NBA 1st Team', NBA2: 'All-NBA 2nd Team', NBA3: 'All-NBA 3rd Team', DEF1: 'All-Defensive 1st Team', DEF2: 'All-Defensive 2nd Team',
+    'MVP-1': 'MVP', 'DPOY-1': 'DPOY', 'ROY-1': 'ROY', 'MIP-1': 'MIP', 'SMOY-1': '6MOY' };
+  const addAward = (id, year, award) => { const l = awards[id] = awards[id] || []; if (!l.some(x => x.year === year && x.award === award)) l.push({ year, award }); };
+  Object.keys(AC).forEach(id => { if (!ids.has(id)) return; AC[id].forEach(([yr, str]) => { if (yr >= Y) return; str.split(',').forEach(t => { const a = TOK[t.trim()]; if (a) addAward(id, yr, a); }); }); });
+  run('data/history.js');
+  const finalsMvp = {}; (global.HISTORY_PRIOR.champions || []).forEach(c => { if (c.finalsMvp) finalsMvp[c.year] = c.finalsMvp; });
+  for (let y = FIRST; y < Y; y++) {
+    const e = era(y); if (!e) continue;
+    if (e.champion) e.players.forEach(p => { if (ids.has(p.id) && ab(p.team) === ab(e.champion)) addAward(p.id, y, 'Champion'); });
+    const q = e.players.filter(p => p.stats && p.stats.g >= (y <= 1951 ? 40 : 58) && p.stats.pts != null).sort((p1, p2) => p2.stats.pts - p1.stats.pts)[0];
+    if (q && ids.has(q.id)) addAward(q.id, y, 'Scoring Champion');
+    if (finalsMvp[y]) { const f = e.players.find(p => p.name === finalsMvp[y]); if (f && ids.has(f.id)) addAward(f.id, y, 'Finals MVP'); }
+  }
+  Object.keys(awards).forEach(id => awards[id].sort((x, z) => x.year - z.year));
   const A04 = P04.alltime, alltime = { keys: A04.keys, cut: A04.cut, retired: A04.retired.filter(r => r[3] < Y), active: {}, games: (A04.games || []).filter(g => g[4] < seasonLabel(Y).slice(0, 4) + '-07-01') };
   const lineOf = {}; d.players.forEach(p => { if (p.stats) lineOf[p.id] = p.stats; });
   Object.keys(A04.active || {}).forEach(id => {
