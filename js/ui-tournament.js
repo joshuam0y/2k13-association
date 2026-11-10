@@ -301,7 +301,7 @@
         if (!s) return null;
         TN.spin = s; TN.spun = TN.spun.concat([s.key]); save(); draft(app); return s;
       };
-      if (spin && !ANIM[spin.n]) UI.challengeWheel.animate(app, teams, () => { ANIM[spin.n] = true; if (TN.spin && TN.spin.n === spin.n) draft(app); }, { year: spin.year, abbr: spin.abbr }, { mode: B.era ? 'alltime' : 'versus' });
+      if (spin && !ANIM[spin.n]) UI.challengeWheel.animate(app, teams, () => { ANIM[spin.n] = true; if (TN.spin && TN.spin.n === spin.n) draft(app); }, { year: spin.year, abbr: spin.abbr }, { mode: B.era ? 'alltime' : 'versus', seasons: cfg.seasons });
       const sp = UI.$('#chSpin', app); if (sp) sp.addEventListener('click', () => doSpin(null));
       const fr = UI.$('#tnFree', app); if (fr) fr.addEventListener('click', () => doSpin(spin && spin.key));
       const re = UI.$('#chRespin', app);

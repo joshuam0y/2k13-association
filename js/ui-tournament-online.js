@@ -543,7 +543,7 @@
         ${body}${fit}`;
       refreshNet(); bindProg(UI.$('#tnProg', app));
       UI.$('#tnQuit', app).addEventListener('click', () => HOOK.quit());
-      if (spin && !ANIM[spin.n]) UI.challengeWheel.animate(app, teams, () => { ANIM[spin.n] = true; const cs = TN().spins[on]; if (cs && cs.n === spin.n) draft(app); }, { year: spin.year, abbr: spin.abbr }, { mode: B.era ? 'alltime' : 'versus' });
+      if (spin && !ANIM[spin.n]) UI.challengeWheel.animate(app, teams, () => { ANIM[spin.n] = true; const cs = TN().spins[on]; if (cs && cs.n === spin.n) draft(app); }, { year: spin.year, abbr: spin.abbr }, { mode: B.era ? 'alltime' : 'versus', seasons: cfg.seasons });
       const once = (id, a) => { const b = UI.$(id, app); if (b) b.addEventListener('click', () => { b.disabled = true; act(a); }); };
       once('#chSpin', { k: 'spin' }); once('#chRespin', { k: 'respin' }); once('#tnFree', { k: 'free' });
       app.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => {

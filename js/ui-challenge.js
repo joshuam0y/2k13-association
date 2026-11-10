@@ -345,6 +345,8 @@
     }
     const strip = reel.querySelector('.ch-reel-in');
     const alltime = cfg && cfg.mode === 'alltime';
+    // the years on the reel's cards: only the seasons switched on for this draft
+    const on = cfg && cfg.seasons && cfg.seasons.length ? cfg.seasons : null, pool = C.poolSeasons(), yrs = on && pool.filter(y => on.indexOf(y) >= 0).length ? pool.filter(y => on.indexOf(y) >= 0) : pool;
     const winner = s ? (alltime ? C.eraTeam(s.year, s.abbr) : null) || teams.find(t => t.abbr === s.abbr) : null;
     if (!strip || !winner) { done(); return; }
     // the reel deals teams like a shuffled deck: every team once per pass, never the same one twice in a row
@@ -360,7 +362,7 @@
     for (let i = 0; i < REEL_N; i++) {
       if (i === REEL_AT) { cards.push(reelCard(winner, alltime ? s.year : null, 'win')); continue; }
       const t = deck[i];
-      const yr = alltime ? C.poolSeasons()[Math.floor(Math.random() * C.poolSeasons().length)] : null;
+      const yr = alltime ? yrs[Math.floor(Math.random() * yrs.length)] : null;
       cards.push(reelCard(t, yr));
     }
     strip.innerHTML = cards.join('');

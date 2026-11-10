@@ -569,7 +569,7 @@
       UI.$('#vsSetup', app).addEventListener('click', () => go('setup'));
       // a new spin on either phone: both animate it
       if (spin && !ANIM[spin.n]) {
-        UI.challengeWheel.animate(app, teams, () => { ANIM[spin.n] = true; if (VS.spin && VS.spin.n === spin.n) draft(app); }, { year: spin.year, abbr: spin.abbr }, { mode: B.era ? 'alltime' : 'versus' });
+        UI.challengeWheel.animate(app, teams, () => { ANIM[spin.n] = true; if (VS.spin && VS.spin.n === spin.n) draft(app); }, { year: spin.year, abbr: spin.abbr }, { mode: B.era ? 'alltime' : 'versus', seasons: cfg.seasons });
       }
       const sp = UI.$('#chSpin', app);
       if (sp) sp.addEventListener('click', () => {
