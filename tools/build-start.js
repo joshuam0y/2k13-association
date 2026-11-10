@@ -52,7 +52,7 @@ function realContract(id, Y, team) {
 }
 const CAREER_KEYS = ['g', 'mpg', 'pts', 'reb', 'ast', 'stl', 'blk', 'fgp', 'tpp', 'ftp'];
 
-const AB = { NJN: 'BKN' };
+const AB = { NJN: 'BKN', CHH: 'NOH', VAN: 'MEM' };   // franchises under the abbreviation the Association uses
 const ab = a => AB[a] || a;
 function build(Y) {
   const d = era(Y);
