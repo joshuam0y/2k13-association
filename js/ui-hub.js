@@ -59,7 +59,7 @@
         <div class="mm-brand"><span class="mm-2k">STARTING</span><span class="mm-a">FIVE</span></div>
         <div class="mm-joint"><span>A</span> JOSHUA MOY <span>JOINT</span></div>
         <div class="mm-install" id="mmInstall">${UI.installButton ? UI.installButton() : ''}</div>
-        <div class="mm-k">${m && m.year ? 'THE ' + esc(UI.seasonLabel(m.year)) + ' NBA SEASON' : 'EVERY SEASON FROM 2003-04 TO 2026-27'}</div>
+        <div class="mm-k">${m && m.year ? 'THE ' + esc(UI.seasonLabel(m.year)) + ' NBA SEASON' : 'EVERY SEASON FROM 2002-03 TO 2026-27'}</div>
         <div class="mm-grid">
           ${UI.tile('#/challenge', 'draft', 'SEASON MODE', { cls: 'mt-hero mt-challenge mt-hot', disabled: !engineOk, sub: engineOk ? 'PICK FIVE, SIM A SEASON' : 'SIM ENGINE NOT LOADED' })}
           ${UI.tile('#/challenge/vs', 'draft', 'HEAD TO HEAD', { cls: 'mt-hero mt-versus mt-hot', disabled: !engineOk, sub: 'YOU VS A FRIEND, ONLINE OR ONE PHONE' })}

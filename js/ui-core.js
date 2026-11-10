@@ -85,6 +85,7 @@
 
   // Seasons a new Association can open in. Other than 2012-13 they load data/start-YYYY.js on demand.
   UI.START_YEARS = [
+    { year: 2003, label: '2002-03', note: "Duncan's second title, Yao's rookie year (generated contracts)", file: 'data/start-2003.js' },
     { year: 2004, label: '2003-04', note: "LeBron's rookie year", file: 'data/start-2004.js' },
     { year: 2005, label: '2004-05', note: 'The Bobcats arrive, Shaq goes to Miami', file: 'data/start-2005.js' },
     { year: 2006, label: '2005-06', note: "Kobe's 81-point season", file: 'data/start-2006.js' },
