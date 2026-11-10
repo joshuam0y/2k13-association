@@ -339,7 +339,9 @@
               <div><span class="ts-start-k">SHOT CLOCK</span><div class="ch-chips">${[[24, '24 SEC'], [0, 'OFF']].map(([v, l]) => `<button type="button" class="ch-chip${(VS.opts.timer || 0) === v ? ' on' : ''}" data-timer="${v}"${dis(boss)}>${l}</button>`).join('')}</div>
                 <small class="muted">${VS.opts.timer ? 'Run out of time and the wheel spins for you, or you get the best player on its team.' : 'No clock.'}</small></div>
               <div><span class="ts-start-k">BLIND DRAFT</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.blind ? ' on' : ''}" data-blind="0"${dis(boss)}>OFF</button><button type="button" class="ch-chip${VS.opts.blind ? ' on' : ''}" data-blind="1"${dis(boss)}>ON</button></div>
-                <small class="muted">${VS.opts.blind ? 'No ratings and no fit grades until the series is over: pick on what you know.' : 'Ratings and fit grades show while you draft.'}</small></div></div></div>
+                <small class="muted">${VS.opts.cap ? 'Off with a salary cap: the prices give the ratings away.' : VS.opts.blind ? 'No ratings and no fit grades until the series is over: pick on what you know.' : 'Ratings and fit grades show while you draft.'}</small></div>
+              <div><span class="ts-start-k">SALARY CAP</span><div class="ch-chips">${UI.challengeCap.CAPS.map(v => `<button type="button" class="ch-chip${(VS.opts.cap || 0) === v ? ' on' : ''}" data-cap="${v}"${dis(boss)}>${v ? '$' + v + 'M' : 'OFF'}</button>`).join('')}</div>
+                <small class="muted">${VS.opts.cap ? 'Every player has a price from his rating (a 99 is $45M, the minimum $1M). Both fives must fit under $' + VS.opts.cap + 'M.' : 'No cap: take anyone.'}</small></div></div></div>
           ${[0, 1].map(i => `<div class="ch-step"><div class="ch-step-k">${i + 4} | PLAYER ${i + 1}${me() === i ? ' (YOU)' : ''}</div>
             <label class="field"><span>NAME</span><input data-name="${i}" maxlength="20" placeholder="Player ${i + 1}" value="${esc(VS.names[i] || '')}"${dis(canAct(i))}></label>${grid(i)}</div>`).join('')}
           ${rivalBox(rivalry(), true)}
@@ -361,6 +363,7 @@
       app.querySelectorAll('[data-yr]').forEach(b => b.addEventListener('click', () => { const y = +b.dataset.yr, i = VS.skip.indexOf(y); if (i >= 0) VS.skip.splice(i, 1); else VS.skip.push(y); setYear(); redraw(); }));
       app.querySelectorAll('[data-seas]').forEach(b => b.addEventListener('click', () => { VS.skip = b.dataset.seas === 'all' ? [] : ALL_YEARS.slice(); setYear(); redraw(); }));
       app.querySelectorAll('[data-bo]').forEach(b => b.addEventListener('click', () => { VS.opts.bestOf = +b.dataset.bo; redraw(); }));
+      app.querySelectorAll('[data-cap]').forEach(b => b.addEventListener('click', () => { VS.opts.cap = +b.dataset.cap; if (VS.opts.cap) VS.opts.blind = false; redraw(); }));
       app.querySelectorAll('[data-blind]').forEach(b => b.addEventListener('click', () => { VS.opts.blind = b.dataset.blind === '1'; redraw(); }));
       app.querySelectorAll('[data-timer]').forEach(b => b.addEventListener('click', () => { VS.opts.timer = +b.dataset.timer; redraw(); }));
       app.querySelectorAll('[data-side]').forEach(b => b.addEventListener('click', () => { VS.teams[+b.dataset.side] = b.dataset.team; redraw(); }));
@@ -372,7 +375,7 @@
         const ch = chosen();
         if (!ch.length) { UI.toast('Switch on at least one season', 'error'); return; }
         VS.year = ch.length === 1 ? ch[0] : 0;
-        VS.cfg = { mode: 'versus', year: VS.year, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null, bestOf: VS.opts.bestOf, blind: !!VS.opts.blind, timer: +VS.opts.timer || 0, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
+        VS.cfg = { mode: 'versus', year: VS.year, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null, bestOf: VS.opts.bestOf, blind: !VS.opts.cap && !!VS.opts.blind, cap: +VS.opts.cap || 0, timer: +VS.opts.timer || 0, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
           sides: [0, 1].map(i => ({ team: VS.teams[i], name: VS.names[i] ? VS.names[i] + "'s " + tOf(teams, VS.teams[i]).name : '', picks: [] })) };
         VS.spin = null; VS.spun = []; VS.respins = [1, 1]; VS.shown = 0; VS.pos = ''; VS.q = '';
         VS.turn = turnFor(VS.cfg, 0, 'spin');
@@ -398,7 +401,7 @@
     });
     if (!era) d.free.forEach(p => { byId[p.id] = p; });
     const base = p => (era ? p.base : p.id);
-    return { era, teams, byId, players, base,
+    return { era, teams, byId, players, base, cap: +cfg.cap || 0,
       takenSet: ids => new Set(ids.map(id => (byId[id] ? base(byId[id]) : id))),
       teamFor: (abbr, year) => (era && C.eraTeam(year, abbr)) || tOf(teams, abbr),
       groupKey: p => (era ? p.season : cfg.year) + ':' + p.team };
@@ -406,7 +409,7 @@
   const short = y => "'" + String(y - 1).slice(2) + "-'" + String(y).slice(2);
   function playerRow(p, B, btn, blind) {
     const t = B.teamFor(p.team, p.season);
-    return `<li class="ch-pl"><span class="ch-pl-b"><b>${esc(p.name)}</b><small>${logo(t, 18)} ${esc(C.posLabel(p))}${B.era && p.season ? ' | ' + short(p.season) : p.age ? ' | ' + p.age : ''}</small></span>${ovrTag(p, blind)}${btn}</li>`;
+    return `<li class="ch-pl"><span class="ch-pl-b"><b>${esc(p.name)}</b><small>${logo(t, 18)} ${esc(C.posLabel(p))}${B.era && p.season ? ' | ' + short(p.season) : p.age ? ' | ' + p.age : ''}</small></span>${B.cap ? UI.challengeCap.priceTag(p) : ''}${ovrTag(p, blind)}${btn}</li>`;
   }
   function spinFor(cfg, B, taken, avoid) {
     const tk = B.takenSet(taken), groups = {};
@@ -438,9 +441,10 @@
       const taken = cfg.sides[0].picks.concat(cfg.sides[1].picks), on = C.vsOnClock(cfg);
       const fives = cfg.sides.map((sd, i) => {
         const t = tOf(teams, sd.team), mine = sd.picks.map(id => byId[id]).filter(Boolean);
-        return `<div class="vs-side${on === i ? ' on' : ''}" style="--c1:${esc(t.colors[0])}"><div class="vs-side-h">${logo(t, 36)}<div><small>${esc(who(i))}${me() === i ? ' (YOU)' : ''}</small><b>${esc(sd.name || tName(t))}</b></div></div>
+        return `<div class="vs-side${on === i ? ' on' : ''}" style="--c1:${esc(t.colors[0])}"><div class="vs-side-h">${logo(t, 36)}<div><small>${esc(who(i))}${me() === i ? ' (YOU)' : ''}</small><b>${esc(sd.name || tName(t))}</b>${pay(sd)}</div></div>
           <ol>${[0, 1, 2, 3, 4].map(k => `<li>${mine[k] ? esc(mine[k].name) + ' <small class="muted">' + esc(C.posLabel(mine[k])) + (B.era && mine[k].season ? ' ' + short(mine[k].season) : '') + '</small>' + (blind ? '' : ' <b class="' + UI.ovrClass(mine[k].ovr) + '">' + esc(mine[k].ovr) + '</b>') : '<span class="muted">-</span>'}</li>`).join('')}</ol></div>`;
       }).join('');
+      const pay = sd => (cfg.cap ? ` <small class="vs-pay">${UI.challengeCap.money(C.capState(cfg.cap, sd.picks.map(id => byId[id]).filter(Boolean)).spent)} of $${cfg.cap}M</small>` : '');
       const fitCard = (sd, i) => {
         if (!sd.picks.length) return '';
         const f = C.lineupFit(sd.picks.map(id => byId[id]).filter(Boolean));
@@ -461,16 +465,19 @@
         C.load(spin.year).then(() => { if (VS.spin && VS.spin.n === spin.n) draft(app); }).catch(() => UI.toast('That roster did not load. Try a re-spin.', 'error'));
       } else {
         const t = B.teamFor(spin.abbr, spin.year);
-        const ros = UI.challengeAlpha(rosterOf(B, spin.key, taken));
+        const ros = UI.challengeAlpha(rosterOf(B, spin.key, taken)), five = cfg.sides[on].picks.map(id => byId[id]).filter(Boolean);
+        const none = cfg.cap && !ros.some(p => C.capFits(cfg.cap, five, p));
         body = `<div class="vs-clock">ON THE CLOCK: <b>${esc(who(on))}</b> <span class="muted">(pick ${taken.length + 1} of 10)</span></div>
           <section class="ch-landed" style="--c1:${esc(t.colors[0])}">${logo(t, 64)}<div><div class="ch-wheel-k">THE WHEEL SAYS</div><div class="ch-landed-t">${B.era ? esc(lbl(spin.year)) + ' ' : ''}${esc(tName(t))}</div></div>
             ${mine && VS.respins[on] > 0 ? '<button type="button" class="btn btn-small" id="chRespin">RE-SPIN (1 LEFT)</button>' : ''}</section>
           ${mine ? '' : `<p class="muted">${esc(who(on))} is picking from the ${esc(t.name)}.</p>`}
-          <ul class="ch-list">${ros.map(p => playerRow(p, B, mine ? `<button type="button" class="btn btn-small btn-gold" data-add="${esc(p.id)}">TAKE</button>` : '', blind)).join('')}</ul>`;
+          ${cfg.cap ? UI.challengeCap.bar(cfg.cap, five) : ''}
+          ${none && mine ? '<div class="ch-ready"><div><b>NOBODY HERE FITS UNDER YOUR CAP.</b><span class="muted"> Spin again, on the house.</span></div><button type="button" class="btn btn-gold" id="vsFree">SPIN AGAIN</button></div>' : ''}
+          <ul class="ch-list">${ros.map(p => playerRow(p, B, mine ? UI.challengeCap.btn(cfg.cap, five, p, `<button type="button" class="btn btn-small btn-gold" data-add="${esc(p.id)}">TAKE</button>`) : '', blind)).join('')}</ul>`;
       }
       const turn = on >= 0 && VS.turn && VS.turn.pick === taken.length ? VS.turn : null;
       const clock = turn ? `<div class="vs-timer" id="vsTimer"><i style="--w:100%"></i><span>${Math.max(0, Math.ceil((turn.until - Date.now()) / 1000))}</span></div>` : '';
-      app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(lblC(cfg))} | TWO PLAYERS | BEST OF ${cfg.bestOf || 5}${blind ? ' | BLIND' : ''}${cfg.timer ? ' | ' + cfg.timer + ' SEC CLOCK' : ''}</div><div class="ch-top-t">THE DRAFT</div></div>
+      app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(lblC(cfg))} | TWO PLAYERS | BEST OF ${cfg.bestOf || 5}${blind ? ' | BLIND' : ''}${cfg.timer ? ' | ' + cfg.timer + ' SEC CLOCK' : ''}${cfg.cap ? ' | $' + cfg.cap + 'M CAP' : ''}</div><div class="ch-top-t">THE DRAFT</div></div>
           <button type="button" class="btn btn-small" id="vsSetup">SETUP</button></div>
         ${netBar()}
         <div class="vs-sides vs-compact">${fives}</div>
@@ -492,7 +499,9 @@
           stopTick();
           if (turn.phase === 'spin' && !VS.spin) { const s2 = spinFor(cfg, B, taken, null); if (s2) { VS.spin = s2; VS.spun = VS.spun.concat([s2.key]); VS.turn = turnFor(cfg, taken.length, 'pick'); push(); draft(app); } }
           else if (turn.phase === 'pick' && VS.spin && VS.spin.pick === taken.length) {
-            const pool = rosterOf(B, VS.spin.key, taken).sort((a, b) => b.ovr - a.ovr);
+            const five = cfg.sides[on].picks.map(id => byId[id]).filter(Boolean);
+            const pool = rosterOf(B, VS.spin.key, taken).filter(p => C.capFits(cfg.cap, five, p)).sort((a, b) => b.ovr - a.ovr);
+            if (!pool[0]) { VS.spin = null; VS.turn = turnFor(cfg, taken.length, 'spin'); push(); draft(app); return; }
             if (pool[0]) { VS.cfg.sides[on].picks.push(pool[0].id); VS.spin = null; VS.turn = turnFor(cfg, taken.length + 1, 'spin'); push(); UI.toast('Time: ' + who(on) + ' gets ' + pool[0].name + '.'); draft(app); }
           }
         };
@@ -510,6 +519,12 @@
         if (!s) return;
         VS.spin = s; VS.spun = VS.spun.concat([s.key]); VS.turn = turnFor(cfg, taken.length, 'pick'); push(); draft(app);
       });
+      const fr = UI.$('#vsFree', app);
+      if (fr) fr.addEventListener('click', () => {
+        const s = spinFor(cfg, B, taken, spin && spin.key);
+        if (!s) return;
+        VS.spin = s; VS.spun = VS.spun.concat([s.key]); VS.turn = turnFor(cfg, taken.length, 'pick'); push(); draft(app);
+      });
       const re = UI.$('#chRespin', app);
       if (re) re.addEventListener('click', () => {
         if (!(VS.respins[on] > 0)) return;
@@ -521,6 +536,8 @@
       app.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => {
         const i = C.vsOnClock(VS.cfg);
         if (i < 0 || !canAct(i)) return;
+        const p = byId[b.dataset.add];
+        if (VS.cfg.cap && p && !C.capFits(VS.cfg.cap, VS.cfg.sides[i].picks.map(id => byId[id]).filter(Boolean), p)) { UI.toast('That contract does not fit under the cap.', 'error'); return; }
         VS.cfg.sides[i].picks.push(b.dataset.add); VS.spin = null; VS.turn = turnFor(VS.cfg, taken.length + 1, 'spin'); push();
         draft(app); window.scrollTo(0, 0);
       }));

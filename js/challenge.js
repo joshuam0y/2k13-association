@@ -373,10 +373,29 @@
   function available(dr) { return dr.pool.filter(function (e) { return !dr.taken[e.base]; }); }
   function teamPicks(dr, abbr) { return dr.picks.filter(function (x) { return x.team === abbr; }).map(function (x) { return entry(dr, x.key); }); }
   function entry(dr, key) { for (var i = 0; i < dr.pool.length; i++) if (dr.pool[i].key === key) return dr.pool[i]; return null; }
+  // ---------- salary cap (cfg.cap, $ millions; 0 = off) ----------
+  // Every player has a price from his overall, like a Basketball GM contract: a 99 costs $45M, an 85 about
+  // $19M, a 70 about $3M, the minimum is $1M. The five must fit under the cap, so a pick may not leave less
+  // than the minimum for each spot still open.
+  var CAP_MIN = 1, CAP_SLOTS = 5;
+  function price(p) {
+    var x = clamp(((p.baseOvr || p.ovr || 60) - 60) / 39, 0, 1);
+    return Math.max(CAP_MIN, Math.round((1 + 44 * Math.pow(x, 1.9)) * 10) / 10);
+  }
+  function capState(cap, list) {
+    var spent = 0;
+    (list || []).forEach(function (p) { if (p) spent += price(p); });
+    spent = Math.round(spent * 10) / 10;
+    var open = Math.max(0, CAP_SLOTS - (list || []).filter(Boolean).length);
+    return { cap: cap, spent: spent, left: Math.round((cap - spent) * 10) / 10, open: open,
+      max: open ? Math.round((cap - spent - CAP_MIN * (open - 1)) * 10) / 10 : 0 };   // the most the next pick can cost
+  }
+  function capFits(cap, list, p) { return !cap || price(p) <= capState(cap, list).max + 1e-9; }
   function draftPick(dr, key) {
     var c = onClock(dr), e = entry(dr, key);
     if (!c) return { ok: false, reason: 'The draft is over.' };
     if (!e || dr.taken[e.base]) return { ok: false, reason: 'That player is already taken.' };
+    if (dr.cfg.cap && !capFits(dr.cfg.cap, teamPicks(dr, c.team), e)) return { ok: false, reason: 'That contract does not fit under the cap.' };
     dr.taken[e.base] = true;
     dr.picks.push({ n: c.n + 1, round: c.round, team: c.team, key: key });
     return { ok: true, slot: c, entry: e };
@@ -397,7 +416,12 @@
     if (!c) return null;
     var rng = mulberry32((dr.cfg.seed + (dr.picks.length + 1) * 7919) >>> 0);
     var best = null, bs = -1e9;
-    available(dr).slice(0, 50).forEach(function (e) { var s = aiScore(dr, c.team, e, rng); if (s > bs) { bs = s; best = e; } });
+    var mine = dr.cfg.cap ? teamPicks(dr, c.team) : null;
+    // under a cap the AI also weighs the price: value per dollar once the stars are gone
+    available(dr).filter(function (e) { return !mine || capFits(dr.cfg.cap, mine, e); }).slice(0, 50).forEach(function (e) {
+      var s = aiScore(dr, c.team, e, rng) - (mine ? 0.25 * price(e) : 0);
+      if (s > bs) { bs = s; best = e; }
+    });
     return best ? draftPick(dr, best.key) : null;
   }
   function simToUser(dr) {
@@ -744,6 +768,7 @@
   }
 
   var API = {
+    price: price, capState: capState, capFits: capFits, CAP_MIN: CAP_MIN,
     SEASONS: SEASONS, ROUNDS: ROUNDS, seasonInfo: seasonInfo, seasonData: seasonData, loaded: loaded, load: load, loadAll: loadAll,
     allTimePool: allTimePool, poolSeasons: poolSeasons, eraTeam: eraTeam, buildYear: buildYear, buildAllTime: buildAllTime, newDraft: newDraft, onClock: onClock,
     draftSlot: draftSlot, draftPick: draftPick, aiPick: aiPick, simToUser: simToUser, autoDraft: autoDraft, available: available,

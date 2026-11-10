@@ -485,3 +485,15 @@
 .vs-seas { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px; margin-bottom: 6px; }
 .vs-seas .ch-chip { justify-content: center; text-align: center; padding-left: 4px; padding-right: 4px; }
 .vs-seas .ch-chip:not(.on) { opacity: .45; text-decoration: line-through; }
+
+/* salary cap */
+.ch-price { font-family: var(--display); font-size: 12px; letter-spacing: .04em; color: #8fd19e; margin-right: 8px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ch-cap { margin: 8px 0; padding: 8px 12px; border: 1px solid var(--line2); background: var(--bg2); }
+.ch-cap-h { display: flex; align-items: baseline; gap: 8px; }
+.ch-cap-h span { font-family: var(--display); font-size: 11px; letter-spacing: .14em; color: var(--gold); flex: 1; }
+.ch-cap-h b { font-family: var(--display); font-size: 20px; }
+.ch-cap-bar { height: 6px; margin: 6px 0 4px; background: var(--line); overflow: hidden; }
+.ch-cap-bar i { display: block; height: 100%; background: linear-gradient(90deg, #5fd38a, var(--gold)); }
+.ch-cap.over .ch-cap-bar i { background: #ff6b6b; }
+.ch-cap small { font-size: 12px; }
+.vs-pay { display: block; color: #8fd19e; font-size: 11px; letter-spacing: .04em; }

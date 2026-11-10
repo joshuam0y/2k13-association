@@ -20,7 +20,7 @@
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } },
     del(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }
   };
-  let SETUP = Object.assign({ mode: 'year', year: 2013, build: 'free', team: '', name: '', injuries: true, era: 2013 }, ls.get(KEY_SETUP) || {});
+  let SETUP = Object.assign({ mode: 'year', year: 2013, build: 'free', team: '', name: '', injuries: true, era: 2013, cap: 0 }, ls.get(KEY_SETUP) || {});
   let CUR = null;        // { cfg, used: [], respins, spin, dr }
   let RUN = null;        // the season being simmed { ch, fast, paused }
   let VIEW = { pos: '', q: '', team: '', season: '', letter: '' };
@@ -144,6 +144,7 @@
           <div class="ch-row">
             <label class="field"><span>TEAM NAME (OPTIONAL)</span><input id="chName" maxlength="32" placeholder="${esc(s.team ? tName(teamOf(teams, s.team)) : 'Keep the real name')}" value="${esc(s.name || '')}"></label>
             <div class="field"><span>INJURIES</span><div class="ch-seg ch-seg-sm"><button type="button" class="ch-seg-b${s.injuries ? ' on' : ''}" data-inj="1"><b>ON</b></button><button type="button" class="ch-seg-b${!s.injuries ? ' on' : ''}" data-inj="0"><b>OFF</b></button></div></div>
+            <div class="field"><span>SALARY CAP</span><div class="ch-seg ch-seg-sm">${CAPS.map(v => `<button type="button" class="ch-seg-b${(s.cap || 0) === v ? ' on' : ''}" data-cap="${v}"><b>${v ? '$' + v + 'M' : 'OFF'}</b></button>`).join('')}</div></div>
           </div>
         </div>
         <div class="ch-go"><button type="button" class="btn btn-gold btn-big" id="chStart"${s.team ? '' : ' disabled'}>${s.team ? 'START THE DRAFT' : 'PICK A FRANCHISE'}</button>
@@ -162,6 +163,7 @@
     app.querySelectorAll('[data-era]').forEach(b => b.addEventListener('click', () => { SETUP.era = +b.dataset.era; redraw(); }));
     app.querySelectorAll('[data-build]').forEach(b => b.addEventListener('click', () => { SETUP.build = b.dataset.build; redraw(); }));
     app.querySelectorAll('[data-inj]').forEach(b => b.addEventListener('click', () => { SETUP.injuries = b.dataset.inj === '1'; redraw(); }));
+    app.querySelectorAll('[data-cap]').forEach(b => b.addEventListener('click', () => { SETUP.cap = +b.dataset.cap; redraw(); }));
     app.querySelectorAll('[data-team]').forEach(b => b.addEventListener('click', () => { SETUP.team = b.dataset.team; redraw(); }));
     const nm = UI.$('#chName');
     nm.addEventListener('input', () => { SETUP.name = nm.value; ls.set(KEY_SETUP, SETUP); });
@@ -169,7 +171,7 @@
     UI.$('#chStart').addEventListener('click', () => {
       if (!SETUP.team) return;
       const cfg = { mode: SETUP.mode, year: isAll ? 2013 : SETUP.year, build: SETUP.build, team: SETUP.team, name: (SETUP.name || '').trim(),
-        injuries: SETUP.injuries, era: SETUP.era || 2013, seed: Math.floor(Math.random() * 2147483646) + 1, picks: [] };
+        injuries: SETUP.injuries, era: SETUP.era || 2013, cap: +SETUP.cap || 0, seed: Math.floor(Math.random() * 2147483646) + 1, picks: [] };
       ensureData(cfg, app, () => {
         try {
           CUR = { cfg, used: [], respins: 1, spin: null, dr: isAll ? C.newDraft(cfg) : null };
@@ -198,6 +200,18 @@
       <ul class="ch-fit-slots">${slots}</ul>${parts ? `<ul class="ch-fit-parts">${parts}</ul>` : ''}</section>`;
   }
   UI.challengeFit = fitHtml;
+  // ---------- salary cap: a price on every player, a bar for the five, picks that do not fit are locked ----------
+  const CAPS = [0, 80, 100, 120];
+  const money = v => '$' + (+v).toFixed(1) + 'M';
+  const priceTag = p => `<span class="ch-price">${money(C.price(p))}</span>`;
+  function capBar(cap, list) {
+    if (!cap) return '';
+    const s = C.capState(cap, list), pct = Math.min(100, Math.round(100 * s.spent / cap));
+    return `<div class="ch-cap${s.left < 0 ? ' over' : ''}"><div class="ch-cap-h"><span>SALARY CAP</span><b>${money(s.spent)}</b><small>of ${money(cap)}</small></div><div class="ch-cap-bar"><i style="width:${pct}%"></i></div>
+      <small class="muted">${s.open ? `${money(s.left)} left for ${s.open} spot${s.open === 1 ? '' : 's'}. The next pick can cost up to ${money(s.max)}.` : `${money(s.left)} under the cap.`}</small></div>`;
+  }
+  const capBtn = (cap, list, p, html) => (!cap || C.capFits(cap, list, p) ? html : '<button type="button" class="btn btn-small" disabled>OVER CAP</button>');
+  UI.challengeCap = { CAPS, money, priceTag, bar: capBar, btn: capBtn };
   // the wheel, for js/ui-versus.js: UI.challengeWheel.strip(teams) and .animate(app, teams, done, spin, cfg)
   UI.challengeWheel = { strip: teams => wheelStrip(teams), animate: (app, teams, done, s, cfg) => animateSpin(app, teams, done, s, cfg) };
   // Draft lists go A to Z by last name, never by rating (the order would give the ratings away). A long list
@@ -222,7 +236,7 @@
       const from = p.from || p.team;
       const t = p.season && p.season !== 2013 && C.eraTeam(p.season, from) || teamOf(teams, from);
       out.push(`<div class="ch-slot" style="--c1:${esc((t.colors || ['#333'])[0])}">${face(p, (t.colors || ['#444'])[0], 'ch-slot-hs')}
-        <span class="ch-slot-b"><b>${esc(p.name)}</b><small>${esc(C.primaryPos(p.pos))} | ${p.label ? esc(short(p.season)) + ' ' : ''}${esc(t.abbr)}</small></span><span class="ch-ovr ${UI.ovrClass(p.ovr)}">${p.ovr}</span>
+        <span class="ch-slot-b"><b>${esc(p.name)}</b><small>${esc(C.primaryPos(p.pos))} | ${p.label ? esc(short(p.season)) + ' ' : ''}${esc(t.abbr)}${CUR && CUR.cfg && CUR.cfg.cap ? ' | ' + money(C.price(p)) : ''}</small></span><span class="ch-ovr ${UI.ovrClass(p.ovr)}">${p.ovr}</span>
         ${removable ? `<button type="button" class="ch-x" data-drop="${esc(p.id)}" aria-label="Remove ${esc(p.name)}">&times;</button>` : ''}</div>`);
     }
     return `<div class="ch-slots">${out.join('')}</div>`;
@@ -231,7 +245,7 @@
     const from = p.from || p.team;
     const t = p.season && p.season !== 2013 && C.eraTeam(p.season, from) || teamOf(teams, from);
     return `<li class="ch-pl">${face(p, (t.colors || ['#444'])[0])}<span class="ch-pl-b"><b>${esc(p.name)}</b><small>${logo(t, 18)} ${esc(String(p.pos || '').replace(/-/g, '/'))}${p.age ? ' | ' + p.age : ''}${p.label ? ' | ' + esc(p.label) : ''}</small></span>
-      <span class="ch-ovr ${UI.ovrClass(p.ovr)}">${p.ovr}</span>${btn || ''}</li>`;
+      ${CUR && CUR.cfg && CUR.cfg.cap ? priceTag(p) : ''}<span class="ch-ovr ${UI.ovrClass(p.ovr)}">${p.ovr}</span>${btn || ''}</li>`;
   }
 
   function drawPick(app) {
@@ -249,19 +263,27 @@
       body = `<div class="ch-filters">${[''].concat(POS).map(x => `<button type="button" class="ch-chip sm${VIEW.pos === x ? ' on' : ''}" data-pos="${x}">${x || 'ALL'}</button>`).join('')}
           <select id="chTeamF" aria-label="Team"><option value="">ALL TEAMS</option>${teams.slice().sort((a, b) => tName(a).localeCompare(tName(b))).map(t => `<option value="${esc(t.abbr)}"${VIEW.team === t.abbr ? ' selected' : ''}>${esc(tName(t))}</option>`).join('')}</select>
           <input id="chQ" placeholder="Search players" value="${esc(VIEW.q)}" autocomplete="off"></div>
-        ${(() => { const L = byLetter(list, !!(q || VIEW.team)); return L.bar + `<ul class="ch-list">${L.rows.map(p => playerRow(p, teams, `<button type="button" class="btn btn-small btn-gold" data-add="${esc(p.id)}">ADD</button>`)).join('')}</ul>`; })()}
+        ${(() => { const L = byLetter(list, !!(q || VIEW.team)); return L.bar + `<ul class="ch-list">${L.rows.map(p => playerRow(p, teams, capBtn(cfg.cap, mine, p, `<button type="button" class="btn btn-small btn-gold" data-add="${esc(p.id)}">ADD</button>`))).join('')}</ul>`; })()}
         ${list.length ? '' : '<p class="muted">Nobody matches.</p>'}`;
     }
     app.innerHTML = `
       <div class="ch-top">${logo(me, 48)}<div><div class="ch-top-k">${esc(seasonLabel(cfg.year))} | ${esc(BUILD[cfg.build].label)}</div><div class="ch-top-t">${esc(cfg.name || tName(me))}</div></div>
         <a class="btn btn-small" href="#/challenge">SETUP</a></div>
       ${slotsHtml(mine, teams, cfg.build === 'free')}
+      ${capBar(cfg.cap, mine)}
       ${mine.length ? fitHtml(C.lineupFit(mine)) : ''}
       ${full ? `<div class="ch-ready"><div><b>YOUR FIVE IS SET.</b><span class="muted"> Eight scrubs fill the bench.</span></div><button type="button" class="btn btn-gold btn-big" id="chSim">SIM THE SEASON</button></div>` : ''}
       ${body}`;
     bindPick(app);
   }
 
+  // the five picked so far (players, not ids), for the cap
+  function myFive(cfg) {
+    if (cfg.mode === 'alltime') return CUR.dr ? C.teamPicks(CUR.dr, cfg.team) : [];
+    const d = C.seasonData(cfg.year), byId = {};
+    d.players.concat(d.free).forEach(p => { byId[p.id] = p; });
+    return cfg.picks.map(id => byId[id]).filter(Boolean);
+  }
   function wheelHtml(cfg, teams, full) {
     const left = 5 - cfg.picks.length;
     if (full) return '';
@@ -270,10 +292,11 @@
         <button type="button" class="btn btn-gold btn-big" id="chSpin">SPIN THE WHEEL</button><p class="muted ch-small">${left} spin${left === 1 ? '' : 's'} left${CUR.respins ? ', one re-spin saved' : ''}.</p></section>`;
     }
     const s = CUR.spin, t = cfg.mode === 'alltime' ? (C.eraTeam(s.year, s.abbr) || teamOf(teams, s.abbr)) : teamOf(teams, s.abbr);
-    const ros = alpha(C.spinRoster(cfg, s, CUR.dr));
+    const ros = alpha(C.spinRoster(cfg, s, CUR.dr)), mine = myFive(cfg), none = cfg.cap && !ros.some(p => C.capFits(cfg.cap, mine, p));
     return `<section class="ch-landed" style="--c1:${esc(t.colors[0])}">${logo(t, 64)}<div><div class="ch-wheel-k">THE WHEEL SAYS</div><div class="ch-landed-t">${cfg.mode === 'alltime' ? esc(seasonLabel(s.year)) + ' ' : ''}${esc(tName(t))}</div></div>
         ${CUR.respins ? '<button type="button" class="btn btn-small" id="chRespin">RE-SPIN (1 LEFT)</button>' : ''}</section>
-      <ul class="ch-list">${ros.map(p => playerRow(p, teams, `<button type="button" class="btn btn-small btn-gold" data-take="${esc(p.key || p.id)}">TAKE</button>`)).join('')}</ul>`;
+      ${none ? '<div class="ch-ready"><div><b>NOBODY HERE FITS UNDER YOUR CAP.</b><span class="muted"> Spin again, on the house.</span></div><button type="button" class="btn btn-gold" id="chSpin">SPIN AGAIN</button></div>' : ''}
+      <ul class="ch-list">${ros.map(p => playerRow(p, teams, capBtn(cfg.cap, mine, p, `<button type="button" class="btn btn-small btn-gold" data-take="${esc(p.key || p.id)}">TAKE</button>`))).join('')}</ul>`;
   }
   // The wheel: a reel of team cards that speeds past and slows to a stop exactly on the team you got.
   const REEL_W = 132, REEL_GAP = 10, REEL_AT = 32, REEL_N = 38;
@@ -360,6 +383,7 @@
     });
     app.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => {
       if (cfg.picks.length >= 5) return;
+      if (cfg.cap) { const d = C.seasonData(cfg.year), p = d.players.concat(d.free).find(x => x.id === b.dataset.add); if (p && !C.capFits(cfg.cap, myFive(cfg), p)) { UI.toast('That contract does not fit under the cap.', 'error'); return; } }
       cfg.picks.push(b.dataset.add);
       redraw();
       if (cfg.picks.length === 5) window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -387,7 +411,11 @@
         CUR.spin = null;
         C.simToUser(CUR.dr);
         cfg.picks = C.teamPicks(CUR.dr, cfg.team).map(e => e.key);
-      } else { cfg.picks.push(id); CUR.spin = null; }
+      } else {
+        const p = cfg.cap && C.spinRoster(cfg, CUR.spin, CUR.dr).find(x => (x.key || x.id) === id);
+        if (p && !C.capFits(cfg.cap, myFive(cfg), p)) { UI.toast('That contract does not fit under the cap.', 'error'); return; }
+        cfg.picks.push(id); CUR.spin = null;
+      }
       redraw();
     }));
     const sim = UI.$('#chSim');
@@ -421,7 +449,7 @@
       board = `<div class="ch-filters">${[''].concat(POS).map(x => `<button type="button" class="ch-chip sm${VIEW.pos === x ? ' on' : ''}" data-pos="${x}">${x || 'ALL'}</button>`).join('')}
           <select id="chSeasonF" aria-label="Season"><option value="">ALL SEASONS</option>${C.SEASONS.filter(s => C.poolSeasons().indexOf(s.year) >= 0).map(s => `<option value="${s.year}"${+VIEW.season === s.year ? ' selected' : ''}>${esc(s.label)}</option>`).join('')}</select>
           <input id="chQ" placeholder="Search players" value="${esc(VIEW.q)}" autocomplete="off"></div>
-        ${(() => { const L = byLetter(list, !!q); return L.bar + `<ul class="ch-list">${L.rows.map(e => playerRow(e, teams, `<button type="button" class="btn btn-small btn-gold" data-take="${esc(e.key)}">DRAFT</button>`)).join('')}</ul>`; })()}
+        ${(() => { const L = byLetter(list, !!q); return L.bar + `<ul class="ch-list">${L.rows.map(e => playerRow(e, teams, capBtn(cfg.cap, mine, e, `<button type="button" class="btn btn-small btn-gold" data-take="${esc(e.key)}">DRAFT</button>`))).join('')}</ul>`; })()}
         ${list.length ? '' : '<p class="muted">Nobody matches.</p>'}`;
     }
     const recent = dr.picks.slice(-10).reverse();
@@ -429,6 +457,7 @@
       <div class="ch-top">${logo(me, 48)}<div><div class="ch-top-k">ALL-TIME | ${esc(BUILD[cfg.build].label)} | ${esc(seasonLabel(cfg.era))} RULES</div><div class="ch-top-t">${esc(cfg.name || tName(me))}</div></div>
         <a class="btn btn-small" href="#/challenge">SETUP</a></div>
       ${slotsHtml(mine, teams, false)}
+      ${capBar(cfg.cap, mine)}
       ${mine.length ? fitHtml(C.lineupFit(mine)) : ''}
       ${full ? `<div class="ch-ready"><div><b>THE DRAFT IS DONE.</b><span class="muted"> 30 teams, five each, scrub benches everywhere.</span></div><button type="button" class="btn btn-gold btn-big" id="chSim">SIM THE SEASON</button></div>` : clock}
       ${board}
