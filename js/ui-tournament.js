@@ -204,7 +204,8 @@
           <div class="ts-start-k tn-hk">HUMAN PLAYERS</div>
           <div class="ch-chips">${chips(Array.from({ length: n }, (_, i) => [i + 1, String(i + 1)]), hum(), 'hum')}</div>
           <small class="muted">${hum() < n ? (n - hum()) + ' AI team' + (n - hum() > 1 ? 's' : '') + ' fill the rest of the bracket and draft on their own.' : 'Everyone is human. Pick fewer to add AI teams.'}</small>
-          <div class="tn-names">${names.slice(0, hum()).map((v, i) => `<label class="field"><span>PLAYER ${i + 1}</span><input data-name="${i}" maxlength="20" placeholder="Player ${i + 1}" value="${esc(v)}" autocomplete="off"></label>`).join('')}</div></div>
+          <div class="tn-names">${names.slice(0, hum()).map((v, i) => `<label class="field"><span>PLAYER ${i + 1}</span><input data-name="${i}" maxlength="20" placeholder="Player ${i + 1}" value="${esc(v)}" autocomplete="off"></label>`).join('')}</div>
+          <div class="ch-go"><button type="button" class="btn btn-small" id="tnResetNames">RESET NAMES</button></div></div>
         <div class="ch-step"><div class="ch-step-k">2 | THE SEASON</div>
           <div class="row-btns vs-seas-all"><button type="button" class="btn btn-small${!TN.skip.length ? ' on' : ''}" data-seas="all">ALL</button><button type="button" class="btn btn-small" data-seas="none">CLEAR</button>
             ${decs.map(d => `<button type="button" class="btn btn-small${ALL_YEARS.filter(y => decOf(y) === d).every(y => TN.skip.indexOf(y) < 0) ? ' on' : ''}" data-dec="${d}">${d + 1}S</button>`).join('')}</div>
@@ -228,6 +229,7 @@
     app.querySelectorAll('[data-n]').forEach(b => b.addEventListener('click', () => { const was = hum() === TN.n; TN.n = +b.dataset.n; TN.humans = was ? TN.n : Math.min(hum(), TN.n); redraw(); }));
     app.querySelectorAll('[data-hum]').forEach(b => b.addEventListener('click', () => { TN.humans = +b.dataset.hum; redraw(); }));
     app.querySelectorAll('[data-name]').forEach(inp => inp.addEventListener('change', () => { readNames(); save(); }));
+    const rnm = app.querySelector('#tnResetNames'); if (rnm) rnm.addEventListener('click', () => { TN.names = TN.names.map(() => ''); save(); app.querySelectorAll('[data-name]').forEach(i => { i.value = ''; }); });
     app.querySelectorAll('[data-yr]').forEach(b => b.addEventListener('click', () => { const y = +b.dataset.yr, i = TN.skip.indexOf(y); if (!TN.skip.length) TN.skip = ALL_YEARS.filter(x => x !== y); else if (i >= 0) TN.skip.splice(i, 1); else TN.skip.push(y); redraw(); }));
     app.querySelectorAll('[data-dec]').forEach(b => b.addEventListener('click', () => {
       const ys = ALL_YEARS.filter(y => decOf(y) === +b.dataset.dec), allOn = ys.every(y => TN.skip.indexOf(y) < 0);

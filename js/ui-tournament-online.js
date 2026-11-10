@@ -21,7 +21,7 @@
     set(v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode */ } },
     del() { try { localStorage.removeItem(k); } catch (e) { /* private mode */ } }
   });
-  const lsHost = store('a13-tn-host'), lsRoom = store('a13-tn-room'), lsName = store('a13-tn-name');
+  const lsHost = store('a13-tn-host'), lsRoom = store('a13-tn-room'), lsName = { get: () => UI.profile.name(), set: v => UI.profile.set(v) };
   const CID = (() => { try { let c = localStorage.getItem('a13-tn-cid'); if (!c) { c = Math.random().toString(36).slice(2, 12); localStorage.setItem('a13-tn-cid', c); } return c; } catch (e) { return Math.random().toString(36).slice(2, 12); } })();
   const NET = { role: null, code: '', status: '', err: '', client: null, key: null, me: '', peerSeen: 0, timers: [] };
   const SEEN = {};
@@ -380,16 +380,17 @@
         <p class="ch-hero-p">Four or eight teams. One phone hosts and runs the bracket, everyone else joins with a room code. You all draft at the same time on your own phones, then watch every game together.</p></section>
       <div id="tnNet">${netBar()}</div>
       <div class="ch-setup tn-setup">
-        <div class="ch-step"><div class="ch-step-k">1 | YOUR NAME</div><label class="field"><span>NAME</span><input id="tnNm" maxlength="20" placeholder="Your name" value="${esc(name)}" autocomplete="off"></label></div>
+        ${UI.profile.bar()}
         <div class="ch-step"><div class="ch-step-k">2 | HOST A ROOM</div>
-          <div class="ch-go"><button type="button" class="btn btn-gold btn-big" id="tnHost">HOST A ROOM</button>${saved && saved.code ? '<button type="button" class="btn" id="tnResume">RESUME YOUR ROOM ' + esc(saved.code) + '</button>' : ''}</div></div>
+          <div class="ch-go"><button type="button" class="btn btn-gold btn-big" id="tnHost"${name ? '' : ' disabled'}>HOST A ROOM</button>${saved && saved.code ? '<button type="button" class="btn" id="tnResume">RESUME YOUR ROOM ' + esc(saved.code) + '</button>' : ''}</div></div>
         <div class="ch-step"><div class="ch-step-k">3 | OR JOIN ONE</div>
-          <div class="vs-join"><label class="field"><span>ROOM CODE</span><input id="tnCode" maxlength="5" placeholder="ABCDE" value="${esc(PEND || '')}" autocomplete="off" autocapitalize="characters"></label><button type="button" class="btn btn-gold" id="tnJoin">JOIN</button></div>
+          <div class="vs-join"><label class="field"><span>ROOM CODE</span><input id="tnCode" maxlength="5" placeholder="ABCDE" value="${esc(PEND || '')}" autocomplete="off" autocapitalize="characters"></label><button type="button" class="btn btn-gold" id="tnJoin"${name ? '' : ' disabled'}>JOIN</button></div>
           ${room && room.code ? '<div class="ch-go"><button type="button" class="btn" id="tnRejoin">REJOIN ROOM ' + esc(room.code) + '</button></div>' : ''}</div>
         <div class="ch-go"><a class="btn" href="#/challenge/tournament">ONE PHONE INSTEAD</a><a class="btn" href="#/home">HOME</a></div>
       </div>`;
     refreshNet();
-    const nm = () => { const v = UI.$('#tnNm', app).value.trim().slice(0, 20); lsName.set(v); return v; };
+    UI.profile.wire(app, () => entry(app));
+    const nm = () => UI.profile.name();
     UI.$('#tnHost', app).addEventListener('click', () => {
       const v = nm() || 'HOST';
       A.swap(fresh(v)); LAST = { page: '', mine: '' }; SIG = '';
