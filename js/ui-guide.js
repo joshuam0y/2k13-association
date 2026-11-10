@@ -252,11 +252,26 @@
           <dt>SHOT CLOCK</dt><dd>24 seconds per pick, or OFF.</dd>
           <dt>SALARY CAP</dt><dd>Every player has a price. Stay under the cap for all five.</dd>
         </dl>`;
+  const HOME_HELP = `<p>Three ways to play. Tap a tile on the main menu to start.</p>
+        <h3>SEASON MODE</h3>
+        <p>Draft five players from one season or from all of NBA history, then sim a full season. Your five play every minute and never get hurt.</p>
+        <h3>HEAD TO HEAD</h3>
+        <p>Draft against a friend, online with a room code or on one phone, and play a best of 3, 5 or 7 series.</p>
+        <h3>THE ASSOCIATION</h3>
+        <p>A full franchise: run one team through trades, free agency, drafts and many seasons, from 2003-04 to today.</p>
+        <h3>MORE</h3>
+        <dl class="gd-dl">
+          <dt>CONTINUE / LOAD</dt><dd>Pick up an Association league where you left off.</dd>
+          <dt>SOUNDTRACK</dt><dd>Music while you play.</dd>
+          <dt>MENU</dt><dd>About, FAQ, Contact and the legal pages.</dd>
+        </dl>
+        <p class="muted">Open the ? on any mode for its own rules.</p>`;
   function modeOf() {
     const h = location.hash || '';
     if (/^#\/challenge\/vs/.test(h)) return { tag: ': HEAD TO HEAD', body: VS_HELP, assoc: false };
     if (/^#\/challenge/.test(h)) return { tag: ': SEASON MODE', body: SEASON_HELP, assoc: false };
-    return { tag: '', body: ASSOC_HELP, assoc: true };
+    if (document.body.classList.contains('no-assoc-nav')) return { tag: '', body: HOME_HELP, assoc: false };
+    return { tag: ': THE ASSOCIATION', body: ASSOC_HELP, assoc: true };
   }
   let helpEl = null;
   function closeHelp() {
