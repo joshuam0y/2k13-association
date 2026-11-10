@@ -50,12 +50,13 @@
     if (m.t === 'hello' && NET.role === 'host') { if (m.name) VS.names[1] = String(m.name).slice(0, 20); push(); route(); return; }
     if (m.t === 'state' && m.s) { SHARED.forEach(k => { if (k in m.s) VS[k] = m.s[k]; }); ls.set(VS); route(); }
     if (m.t === 'react' && REACTS.indexOf(m.r) >= 0) bubble(m.r, String(m.name || '').slice(0, 20), false);
+    if (m.t === 'chat' && m.text) { addChat({ name: String(m.name || '').slice(0, 20), text: String(m.text).slice(0, 300), mine: false }); }
   }
   function wire(c) {
     NET.conn = c;
-    c.on('open', () => { NET.status = 'connected'; NET.err = ''; if (NET.role === 'guest') c.send({ t: 'hello', name: VS.names[1] || '' }); else push(); route(); });
+    c.on('open', () => { NET.status = 'connected'; NET.err = ''; if (NET.role === 'guest') c.send({ t: 'hello', name: VS.names[1] || '' }); else push(); route(); drawChat(); });
     c.on('data', onMsg);
-    c.on('close', () => { NET.status = 'lost'; route(); });
+    c.on('close', () => { NET.status = 'lost'; route(); drawChat(); });
     c.on('error', () => { NET.status = 'lost'; route(); });
   }
   function hangUp() {
@@ -140,6 +141,43 @@
       if (linked()) try { NET.conn.send({ t: 'react', r, name }); } catch (e) { /* closed */ }
     }));
   }
+
+  // ---------- chat (online): a message panel on both phones ----------
+  const CHAT = { list: [], open: false, unread: 0 };
+  function addChat(msg) {
+    CHAT.list.push(Object.assign({ at: Date.now() }, msg));
+    if (CHAT.list.length > 100) CHAT.list.shift();
+    if (!msg.mine && !CHAT.open) { CHAT.unread++; bubble('💬 ' + msg.text.slice(0, 40), msg.name, false); }
+    drawChat();
+  }
+  function drawChat() {
+    let box = document.getElementById('vsChat');
+    if (!linked() || !/^#\/challenge\/vs/.test(location.hash)) { if (box) box.remove(); return; }
+    if (!box) {
+      box = document.createElement('div'); box.id = 'vsChat'; box.className = 'vs-chat';
+      document.body.appendChild(box);
+      box.addEventListener('click', e => {
+        if (e.target.closest('[data-chat="toggle"]')) { CHAT.open = !CHAT.open; if (CHAT.open) CHAT.unread = 0; drawChat(); if (CHAT.open) { const i = box.querySelector('input'); if (i) i.focus(); } }
+      });
+      box.addEventListener('submit', e => {
+        e.preventDefault();
+        const i = box.querySelector('input'), text = (i.value || '').trim().slice(0, 300);
+        if (!text) return;
+        i.value = '';
+        const name = who(me());
+        addChat({ name, text, mine: true });
+        try { NET.conn.send({ t: 'chat', text, name }); } catch (err) { /* closed */ }
+        const again = box.querySelector('input'); if (again) again.focus();
+      });
+    }
+    const msgs = CHAT.list.map(m => `<li class="${m.mine ? 'mine' : ''}"><small>${esc(m.name)}</small><span>${esc(m.text)}</span></li>`).join('');
+    box.innerHTML = `<button type="button" class="vs-chat-btn" data-chat="toggle" aria-expanded="${CHAT.open}">💬 CHAT${CHAT.unread ? `<b>${CHAT.unread}</b>` : ''}</button>
+      ${CHAT.open ? `<div class="vs-chat-panel"><div class="vs-chat-h"><span>CHAT WITH ${esc(who(me() === 0 ? 1 : 0)).toUpperCase()}</span><button type="button" data-chat="toggle" aria-label="Close chat">&times;</button></div>
+        <ol class="vs-chat-list">${msgs || '<li class="muted">Say something. Trash talk welcome.</li>'}</ol>
+        <form class="vs-chat-form"><input maxlength="300" placeholder="Message" autocomplete="off" enterkeyhint="send"><button type="submit" class="btn btn-gold btn-small">SEND</button></form></div>` : ''}`;
+    const list = box.querySelector('.vs-chat-list'); if (list) list.scrollTop = list.scrollHeight;
+  }
+  window.addEventListener('hashchange', drawChat);
 
   // ---------- routing ----------
   function route() {
