@@ -962,3 +962,9 @@ img.hs.hs-br { object-fit: cover; object-position: center 18%; }
 body.no-assoc-nav .mainnav > a { display: none; }
 body.no-assoc-nav .nm-group[data-grp="MY TEAM"], body.no-assoc-nav .nm-group[data-grp="SEASON"], body.no-assoc-nav .nm-group[data-grp="LEAGUE"], body.no-assoc-nav .nm-group[data-grp="MORE"],
 body.no-assoc-nav .navmore-list a[data-nav="settings"], body.no-assoc-nav .navmore-list a[data-nav="commish"] { display: none; }
+
+/* the music bar can be hidden entirely (js/ui-music.js); a small note button brings it back */
+body.mb-off .musicbar { display: none; }
+.mb-pill { position: fixed; right: 10px; bottom: 10px; z-index: 41; width: 40px; height: 40px; border-radius: 50%; background: #000; color: var(--gold); border: 1px solid var(--gold-dim); font-size: 18px; cursor: pointer; }
+.mb-pill[hidden] { display: none; }
+body.ct-full-on .mb-pill { display: none; }

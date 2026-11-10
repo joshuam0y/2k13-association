@@ -214,18 +214,31 @@
         <div class="ct-stage">
           <svg class="ct-svg" role="img" aria-label="Court view of the game" preserveAspectRatio="xMidYMid meet"></svg>
           <div class="ct-banner" hidden></div>
-          <div class="ct-card" hidden></div>
         </div>
+        <div class="ct-card"></div>
         <div class="ct-line"><span class="ct-lt"></span><span class="ct-lx">Tip-off coming up</span></div>
         <div class="ct-ctrl">
           <button type="button" class="btn btn-small ct-play" aria-label="Pause">PAUSE</button>
           ${[1, 2, 4].map(s => `<button type="button" class="btn btn-small ct-spd${s === 1 ? ' on' : ''}" data-speed="${s}">${s}X</button>`).join('')}
           <button type="button" class="btn btn-small ct-skip" aria-label="Skip to the end of the quarter">SKIP QTR</button>
+          <button type="button" class="btn btn-small ct-fs" aria-label="Full screen">FULL SCREEN</button>
+          ${window.MUSICBAR ? '<button type="button" class="btn btn-small ct-mus" aria-label="Music bar"></button>' : ''}
           ${window.SFX ? `<button type="button" class="btn btn-small ct-sfx${window.SFX.on ? ' on' : ''}" aria-label="Sound effects">${window.SFX.on ? 'SOUND ON' : 'SOUND OFF'}</button>` : ''}
         </div>
         <div class="ct-floor-list" aria-label="On the floor"></div>
       </div>`;
     const $ = sel => el.querySelector(sel);
+    // full screen watch mode: the score, the court, the play, the controls and the five-a-side chips on one screen, no scrolling
+    const FSKEY = 'a13-ct-full';
+    let full = opts.full != null ? !!opts.full : (() => { try { return localStorage.getItem(FSKEY) !== '0'; } catch (e) { return true; } })();
+    const narrow = () => (full ? window.innerWidth < NARROW || window.innerHeight > window.innerWidth * 1.15 : !!(el.clientWidth && el.clientWidth < NARROW));
+    const wrapEl = $('.ct-wrap');
+    const applyFull = () => {
+      wrapEl.classList.toggle('ct-full', full);
+      document.body.classList.toggle('ct-full-on', full);
+      const fb = $('.ct-fs'); if (fb) fb.textContent = full ? 'EXIT FULL SCREEN' : 'FULL SCREEN';
+    };
+    const syncMus = () => { const b = $('.ct-mus'); if (b && window.MUSICBAR) b.textContent = window.MUSICBAR.hidden() ? 'SHOW MUSIC' : 'HIDE MUSIC'; };
     const svg = $('.ct-svg');
     const NS = 'http://www.w3.org/2000/svg';
     const mk = (tag, attrs, parent) => {
@@ -239,7 +252,7 @@
     // ---------- drawing ----------
     function toScreen(x, y) { return st.mode === 'v' ? [CH - y + M, x + M] : [x + M, y + M]; }
     function build() {
-      st.mode = el.clientWidth && el.clientWidth < NARROW ? 'v' : 'h';
+      st.mode = narrow() ? 'v' : 'h';
       const v = st.mode === 'v';
       svg.setAttribute('viewBox', v ? `0 ${st.camY} ${CH + 2 * M} ${V_WIN}` : `0 0 ${CW + 2 * M} ${CH + 2 * M}`);
       svg.classList.toggle('ct-v', v);
@@ -364,14 +377,13 @@
     }
     function card() {
       const c = $('.ct-card');
-      if (!st.sel || !info[st.sel]) { c.hidden = true; return; }
+      if (!st.sel || !info[st.sel]) { c.classList.add('empty'); c.innerHTML = '<span class="ct-hint">TAP A PLAYER ON THE COURT OR BELOW TO FOLLOW HIM</span>'; return; }
+      c.classList.remove('empty');
       const p = info[st.sel];
       const line = linesAt(tl, st.done)[st.sel] || { pts: 0, reb: 0, ast: 0 };
       const onFloor = st.on[p.side].indexOf(st.sel) >= 0;
-      c.hidden = false;
-      c.innerHTML = `<button type="button" class="ct-x" aria-label="Close">X</button>
-        <div class="ct-cn">${logoOf(abbr[p.side], 22)}<b>${esc(p.name)}</b><small>${esc(p.pos)}${onFloor ? '' : ' | BENCH'}</small></div>
-        <div class="ct-cl"><span><b>${line.pts}</b>PTS</span><span><b>${line.reb}</b>REB</span><span><b>${line.ast}</b>AST</span></div>`;
+      c.innerHTML = `<div class="ct-cn">${logoOf(abbr[p.side], 22)}<b>${esc(p.name)}</b><small>${esc(p.pos)}${onFloor ? '' : ' | BENCH'}</small></div>
+        <div class="ct-cl"><span><b>${line.pts}</b>PTS</span><span><b>${line.reb}</b>REB</span><span><b>${line.ast}</b>AST</span></div><button type="button" class="ct-x" aria-label="Stop following">X</button>`;
       c.querySelector('.ct-x').addEventListener('click', () => select(st.sel));
     }
 
@@ -832,13 +844,16 @@
     if (sfxB) sfxB.addEventListener('click', () => { window.SFX.set(!window.SFX.on); sfxB.classList.toggle('on', window.SFX.on); sfxB.textContent = window.SFX.on ? 'SOUND ON' : 'SOUND OFF'; });
 
     function onResize() {
-      const want = el.clientWidth && el.clientWidth < NARROW ? 'v' : 'h';
+      const want = narrow() ? 'v' : 'h';
       if (want !== st.mode) { build(); wake(); }
     }
     window.addEventListener('resize', onResize);
+    $('.ct-fs').addEventListener('click', () => { full = !full; try { localStorage.setItem(FSKEY, full ? '1' : '0'); } catch (e) { /* private mode */ } applyFull(); build(); wake(); });
+    const musB = $('.ct-mus'); if (musB) musB.addEventListener('click', () => { window.MUSICBAR.setHidden(!window.MUSICBAR.hidden()); syncMus(); });
 
     function destroy() {
       st.dead = true;
+      document.body.classList.remove('ct-full-on');
       if (st.raf) cancelAnimationFrame(st.raf);
       st.raf = 0;
       clearTimeout(st.bannerT);
@@ -864,6 +879,7 @@
       SIDES.forEach(side => ordered(st.on[side]).forEach((key, i) => { st.pos[key] = at(side, 'Q1', 47 + 8 + rnd(0, 3), [11, 19, 25, 31, 39][i]); }));
     }
     if (start >= evs.length) { st.ended = true; st.per = evs[evs.length - 1].per; }
+    applyFull(); syncMus(); card();
     build();
     drawScore();
     chips();

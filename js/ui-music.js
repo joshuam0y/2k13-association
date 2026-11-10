@@ -263,7 +263,8 @@
       <button type="button" class="mb-btn" data-act="play" ${on} aria-label="${M.playing ? 'Pause' : 'Play'}">${M.playing ? ICON.pause : ICON.play}</button>
       <button type="button" class="mb-btn" data-act="next" ${on} aria-label="Next song" title="Next song">${ICON.next}</button>
       <button type="button" class="mb-btn" data-act="mute" ${on} aria-label="${muteLabel}" title="${muteLabel}">${M.muted ? ICON.mute : ICON.vol}</button>
-      <button type="button" class="mb-btn${M.open ? ' active' : ''}" data-act="list" aria-label="Tracklist and music source" title="Tracklist and music source" aria-expanded="${M.open ? 'true' : 'false'}">${ICON.list}</button>`;
+      <button type="button" class="mb-btn${M.open ? ' active' : ''}" data-act="list" aria-label="Tracklist and music source" title="Tracklist and music source" aria-expanded="${M.open ? 'true' : 'false'}">${ICON.list}</button>
+      <button type="button" class="mb-btn" data-act="hide" aria-label="Hide the music bar" title="Hide the music bar">&times;</button>`;
   }
 
   function tracksHtml() {
@@ -439,8 +440,34 @@
     }, true);
   }
 
+  // hide the whole bar (and pause the music); a small note button brings it back
+  const HKEY = 'a13-mb-hidden';
+  let hid = false;
+  try { hid = localStorage.getItem(HKEY) === '1'; } catch (e) { /* private mode */ }
+  function applyHidden() {
+    document.body.classList.toggle('mb-off', hid);
+    let pill = document.getElementById('mbPill');
+    if (hid && !pill) {
+      pill = document.createElement('button'); pill.id = 'mbPill'; pill.type = 'button'; pill.className = 'mb-pill';
+      pill.setAttribute('aria-label', 'Show the music bar'); pill.title = 'Show the music bar'; pill.textContent = '\u266A';
+      pill.addEventListener('click', () => window.MUSICBAR.setHidden(false));
+      document.body.appendChild(pill);
+    }
+    if (pill) pill.hidden = !hid;
+    window.dispatchEvent(new Event('resize'));   // the page re-measures the room the bar takes
+  }
+  window.MUSICBAR = {
+    hidden: () => hid,
+    setHidden(v) {
+      hid = !!v;
+      try { localStorage.setItem(HKEY, hid ? '1' : '0'); } catch (e) { /* private mode */ }
+      if (hid && M.playing) pause();
+      applyHidden();
+    }
+  };
   M.init = function () {
     loadPrefs();
+    applyHidden();
     if (!tracks()[M.idx]) M.idx = 0;
     build();
     refresh();
@@ -455,6 +482,7 @@
       else if (act === 'prev') prev();
       else if (act === 'mute') toggleMute();
       else if (act === 'list') { M.open = !M.open; refresh(); }
+      else if (act === 'hide') window.MUSICBAR.setHidden(true);
       else if (b.hasAttribute('data-src')) setSource(b.getAttribute('data-src'));
       else if (b.hasAttribute('data-track')) M.playTrack(Number(b.getAttribute('data-track')));
     });

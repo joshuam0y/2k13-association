@@ -82,18 +82,19 @@
 @keyframes ctPop { from { opacity: 0; transform: translate(-50%, -50%) scale(.9); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
 
 .ct-card {
-  position: absolute; left: 8px; top: 8px; max-width: calc(100% - 16px); min-width: 210px;
-  padding: 10px 52px 10px 12px; background: rgba(12, 12, 13, .95); border: 1px solid var(--line2); border-left: 3px solid var(--gold);
+  position: relative; display: flex; align-items: center; gap: 14px; min-height: 52px; padding: 6px 52px 6px 12px;
+  background: var(--bg2); border-top: 1px solid var(--line); border-left: 3px solid var(--gold);
 }
-.ct-card[hidden] { display: none; }
-.ct-x { position: absolute; top: 0; right: 0; width: 44px; height: 44px; background: none; border: 0; color: var(--muted); font-family: var(--display); font-size: 16px; cursor: pointer; }
+.ct-card.empty { border-left-color: var(--line2); }
+.ct-hint { font-family: var(--display); font-size: 11px; letter-spacing: .16em; color: var(--muted); }
+.ct-x { position: absolute; top: 4px; right: 0; width: 44px; height: 44px; background: none; border: 0; color: var(--muted); font-family: var(--display); font-size: 16px; cursor: pointer; }
 .ct-x:hover { color: var(--gold2); }
 .ct-cn { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .ct-cn b { font-family: var(--display); font-weight: 600; font-size: 17px; text-transform: uppercase; letter-spacing: .03em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ct-cn small { color: var(--muted); font-size: 12px; white-space: nowrap; }
-.ct-cl { display: flex; gap: 18px; margin-top: 6px; }
+.ct-cl { display: flex; gap: 18px; margin-left: auto; }
 .ct-cl span { display: flex; flex-direction: column; font-family: var(--display); font-size: 11px; letter-spacing: .2em; color: var(--muted); }
-.ct-cl b { font-size: 24px; letter-spacing: 0; color: #fff; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.ct-cl b { font-size: 22px; letter-spacing: 0; color: #fff; line-height: 1.05; font-variant-numeric: tabular-nums; }
 
 .ct-line { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--bg2); font-size: 14px; color: var(--text2); }
 .ct-line.made { color: #fff; box-shadow: inset 3px 0 0 var(--gold); }
@@ -158,4 +159,36 @@
   .ct-ctrl { padding: 14px; gap: 10px; }
   .ct-floor-list { padding: 0 18px 16px; }
   .ct-chip { font-size: 14px; min-height: 48px; }
+}
+
+/* ---------- full screen watch mode: everything on one screen, nothing to scroll ---------- */
+body.ct-full-on { overflow: hidden; }
+.ct-wrap.ct-full {
+  position: fixed; inset: 0; z-index: 70; max-width: none; margin: 0; border: 0; border-radius: 0;
+  display: flex; flex-direction: column; background: #050505;
+  height: 100vh; height: 100dvh; padding-bottom: env(safe-area-inset-bottom);
+}
+.ct-full .ct-strip { flex: none; padding-top: calc(6px + env(safe-area-inset-top)); }
+.ct-full .ct-stage { flex: 1 1 0; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.ct-full .ct-svg { width: 100%; height: 100%; max-height: 100%; }
+.ct-full .ct-card, .ct-full .ct-line, .ct-full .ct-ctrl, .ct-full .ct-floor-list { flex: none; }
+.ct-full .ct-line { min-height: 40px; padding: 6px 12px; }
+.ct-full .ct-ctrl { padding: 6px 8px; gap: 6px; }
+.ct-full .ct-ctrl .btn { min-height: 38px; padding: 0 10px; font-size: 12px; }
+.ct-full .ct-floor-list { padding: 4px 8px 8px; gap: 4px; }
+.ct-full .ct-chip { min-height: 38px; }
+.ct-full .ct-card { min-height: 46px; }
+@media (max-height: 640px) {
+  .ct-full .ct-line { min-height: 32px; font-size: 12px; padding: 3px 10px; }
+  .ct-full .ct-card { min-height: 38px; }
+  .ct-full .ct-cl b { font-size: 18px; }
+  .ct-full .ct-chip { min-height: 32px; }
+  .ct-full .ct-chip i { width: 18px; height: 18px; font-size: 9px; }
+  .ct-full .ct-ctrl .btn { min-height: 32px; }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .ct-full .ct-card { display: none; }
+  .ct-full .ct-floor-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ct-full .ct-row { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .ct-full .ct-chip { flex-direction: column; font-size: 9px; min-height: 28px; padding: 1px; }
 }
