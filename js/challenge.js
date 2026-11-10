@@ -268,17 +268,19 @@
   function playVersus(cfg, opts) {
     opts = opts || {};
     var bestOf = VS_HOME[cfg.bestOf] ? +cfg.bestOf : 5, need = Math.ceil(bestOf / 2);
-    var E = W.ENGINE, d = seasonData(cfg.year);
+    // cfg.year 0: every season (era spin), the picks are all-time pool keys (id@season)
+    var everyEra = !cfg.year, E = W.ENGINE, d = seasonData(everyEra ? 2013 : cfg.year);
     if (!E) throw new Error('Game engine not loaded');
-    if (!d) throw new Error('The ' + cfg.year + ' rosters are not loaded.');
+    if (!d) throw new Error('The ' + (cfg.year || 2013) + ' rosters are not loaded.');
     var byId = {};
-    d.players.concat(d.free).forEach(function (p) { byId[p.id] = p; });
+    if (everyEra) allTimePool().forEach(function (e) { var q = clone(e); q.id = e.key; byId[e.key] = q; });
+    else d.players.concat(d.free).forEach(function (p) { byId[p.id] = p; });
     var rng = mulberry32((cfg.seed ^ 0x7F4A7C15) >>> 0);
     var sides = cfg.sides.map(function (sd) {
       var t = clone(d.teams.filter(function (x) { return x.abbr === sd.team; })[0] || { abbr: sd.team, city: sd.team, name: '' });
       t.orig = { city: t.city, name: t.name };
       if (sd.name) { var nm = splitName(sd.name, t); t.city = nm.city; t.name = nm.name; }
-      var five = sd.picks.map(function (id, i) { var p = clone(byId[id]); p.team = sd.team; p.realTeam = byId[id].team; p.pick = i + 1; p.injury = null; return p; });
+      var five = sd.picks.map(function (id, i) { var p = clone(byId[id]); p.team = sd.team; p.realTeam = byId[id].from || byId[id].team; p.pick = i + 1; p.injury = null; return p; });
       if (five.length !== 5) throw new Error('Pick five players first.');
       var fit = lineupFit(five);
       applyFit(five, fit);
@@ -287,7 +289,7 @@
       return { abbr: sd.team, team: t, five: five, fit: fit, obj: { abbr: sd.team, players: five, minutes: mins, ironman: true, strategy: null } };
     });
     var norms = E.computeNorms({ season: d.year, teams: d.teams, players: d.players });
-    var era = E.eraFor(cfg.year);
+    var era = E.eraFor(cfg.year || +(cfg.era || 2013));
     var A = sides[0].abbr, B = sides[1].abbr, hi = rng() < 0.5 ? 0 : 1, lo = 1 - hi;
     var wins = {}; wins[A] = 0; wins[B] = 0;
     var games = [], tot = {};
@@ -317,10 +319,10 @@
       fgp: x.fga ? r1(100 * x.fgm / x.fga) : null, tpp: x.tpa ? r1(100 * x.tpm / x.tpa) : null }; });
     var win5 = sides[winner === A ? 0 : 1].five;
     var mvp = win5.slice().sort(function (x, y) { var a = lines[x.id] || {}, b = lines[y.id] || {}; return ((b.pts || 0) + (b.reb || 0) + (b.ast || 0)) - ((a.pts || 0) + (a.reb || 0) + (a.ast || 0)); })[0];
-    return { cfg: cfg, label: d.label, bestOf: bestOf, need: need, home: sides[hi].abbr, games: games, wins: wins, winner: winner,
+    return { cfg: cfg, label: everyEra ? 'Every season' : d.label, bestOf: bestOf, need: need, home: sides[hi].abbr, games: games, wins: wins, winner: winner,
       mvp: mvp ? { id: mvp.id, name: mvp.name, line: lines[mvp.id] } : null, lines: lines,
       sides: sides.map(function (sd) { return { abbr: sd.abbr, team: { abbr: sd.team.abbr, city: sd.team.city, name: sd.team.name, colors: sd.team.colors, logo: sd.team.logo, logoNoRef: sd.team.logoNoRef },
-        fit: sd.fit, five: sd.five.map(function (p) { return { id: p.id, name: p.name, pos: p.pos, ovr: p.baseOvr || p.ovr, nbaId: p.nbaId || null, slot: SLOTS[p.slot] }; }) }; }) };
+        fit: sd.fit, five: sd.five.map(function (p) { return { id: p.id, name: p.name, pos: p.pos, ovr: p.baseOvr || p.ovr, nbaId: p.nbaId || null, slot: SLOTS[p.slot], season: p.season || null }; }) }; }) };
   }
 
   function splitName(full, t) {

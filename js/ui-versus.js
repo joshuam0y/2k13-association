@@ -18,7 +18,7 @@
   let VS = Object.assign(FRESH(), ls.get() || {});
   VS.opts = Object.assign({ bestOf: 5, blind: false, timer: 30 }, VS.opts || {});
   const POS = ['PG', 'SG', 'SF', 'PF', 'C'];
-  const lbl = y => (y - 1) + '-' + String(y).slice(2);
+  const lbl = y => (y ? (y - 1) + '-' + String(y).slice(2) : 'EVERY SEASON');   // y 0: era spin, every season
   const logo = (t, n) => UI.logoFor(t || { abbr: '?' }, n);
   const tOf = (teams, a) => teams.find(t => t.abbr === a) || { abbr: a, city: a, name: '', colors: ['#333', '#777'] };
   const tName = t => ((t.city || '') + ' ' + (t.name || '')).trim();
@@ -189,6 +189,12 @@
   function go(page) { VS.page = page; push(); route(); window.scrollTo(0, 0); }
 
   function loadThen(app, year, fn) {
+    if (!year) {   // every season: the all-time pool plus the 2012-13 franchises
+      if (C.loaded('pool') && C.loaded(2013)) { fn(); return; }
+      app.innerHTML = '<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING EVERY SEASON...</div></section>';
+      Promise.all([C.load('pool'), C.load(2013)]).then(fn).catch(e => { app.innerHTML = UI.empty('ROSTERS DID NOT LOAD', esc(e.message || e), '<div class="row-btns"><a class="btn" href="#/challenge">BACK</a></div>'); });
+      return;
+    }
     if (C.loaded(year)) { fn(); return; }
     app.innerHTML = `<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE ${esc(lbl(year))} ROSTERS...</div></section>`;
     C.load(year).then(fn).catch(e => { app.innerHTML = UI.empty('ROSTERS DID NOT LOAD', esc(e.message || e), '<div class="row-btns"><a class="btn" href="#/challenge">BACK</a></div>'); });
@@ -198,7 +204,7 @@
   function setup(app) {
     stopTick();
     loadThen(app, VS.year, () => {
-      const d = C.seasonData(VS.year), teams = d.teams.slice().sort((a, b) => tName(a).localeCompare(tName(b)));
+      const d = C.seasonData(VS.year || 2013), teams = d.teams.slice().sort((a, b) => tName(a).localeCompare(tName(b)));
       VS.teams = VS.teams.map((a, i) => teams.some(t => t.abbr === a) ? a : teams[i].abbr);
       if (VS.teams[0] === VS.teams[1]) VS.teams[1] = teams.find(t => t.abbr !== VS.teams[0]).abbr;
       const boss = me() !== 1;   // the host (or the one phone) sets the season and the rules
@@ -216,7 +222,8 @@
               <button type="button" class="ch-seg-b${NET.role === 'guest' ? ' on' : ''}" data-net="join"><b>JOIN ONLINE</b><small>Enter your friend's code</small></button></div>
             ${NET.role === 'guest' && !linked() ? `<div class="vs-join"><label class="field"><span>ROOM CODE</span><input id="vsCode" maxlength="5" placeholder="ABCDE" value="${esc(NET.code)}" autocomplete="off" autocapitalize="characters"></label><button type="button" class="btn btn-gold" id="vsJoin">JOIN</button></div>` : ''}
           </div>
-          <div class="ch-step"><div class="ch-step-k">2 | THE SEASON</div><div class="ch-chips ch-swipe">${C.SEASONS.map(s => `<button type="button" class="ch-chip${VS.year === s.year ? ' on' : ''}" data-year="${s.year}"${dis(boss)}>${esc(s.label)}</button>`).join('')}</div></div>
+          <div class="ch-step"><div class="ch-step-k">2 | THE SEASON</div><div class="ch-chips ch-swipe"><button type="button" class="ch-chip vs-era${!VS.year ? ' on' : ''}" data-year="0"${dis(boss)}>EVERY SEASON</button>${C.SEASONS.map(s => `<button type="button" class="ch-chip${VS.year === s.year ? ' on' : ''}" data-year="${s.year}"${dis(boss)}>${esc(s.label)}</button>`).join('')}</div>
+            ${!VS.year ? '<small class="muted">Era spin: every spin lands on a team and a season, from 2003-04 to 2025-26. Nobody can be drafted twice, even from different seasons.</small>' : ''}</div>
           <div class="ch-step"><div class="ch-step-k">3 | THE RULES</div>
             <div class="vs-rules"><div><span class="ts-start-k">SERIES</span><div class="ch-chips">${[3, 5, 7].map(n => `<button type="button" class="ch-chip${VS.opts.bestOf === n ? ' on' : ''}" data-bo="${n}"${dis(boss)}>BEST OF ${n}</button>`).join('')}</div></div>
               <div><span class="ts-start-k">PICK TIMER</span><div class="ch-chips">${[[30, '30 SEC'], [60, '60 SEC'], [0, 'OFF']].map(([v, l]) => `<button type="button" class="ch-chip${(VS.opts.timer || 0) === v ? ' on' : ''}" data-timer="${v}"${dis(boss)}>${l}</button>`).join('')}</div>
@@ -261,18 +268,35 @@
   // ---------- the draft: a spin for every pick ----------
   const ANIM = {};   // spins already animated on this phone
   function ovrTag(p, blind) { return blind ? '' : `<b class="ch-ovr ${UI.ovrClass(p.ovr)}">${esc(p.ovr)}</b>`; }
-  function playerRow(p, teams, btn, blind) {
-    const t = tOf(teams, p.team);
-    return `<li class="ch-pl"><span class="ch-pl-b"><b>${esc(p.name)}</b><small>${logo(t, 18)} ${esc(C.posLabel(p))}${p.age ? ' | ' + p.age : ''}</small></span>${ovrTag(p, blind)}${btn}</li>`;
+  // the draft board: one season's league, or every season (era spin: the all-time pool, keys id@season,
+  // nobody twice even from different seasons). A spin lands on a group: season:team.
+  function board(cfg) {
+    const era = !cfg.year, d = C.seasonData(era ? 2013 : cfg.year), teams = d.teams, byId = {};
+    const players = era ? C.allTimePool().map(e => Object.assign({}, e, { id: e.key, team: e.from })) : d.players;
+    players.forEach(p => { byId[p.id] = p; });
+    if (!era) d.free.forEach(p => { byId[p.id] = p; });
+    const base = p => (era ? p.base : p.id);
+    return { era, teams, byId, players, base,
+      takenSet: ids => new Set(ids.map(id => (byId[id] ? base(byId[id]) : id))),
+      teamFor: (abbr, year) => (era && C.eraTeam(year, abbr)) || tOf(teams, abbr),
+      groupKey: p => (era ? p.season : cfg.year) + ':' + p.team };
   }
-  function spinFor(cfg, d, taken, avoid) {
-    const left = d.teams.filter(t => d.players.some(p => p.team === t.abbr && taken.indexOf(p.id) < 0));
-    let pool = left.filter(t => VS.spun.indexOf(t.abbr) < 0 && t.abbr !== avoid);
-    if (!pool.length) pool = left.filter(t => t.abbr !== avoid);
-    if (!pool.length) pool = left;
-    const t = pool[Math.floor(Math.random() * pool.length)];
-    return t ? { abbr: t.abbr, year: cfg.year, key: cfg.year + ':' + t.abbr, side: C.vsOnClock(cfg), pick: taken.length, n: Date.now() + '-' + Math.floor(Math.random() * 1e6) } : null;
+  const short = y => "'" + String(y - 1).slice(2) + "-'" + String(y).slice(2);
+  function playerRow(p, B, btn, blind) {
+    const t = B.teamFor(p.team, p.season);
+    return `<li class="ch-pl"><span class="ch-pl-b"><b>${esc(p.name)}</b><small>${logo(t, 18)} ${esc(C.posLabel(p))}${B.era && p.season ? ' | ' + short(p.season) : p.age ? ' | ' + p.age : ''}</small></span>${ovrTag(p, blind)}${btn}</li>`;
   }
+  function spinFor(cfg, B, taken, avoid) {
+    const tk = B.takenSet(taken), groups = {};
+    B.players.forEach(p => { if (tk.has(B.base(p))) return; const k = B.groupKey(p); if (!groups[k]) groups[k] = { abbr: p.team, year: B.era ? p.season : cfg.year, key: k }; });
+    const keys = Object.keys(groups);
+    let pool = keys.filter(k => VS.spun.indexOf(k) < 0 && k !== avoid);
+    if (!pool.length) pool = keys.filter(k => k !== avoid);
+    if (!pool.length) pool = keys;
+    const g = groups[pool[Math.floor(Math.random() * pool.length)]];
+    return g ? { abbr: g.abbr, year: g.year, key: g.key, side: C.vsOnClock(cfg), pick: taken.length, n: Date.now() + '-' + Math.floor(Math.random() * 1e6) } : null;
+  }
+  const rosterOf = (B, key, taken) => { const tk = B.takenSet(taken); return B.players.filter(p => B.groupKey(p) === key && !tk.has(B.base(p))); };
   // the pick clock: { pick, phase: 'spin' | 'pick', until } shared by both phones. When it runs out the
   // player on the clock spins (or takes the best player on the team the wheel landed on); online, the
   // other phone steps in five seconds later if the first one is gone.
@@ -284,14 +308,13 @@
     const cfg = VS.cfg;
     if (!cfg) { go('setup'); return; }
     loadThen(app, cfg.year, () => {
-      const d = C.seasonData(cfg.year), teams = d.teams, byId = {};
-      d.players.concat(d.free).forEach(p => { byId[p.id] = p; });
+      const B = board(cfg), teams = B.teams, byId = B.byId;
       const blind = !!cfg.blind;
       const taken = cfg.sides[0].picks.concat(cfg.sides[1].picks), on = C.vsOnClock(cfg);
       const fives = cfg.sides.map((sd, i) => {
         const t = tOf(teams, sd.team), mine = sd.picks.map(id => byId[id]).filter(Boolean);
         return `<div class="vs-side${on === i ? ' on' : ''}" style="--c1:${esc(t.colors[0])}"><div class="vs-side-h">${logo(t, 36)}<div><small>${esc(who(i))}${me() === i ? ' (YOU)' : ''}</small><b>${esc(sd.name || tName(t))}</b></div></div>
-          <ol>${[0, 1, 2, 3, 4].map(k => `<li>${mine[k] ? esc(mine[k].name) + ' <small class="muted">' + esc(C.posLabel(mine[k])) + '</small>' + (blind ? '' : ' <b class="' + UI.ovrClass(mine[k].ovr) + '">' + esc(mine[k].ovr) + '</b>') : '<span class="muted">-</span>'}</li>`).join('')}</ol></div>`;
+          <ol>${[0, 1, 2, 3, 4].map(k => `<li>${mine[k] ? esc(mine[k].name) + ' <small class="muted">' + esc(C.posLabel(mine[k])) + (B.era && mine[k].season ? ' ' + short(mine[k].season) : '') + '</small>' + (blind ? '' : ' <b class="' + UI.ovrClass(mine[k].ovr) + '">' + esc(mine[k].ovr) + '</b>') : '<span class="muted">-</span>'}</li>`).join('')}</ol></div>`;
       }).join('');
       const fitCard = (sd, i) => {
         if (!sd.picks.length) return '';
@@ -308,13 +331,13 @@
           <section class="ch-wheel">${UI.challengeWheel.strip(teams)}<div class="ch-wheel-k">${spin ? 'SPINNING...' : mine ? 'YOUR SPIN' : 'WAITING FOR ' + esc(who(on)).toUpperCase() + ' TO SPIN'}</div>
           ${mine && !spin ? '<button type="button" class="btn btn-gold btn-big" id="chSpin">SPIN THE WHEEL</button>' : ''}</section>`;
       } else {
-        const t = tOf(teams, spin.abbr);
-        const ros = UI.challengeAlpha(d.players.filter(p => p.team === spin.abbr && taken.indexOf(p.id) < 0));
+        const t = B.teamFor(spin.abbr, spin.year);
+        const ros = UI.challengeAlpha(rosterOf(B, spin.key, taken));
         body = `<div class="vs-clock">ON THE CLOCK: <b>${esc(who(on))}</b> <span class="muted">(pick ${taken.length + 1} of 10)</span></div>
-          <section class="ch-landed" style="--c1:${esc(t.colors[0])}">${logo(t, 64)}<div><div class="ch-wheel-k">THE WHEEL SAYS</div><div class="ch-landed-t">${esc(tName(t))}</div></div>
+          <section class="ch-landed" style="--c1:${esc(t.colors[0])}">${logo(t, 64)}<div><div class="ch-wheel-k">THE WHEEL SAYS</div><div class="ch-landed-t">${B.era ? esc(lbl(spin.year)) + ' ' : ''}${esc(tName(t))}</div></div>
             ${mine && VS.respins[on] > 0 ? '<button type="button" class="btn btn-small" id="chRespin">RE-SPIN (1 LEFT)</button>' : ''}</section>
           ${mine ? '' : `<p class="muted">${esc(who(on))} is picking from the ${esc(t.name)}.</p>`}
-          <ul class="ch-list">${ros.map(p => playerRow(p, teams, mine ? `<button type="button" class="btn btn-small btn-gold" data-add="${esc(p.id)}">TAKE</button>` : '', blind)).join('')}</ul>`;
+          <ul class="ch-list">${ros.map(p => playerRow(p, B, mine ? `<button type="button" class="btn btn-small btn-gold" data-add="${esc(p.id)}">TAKE</button>` : '', blind)).join('')}</ul>`;
       }
       const turn = on >= 0 && VS.turn && VS.turn.pick === taken.length ? VS.turn : null;
       const clock = turn ? `<div class="vs-timer" id="vsTimer"><i style="--w:100%"></i><span>${Math.max(0, Math.ceil((turn.until - Date.now()) / 1000))}</span></div>` : '';
@@ -338,9 +361,9 @@
           const actor = canAct(on) ? 0 : online() ? 5000 : null;   // the player on the clock, else the other phone a bit later
           if (actor === null || left > -actor) return;
           stopTick();
-          if (turn.phase === 'spin' && !VS.spin) { const s2 = spinFor(cfg, d, taken, null); if (s2) { VS.spin = s2; VS.spun = VS.spun.concat([s2.abbr]); VS.turn = turnFor(cfg, taken.length, 'pick'); push(); draft(app); } }
+          if (turn.phase === 'spin' && !VS.spin) { const s2 = spinFor(cfg, B, taken, null); if (s2) { VS.spin = s2; VS.spun = VS.spun.concat([s2.key]); VS.turn = turnFor(cfg, taken.length, 'pick'); push(); draft(app); } }
           else if (turn.phase === 'pick' && VS.spin && VS.spin.pick === taken.length) {
-            const pool = d.players.filter(p => p.team === VS.spin.abbr && taken.indexOf(p.id) < 0).sort((a, b) => b.ovr - a.ovr);
+            const pool = rosterOf(B, VS.spin.key, taken).sort((a, b) => b.ovr - a.ovr);
             if (pool[0]) { VS.cfg.sides[on].picks.push(pool[0].id); VS.spin = null; VS.turn = turnFor(cfg, taken.length + 1, 'spin'); push(); UI.toast('Time: ' + who(on) + ' gets ' + pool[0].name + '.'); draft(app); }
           }
         };
@@ -350,21 +373,21 @@
       UI.$('#vsSetup', app).addEventListener('click', () => go('setup'));
       // a new spin on either phone: both animate it
       if (spin && !ANIM[spin.n]) {
-        UI.challengeWheel.animate(app, teams, () => { ANIM[spin.n] = true; if (VS.spin && VS.spin.n === spin.n) draft(app); }, { year: spin.year, abbr: spin.abbr }, { mode: 'versus' });
+        UI.challengeWheel.animate(app, teams, () => { ANIM[spin.n] = true; if (VS.spin && VS.spin.n === spin.n) draft(app); }, { year: spin.year, abbr: spin.abbr }, { mode: B.era ? 'alltime' : 'versus' });
       }
       const sp = UI.$('#chSpin', app);
       if (sp) sp.addEventListener('click', () => {
-        const s = spinFor(cfg, d, taken, null);
+        const s = spinFor(cfg, B, taken, null);
         if (!s) return;
-        VS.spin = s; VS.spun = VS.spun.concat([s.abbr]); VS.turn = turnFor(cfg, taken.length, 'pick'); push(); draft(app);
+        VS.spin = s; VS.spun = VS.spun.concat([s.key]); VS.turn = turnFor(cfg, taken.length, 'pick'); push(); draft(app);
       });
       const re = UI.$('#chRespin', app);
       if (re) re.addEventListener('click', () => {
         if (!(VS.respins[on] > 0)) return;
-        const s = spinFor(cfg, d, taken, spin && spin.abbr);
+        const s = spinFor(cfg, B, taken, spin && spin.key);
         if (!s) return;
         VS.respins = VS.respins.slice(); VS.respins[on]--;
-        VS.spin = s; VS.spun = VS.spun.concat([s.abbr]); VS.turn = turnFor(cfg, taken.length, 'pick'); push(); draft(app);
+        VS.spin = s; VS.spun = VS.spun.concat([s.key]); VS.turn = turnFor(cfg, taken.length, 'pick'); push(); draft(app);
       });
       app.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => {
         const i = C.vsOnClock(VS.cfg);
@@ -416,7 +439,7 @@
           <button type="button" class="btn btn-small vs-rewatch" data-rewatch="${g.n}">WATCH</button></li>`;
       }).join('');
       const box = done ? `<section class="vs-box">${UI.header('SERIES BOX', 'Per game')}<div class="vs-sides">${S.map((sd, i) => `<div class="vs-res" style="--c1:${esc((sd.team.colors || ['#333'])[0])}"><div class="vs-side-h">${logo(sd.team, 32)}<div><small>${esc(who(i))}</small><b>${esc(nm(i))}</b></div></div>
-          <table class="vs-tbl"><thead><tr><th class="l">PLAYER</th><th>SPOT</th><th>OVR</th><th>PTS</th><th>REB</th><th>AST</th><th>FG%</th></tr></thead><tbody>${sd.five.slice().sort((a, b) => C.SLOTS.indexOf(a.slot) - C.SLOTS.indexOf(b.slot)).map(p => { const l = r.lines[p.id] || {}; return `<tr><td class="l">${esc(p.name)}</td><td>${esc(p.slot || '')}</td><td>${esc(p.ovr)}</td><td>${l.pts != null ? l.pts : '-'}</td><td>${l.reb != null ? l.reb : '-'}</td><td>${l.ast != null ? l.ast : '-'}</td><td>${l.fgp != null ? l.fgp : '-'}</td></tr>`; }).join('')}</tbody></table></div>`).join('')}</div></section>` : '';
+          <table class="vs-tbl"><thead><tr><th class="l">PLAYER</th><th>SPOT</th><th>OVR</th><th>PTS</th><th>REB</th><th>AST</th><th>FG%</th></tr></thead><tbody>${sd.five.slice().sort((a, b) => C.SLOTS.indexOf(a.slot) - C.SLOTS.indexOf(b.slot)).map(p => { const l = r.lines[p.id] || {}; return `<tr><td class="l">${esc(p.name)}${p.season && !cfg.year ? ' <small class="muted">' + esc(short(p.season)) + '</small>' : ''}</td><td>${esc(p.slot || '')}</td><td>${esc(p.ovr)}</td><td>${l.pts != null ? l.pts : '-'}</td><td>${l.reb != null ? l.reb : '-'}</td><td>${l.ast != null ? l.ast : '-'}</td><td>${l.fgp != null ? l.fgp : '-'}</td></tr>`; }).join('')}</tbody></table></div>`).join('')}</div></section>` : '';
       const next = shown + 1;
       const acts = done
         ? `<button type="button" class="btn btn-share" id="vsShare">${UI.shareIcon || ''}SEND THIS TO YOUR FRIENDS</button><button type="button" class="btn btn-gold" id="vsAgain">RUN IT BACK</button><button type="button" class="btn" id="vsNew">NEW MATCHUP</button>`
