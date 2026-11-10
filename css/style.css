@@ -958,3 +958,5 @@ img.hs.hs-br { object-fit: cover; object-position: center 18%; }
 .inf-form { display: grid; gap: 12px; margin: 14px 0; }
 .inf-form label { display: grid; gap: 4px; font-size: 13px; }
 .inf-form input, .inf-form textarea { font: inherit; padding: 10px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, .2); background: rgba(255, 255, 255, .06); color: inherit; }
+
+body.no-assoc-nav .mainnav > a { display: none; }
