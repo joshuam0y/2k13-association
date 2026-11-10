@@ -574,6 +574,7 @@
         if (!q || q.retired || !state.teams[q.team] || q.mood == null) return;
         var adj = Math.max(-3, Math.min(3, Math.round((q.mood - 60) / 13))), d = adj - (q.moodAdj || 0);
         if (!d) return;
+        d = d > 0 ? 1 : -1;   // one point at a time: 90, 89, 88 (never a jump)
         var was = q.ovr; W.PROG.setOvr(q, q.ovr + d, { keepPot: true });
         var got = q.ovr - was; q.moodAdj = (q.moodAdj || 0) + got;
         if (got) { var mv = q.ovrMove && q.ovrMove.year === state.year ? q.ovrMove : { d: 0, year: state.year }; mv.d += got; mv.day = state.day || 0; q.ovrMove = mv; }

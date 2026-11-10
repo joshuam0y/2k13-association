@@ -873,7 +873,7 @@
       if (M && t && t.min >= 120) { var g = gameScore36(t); if (g != null) z = clamp((g - (M.a + M.b * p.ovr)) / M.sd, -2.5, 2.5); }
       // bigger jumps only for players far above or below their rating
       var az = Math.abs(z), r0 = rng();
-      var step = az >= 2 && r0 < 0.25 ? 3 : (az >= 1.2 && r0 < 0.5) || r0 < 0.15 ? 2 : 1;
+      var step = 1;   // form moves one rating point at a time
       var mood = p.mood != null ? (p.mood - 60) / 200 : 0;
       var up = rng() < clamp(0.5 + 0.17 * z + mood - 0.15 * form, 0.08, 0.92);
       var nf = clamp(form + (up ? step : -step), -FORM_MAX, FORM_MAX);

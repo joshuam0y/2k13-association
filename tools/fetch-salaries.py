@@ -13,9 +13,10 @@ ids, seen = [], set()
 YEARS = [int(a) for a in sys.argv[1:]] or list(range(2003, 1989, -1))   # e.g. python3 tools/fetch-salaries.py 2003
 for y in YEARS:
     s = open(os.path.join(ROOT, 'data', 'era-%d.js' % y), encoding='utf8').read()
-    for m in re.finditer(r'\["([a-z]+[0-9]{2})","', s):
+    for m in re.finditer(r'\["([a-z]+[0-9]{2})","[^"]*","[A-Za-z]{2,3}","[A-Za-z/-]*",\d+,\d+,\d+,(\d+)', s):
         if m.group(1) not in seen:
-            seen.add(m.group(1)); ids.append(m.group(1))
+            seen.add(m.group(1)); ids.append((int(m.group(2)), m.group(1)))
+ids = [i for _, i in sorted(set(ids), key=lambda x: (-x[0], x[1]))]   # the best players first, so a partial run still covers the stars
 todo = [i for i in ids if i not in cache or i not in acache]
 print('players', len(ids), 'to fetch', len(todo), flush=True)
 ROW = re.compile(r'data-stat="season"[^>]*>(\d{4}-\d{2})</th>.*?href="/teams/([A-Z]{3})/.*?data-stat="salary" csk="(\d+)"', re.S)

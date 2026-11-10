@@ -393,7 +393,8 @@
     const draft = p.draft && p.draft.year ? `${p.draft.year} draft${p.draft.round ? ', round ' + p.draft.round : ''}${p.draft.pick ? ', pick ' + p.draft.pick : ''}${p.draft.team ? ' (' + p.draft.team + ')' : ''}` : '';
 
     const status = [];
-    if (injury) status.push(`<span class="pk-st bad"><i></i>${esc(injury.type || 'Injured')}${injury.games && injury.games < 900 ? ', out ' + esc(injury.games) + (injury.games === 1 ? ' game' : ' games') : ''}</span>`);
+    if (injury && injury.hurt) status.push(`<span class="pk-st mid" title="He plays through it at a lower rating until it heals, unless he is sat"><i></i>Playing through ${esc(injury.type || 'an injury')}: -${esc(injury.hurt)} overall, ${esc(injury.games)} ${injury.games === 1 ? 'game' : 'games'} to heal</span>`);
+    else if (injury) status.push(`<span class="pk-st bad"><i></i>OUT: ${esc(injury.type || 'Injured')}${injury.games && injury.games < 900 ? ', ' + esc(injury.games) + (injury.games === 1 ? ' game' : ' games') : ', season-ending'}</span>`);
     else if (!p.retired && p.team !== 'DRAFT') status.push('<span class="pk-st good"><i></i>Healthy</span>');
     if (mood) status.push(`<span class="pk-st ${mood.cls}" title="${esc(mood.reasons.join('. '))}"><i></i>Mood: ${esc(mood.label)} (${mood.score})</span>`);
     if (p.gleague) status.push('<span class="pk-st mid"><i></i>G League assignment</span>');
