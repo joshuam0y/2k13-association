@@ -567,6 +567,18 @@
       if (rng() < 0.08 * days) safe("aiOffers", function () { (W.TRADE.aiOffers(state, rng) || []).forEach(function (o) { state.events.push({ type: "tradeOffer", offer: o, quiet: !autoOn(state, "tradeOffers") }); }); });
     }
     if (mod("MOOD") && rng() < days / 30) safe("mood", function () { W.MOOD.update(state); });
+    // mood moves the rating: about 13 mood points a rating point, up to 3 either way (a player at 40 mood plays 2 under his level)
+    if (mod("PROG") && W.PROG.setOvr) safe("moodRating", function () {
+      Object.keys(state.players).forEach(function (pid) {
+        var q = state.players[pid];
+        if (!q || q.retired || !state.teams[q.team] || q.mood == null) return;
+        var adj = Math.max(-3, Math.min(3, Math.round((q.mood - 60) / 13))), d = adj - (q.moodAdj || 0);
+        if (!d) return;
+        var was = q.ovr; W.PROG.setOvr(q, q.ovr + d, { keepPot: true });
+        var got = q.ovr - was; q.moodAdj = (q.moodAdj || 0) + got;
+        if (got) { var mv = q.ovrMove && q.ovrMove.year === state.year ? q.ovrMove : { d: 0, year: state.year }; mv.d += got; mv.day = state.day || 0; q.ovrMove = mv; }
+      });
+    });
     safe("chemistry", function () { updateChemistry(state, Math.min(0.5, 0.06 * days)); });
     if (mod("PROG") && rng() < days / 30) safe("inSeason", function () { W.PROG.inSeason(state, rng); });
     if (mod("GLEAGUE")) safe("gleague", function () { if (typeof W.GLEAGUE.sync === "function") W.GLEAGUE.sync(state, rng); else if (days >= 7) W.GLEAGUE.simWeek(state, rng); });

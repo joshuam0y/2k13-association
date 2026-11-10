@@ -631,6 +631,7 @@
       // Remove any in-season streak before developing
       if (p.form) { setOvr(p, p.ovr - p.form, { keepPot: true }); }
       p.form = 0;
+      if (p.moodAdj) { setOvr(p, p.ovr - p.moodAdj, { keepPot: true }); p.moodAdj = 0; }   // the mood swing starts over next season
       // most of what a long injury took comes back over the summer (about 60%)
       if (p.injPen) { setOvr(p, p.ovr + Math.ceil(p.injPen * 0.6), { keepPot: true }); p.injPen = 0; }
       var before = p.ovr;
