@@ -28,67 +28,117 @@
 
   // ---------- online (PeerJS) ----------
   const PEER_SRC = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
-  const NET = { role: null, code: '', status: '', err: '', peer: null, conn: null };
+  // Online: both phones join a room on a public MQTT relay over a secure WebSocket (works on any network,
+  // phone data or Wi-Fi, no direct phone-to-phone link to fail), with a second and third relay to fall back
+  // on. Every message is encrypted with a key made from the room code (AES-GCM). Both phones ping every
+  // 4 seconds; 15 seconds of silence shows the connection as lost, and it heals by itself when the other
+  // phone is back (the host then sends the whole state again).
+  const MQTT_SRC = 'https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js';
+  const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081'];
+  const NET = { role: null, code: '', status: '', err: '', client: null, key: null, me: '', peerSeen: 0, broker: 0, timers: [] };
   const me = () => (NET.role === 'host' ? 0 : NET.role === 'guest' ? 1 : null);   // null: same phone, both sides
   const canAct = side => me() === null || me() === side;
   const online = () => !!NET.role;
-  const linked = () => !!(NET.conn && NET.conn.open);
-  function loadPeer() {
-    if (window.Peer) return Promise.resolve();
+  const linked = () => NET.status === 'connected';
+  function loadMqtt() {
+    if (window.mqtt) return Promise.resolve();
     return new Promise((res, rej) => {
       const s = document.createElement('script');
-      s.src = PEER_SRC; s.onload = res; s.onerror = () => rej(new Error('Could not load the online connection. Check the internet and try again.'));
+      s.src = MQTT_SRC; s.onload = res; s.onerror = () => rej(new Error('Could not load the online connection. Check the internet and try again.'));
       document.head.appendChild(s);
     });
   }
+  const topic = () => 'a13vs/v1/' + NET.code;
+  async function keyFor(code) {
+    const raw = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('2k13-association-versus:' + code));
+    return crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
+  }
+  async function seal(obj) {
+    const iv = crypto.getRandomValues(new Uint8Array(12)), data = new TextEncoder().encode(JSON.stringify(obj));
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, NET.key, data));
+    const all = new Uint8Array(iv.length + ct.length); all.set(iv); all.set(ct, iv.length);
+    let b = ''; all.forEach(x => { b += String.fromCharCode(x); });
+    return btoa(b);
+  }
+  async function open64(txt) {
+    const all = Uint8Array.from(atob(txt), c => c.charCodeAt(0));
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: all.slice(0, 12) }, NET.key, all.slice(12));
+    return JSON.parse(new TextDecoder().decode(pt));
+  }
+  function send(obj) {
+    if (!NET.client || !NET.key) return;
+    seal(Object.assign({ from: NET.me, role: NET.role }, obj)).then(txt => { try { NET.client.publish(topic(), txt, { qos: 1 }); } catch (e) { /* reconnecting */ } }).catch(() => {});
+  }
   function push() {
     ls.set(VS);
-    if (linked()) { const s = {}; SHARED.forEach(k => { s[k] = VS[k]; }); try { NET.conn.send({ t: 'state', s }); } catch (e) { /* closed */ } }
+    if (linked()) { const s = {}; SHARED.forEach(k => { s[k] = VS[k]; }); send({ t: 'state', s }); }
+  }
+  function seen() {
+    NET.peerSeen = Date.now();
+    if (NET.status !== 'connected') {
+      NET.status = 'connected'; NET.err = '';
+      if (NET.role === 'host') push(); else send({ t: 'hello', name: VS.names[1] || '' });
+      route(); drawChat();
+    }
   }
   function onMsg(m) {
-    if (!m || typeof m !== 'object') return;
-    if (m.t === 'hello' && NET.role === 'host') { if (m.name) VS.names[1] = String(m.name).slice(0, 20); push(); route(); return; }
-    if (m.t === 'state' && m.s) { SHARED.forEach(k => { if (k in m.s) VS[k] = m.s[k]; }); ls.set(VS); route(); }
+    if (!m || typeof m !== 'object' || m.from === NET.me || m.role === NET.role) return;   // our own echo, or a third phone with our role
+    if (m.t === 'ping') { seen(); return; }
+    if (m.t === 'hello' && NET.role === 'host') { if (m.name) VS.names[1] = String(m.name).slice(0, 20); seen(); push(); route(); return; }
+    if (m.t === 'state' && m.s && NET.role === 'guest' || m.t === 'state' && m.s && NET.role === 'host') {
+      SHARED.forEach(k => { if (k in m.s) VS[k] = m.s[k]; }); ls.set(VS); seen(); route(); return;
+    }
+    seen();
     if (m.t === 'react' && REACTS.indexOf(m.r) >= 0) bubble(m.r, String(m.name || '').slice(0, 20), false);
     if (m.t === 'chat' && m.text) { addChat({ name: String(m.name || '').slice(0, 20), text: String(m.text).slice(0, 300), mine: false }); }
   }
-  function wire(c) {
-    NET.conn = c;
-    c.on('open', () => { NET.status = 'connected'; NET.err = ''; if (NET.role === 'guest') c.send({ t: 'hello', name: VS.names[1] || '' }); else push(); route(); drawChat(); });
-    c.on('data', onMsg);
-    c.on('close', () => { NET.status = 'lost'; route(); drawChat(); });
-    c.on('error', () => { NET.status = 'lost'; route(); });
-  }
   function hangUp() {
-    try { if (NET.conn) NET.conn.close(); } catch (e) { /* gone */ }
-    try { if (NET.peer) NET.peer.destroy(); } catch (e) { /* gone */ }
-    Object.assign(NET, { role: null, code: '', status: '', err: '', peer: null, conn: null });
+    NET.timers.forEach(t => clearInterval(t)); NET.timers = [];
+    try { if (NET.client) NET.client.end(true); } catch (e) { /* gone */ }
+    Object.assign(NET, { role: null, code: '', status: '', err: '', client: null, key: null, peerSeen: 0 });
+  }
+  // connects to a relay (falling back to the next if one will not answer), joins the room, starts the pings
+  function connectRoom(role, code) {
+    NET.timers.forEach(t => clearInterval(t)); NET.timers = [];
+    try { if (NET.client) NET.client.end(true); } catch (e) { /* gone */ }
+    Object.assign(NET, { role, code, status: role === 'host' ? 'starting' : 'connecting', err: '', client: null, peerSeen: 0, me: Math.random().toString(36).slice(2, 10) });
+    route();
+    Promise.all([loadMqtt(), keyFor(code)]).then(([, key]) => {
+      NET.key = key;
+      const tryBroker = i => {
+        if (NET.code !== code) return;
+        const url = BROKERS[i % BROKERS.length];
+        const client = window.mqtt.connect(url, { clientId: 'a13vs_' + NET.me + '_' + i, clean: true, connectTimeout: 7000, reconnectPeriod: 2000, keepalive: 20 });
+        NET.client = client; NET.broker = i;
+        let up = false;
+        const giveUp = setTimeout(() => { if (!up && NET.client === client && i < BROKERS.length * 2 - 1) { try { client.end(true); } catch (e) { /* gone */ } tryBroker(i + 1); } }, 9000);
+        client.on('connect', () => {
+          up = true; clearTimeout(giveUp);
+          client.subscribe(topic(), { qos: 1 }, () => {
+            if (NET.status === 'starting') NET.status = 'waiting';
+            if (NET.role === 'guest' && NET.status !== 'connected') NET.status = 'connecting';
+            send({ t: NET.role === 'guest' ? 'hello' : 'ping', name: VS.names[me()] || '' });
+            route();
+          });
+        });
+        client.on('message', (t, buf) => { open64(buf.toString()).then(onMsg).catch(() => {}); });
+        client.on('error', () => { /* mqtt.js retries on its own; the timer above moves to another relay if it never connects */ });
+      };
+      tryBroker(0);
+      // pings both ways; silence means lost, a ping back heals it
+      NET.timers.push(setInterval(() => {
+        if (!NET.client || NET.code !== code) return;
+        send({ t: NET.role === 'guest' && NET.status !== 'connected' ? 'hello' : 'ping', name: VS.names[me()] || '' });
+        if (NET.status === 'connected' && Date.now() - NET.peerSeen > 15000) { NET.status = 'lost'; route(); drawChat(); }
+      }, 4000));
+      // a guest whose host never answers: say so, but keep listening
+      if (role === 'guest') setTimeout(() => { if (NET.code === code && NET.status === 'connecting') { NET.err = 'No answer from room ' + code + ' yet. Check the code, and that your friend still has the room open. Still trying...'; NET.status = 'error-wait'; route(); } }, 20000);
+    }).catch(e => { NET.status = 'error'; NET.err = e.message || 'The connection failed.'; route(); });
   }
   const CODE_CH = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const newCode = () => Array.from({ length: 5 }, () => CODE_CH[Math.floor(Math.random() * CODE_CH.length)]).join('');
-  function host() {
-    hangUp();
-    Object.assign(NET, { role: 'host', code: newCode(), status: 'starting' });
-    route();
-    loadPeer().then(() => {
-      const peer = new window.Peer('a13vs-' + NET.code);
-      NET.peer = peer;
-      peer.on('open', () => { NET.status = 'waiting'; route(); });
-      peer.on('connection', c => { if (linked()) { c.close(); return; } wire(c); });
-      peer.on('error', e => { if (e && e.type === 'unavailable-id') { host(); return; } NET.status = 'error'; NET.err = (e && e.message) || 'The connection failed.'; route(); });
-    }).catch(e => { NET.status = 'error'; NET.err = e.message; route(); });
-  }
-  function join(code) {
-    hangUp();
-    Object.assign(NET, { role: 'guest', code: String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, ''), status: 'connecting' });
-    route();
-    loadPeer().then(() => {
-      const peer = new window.Peer();
-      NET.peer = peer;
-      peer.on('open', () => wire(peer.connect('a13vs-' + NET.code, { reliable: true })));
-      peer.on('error', e => { NET.status = 'error'; NET.err = e && e.type === 'peer-unavailable' ? 'No game with that code. Check it with your friend.' : (e && e.message) || 'The connection failed.'; route(); });
-    }).catch(e => { NET.status = 'error'; NET.err = e.message; route(); });
-  }
+  function host() { connectRoom('host', newCode()); }
+  function join(code) { const c = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); if (c.length >= 4) connectRoom('guest', c); }
   const joinLink = () => location.origin + location.pathname + '#/challenge/vs/join/' + NET.code;
   function netBar() {
     if (!online()) return '';
@@ -97,7 +147,8 @@
       : st === 'waiting' ? `Room <b>${esc(NET.code)}</b>: send your friend the link, then wait here.`
       : st === 'connecting' || st === 'starting' ? 'Connecting...'
       : st === 'code' ? 'Type the room code your friend sees on his phone.'
-      : st === 'lost' ? 'The connection dropped.' : esc(NET.err || 'Not connected.');
+      : st === 'lost' ? 'Lost the other phone. Reconnecting on its own when it is back...'
+      : st === 'error-wait' ? esc(NET.err) : esc(NET.err || 'Not connected.');
     return `<div class="vs-net ${st}"><span class="vs-net-dot"></span><span>${msg}</span>
       ${st === 'waiting' ? `<button type="button" class="btn btn-small" id="vsCopy">COPY LINK</button>` : ''}
       ${st === 'lost' || st === 'error' ? `<button type="button" class="btn btn-small" id="vsRetry">${NET.role === 'host' ? 'NEW ROOM' : 'TRY AGAIN'}</button>` : ''}
@@ -138,7 +189,7 @@
       lastReact = now;
       const r = b.dataset.react, name = who(me());
       bubble(r, name, true);
-      if (linked()) try { NET.conn.send({ t: 'react', r, name }); } catch (e) { /* closed */ }
+      if (linked()) send({ t: 'react', r, name });
     }));
   }
 
@@ -166,7 +217,7 @@
         i.value = '';
         const name = who(me());
         addChat({ name, text, mine: true });
-        try { NET.conn.send({ t: 'chat', text, name }); } catch (err) { /* closed */ }
+        send({ t: 'chat', text, name });
         const again = box.querySelector('input'); if (again) again.focus();
       });
     }
