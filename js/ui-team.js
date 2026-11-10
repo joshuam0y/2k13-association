@@ -133,6 +133,18 @@
   const posOf = p => (POSN() ? POSN().of(p) : { pos: primaryPos(p && p.pos), pos2: null });
   const posLabel = p => (POSN() ? POSN().label(p) : String((p && p.pos) || '-'));
   fr.posLabel = posLabel;
+  // team chemistry (js/league.js chemParts): the number, a word and what is pushing it
+  function chemHtml(s, abbr) {
+    const t = s.teams[abbr];
+    if (!t || t.chem == null) return '';
+    const c = t.chem, word = c >= 80 ? 'GREAT' : c >= 67 ? 'GOOD' : c >= 53 ? 'OK' : c >= 40 ? 'SHAKY' : 'BAD';
+    const P = t.chemParts || (window.LEAGUE && LEAGUE.chemParts ? LEAGUE.chemParts(s, abbr) : null) || {};
+    const part = (k, l) => P[k] == null ? '' : `<li class="${P[k] > 1 ? 'up' : P[k] < -1 ? 'down' : ''}"><span>${l}</span><b>${P[k] > 0 ? '+' : ''}${P[k]}</b></li>`;
+    const edge = Math.max(-3, Math.min(2.5, (c - 60) / 12));
+    return `<section class="fr-chem"><div class="fr-chem-n"><small>TEAM CHEMISTRY</small><b class="${c >= 67 ? 'up' : c < 45 ? 'down' : ''}">${c}</b><span>${word}</span></div>
+      <ul>${part('winning', 'WINNING LATELY')}${part('continuity', 'ROSTER CONTINUITY')}${part('mood', 'LOCKER ROOM MOOD')}</ul>
+      <p class="muted">On the court: ${edge >= 0 ? '+' : ''}${Math.round(edge * 2) / 2} for every player. Wins, a steady rotation and happy players build it; losing streaks and roster churn cost it.</p></section>`;
+  }
   const TOTAL_MIN = 240;
   const sumMin = rot => rot.active.reduce((a, id) => a + (Number(rot.minutes[id]) || 0), 0);
 
@@ -227,6 +239,7 @@
         <div class="fr-hero-t">${esc(fr.teamName(s, abbr))}</div>
         <div class="fr-hero-d">${esc(fr.record(s, abbr))}${s.phase ? ' | ' + esc(((UI.PHASES && UI.PHASES[s.phase]) || String(s.phase).replace(/([A-Z])/g, ' $1')).toUpperCase()) : ''}</div></div>
       </div>
+      ${chemHtml(s, abbr)}
       ${fr.tabs('manage', TABS, tab)}
       <div id="frBody"></div>`;
     const body = UI.$('#frBody', app);

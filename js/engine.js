@@ -573,7 +573,9 @@
 
   function buildTeam(team, side, rng, opts, n) {
     var injuries = opts.injuries || null;
-    var all = (team.players || []).map(function (p) { var pen = hurtPenalty(p, injuries, team); return pen ? makeState(hurtCopy(p, pen), n) : makeState(p, n); });
+    // team chemistry (team.chem, 0 to 100, js/league.js): a small edge either way for everyone
+    var chemD = team.chem != null ? Math.round(clamp((team.chem - 60) / 12, -3, 2.5) * 2) / 2 : 0;
+    var all = (team.players || []).map(function (p) { var pen = hurtPenalty(p, injuries, team) - chemD; return pen ? makeState(hurtCopy(p, pen), n) : makeState(p, n); });
     var avail = all.filter(function (s) { return !isInjured(s.p, injuries) || hurtPenalty(s.p, injuries, team) > 0; });
     if (avail.length < 5) {
       // Emergency: bring back the least injured, then fill with replacement players
@@ -1452,7 +1454,8 @@
       minutes: (lineups && lineups.minutes) || null,
       strategy: (lt && lt.strategy) || (season.strategies && season.strategies[abbr]) || null,
       autoStyle: (lt && lt.autoStyle) || null,
-      playHurt: lt ? lt.playHurt !== false : true
+      playHurt: lt ? lt.playHurt !== false : true,
+      chem: lt && lt.chem != null ? lt.chem : null
     };
   }
 

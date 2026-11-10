@@ -917,3 +917,16 @@ html { scroll-padding-bottom: calc(var(--mb-h, var(--bar-h)) + 12px); }
 .badge-form.up { color: #5fd38a; }
 .badge-form.down { color: #ff7b7b; }
 .ftd-range { font-family: var(--display); font-size: 14px; letter-spacing: .04em; color: var(--text2); border: 1px dashed var(--line2); padding: 1px 6px; white-space: nowrap; }
+
+/* team chemistry card (front office) */
+.fr-chem { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 18px; align-items: center; margin: 12px 0; padding: 12px 14px; border: 1px solid var(--line2); background: var(--bg2); }
+.fr-chem-n { display: flex; flex-direction: column; align-items: center; min-width: 96px; }
+.fr-chem-n small { font-family: var(--display); font-size: 10.5px; letter-spacing: .16em; color: var(--gold); }
+.fr-chem-n b { font-family: var(--display); font-size: 40px; line-height: 1.05; }
+.fr-chem-n b.up { color: #5fd38a; } .fr-chem-n b.down { color: #ff7b7b; }
+.fr-chem-n span { font-family: var(--display); letter-spacing: .14em; font-size: 12px; color: var(--text2); }
+.fr-chem ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.fr-chem li { display: flex; justify-content: space-between; gap: 6px; padding: 6px 9px; background: var(--bg3); font-size: 12px; letter-spacing: .05em; border-left: 3px solid var(--line2); }
+.fr-chem li.up { border-left-color: #5fd38a; } .fr-chem li.down { border-left-color: #ff7b7b; }
+.fr-chem p { grid-column: 1 / -1; margin: 2px 0 0; font-size: 12.5px; }
+@media (max-width: 600px) { .fr-chem { grid-template-columns: minmax(0, 1fr); } .fr-chem ul { grid-template-columns: minmax(0, 1fr); } }

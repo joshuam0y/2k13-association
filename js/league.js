@@ -441,6 +441,12 @@
   }
   function startSeason(state) {
     safe("realPositions", function () { realPositions(state); });
+    // opening night rosters (chemistry's continuity); chemistry carries over half its distance from 60
+    Object.keys(state.teams).forEach(function (a) {
+      var t = state.teams[a];
+      t.openRoster = Object.keys(state.players).filter(function (id) { var p = state.players[id]; return p.team === a && !p.retired; });
+      t.chem = t.chem != null ? Math.round(60 + (t.chem - 60) * 0.5) : 60;
+    });
     var move = RELOCATIONS[state.year];
     if (move) safe("relocation", function () { relocate(state, move); });
     applyBrands(state);
@@ -498,6 +504,29 @@
   }
 
   // ---------- in-season ----------
+  // Team chemistry (0 to 100, team.chem): winning lately, continuity (how much of the rotation was on the
+  // team on opening night) and the rotation's mood. It moves part of the way to its target after each
+  // chunk of days; the engine turns it into a small edge (about -3 to +2.5 for every player).
+  function chemClamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function chemParts(state, abbr) {
+    var st = state.season && state.season.standings && state.season.standings[abbr], t = state.teams[abbr];
+    var last = st && st.last10 && st.last10.length ? st.last10.reduce(function (a, b) { return a + b; }, 0) / st.last10.length : 0.5;
+    var ps = state.season && state.season.playerStats || {};
+    var rot = Object.keys(state.players).map(function (id) { return state.players[id]; })
+      .filter(function (p) { return p.team === abbr && !p.retired; })
+      .sort(function (a, b) { return ((ps[b.id] || {}).min || b.ovr / 10) - ((ps[a.id] || {}).min || a.ovr / 10); }).slice(0, 8);
+    var open = (t && t.openRoster) || [];
+    var cont = rot.length && open.length ? rot.filter(function (p) { return open.indexOf(p.id) >= 0; }).length / rot.length : 1;
+    var mood = rot.length ? rot.reduce(function (a, p) { return a + (p.mood != null ? p.mood : 60); }, 0) / rot.length : 60;
+    return { winning: Math.round((last - 0.5) * 50), continuity: Math.round((cont - 0.65) * 40), mood: Math.round((mood - 60) * 0.4) };
+  }
+  function updateChemistry(state, rate) {
+    Object.keys(state.teams).forEach(function (a) {
+      var t = state.teams[a], c = chemParts(state, a), cur = t.chem != null ? t.chem : 60, target = chemClamp(60 + c.winning + c.continuity + c.mood, 15, 98);
+      t.chem = Math.round(chemClamp(cur + (target - cur) * (rate || 0.2), 10, 99));
+      t.chemParts = c;
+    });
+  }
   function simChunk(state, days) {
     var E = mod("ENGINE"), rng = rngFor(state);
     var injBefore = clone(state.season.injuries || {});
@@ -519,6 +548,7 @@
       if (rng() < 0.08 * days) safe("aiOffers", function () { (W.TRADE.aiOffers(state, rng) || []).forEach(function (o) { state.events.push({ type: "tradeOffer", offer: o, quiet: !autoOn(state, "tradeOffers") }); }); });
     }
     if (mod("MOOD") && rng() < days / 30) safe("mood", function () { W.MOOD.update(state); });
+    safe("chemistry", function () { updateChemistry(state, Math.min(0.5, 0.06 * days)); });
     if (mod("PROG") && rng() < days / 30) safe("inSeason", function () { W.PROG.inSeason(state, rng); });
     if (mod("GLEAGUE")) safe("gleague", function () { if (typeof W.GLEAGUE.sync === "function") W.GLEAGUE.sync(state, rng); else if (days >= 7) W.GLEAGUE.simWeek(state, rng); });
     // real-world headlines (elections, COVID, other sports) for the dates just simmed
@@ -982,7 +1012,7 @@
     return state;
   }
 
-  var API = { KEY_DATES: KEY_DATES, newLeague: newLeague, summerStart: summerStart, advance: advance, nextPhase: nextPhase, leagueView: leagueView, resolveEvent: resolveEvent,
+  var API = { KEY_DATES: KEY_DATES, newLeague: newLeague, summerStart: summerStart, chemParts: chemParts, advance: advance, nextPhase: nextPhase, leagueView: leagueView, resolveEvent: resolveEvent,
     clearResolved: clearResolved, currentDate: currentDate, useStart: useStart, startData: startData, pendingEvents: pendingEvents, OFFSEASON: OFFSEASON,
     userPicksLeft: userPicksLeft, handlesContractDecisions: true, autoOn: autoOn, applyBrands: applyBrands, migrate: migrate, rosterRules: rosterRules, rosterOf: rosterOf, enforceRosters: enforceRosters, assignPicks: assignPicks };
   W.LEAGUE = API;
