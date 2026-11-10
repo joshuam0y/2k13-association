@@ -272,8 +272,14 @@
   // nobody twice even from different seasons). A spin lands on a group: season:team.
   function board(cfg) {
     const era = !cfg.year, d = C.seasonData(era ? 2013 : cfg.year), teams = d.teams, byId = {};
-    const players = era ? C.allTimePool().map(e => Object.assign({}, e, { id: e.key, team: e.from })) : d.players;
+    const players = era ? C.allTimePool().map(e => Object.assign({}, e, { id: e.key, team: e.from })) : d.players.slice();
     players.forEach(p => { byId[p.id] = p; });
+    // every season: a landed season's full rosters join once its file is loaded (keys id@season)
+    if (era) C.poolSeasons().forEach(y => {
+      if (y !== 2013 && !C.loaded(y)) return;
+      const sd = C.seasonData(y);
+      if (sd) sd.players.forEach(q => { const k = q.id + '@' + y; if (byId[k]) return; const e = Object.assign({}, q, { id: k, key: k, base: q.id, from: q.team, season: y }); byId[k] = e; players.push(e); });
+    });
     if (!era) d.free.forEach(p => { byId[p.id] = p; });
     const base = p => (era ? p.base : p.id);
     return { era, teams, byId, players, base,
@@ -288,7 +294,8 @@
   }
   function spinFor(cfg, B, taken, avoid) {
     const tk = B.takenSet(taken), groups = {};
-    B.players.forEach(p => { if (tk.has(B.base(p))) return; const k = B.groupKey(p); if (!groups[k]) groups[k] = { abbr: p.team, year: B.era ? p.season : cfg.year, key: k }; });
+    if (B.era && window.CHALLENGE_POOL && window.CHALLENGE_POOL.teams) Object.keys(window.CHALLENGE_POOL.teams).forEach(y => (window.CHALLENGE_POOL.teams[y] || []).forEach(t => { groups[y + ':' + t.abbr] = { abbr: t.abbr, year: +y, key: y + ':' + t.abbr }; }));
+    else B.players.forEach(p => { if (tk.has(B.base(p))) return; const k = B.groupKey(p); if (!groups[k]) groups[k] = { abbr: p.team, year: B.era ? p.season : cfg.year, key: k }; });
     const keys = Object.keys(groups);
     let pool = keys.filter(k => VS.spun.indexOf(k) < 0 && k !== avoid);
     if (!pool.length) pool = keys.filter(k => k !== avoid);
@@ -330,6 +337,10 @@
         body = `<div class="vs-clock">ON THE CLOCK: <b>${esc(who(on))}</b> <span class="muted">(pick ${taken.length + 1} of 10)</span></div>
           <section class="ch-wheel">${UI.challengeWheel.strip(teams)}<div class="ch-wheel-k">${spin ? 'SPINNING...' : mine ? 'YOUR SPIN' : 'WAITING FOR ' + esc(who(on)).toUpperCase() + ' TO SPIN'}</div>
           ${mine && !spin ? '<button type="button" class="btn btn-gold btn-big" id="chSpin">SPIN THE WHEEL</button>' : ''}</section>`;
+      } else if (B.era && spin.year !== 2013 && !C.loaded(spin.year)) {
+        // the landed season's full rosters: load them, then draw again
+        body = `<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE ${esc(lbl(spin.year))} ROSTER...</div></section>`;
+        C.load(spin.year).then(() => { if (VS.spin && VS.spin.n === spin.n) draft(app); }).catch(() => UI.toast('That roster did not load. Try a re-spin.', 'error'));
       } else {
         const t = B.teamFor(spin.abbr, spin.year);
         const ros = UI.challengeAlpha(rosterOf(B, spin.key, taken));
@@ -414,6 +425,10 @@
     stopTick();
     const cfg = VS.cfg;
     if (!cfg || C.vsOnClock(cfg) >= 0) { go(cfg ? 'draft' : 'setup'); return; }
+    if (!cfg.year) {   // every season: the seasons the picks came from
+      const need = [...new Set(cfg.sides[0].picks.concat(cfg.sides[1].picks).map(k => +String(k).split('@')[1]).filter(y => y && y !== 2013 && !C.loaded(y)))];
+      if (need.length) { app.innerHTML = '<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE ROSTERS...</div></section>'; Promise.all(need.map(y => C.load(y))).then(() => series(app)).catch(e => UI.toast(e.message || 'Rosters did not load', 'error')); return; }
+    }
     loadThen(app, cfg.year, () => {
       let r;
       try { r = runFor(cfg); } catch (e) { app.innerHTML = UI.empty('COULD NOT PLAY IT', esc(e.message || e), '<div class="row-btns"><a class="btn" href="#/challenge/vs">BACK</a></div>'); return; }

@@ -273,7 +273,19 @@
     if (!E) throw new Error('Game engine not loaded');
     if (!d) throw new Error('The ' + (cfg.year || 2013) + ' rosters are not loaded.');
     var byId = {};
-    if (everyEra) allTimePool().forEach(function (e) { var q = clone(e); q.id = e.key; byId[e.key] = q; });
+    if (everyEra) {
+      allTimePool().forEach(function (e) { var q = clone(e); q.id = e.key; byId[e.key] = q; });
+      // picks from a landed season's full rosters (not in the pool): that season's data, keyed id@season
+      [].concat(cfg.sides[0].picks, cfg.sides[1].picks).forEach(function (k) {
+        if (byId[k]) return;
+        var bits = String(k).split('@'), sd = seasonData(+bits[1]), src = sd && sd.players.filter(function (q) { return q.id === bits[0]; })[0];
+        if (!src) return;
+        var q = clone(src);
+        if (!q.tend && E.tendencyOf) { var tt = clone(E.tendencyOf(src)), dr = E.defRates(src); tt.blk = Math.round(dr.blk * 100) / 10; tt.stl = Math.round(dr.stl * 100) / 10; delete tt.generated; q.tend = tt; }
+        q.id = k; q.key = k; q.base = src.id; q.from = src.team; q.season = +bits[1];
+        byId[k] = q;
+      });
+    }
     else d.players.concat(d.free).forEach(function (p) { byId[p.id] = p; });
     var rng = mulberry32((cfg.seed ^ 0x7F4A7C15) >>> 0);
     var sides = cfg.sides.map(function (sd) {
