@@ -203,23 +203,8 @@
 
   // ---------- help sheet ----------
   const KEYS = [['N', 'Sim to your next game'], ['W', 'Sim a week'], ['M', 'Sim a month'], ['R', 'Your roster'], ['T', 'Trades'], ['F', 'Free agency'], ['S', 'Standings'], ['?', 'This help']];
-  let helpEl = null;
-  function closeHelp() {
-    if (!helpEl) return;
-    helpEl.remove();
-    helpEl = null;
-    const b = document.getElementById('gdHelpBtn');
-    if (b) b.setAttribute('aria-expanded', 'false');
-  }
-  function help() {
-    if (helpEl) { closeHelp(); return; }
-    if (tour) finish();
-    const el = document.createElement('div');
-    el.className = 'gd-sheet';
-    el.innerHTML = `<div class="gd-box" role="dialog" aria-modal="true" aria-labelledby="gdHelpTitle">
-      <div class="gd-head"><span id="gdHelpTitle">HOW TO PLAY</span><button type="button" class="gd-x" data-gh="close" aria-label="Close help">&times;</button></div>
-      <div class="gd-body">
-        <p>You run one NBA team. Sim games from the PLAY tile on the Season page, make trades and signings, and set your rotation. The sim stops for decisions that need you.</p>
+  // The help text follows the screen you are on: Head to Head, Season Mode, or the Association.
+  const ASSOC_HELP = `        <p>You run one NBA team. Sim games from the PLAY tile on the Season page, make trades and signings, and set your rotation. The sim stops for decisions that need you.</p>
         <h3>THE OFFSEASON</h3>
         <ol class="gd-steps">
           <li><b>Draft Lottery.</b> The teams that missed the playoffs draw for the top picks, with the real odds of the era.</li>
@@ -235,8 +220,63 @@
           <dt>TEAM OVR</dt><dd>The rating of the whole team, from its top eight players. The best players count the most. G League and overseas players are left out.</dd>
         </dl>
         <h3>KEYBOARD SHORTCUTS</h3>
-        <ul class="gd-keys">${KEYS.map(([k, t]) => `<li><kbd>${esc(k)}</kbd><span>${esc(t)}</span></li>`).join('')}</ul>
-        <p class="muted">N, W and M work on the Season page and still ask before a key date. Keys do nothing while you type in a box.</p>
+        <ul class="gd-keys">__KEYS__</ul>
+        <p class="muted">N, W and M work on the Season page and still ask before a key date. Keys do nothing while you type in a box.</p>`;
+  const SEASON_HELP = `<p>Draft five players and see how they do. Nothing else matters: no bench, no injuries, no trades.</p>
+        <h3>HOW IT WORKS</h3>
+        <ol class="gd-steps">
+          <li><b>Set it up.</b> Pick one real season or ALL TIME, and a team. All time is a snake draft against 29 AI teams, and you can switch seasons on or off (ALL, CLEAR or a decade).</li>
+          <li><b>Draft your five.</b> Pick free from the pool, or spin the wheel for a team and take someone from it. Each spot wants a position, and a lineup with no big man gets hurt on the boards.</li>
+          <li><b>Sim.</b> 82 games and the playoffs. Your five play all 48 minutes and never get hurt, so the stats get big.</li>
+          <li><b>Share.</b> Your season card has your record, your five and their stats.</li>
+        </ol>
+        <h3>OPTIONS</h3>
+        <dl class="gd-dl">
+          <dt>SHOT CLOCK</dt><dd>24 seconds to make each pick, or OFF.</dd>
+          <dt>SALARY CAP</dt><dd>Every player has a price. Spend your cap on five, and leave enough for the open spots.</dd>
+          <dt>RATINGS</dt><dd>Turn ratings off to draft on names and instinct.</dd>
+          <dt>INJURIES</dt><dd>Only affects the other teams, and only in a one season run.</dd>
+        </dl>`;
+  const VS_HELP = `<p>Two people draft five players each and play a series. Same device, or online with a room code.</p>
+        <h3>HOW IT WORKS</h3>
+        <ol class="gd-steps">
+          <li><b>Start a room.</b> Share the code or link and your friend joins from their phone. Or play both sides on one device.</li>
+          <li><b>Draft.</b> Every pick is a wheel spin, and you alternate. BLIND DRAFT hides what the other side picks until the end.</li>
+          <li><b>Series.</b> Best of 3, 5 or 7. Both fives play all 48 minutes. Size matters: height decides boards and shots near the rim, and positions matter.</li>
+          <li><b>Watch.</b> WATCH plays a game on both screens at once. Pause, play, speed and skip stay in sync.</li>
+          <li><b>Box scores.</b> Every game has one, and the series box shows 3P%, steals, blocks and more. Your head to head record is kept between the two of you.</li>
+        </ol>
+        <h3>OPTIONS</h3>
+        <dl class="gd-dl">
+          <dt>SEASONS</dt><dd>Switch seasons on or off by year or decade. Players only come from seasons that are on.</dd>
+          <dt>SHOT CLOCK</dt><dd>24 seconds per pick, or OFF.</dd>
+          <dt>SALARY CAP</dt><dd>Every player has a price. Stay under the cap for all five.</dd>
+        </dl>`;
+  function modeOf() {
+    const h = location.hash || '';
+    if (/^#\/challenge\/vs/.test(h)) return { tag: ': HEAD TO HEAD', body: VS_HELP, assoc: false };
+    if (/^#\/challenge/.test(h)) return { tag: ': SEASON MODE', body: SEASON_HELP, assoc: false };
+    return { tag: '', body: ASSOC_HELP, assoc: true };
+  }
+  let helpEl = null;
+  function closeHelp() {
+    if (!helpEl) return;
+    helpEl.remove();
+    helpEl = null;
+    const b = document.getElementById('gdHelpBtn');
+    if (b) b.setAttribute('aria-expanded', 'false');
+  }
+  function help() {
+    if (helpEl) { closeHelp(); return; }
+    if (tour) finish();
+    const mode = modeOf();
+    const body = mode.assoc ? ASSOC_HELP.replace('__KEYS__', KEYS.map(([k, t]) => `<li><kbd>${esc(k)}</kbd><span>${esc(t)}</span></li>`).join('')) : mode.body;
+    const el = document.createElement('div');
+    el.className = 'gd-sheet';
+    el.innerHTML = `<div class="gd-box" role="dialog" aria-modal="true" aria-labelledby="gdHelpTitle">
+      <div class="gd-head"><span id="gdHelpTitle">HOW TO PLAY${mode.tag}</span><button type="button" class="gd-x" data-gh="close" aria-label="Close help">&times;</button></div>
+      <div class="gd-body">
+${body}
       </div>
       <div class="gd-foot">${g() && g().season ? '<button type="button" class="btn btn-small" data-gh="tour">SHOW TOUR</button>' : ''}${P.settings ? '<a class="btn btn-small" href="#/settings" data-gh="settings">SETTINGS</a>' : ''}<button type="button" class="btn btn-gold btn-small" data-gh="close">CLOSE</button></div>
     </div>`;
