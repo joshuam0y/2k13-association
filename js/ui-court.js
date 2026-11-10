@@ -237,7 +237,12 @@
       wrapEl.classList.toggle('ct-full', full);
       document.body.classList.toggle('ct-full-on', full);
       const fb = $('.ct-fs'); if (fb) fb.textContent = full ? 'EXIT FULL SCREEN' : 'FULL SCREEN';
+      fitH();
     };
+    // the height you can really see (phone browsers with a toolbar: 100vh is taller than the screen, the bottom would be cut off)
+    const fitH = () => { const h = full ? Math.round((window.visualViewport && window.visualViewport.height) || window.innerHeight) : 0; wrapEl.style.height = h ? h + 'px' : ''; };
+    window.addEventListener('resize', fitH);
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', fitH);
     const syncMus = () => { const b = $('.ct-mus'); if (b && window.MUSICBAR) b.textContent = window.MUSICBAR.hidden() ? 'SHOW MUSIC' : 'HIDE MUSIC'; };
     const svg = $('.ct-svg');
     const NS = 'http://www.w3.org/2000/svg';
@@ -857,6 +862,8 @@
       if (st.raf) cancelAnimationFrame(st.raf);
       st.raf = 0;
       clearTimeout(st.bannerT);
+      window.removeEventListener('resize', fitH);
+      if (window.visualViewport) window.visualViewport.removeEventListener('resize', fitH);
       window.removeEventListener('resize', onResize);
     }
 
