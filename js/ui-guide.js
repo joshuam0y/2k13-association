@@ -293,7 +293,7 @@
       <div class="gd-body">
 ${body}
       </div>
-      <div class="gd-foot">${g() && g().season ? '<button type="button" class="btn btn-small" data-gh="tour">SHOW TOUR</button>' : ''}${P.settings ? '<a class="btn btn-small" href="#/settings" data-gh="settings">SETTINGS</a>' : ''}<button type="button" class="btn btn-gold btn-small" data-gh="close">CLOSE</button></div>
+      <div class="gd-foot">${g() && g().season ? '<button type="button" class="btn btn-small" data-gh="tour">SHOW TOUR</button>' : ''}<button type="button" class="btn btn-gold btn-small" data-gh="close">CLOSE</button></div>
     </div>`;
     document.body.appendChild(el);
     helpEl = el;
