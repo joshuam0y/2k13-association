@@ -130,7 +130,7 @@ check(starsHeld === 0 || starsStayed / starsHeld >= 0.7, 'stars mostly stay with
       const hurt = Object.keys(u.season.injuries || {}).filter(id => u.players[id] && u.players[id].team === u.userTeam && u.season.injuries[id].games > 0 && u.season.injuries[id].games < 900);
       const gp = {}; hurt.forEach(id => { gp[id] = (u.season.playerStats[id] || {}).g || 0; });
       r = step(() => L.advance(u, { days: 3 }), 'season ' + u.year);
-      hurt.forEach(id => { const now = (u.season.playerStats[id] || {}).g || 0; if (now > gp[id] && u.season.injuries[id] && u.season.injuries[id].games > 2) injuredPlayed.push(u.players[id].name); });
+      hurt.forEach(id => { const now = (u.season.playerStats[id] || {}).g || 0; if (now > gp[id] && u.season.injuries[id] && u.season.injuries[id].games > 2 && !u.season.injuries[id].hurt) injuredPlayed.push(u.players[id].name); });
       if (Array.isArray(u.notices) && u.notices.length) { seen.notices += u.notices.length; u.notices = []; }
     } while (r.stopped !== 'seasonOver' && ++g < 400);
     // the offseason the way a user plays it: sim past the draft, re-sign by hand (nobody), free agency in ask mode
