@@ -202,6 +202,8 @@
     if (mod("PROG") && W.PROG.rollFates) safe("fates", function () { W.PROG.rollFates(state); });
     // coaches are cosmetic: names and records for display
     if (mod("COACH") && W.COACH.init) safe("coaches", function () { W.COACH.init(state); });
+    // a start's first season: AI rotations lean on who really played (real minutes per game that season)
+    if (other && base.seasonStats) Object.keys(base.seasonStats).forEach(function (id) { var rp = state.players[id]; if (rp) rp.realMpg = { year: base.season, mpg: base.seasonStats[id].mpg }; });
     var today = opts.today && base.today ? base.today : null;
     if (today) todayRosters(state, today);
     startSeason(state);

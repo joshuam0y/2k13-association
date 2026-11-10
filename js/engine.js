@@ -592,6 +592,8 @@
     // auto style (ignored once the user saved his own minutes)
     var style = !team.minutes && AUTO_STYLES[team.autoStyle] || null;
     if (style && (style.young || style.bias)) avail.forEach(function (s) { s.rv = s.ovr + (style.young ? youthBonus(s.p) : 0) + (style.bias ? style.bias(s.p) : 0); });
+    // AI teams in a start's first season: who really played gets the minutes (p.realMpg, js/league.js)
+    if (!team.isUser) avail.forEach(function (s) { var r = s.p.realMpg; if (r && r.year === (opts.year || 0)) s.rv = (s.rv != null ? s.rv : s.ovr) + clamp((r.mpg - 20) * 0.3, -6, 5); });
     var rank = function (s) { return s.rv != null ? s.rv : s.ovr; };
     avail.sort(function (a, b) { return rank(b) - rank(a); });
     var starters = pickStarters(avail, team.starters, style);
@@ -1455,7 +1457,8 @@
       strategy: (lt && lt.strategy) || (season.strategies && season.strategies[abbr]) || null,
       autoStyle: (lt && lt.autoStyle) || null,
       playHurt: lt ? lt.playHurt !== false : true,
-      chem: lt && lt.chem != null ? lt.chem : null
+      chem: lt && lt.chem != null ? lt.chem : null,
+      isUser: abbr === season.userTeam
     };
   }
 

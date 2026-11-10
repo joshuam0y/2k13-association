@@ -19,6 +19,8 @@
   var PHYSICAL = { speed: 1, vert: 1, stamina: 1, durability: 1, strength: 0.5 };
   var CRAFT = { three: 1, mid: 1, ft: 1, pass: 1, oiq: 1, diq: 1, post: 0.5 };
 
+  var GAP_ROOM = 2;      // a season inside a gap of his real career: at most this much above his real level
+  var LAST_DATA_YEAR = 2026;   // the last season the real ratings cover
   var FORM_MAX = 4;      // in-season form moves a player at most 4 points either way (like 2K's +4 / -4)
   var OVR_MIN = 35, OVR_MAX = 99, ATTR_MIN = 25, ATTR_MAX = 99;
 
@@ -702,6 +704,20 @@
         // well past his ceiling, gains come slowly (a what-if bust can become a star, rarely an MVP)
         var ceil = Math.max(p.pot || 0, p.whatIf || 0) + 1;
         if (newOvr > p.ovr && newOvr > ceil) newOvr = Math.max(p.ovr, ceil) + (newOvr - Math.max(p.ovr, ceil)) * 0.25;
+      }
+      // Seasons his real path does not cover: inside a gap of his real NBA career (Europe, a long injury) the
+      // interpolated target is a guess, not a level, so breakouts and drift there stop near his real level
+      // (Sergio Rodriguez, real 74 before and after Spain, was reaching 83). After a real career that ended
+      // before the data does (he went overseas for good, or out of the league), he keeps about his last real
+      // level instead of developing like an unknown.
+      if (info && info.years.length && SETTINGS.variety) {
+        var t0 = info.t, lastY = null, nextY = null;
+        info.years.forEach(function (y) { if (y < next) lastY = y; if (y > next && nextY == null) nextY = y; });
+        var lastR = lastY != null ? scaleRating(lastY, +t0[lastY]) : null;
+        if (t0[next] == null && lastR != null) {
+          if (nextY != null) newOvr = Math.min(newOvr, Math.max(lastR, tgt != null ? tgt : lastR) + GAP_ROOM);
+          else if (info.last < LAST_DATA_YEAR && p.age >= 24) newOvr = Math.min(newOvr, Math.max(lastR, before) + 1);
+        }
       }
       // a player who was never really a star (real peak under 88) can become a very good player here,
       // rarely an MVP: past 90 his gains count about 30%, and 93 is the most he reaches
