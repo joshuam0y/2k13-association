@@ -12,9 +12,10 @@
 
   const PAGES = {
     about: ['ABOUT', `
-      <p>This is a free basketball sim made by <b>Joshua Moy</b>. It started as a love letter to NBA 2K13 and grew into three ways to play:</p>
+      <p><b>Starting Five</b> is a free basketball sim made by <b>Joshua Moy</b>. It started as a love letter to NBA 2K13 and grew into four ways to play:</p>
       <ul><li><b>Season Mode.</b> Draft five players from any season, or from all of NBA history, and sim a full season.</li>
       <li><b>Head to Head.</b> Draft against a friend, online or on one phone, and play a series.</li>
+      <li><b>Tournament.</b> Four or eight friends draft on one device and play a bracket.</li>
       <li><b>The Association.</b> A full franchise sim with trades, free agency, drafts and real history.</li></ul>
       <p>Ratings are estimates built from real stats and tuned to feel like the games. Nothing here is official.</p>
       <p>It is a hobby project. It has no ads, no accounts and no cost.</p>`],

@@ -59,6 +59,17 @@
     if (!lw) R.sweeps[wn] = (R.sweeps[wn] || 0) + 1;
     R.log.unshift({ w: wn, s: ww + '-' + lw, y: cfg.year || 0, at: Date.now() }); R.log = R.log.slice(0, 12);
     R.ids.unshift(id); R.ids = R.ids.slice(0, 60);
+    // extra rivalry stats (older entries simply lack them): best games, the current streak, the last five series
+    const nameOf = a => norm(who(S[0].abbr === a ? 0 : 1)), best = R.best || {};
+    (r.games || []).forEach(g => {
+      const win = g.winner, m = Math.abs(g.hs - g.as), hi = Math.max(g.hs, g.as), hiTeam = g.hs >= g.as ? g.home : g.away;
+      if (!best.margin || m > best.margin.m) best.margin = { w: nameOf(win), m, s: Math.max(g.hs, g.as) + '-' + Math.min(g.hs, g.as), y: cfg.year || 0 };
+      if (!best.high || hi > best.high.pts) best.high = { n: nameOf(hiTeam), pts: hi, s: g.hs + '-' + g.as, y: cfg.year || 0 };
+    });
+    R.best = best;
+    let run = 0; while (run < R.log.length && R.log[run].w === R.log[0].w) run++;
+    R.streak = { w: R.log[0].w, n: run };
+    R.last5 = R.log.slice(0, 5).map(x => ({ w: x.w, s: x.s }));
     const all = rivals.all(); all[pairKey()] = R; rivals.save(all);
     return R;
   }
@@ -72,10 +83,19 @@
     if (!sa && !sb) return '';
     if (compact) return `<p class="vs-rival-mini"><span>THE RIVALRY</span> ${esc(a)} <b>${sa}</b> | ${esc(b)} <b>${sb}</b></p>`;
     let run = 0; while (run < R.log.length && R.log[run].w === R.log[0].w) run++;
-    const streak = R.log.length ? (run >= 2 ? `${R.log[0].w} has won ${run} straight.` : `${R.log[0].w} won the last one.`) : '';
+    const st = R.streak && R.streak.w ? R.streak : { w: (R.log[0] || {}).w, n: run };
+    const streak = R.log.length ? (st.n >= 2 ? `${st.w} has won ${st.n} straight.` : `${st.w} won the last one.`) : '';
+    const bt = R.best || {}, last5 = (R.last5 && R.last5.length ? R.last5 : R.log.slice(0, 5));
+    const stats = `<div class="vs-rstats">
+        <span><small>CURRENT STREAK</small><b>${esc(st.w || '-')} ${st.n || 0}</b></span>
+        <span><small>SERIES RECORD</small><b>${esc(a.split(' ')[0])} ${sa}-${sb} ${esc(b.split(' ')[0])}</b></span>
+        ${bt.margin ? `<span><small>BIGGEST WIN</small><b>${esc(bt.margin.w.split(' ')[0])} by ${bt.margin.m}</b><i>${esc(bt.margin.s)}</i></span>` : ''}
+        ${bt.high ? `<span><small>HIGHEST SCORE</small><b>${esc(bt.high.n.split(' ')[0])} ${bt.high.pts}</b><i>${esc(bt.high.s)}</i></span>` : ''}
+        <span class="vs-rlast"><small>LAST 5 SERIES</small><em>${last5.map(x => `<u class="${x.w === a ? 'a' : 'b'}">${esc(x.w.split(' ')[0].slice(0, 6))}<i>${esc(x.s)}</i></u>`).join('')}</em></span></div>`;
     const sw = [a, b].filter(n => R.sweeps[n]).map(n => `${n} ${R.sweeps[n]}`).join(', ');
     return `<section class="vs-rival"><div class="vs-rival-h"><div class="ch-hero-k">THE RIVALRY</div><button type="button" class="btn btn-small" id="vsRivalReset">RESET</button></div>
       <div class="vs-rival-row"><span class="${sa > sb ? 'up' : ''}"><b>${esc(a)}</b><strong>${sa}</strong></span><i>-</i><span class="${sb > sa ? 'up' : ''}"><strong>${sb}</strong><b>${esc(b)}</b></span></div>
+      ${stats}
       <p class="muted">Series won. Games: ${esc(a)} ${R.games[a] || 0}, ${esc(b)} ${R.games[b] || 0}.${sw ? ' Sweeps: ' + esc(sw) + '.' : ''} ${esc(streak)}</p>
       <div class="vs-rival-log">${R.log.slice(0, 8).map(x => `<span class="${x.w === a ? 'a' : 'b'}">${esc(x.w.split(' ')[0])} ${esc(x.s)}<small>${esc(x.y ? short(x.y) : 'ALL')}</small></span>`).join('')}</div></section>`;
   }
@@ -216,7 +236,7 @@
   function bindNet(app) {
     const cp = UI.$('#vsCopy', app);
     if (cp) cp.addEventListener('click', async () => {
-      const link = joinLink(), text = 'Draft me in the 2K13 Association. Room ' + NET.code + ': ' + link;
+      const link = joinLink(), text = 'Draft me on Starting Five. Room ' + NET.code + ': ' + link;
       if (navigator.share) { try { await navigator.share({ text, url: link }); return; } catch (e) { /* closed */ } }
       try { await navigator.clipboard.writeText(link); UI.toast('Link copied. Send it to your friend.'); } catch (e) { UI.toast(link); }
     });
@@ -549,7 +569,14 @@
         draft(app); window.scrollTo(0, 0);
       }));
       const sim = UI.$('#vsSim', app);
-      if (sim) sim.addEventListener('click', () => { VS.shown = 0; go('series'); });
+      if (sim) sim.addEventListener('click', () => {
+        const go2 = () => { VS.shown = 0; go('series'); };
+        if (!UI.slib || sim.dataset.busy) { go2(); return; }
+        sim.dataset.busy = '1';
+        const groups = [0, 1].map(i => ({ label: who(i).toUpperCase() + ' | ' + ((tOf(B.teams, VS.cfg.sides[i].team).name) || '').toUpperCase(), color: (tOf(B.teams, VS.cfg.sides[i].team).colors || ['#888'])[0],
+          players: VS.cfg.sides[i].picks.map(id => byId[id]).filter(Boolean) }));
+        UI.slib.intro(groups, { ratings: !(VS.cfg.blind || (VS.opts && VS.opts.blind)) }, () => { delete sim.dataset.busy; go2(); });
+      });
     });
   }
 
@@ -613,7 +640,7 @@
           <div class="vs-tbl-w"><table class="vs-tbl"><thead><tr><th class="l">PLAYER</th><th>SPOT</th><th>OVR</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>3PM</th><th>FG%</th><th>3P%</th><th>FT%</th></tr></thead><tbody>${sd.five.slice().sort((a, b) => C.SLOTS.indexOf(a.slot) - C.SLOTS.indexOf(b.slot)).map(p => { const l = r.lines[p.id] || {}; return `<tr><td class="l">${esc(p.name)}${p.season && !cfg.year ? ' <small class="muted">' + esc(short(p.season)) + '</small>' : ''}</td><td>${esc(p.slot || '')}</td><td>${esc(p.ovr)}</td><td>${f1(l.pts)}</td><td>${f1(l.reb)}</td><td>${f1(l.ast)}</td><td>${f1(l.stl)}</td><td>${f1(l.blk)}</td><td>${f1(l.tov)}</td><td>${f1(l.tpm)}</td><td>${f1(l.fgp)}</td><td>${f1(l.tpp)}</td><td>${f1(l.ftp)}</td></tr>`; }).join('')}</tbody></table></div></div>`).join('')}</div></section>` : '';
       const next = shown + 1;
       const acts = done
-        ? `<button type="button" class="btn btn-share" id="vsShare">${UI.shareIcon || ''}SEND THIS TO YOUR FRIENDS</button><button type="button" class="btn btn-gold" id="vsAgain">RUN IT BACK</button><button type="button" class="btn" id="vsNew">NEW MATCHUP</button>`
+        ? `<button type="button" class="btn btn-share" id="vsShare">${UI.shareIcon || ''}SEND THIS TO YOUR FRIENDS</button><button type="button" class="btn sl-copy" id="vsCopy">COPY LINK</button><button type="button" class="btn btn-gold" id="vsAgain">RUN IT BACK</button><button type="button" class="btn" id="vsNew">NEW MATCHUP</button>`
         : WATCH ? `<button type="button" class="btn btn-gold" id="vsFinal">SKIP TO THE FINAL</button>`
         : `<button type="button" class="btn btn-gold btn-big" id="vsWatch">WATCH GAME ${next}</button><button type="button" class="btn" id="vsNext">SIM GAME ${next}</button><button type="button" class="btn" id="vsAll">SIM THE REST</button>`;
       app.innerHTML = `${head}${netBar()}${score}
@@ -663,6 +690,15 @@
         const text = `${how} in a ${lblC(cfg)} versus draft. Winning five: ${five}.${mv}${nail}${riv} ${end}`;
         UI.shareResult(spec, text, location.origin + location.pathname + '#/challenge/vs', 'versus');
       });
+      if ($('#vsCopy')) $('#vsCopy').addEventListener('click', () => {
+        const wi = idx(r.winner);
+        const o = { v: 1, k: 'v', bo: r.bestOf, lb: lblC(cfg), wi: wi, n: [who(0), who(1)], r: cfg.blind || cfg.cap ? 0 : 1,
+          tm: S.map((x, i) => [x.abbr, nm(i), (x.team.colors || ['#444'])[0]]), sc: S.map(x => r.wins[x.abbr] || 0),
+          f: S.map(x => x.five.slice().sort((a, b) => C.SLOTS.indexOf(a.slot) - C.SLOTS.indexOf(b.slot)).map(p => [p.id, p.name, p.slot || C.primaryPos(p.pos), p.ovr, p.nbaId || 0, r.lines[p.id] ? f1(r.lines[p.id].pts) + ' PPG' : ''])),
+          g: r.games.map(g => [g[S[0].abbr === g.home ? 'hs' : 'as'], g[S[0].abbr === g.home ? 'as' : 'hs'], g.ot ? 1 : 0]) };
+        if (r.mvp) o.mv = [r.mvp.name, f1(r.mvp.line.pts), f1(r.mvp.line.reb), f1(r.mvp.line.ast)];
+        UI.slib.copy(UI.slib.url('vs', o), 'Head to Head result', who(wi) + ' beat ' + who(1 - wi) + ' ' + o.sc[wi] + '-' + o.sc[1 - wi] + ' in a Head to Head draft. Spin your own:');
+      });
       if ($('#vsRivalReset')) $('#vsRivalReset').addEventListener('click', () => {
         if (!window.confirm('Reset the record between ' + who(0) + ' and ' + who(1) + ' on this phone?')) return;
         const all = rivals.all(), k = pairKey(), ids = all[k] ? all[k].ids : []; all[k] = { ids }; rivals.save(all); series(app);   // keeps the ids so this series does not count again
@@ -675,6 +711,12 @@
   const base = P.challenge;
   P.challenge = function (app, arg) {
     const part = String(arg || '').split('/');
+    if (part[0] === 'vs' && part[1] === 'r') {   // a shared Head to Head result card (read only)
+      dropCourt(); stopTick();
+      const o = UI.slib && UI.slib.read(part.slice(2).join('/'));
+      if (!o || o.k !== 'v') { UI.slib ? UI.slib.bad(app) : (location.hash = '#/challenge/vs'); return; }
+      UI.slib.vsCard(app, o); return;
+    }
     if (part[0] !== 'vs') { dropCourt(); stopTick(); return base.apply(this, arguments); }
     APP = app;
     if (part[1] === 'join' && part[2]) {

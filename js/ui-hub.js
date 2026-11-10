@@ -56,7 +56,7 @@
       : UI.tile('#/continue', 'play', 'CONTINUE', { cls: 'mt-continue', sub: 'No saved league yet', disabled: true });
     app.innerHTML = `
       <section class="mm">
-        <div class="mm-brand"><span class="mm-2k">2K13</span><span class="mm-a">ASSOCIATION</span></div>
+        <div class="mm-brand"><span class="mm-2k">STARTING</span><span class="mm-a">FIVE</span></div>
         <div class="mm-joint"><span>A</span> JOSHUA MOY <span>JOINT</span></div>
         <div class="mm-install" id="mmInstall">${UI.installButton ? UI.installButton() : ''}</div>
         <div class="mm-k">${m && m.year ? 'THE ' + esc(UI.seasonLabel(m.year)) + ' NBA SEASON' : 'EVERY SEASON FROM 2003-04 TO 2026-27'}</div>
@@ -65,6 +65,7 @@
           ${UI.tile('#/challenge/vs', 'draft', 'HEAD TO HEAD', { cls: 'mt-hero mt-versus mt-hot', disabled: !engineOk, sub: 'YOU VS A FRIEND, ONLINE OR ONE PHONE' })}
           ${UI.tile('#/new', 'ball', 'THE ASSOCIATION', { cls: 'mt-assoc', disabled: !engineOk, sub: 'A FULL FRANCHISE' })}
           ${cont}
+          ${UI.tile('#/challenge/tournament', 'draft', 'TOURNAMENT', { cls: 'mt-tn', disabled: !engineOk, sub: '4 OR 8 FRIENDS, ONE PHONE, ONE BRACKET' })}
           ${UI.tile('#/saves', 'load', 'LOAD', { cls: 'mt-half' })}
           ${UI.tile('#/soundtrack', 'music', 'SOUNDTRACK', { cls: 'mt-half' })}
         </div>

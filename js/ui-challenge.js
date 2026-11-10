@@ -87,6 +87,11 @@
   // Setup
   // =====================================================================
   P.challenge = function (app, arg) {
+    if (String(arg || '').split('/')[0] === 'r') {   // a shared result card (read only)
+      const o = UI.slib && UI.slib.read(String(arg).split('/').slice(1).join('/'));
+      if (!o || o.k !== 's') { UI.slib ? UI.slib.bad(app) : (location.hash = '#/challenge'); return; }
+      drawSolo(app, o); return;
+    }
     if (!(window.ENGINE && typeof window.ENGINE.newSeason === 'function')) {
       app.innerHTML = UI.empty('SIM ENGINE NOT LOADED', 'The Draft Challenge needs the game engine (<code>js/engine.js</code>), which did not load.', '<div class="row-btns"><a class="btn" href="#/home">HOME</a></div>');
       return;
@@ -137,6 +142,7 @@
             <button type="button" class="ch-seg-b${isAll ? ' on' : ''}" data-mode="alltime"><b>ALL-TIME</b><small>Vets from every season, 30 teams draft</small></button>
             <a class="ch-seg-b" href="#/challenge/vs"><b>VERSUS</b><small>Two players, one phone, then a showdown</small></a>
           </div>
+          <small class="ch-hint">${isAll ? 'Seasons: every season you leave on is in one big pool, and nobody can be drafted twice.' : 'Seasons: you draft from the real league of the one season you pick.'}</small>
           ${isAll ? `<div class="ch-sub">SEASONS IN THE POOL <span class="muted">(${C.SEASONS.length - skip.length} of ${C.SEASONS.length} on)</span></div>
             <div class="row-btns vs-seas-all"><button type="button" class="btn btn-small${!skip.length ? ' on' : ''}" data-askip="all">ALL</button><button type="button" class="btn btn-small" data-askip="none">CLEAR</button>${decs.length > 1 ? decs.map(d => { const ys = C.SEASONS.filter(x => decOf(x.year) === d).map(x => x.year), n = ys.filter(y => skip.indexOf(y) < 0).length; return `<button type="button" class="btn btn-small${n === ys.length ? ' on' : n ? ' part' : ''}" data-adec="${d}">${d}s</button>`; }).join('') : ''}</div>
             <div class="vs-seas">${C.SEASONS.map(x => `<button type="button" class="ch-chip${skip.indexOf(x.year) < 0 ? ' on' : ''}" data-ayr="${x.year}">${esc(x.label)}</button>`).join('')}</div>
@@ -150,9 +156,9 @@
           ${ready ? `<div class="ch-teams">${teams.map(t => `<button type="button" class="ch-team${s.team === t.abbr ? ' on' : ''}" data-team="${esc(t.abbr)}" style="--c1:${esc(t.colors[0])}">${logo(t, 34)}<span>${esc(t.name)}</span></button>`).join('')}</div>` : '<p class="muted">Loading teams...</p>'}
           <div class="ch-row">
             <label class="field"><span>TEAM NAME (OPTIONAL)</span><input id="chName" maxlength="32" placeholder="${esc(s.team ? tName(teamOf(teams, s.team)) : 'Keep the real name')}" value="${esc(s.name || '')}"></label>
-            ${isAll ? '' : `<div class="field"><span>INJURIES (OTHER TEAMS)</span><div class="ch-seg ch-seg-sm"><button type="button" class="ch-seg-b${s.injuries ? ' on' : ''}" data-inj="1"><b>ON</b></button><button type="button" class="ch-seg-b${!s.injuries ? ' on' : ''}" data-inj="0"><b>OFF</b></button></div></div>`}
-            <div class="field"><span>RATINGS</span><div class="ch-seg ch-seg-sm"><button type="button" class="ch-seg-b${s.ratings !== false || s.cap ? ' on' : ''}" data-rat="1"><b>ON</b></button><button type="button" class="ch-seg-b${s.ratings === false && !s.cap ? ' on' : ''}" data-rat="0"${s.cap ? ' disabled title="The salary cap prices give the ratings away"' : ''}><b>OFF</b></button></div></div>
-            <div class="field"><span>SALARY CAP</span><div class="ch-seg ch-seg-sm">${CAPS.map(v => `<button type="button" class="ch-seg-b${(s.cap || 0) === v ? ' on' : ''}" data-cap="${v}"><b>${v ? '$' + v + 'M' : 'OFF'}</b></button>`).join('')}</div></div>
+            ${isAll ? '' : `<div class="field"><span>INJURIES (OTHER TEAMS)</span><div class="ch-seg ch-seg-sm"><button type="button" class="ch-seg-b${s.injuries ? ' on' : ''}" data-inj="1"><b>ON</b></button><button type="button" class="ch-seg-b${!s.injuries ? ' on' : ''}" data-inj="0"><b>OFF</b></button></div><small class="ch-hint">${s.injuries ? 'Rival teams lose players to injuries as the season goes on.' : 'Every rival team is healthy all year.'}</small></div>`}
+            <div class="field"><span>RATINGS</span><div class="ch-seg ch-seg-sm"><button type="button" class="ch-seg-b${s.ratings !== false || s.cap ? ' on' : ''}" data-rat="1"><b>ON</b></button><button type="button" class="ch-seg-b${s.ratings === false && !s.cap ? ' on' : ''}" data-rat="0"${s.cap ? ' disabled title="The salary cap prices give the ratings away"' : ''}><b>OFF</b></button></div><small class="ch-hint">${s.ratings === false && !s.cap ? 'Overalls and fit grades stay hidden until the season is played.' : 'Overalls and fit grades show while you draft.'}</small></div>
+            <div class="field"><span>SALARY CAP</span><div class="ch-seg ch-seg-sm">${CAPS.map(v => `<button type="button" class="ch-seg-b${(s.cap || 0) === v ? ' on' : ''}" data-cap="${v}"><b>${v ? '$' + v + 'M' : 'OFF'}</b></button>`).join('')}</div><small class="ch-hint">${s.cap ? 'Every player has a price from his rating. Your five must fit under $' + s.cap + 'M.' : 'No cap: take anyone.'}</small></div>
           </div>
         </div>
         <div class="ch-go"><button type="button" class="btn btn-gold btn-big" id="chStart"${s.team ? '' : ' disabled'}>${s.team ? 'START THE DRAFT' : 'PICK A FRANCHISE'}</button>
@@ -518,6 +524,13 @@
     return ch;
   }
   function startSim(app) {
+    let five = [];
+    try { five = myFive(CUR.cfg); } catch (e) { five = []; }
+    if (five.length && UI.slib) UI.slib.intro([{ label: 'YOUR STARTERS', players: five }], { ratings: !noR() }, () => beginSim(app));
+    else beginSim(app);
+  }
+  function beginSim(app) {
+    if (!CUR) return;
     try {
       RUN = { ch: buildChallenge(CUR.cfg, CUR.dr), fast: false, paused: false, ticker: [] };
     } catch (e) { UI.toast('Could not start the season: ' + (e && e.message ? e.message : e), 'error'); return; }
@@ -696,6 +709,97 @@
   // ---------- share links: the setup and the seed, so the same season plays on any device ----------
   function b64(str) { return btoa(unescape(encodeURIComponent(str))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
   function unb64(code) { const t = code.replace(/-/g, '+').replace(/_/g, '/'); return decodeURIComponent(escape(atob(t + '==='.slice((t.length + 3) % 4)))); }
+
+  // ---------- result links (#/challenge/r/CODE, #/challenge/vs/r/CODE): the finished result in the link, read only ----------
+  // Shared with js/ui-versus.js as UI.slib. The code is compact JSON in base64url; nothing is simmed when it opens.
+  function slUrl(kind, o) { return location.origin + location.pathname + '#/challenge/' + (kind === 'vs' ? 'vs/r/' : 'r/') + b64(JSON.stringify(o)); }
+  function slCopy(url, title, text) {
+    if (navigator.share) { return navigator.share({ title: title, text: text || title, url: url }).catch(e => { if (e && e.name === 'AbortError') return; return slClip(url); }); }
+    return slClip(url);
+  }
+  function slClip(url) {
+    const done = () => UI.toast('Link copied. Paste it in a text to your friends.');
+    const old = () => { try { const t = document.createElement('textarea'); t.value = url; t.style.position = 'fixed'; t.style.opacity = '0'; document.body.appendChild(t); t.select(); const ok = document.execCommand('copy'); t.remove(); if (ok) done(); else UI.toast(url); } catch (e) { UI.toast(url); } };
+    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(url).then(done).catch(old);
+    old(); return Promise.resolve();
+  }
+  const slPlayer = a => ({ id: a[0], name: a[1], pos: a[2], ovr: a[3], nbaId: a[4] || null });
+  const slFiveRow = (a, c, ratings) => { const p = slPlayer(a); return `<li class="sl-p">${face(p, c, 'sl-hs')}<span class="sl-pn"><b>${esc(p.name)}</b><small>${esc(p.pos || '')}</small></span>${ratings && p.ovr != null ? `<span class="ch-ovr ${UI.ovrClass(p.ovr)}">${esc(p.ovr)}</span>` : ''}${a[5] ? `<span class="sl-pl">${esc(a[5])}</span>` : ''}</li>`; };
+  function slBad(app) { app.innerHTML = UI.empty('LINK NOT READABLE', 'This result link is broken or cut off.', '<div class="row-btns"><a class="btn btn-gold" href="#/challenge">PLAY YOUR OWN</a></div>'); }
+  function slRead(code) { try { const o = JSON.parse(unb64(code)); return o && typeof o === 'object' ? o : null; } catch (e) { return null; } }
+  function soloCode(r) {
+    const me = r.team && typeof r.team === 'object' ? r.team : {};
+    const po = (r.series || []).reduce((t, x) => [t[0] + (x.w || 0), t[1] + (x.l || 0)], [0, 0]);
+    return { v: 1, k: 's', m: r.mode === 'alltime' ? 'a' : 'y', y: r.year || 0, lb: r.label || '', t: me.abbr || '', tn: tName(me), c: (me.colors || []).slice(0, 2),
+      w: r.w, l: r.l, x: r.exit, rs: r.result || '', po: po,
+      f: r.five.map(x => [x.id, x.name, C.primaryPos(x.pos), x.ovr, x.nbaId || 0, x.line ? x.line.pts.toFixed(1) + ' PTS' : '']),
+      o: { i: r.cfg && r.cfg.injuries === false ? 0 : 1, c: r.cfg && r.cfg.cap || 0, r: r.cfg && r.cfg.noRatings ? 0 : 1 } };
+  }
+  function drawSolo(app, o) {
+    const c1 = (o.c && o.c[0]) || '#444', c2 = (o.c && o.c[1]) || c1, champ = o.x === 'champion';
+    const opts = o.o || {};
+    app.innerHTML = `<section class="sl-wrap"><div class="ch-res ${champ ? 'champ' : ''} sl-card" style="--c1:${esc(c1)};--c2:${esc(c2)}">
+        <div class="ch-res-k">${esc(o.lb || '')} DRAFT CHALLENGE | SHARED RESULT</div>
+        <div class="ch-res-main"><div><div class="ch-res-t">${esc(o.tn || 'MY FIVE')}</div><div class="ch-res-rec">${+o.w || 0}-${+o.l || 0}</div>
+          <div class="ch-res-seed">${o.m === 'a' ? 'All-time pool' : 'One season'}${opts.i === 0 ? ' | injuries off' : ''}${opts.c ? ' | $' + esc(opts.c) + 'M cap' : ''}</div></div></div>
+        <div class="ch-res-banner">${champ ? '<span class="ch-trophy" aria-hidden="true"></span>' : ''}<b>${esc(EXIT[o.x] || '')}</b><span>${esc(champ ? '' : o.rs || '')}</span></div>
+        ${o.po && (o.po[0] || o.po[1]) ? `<div class="ch-res-real">Playoffs: ${+o.po[0]}-${+o.po[1]}</div>` : ''}
+      </div>
+      ${UI.header('THE FIVE')}<ul class="sl-five">${(o.f || []).map(a => slFiveRow(a, c1, opts.r !== 0)).join('')}</ul>
+      <p class="muted sl-note">A shared result. Nothing is simmed here.</p>
+      <div class="row-btns center"><a class="btn btn-gold btn-big" href="#/challenge">PLAY YOUR OWN</a></div></section>`;
+  }
+  function drawVsCard(app, o) {
+    const T = o.tm || [], N = o.n || ['', ''], wi = o.wi === 1 ? 1 : 0, sc = o.sc || [0, 0];
+    const col = i => (T[i] && T[i][2]) || '#444';
+    app.innerHTML = `<section class="sl-wrap"><div class="vs-win sl-card" style="--c1:${esc(col(wi))}"><div><div class="ch-hero-k">HEAD TO HEAD | BEST OF ${+o.bo || ''} | ${esc(o.lb || '')} | SHARED RESULT</div>
+        <h1>${esc(String(N[wi] || 'PLAYER ' + (wi + 1)).toUpperCase())} WINS ${+sc[wi] || 0}-${+sc[1 - wi] || 0}</h1>
+        ${o.mv ? `<p>Series MVP: <b>${esc(o.mv[0])}</b> (${esc(o.mv[1] + ' PTS, ' + o.mv[2] + ' REB, ' + o.mv[3] + ' AST')})</p>` : ''}</div></div>
+      <div class="sl-sides">${[0, 1].map(i => `<div class="sl-side${i === wi ? ' won' : ''}" style="--c1:${esc(col(i))}"><div class="sl-side-h"><small>${esc(N[i] || 'PLAYER ' + (i + 1))}</small><b>${esc((T[i] && T[i][1]) || '')}</b><strong>${+sc[i] || 0}</strong></div>
+        <ul class="sl-five">${((o.f || [])[i] || []).map(a => slFiveRow(a, col(i), o.r !== 0)).join('')}</ul></div>`).join('')}</div>
+      ${o.g && o.g.length ? `<ol class="sl-games">${o.g.map((g, k) => `<li><small>GAME ${k + 1}</small><b class="${g[0] > g[1] ? 'w' : ''}">${esc(N[0] || 'P1')} ${+g[0]}</b><b class="${g[1] > g[0] ? 'w' : ''}">${esc(N[1] || 'P2')} ${+g[1]}</b>${g[2] ? '<small>OT</small>' : ''}</li>`).join('')}</ol>` : ''}
+      <p class="muted sl-note">A shared result. Nothing is simmed here.</p>
+      <div class="row-btns center"><a class="btn btn-gold btn-big" href="#/challenge/vs">PLAY YOUR OWN</a></div></section>`;
+  }
+  // The starters intro: about 3 seconds, tap to skip. Pure DOM and CSS; the overlay is fixed, so nothing shifts.
+  // groups: [{ label, color, players: [{ name, pos, ovr, nbaId }] }]; opts.ratings false hides the overalls.
+  function slIntro(groups, opts, done) {
+    opts = opts || {};
+    const list = [];
+    groups.forEach((g, gi) => (g.players || []).forEach(p => list.push({ g: gi, p })));
+    if (!list.length) { done(); return; }
+    const per = list.length > 5 ? 240 : 480, lead = 250, total = lead + per * list.length + 450;
+    const el = document.createElement('div');
+    el.className = 'in-wrap';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-label', 'Starters introduction. Tap to skip.');
+    let k = 0;
+    el.innerHTML = `<div class="in-box">${groups.map((g, gi) => `<div class="in-grp"><div class="in-k">${esc(g.label || 'STARTERS')}</div><ol class="in-list">${(g.players || []).map(p => {
+        const d = lead + per * k++, name = p.name || '', pos = C.primaryPos ? C.primaryPos(p.pos) : p.pos;
+        return `<li class="in-c" style="animation-delay:${d}ms">${face(p, g.color || '#888', 'in-hs')}<span class="in-n"><b>${esc(name)}</b><small>${esc(pos || '')}</small></span>${opts.ratings === false || p.ovr == null ? '' : `<span class="ch-ovr in-o ${UI.ovrClass(p.ovr)}">${esc(p.ovr)}</span>`}</li>`;
+      }).join('')}</ol></div>`).join('')}<div class="in-skip">TAP TO SKIP</div></div>`;
+    document.body.appendChild(el);
+    const timers = [];
+    let over = false;
+    const stop = go => {
+      if (over) return; over = true;
+      timers.forEach(clearTimeout);
+      window.removeEventListener('hashchange', onHash);
+      el.classList.add('in-out');
+      setTimeout(() => el.remove(), 180);
+      if (go) done();
+    };
+    const onHash = () => stop(false);
+    window.addEventListener('hashchange', onHash);
+    el.addEventListener('click', () => stop(true));
+    list.forEach((x, i) => { timers.push(setTimeout(() => { if (window.SFX) { try { window.SFX.play('chime'); } catch (e) { /* no audio */ } } }, lead + per * i)); });
+    timers.push(setTimeout(() => stop(true), total));
+  }
+  UI.slib = { b64, unb64, url: slUrl, copy: slCopy, read: slRead, bad: slBad, vsCard: drawVsCard, intro: slIntro };
+  function slButton(r) {
+    const b = UI.$('#chCopy');
+    if (b) b.addEventListener('click', () => { let u; try { u = slUrl('solo', soloCode(r)); } catch (e) { UI.toast('Could not make a link for this result.', 'error'); return; } slCopy(u, 'Draft Challenge result', (r.label || '') + ' draft challenge: ' + r.w + '-' + r.l + '. Think you can do better?'); });
+  }
   function shareCode(r) {
     const c = r.cfg, o = { v: 1, m: c.mode === 'alltime' ? 'a' : 'y', y: c.year, b: c.build === 'wheel' ? 'w' : 'f', t: c.team, n: c.name || '', s: c.seed,
       i: c.injuries === false ? 0 : 1, e: c.era || 2013, w: r.w, l: r.l };
@@ -761,6 +865,7 @@
       </section>
       ${r.sharedFrom ? `<div class="note">${r.sharedFrom.w === r.w && r.sharedFrom.l === r.l ? 'Shared challenge: the same season your friend simmed.' : 'Shared challenge: the original run went ' + r.sharedFrom.w + '-' + r.sharedFrom.l + '. A different browser rolled the luck a little differently.'}</div>` : ''}
       <button type="button" class="btn btn-share" id="chShare">${UI.shareIcon || ''}SEND THIS TO YOUR FRIENDS</button>
+      <button type="button" class="btn sl-copy" id="chCopy">COPY LINK</button>
       <div class="row-btns center ch-acts"><button type="button" class="btn btn-gold" id="chAgain">RUN IT BACK</button><button type="button" class="btn" id="chOdds">SIM 10 MORE SEASONS</button><a class="btn" href="#/challenge">NEW CHALLENGE</a></div>
       <div id="chOddsBox">${oddsHtml(r)}</div>
       ${UI.header('YOUR FIVE')}${r.fit ? fitHtml(r.fit) : ''}<div class="ch-cards">${fiveCards}</div>
@@ -776,6 +881,7 @@
       <details class="ch-logbox"><summary>GAME LOG (${r.log.length} GAMES) | TAP A GAME FOR THE BOX SCORE</summary><ol class="ch-log">${log}</ol></details>`;
     UI.$('#chAgain').addEventListener('click', () => rerun(r));
     UI.$('#chShare').addEventListener('click', () => share(r));
+    slButton(r);
     UI.$('#chOdds').addEventListener('click', () => runOdds(r));
   }
 

@@ -500,3 +500,61 @@
 .ch-decades { margin-bottom: 6px; }
 .vs-seas-all { flex-wrap: wrap; }
 .vs-seas-all .btn.part { border-color: var(--gold-dim, #7a6420); }
+
+/* ---- setup hints (one line, always visible) ---- */
+.ch-hint { display: block; margin-top: 6px; font-size: 12px; line-height: 1.35; color: var(--muted); }
+
+/* ---- share links and shared result cards (sl-) ---- */
+.sl-copy { margin-top: 8px; }
+.sl-wrap { max-width: 640px; margin: 0 auto; padding: 0 2px 24px; }
+.sl-card { margin-bottom: 12px; }
+.sl-five { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; }
+.sl-p { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 10px; background: rgba(255, 255, 255, .05); min-height: 52px; }
+.sl-hs { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; flex: none; }
+.sl-pn { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sl-pn b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sl-pn small, .sl-pl { color: var(--muted); font-size: 12px; }
+.sl-note { text-align: center; margin: 10px 0; }
+.sl-sides { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.sl-side-h { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; border-left: 4px solid var(--c1, #444); padding-left: 8px; }
+.sl-side-h small { color: var(--muted); }
+.sl-side-h b { flex: 1; }
+.sl-side-h strong { font-size: 22px; }
+.sl-side.won .sl-side-h strong { color: var(--gold); }
+.sl-games { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 4px; }
+.sl-games li { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+.sl-games small { color: var(--muted); }
+.sl-games b.w { color: var(--gold); }
+@media (min-width: 720px) { .sl-sides { grid-template-columns: 1fr 1fr; } }
+
+/* ---- rivalry stats ---- */
+.vs-rstats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 10px 0; }
+.vs-rstats > span { display: flex; flex-direction: column; padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, .05); min-width: 0; }
+.vs-rstats small { font-size: 10px; letter-spacing: .14em; color: var(--muted); }
+.vs-rstats b { font-size: 15px; }
+.vs-rstats i { font-style: normal; font-size: 12px; color: var(--muted); }
+.vs-rstats .vs-rlast { grid-column: 1 / -1; }
+.vs-rlast em { display: flex; gap: 6px; font-style: normal; flex-wrap: wrap; margin-top: 4px; }
+.vs-rlast u { text-decoration: none; display: inline-flex; flex-direction: column; align-items: center; padding: 3px 8px; border-radius: 8px; font-size: 12px; font-weight: 700; }
+.vs-rlast u.a { background: rgba(243, 207, 94, .18); color: var(--gold); }
+.vs-rlast u.b { background: rgba(255, 255, 255, .1); }
+.vs-rlast u i { font-size: 10px; font-weight: 400; }
+@media (min-width: 720px) { .vs-rstats { grid-template-columns: repeat(4, 1fr); } }
+
+/* ---- starters intro (in-): a fixed overlay, nothing on the page moves ---- */
+.in-wrap { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: rgba(6, 8, 14, .94); cursor: pointer; animation: inFade .2s ease both; overflow: hidden; }
+.in-wrap.in-out { opacity: 0; transition: opacity .18s ease; pointer-events: none; }
+.in-box { width: min(94vw, 460px); max-height: 96vh; display: flex; flex-direction: column; gap: 8px; }
+.in-grp { display: flex; flex-direction: column; gap: 4px; }
+.in-k { font-family: var(--display); font-size: 12px; letter-spacing: .22em; color: var(--gold); }
+.in-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.in-c { display: flex; align-items: center; gap: 10px; padding: 4px 10px; min-height: 46px; border-radius: 10px; background: rgba(255, 255, 255, .07); opacity: 0; transform: translateX(-18px); animation: inIn .28s ease-out forwards; }
+.in-hs { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; flex: none; }
+.in-n { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
+.in-n b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.in-n small { color: var(--muted); font-size: 12px; letter-spacing: .1em; }
+.in-skip { text-align: center; font-size: 11px; letter-spacing: .2em; color: var(--muted); margin-top: 4px; }
+@keyframes inIn { to { opacity: 1; transform: none; } }
+@keyframes inFade { from { opacity: 0; } to { opacity: 1; } }
+@media (min-width: 720px) { .in-c { min-height: 62px; } .in-hs { width: 52px; height: 52px; } .in-n b { font-size: 20px; } }
+@media (prefers-reduced-motion: reduce) { .in-c { transform: none; } }

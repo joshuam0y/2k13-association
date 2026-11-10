@@ -270,7 +270,7 @@
   // 1-1-1, 2-2-1 or 2-2-1-1-1), each playing all 48 minutes, nobody on the bench. Fit and positions count
   // like everywhere else. opts.pbp keeps every game's play-by-play (res) for the court view.
   // Returns { cfg, label, bestOf, need, sides: [{ team, five, fit }], games: [...], wins, winner, mvp, lines, home }
-  var VS_HOME = { 3: [1, 0, 1], 5: [1, 1, 0, 0, 1], 7: [1, 1, 0, 0, 1, 0, 1] };
+  var VS_HOME = { 1: [1], 3: [1, 0, 1], 5: [1, 1, 0, 0, 1], 7: [1, 1, 0, 0, 1, 0, 1] };
   function playVersus(cfg, opts) {
     opts = opts || {};
     var bestOf = VS_HOME[cfg.bestOf] ? +cfg.bestOf : 5, need = Math.ceil(bestOf / 2);

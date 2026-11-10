@@ -1,7 +1,7 @@
 {
-  "name": "2K13 Association",
-  "short_name": "2K13",
-  "description": "NBA franchise sim: start in any season from 2003-04 to 2026-27.",
+  "name": "Starting Five",
+  "short_name": "Starting Five",
+  "description": "Draft five from all of NBA history, play a friend head to head, or run a full franchise.",
   "start_url": "./index.html#/home",
   "scope": "./",
   "display": "standalone",

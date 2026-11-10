@@ -84,7 +84,7 @@
     ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = c2; ctx.globalAlpha = 0.18; ctx.beginPath(); ctx.arc(W - 120, 160, 420, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#f5c542'; ctx.font = "700 40px Oswald, Arial, sans-serif"; ctx.fillText('2K13 ASSOCIATION', W / 2, 90);
+    ctx.fillStyle = '#f5c542'; ctx.font = "700 40px Oswald, Arial, sans-serif"; ctx.fillText('STARTING FIVE', W / 2, 90);
     ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.font = "500 34px Oswald, Arial, sans-serif"; ctx.fillText('THE ' + f.label + ' SEASON', W / 2, 140);
     const logo = await loadImg(f.t.logo);
     if (logo) { const s = 260, r = Math.min(s / logo.width, s / logo.height), g = glow(ctx, UI.darkLogo && UI.darkLogo(f.t)); ctx.drawImage(logo, W / 2 - logo.width * r / 2, 180 + (s - logo.height * r) / 2, logo.width * r, logo.height * r); if (g) ctx.restore(); }
@@ -111,7 +111,7 @@
       f.awards.forEach((a, i) => ctx.fillText(a.toUpperCase(), W / 2, 1220 + i * 40));
     }
     ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.font = "500 26px Oswald, Arial, sans-serif";
-    ctx.fillText(location.host ? location.host.toUpperCase() + location.pathname.replace(/index\.html$/, '').toUpperCase() : '2K13 ASSOCIATION', W / 2, H - 30);
+    ctx.fillText(location.host ? location.host.toUpperCase() + location.pathname.replace(/index\.html$/, '').toUpperCase() : 'STARTING FIVE', W / 2, H - 30);
     joint(ctx, W / 2, H - 68);
     return cv;
   }
@@ -127,7 +127,7 @@
     ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = c2; ctx.globalAlpha = 0.16; ctx.beginPath(); ctx.arc(W - 120, 170, 420, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#f5c542'; ctx.font = '700 40px Oswald, Arial, sans-serif'; ctx.fillText('2K13 ASSOCIATION', W / 2, 90);
+    ctx.fillStyle = '#f5c542'; ctx.font = '700 40px Oswald, Arial, sans-serif'; ctx.fillText('STARTING FIVE', W / 2, 90);
     ctx.fillStyle = 'rgba(255,255,255,.8)'; fit(ctx, spec.kicker || '', W - 120, 34, 500); ctx.fillText(spec.kicker || '', W / 2, 140);
     let y = 180;
     const lg = await loadImg(spec.logo);
@@ -162,7 +162,7 @@
     if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
       try { await navigator.share({ files: [file], text: text + ' ' + url }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
     }
-    if (navigator.share) { try { await navigator.share({ title: '2K13 Association', text, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+    if (navigator.share) { try { await navigator.share({ title: 'Starting Five', text, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
     const all = text + ' ' + url;
     try { await navigator.clipboard.writeText(all); UI.toast('Copied. Paste it in a text to your friends.'); } catch (e) { UI.toast(all); }
     if (blob && !(navigator.canShare)) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (name || 'result') + '.png'; document.body.appendChild(a); a.click(); a.remove(); }
@@ -192,7 +192,7 @@
     UI.$('#shGo', app).addEventListener('click', async () => {
       if (!blob) { UI.toast('The card is still drawing.'); return; }
       const file = new File([blob], name(), { type: 'image/png' });
-      const text = 'My ' + f.label + ' ' + f.t.name + ' in the 2K13 Association: ' + f.st.w + '-' + f.st.l + (f.result ? ', ' + f.result.toLowerCase() : '') + '.';
+      const text = 'My ' + f.label + ' ' + f.t.name + ' on Starting Five: ' + f.st.w + '-' + f.st.l + (f.result ? ', ' + f.result.toLowerCase() : '') + '.';
       if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], text }); } catch (e) { /* closed */ } }
       else download();
     });
