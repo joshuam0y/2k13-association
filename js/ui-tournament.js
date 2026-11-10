@@ -15,10 +15,10 @@
     del() { try { localStorage.removeItem(KEY); } catch (e) { /* private mode */ } }
   };
   const ALL_YEARS = C.SEASONS.map(s => s.year);
-  const FRESH = () => ({ v: 1, page: 'setup', n: 4, names: [], skip: [], opts: { timer: 24, cap: 0, bestOf: 1, seeding: 'random' },
+  const FRESH = () => ({ v: 1, page: 'setup', n: 4, names: [], skip: [], opts: { timer: 24, cap: 0, bestOf: 1, seeding: 'random', ratings: true },
     cfg: null, teams: [], picks: [], who: 0, hand: false, spin: null, spun: [], respins: [], seeds: [], rounds: [], cur: null, champ: -1 });
   let TN = Object.assign(FRESH(), ls.get() || {});
-  TN.opts = Object.assign({ timer: 24, cap: 0, bestOf: 1, seeding: 'random' }, TN.opts || {});
+  TN.opts = Object.assign({ timer: 24, cap: 0, bestOf: 1, seeding: 'random', ratings: true }, TN.opts || {});
   const save = () => ls.set(TN);
   let APP = null;
 
@@ -136,6 +136,7 @@
 
   // ---------- routing ----------
   function render() {
+    if (APP) APP.classList.toggle('tn-noR', TN.opts && TN.opts.ratings === false);
     if (!APP) return;
     const app = APP;
     stopTick(); dropCourt();
@@ -172,6 +173,7 @@
             <div><span class="ts-start-k">EACH ROUND</span><div class="ch-chips">${chips([[1, 'BEST OF 1'], [3, 'BEST OF 3']], o.bestOf, 'bo')}</div></div>
             <div><span class="ts-start-k">SEEDING</span><div class="ch-chips">${chips([['random', 'RANDOM'], ['rating', 'BY TEAM RATING']], o.seeding, 'seed')}</div></div>
             <div><span class="ts-start-k">SHOT CLOCK</span><div class="ch-chips">${chips([[24, '24 SEC'], [0, 'OFF']], o.timer ? 24 : 0, 'timer')}</div></div>
+            <div><span class="ts-start-k">RATINGS</span><div class="ch-chips">${[[true, 'ON'], [false, 'OFF']].map(([v, l]) => `<button type="button" class="ch-chip${(o.ratings !== false) === v ? ' on' : ''}" data-rate="${v}">${l}</button>`).join('')}</div></div>
             <div><span class="ts-start-k">SALARY CAP</span><div class="ch-chips">${UI.challengeCap.CAPS.map(v => `<button type="button" class="ch-chip${(o.cap || 0) === v ? ' on' : ''}" data-cap="${v}">${v ? '$' + v + 'M' : 'OFF'}</button>`).join('')}</div></div>
           </div></div>
         <div class="ch-go"><button type="button" class="btn btn-gold btn-big" id="tnStart">START THE DRAFT</button><a class="btn" href="#/home">HOME</a></div>
@@ -190,6 +192,7 @@
     app.querySelectorAll('[data-bo]').forEach(b => b.addEventListener('click', () => { o.bestOf = +b.dataset.bo; redraw(); }));
     app.querySelectorAll('[data-seed]').forEach(b => b.addEventListener('click', () => { o.seeding = b.dataset.seed; redraw(); }));
     app.querySelectorAll('[data-timer]').forEach(b => b.addEventListener('click', () => { o.timer = +b.dataset.timer; redraw(); }));
+    app.querySelectorAll('[data-rate]').forEach(b => b.addEventListener('click', () => { o.ratings = b.dataset.rate === 'true'; redraw(); }));
     app.querySelectorAll('[data-cap]').forEach(b => b.addEventListener('click', () => { o.cap = +b.dataset.cap; redraw(); }));
     UI.$('#tnStart', app).addEventListener('click', () => {
       readNames();
@@ -344,7 +347,7 @@
       const rosters = TN.seeds.map((p, s) => {
         const t = teamOf(p), five = TN.picks[p].map(id => B.byId[id]).filter(Boolean);
         return `<details class="tn-roster" style="--c1:${esc((t.colors || ['#333'])[0])}"><summary>${logo(t, 24)}<b>#${s + 1} ${esc(nm(p))}</b><small>${esc(t.name)} | ${f1(TN.rating && TN.rating[p])} AVG</small></summary>
-          <ul>${five.map(q => `<li>${esc(q.name)} <small class="muted">${esc(C.posLabel(q))}${B.era && q.season ? ' ' + short(q.season) : ''}</small> <b class="${UI.ovrClass(q.ovr)}">${esc(q.ovr)}</b></li>`).join('')}</ul></details>`;
+          <ul>${five.map(q => `<li>${esc(q.name)} <small class="muted">${esc(C.posLabel(q))}${B.era && q.season ? ' ' + short(q.season) : ''}</small> <b class="tn-ovr ${UI.ovrClass(q.ovr)}">${esc(q.ovr)}</b></li>`).join('')}</ul></details>`;
       }).join('');
       const over = TN.champ >= 0;
       app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(lblC(TN.cfg))} | ${TN.n} PLAYERS | BEST OF ${TN.opts.bestOf}${TN.cfg.cap ? ' | $' + TN.cfg.cap + 'M CAP' : ''}</div><div class="ch-top-t">THE BRACKET</div></div>
@@ -414,7 +417,7 @@
         : WATCH ? '<button type="button" class="btn btn-gold" id="tnFinal">SKIP TO THE END OF THIS GAME</button>'
         : `<button type="button" class="btn btn-gold btn-big" id="tnWatch">WATCH GAME ${next}</button><button type="button" class="btn" id="tnNext">SIM GAME ${next}</button>${res.bestOf > 1 ? '<button type="button" class="btn" id="tnRest">SIM THE REST</button>' : ''}<button type="button" class="btn" id="tnBack">BRACKET</button>`;
       const lines = done ? `<section class="vs-box">${UI.header('SERIES BOX', 'Per game')}<div class="vs-sides">${S.map(sd => { const p = pOf(sd.abbr); return `<div class="vs-res" style="--c1:${esc((sd.team.colors || ['#333'])[0])}"><div class="vs-side-h">${logo(sd.team, 32)}<div><small>${esc(nm(p))}</small><b>${esc(sd.team.name)}</b></div></div>
-          <div class="vs-tbl-w"><table class="vs-tbl"><thead><tr><th class="l">PLAYER</th><th>SPOT</th><th>OVR</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>3PM</th><th>FG%</th><th>3P%</th><th>FT%</th></tr></thead><tbody>${sd.five.slice().sort((a, b) => C.SLOTS.indexOf(a.slot) - C.SLOTS.indexOf(b.slot)).map(q => { const l = res.lines[q.id] || {}; return `<tr><td class="l">${esc(q.name)}${q.season && !TN.cfg.year ? ' <small class="muted">' + esc(short(q.season)) + '</small>' : ''}</td><td>${esc(q.slot || '')}</td><td>${esc(q.ovr)}</td><td>${f1(l.pts)}</td><td>${f1(l.reb)}</td><td>${f1(l.ast)}</td><td>${f1(l.stl)}</td><td>${f1(l.blk)}</td><td>${f1(l.tov)}</td><td>${f1(l.tpm)}</td><td>${f1(l.fgp)}</td><td>${f1(l.tpp)}</td><td>${f1(l.ftp)}</td></tr>`; }).join('')}</tbody></table></div></div>`; }).join('')}</div></section>` : '';
+          <div class="vs-tbl-w"><table class="vs-tbl"><thead><tr><th class="l">PLAYER</th><th>SPOT</th><th class="tn-ovr">OVR</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>3PM</th><th>FG%</th><th>3P%</th><th>FT%</th></tr></thead><tbody>${sd.five.slice().sort((a, b) => C.SLOTS.indexOf(a.slot) - C.SLOTS.indexOf(b.slot)).map(q => { const l = res.lines[q.id] || {}; return `<tr><td class="l">${esc(q.name)}${q.season && !TN.cfg.year ? ' <small class="muted">' + esc(short(q.season)) + '</small>' : ''}</td><td>${esc(q.slot || '')}</td><td class="tn-ovr">${esc(q.ovr)}</td><td>${f1(l.pts)}</td><td>${f1(l.reb)}</td><td>${f1(l.ast)}</td><td>${f1(l.stl)}</td><td>${f1(l.blk)}</td><td>${f1(l.tov)}</td><td>${f1(l.tpm)}</td><td>${f1(l.fgp)}</td><td>${f1(l.tpp)}</td><td>${f1(l.ftp)}</td></tr>`; }).join('')}</tbody></table></div></div>`; }).join('')}</div></section>` : '';
       app.innerHTML = `${head}${score}${WATCH ? '<div class="ct-host" id="vsCourt"></div>' : ''}
         <div class="row-btns center ch-acts vs-acts">${acts}</div>
         ${games ? `<ol class="vs-glist">${games}</ol>` : ''}${lines}`;
@@ -475,7 +478,7 @@
   const prev = P.challenge;
   P.challenge = function (app, arg) {
     const part = String(arg || '').split('/');
-    if (part[0] !== 'tournament') { stopTick(); if (APP) dropCourt(); return prev.apply(this, arguments); }
+    if (part[0] !== 'tournament') { app.classList.remove('tn-noR'); stopTick(); if (APP) dropCourt(); return prev.apply(this, arguments); }
     APP = app;
     return render();
   };
