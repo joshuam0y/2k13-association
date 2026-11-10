@@ -947,3 +947,14 @@ img.hs.hs-br { object-fit: cover; object-position: center 18%; }
 /* the credit under the title, like "A Spike Lee Joint" */
 .mm-joint { margin-top: 10px; font-family: var(--display); font-style: italic; font-weight: 700; font-size: clamp(15px, 2vw, 20px); letter-spacing: .22em; color: #fff; display: inline-block; padding: 4px 12px 4px 10px; border-left: 3px solid var(--gold); background: linear-gradient(90deg, rgba(243, 207, 94, .14), transparent); }
 .mm-joint span { color: var(--gold2); font-weight: 500; }
+
+.mm-foot { margin-top: 22px; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+.mm-foot a { color: var(--muted, #9aa); text-decoration: none; }
+.mm-foot a:hover { color: var(--gold2); }
+.inf { max-width: 720px; margin: 0 auto; padding: 8px 16px 40px; line-height: 1.6; }
+.inf h3 { margin: 22px 0 4px; font-family: var(--display); letter-spacing: .06em; color: var(--gold2); }
+.inf ul { padding-left: 20px; }
+.inf-nav { margin-top: 30px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, .12); display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; }
+.inf-form { display: grid; gap: 12px; margin: 14px 0; }
+.inf-form label { display: grid; gap: 4px; font-size: 13px; }
+.inf-form input, .inf-form textarea { font: inherit; padding: 10px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, .2); background: rgba(255, 255, 255, .06); color: inherit; }

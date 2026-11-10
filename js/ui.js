@@ -21,7 +21,7 @@
   // ---------- navigation ----------
   // The top bar (index.html) holds seven links: Home, Season, Rosters, Free Agency, Standings, Stats, League.
   // Every page is also in the grouped Menu (MENU below).
-  const CORE = ['home', 'new', 'continue', 'teams', 'team', 'player', 'season', 'game', 'standings', 'leaders', 'stats', 'league', 'playoffs', 'saves', 'soundtrack'];
+  const CORE = ['about', 'faq', 'contact', 'privacy', 'terms', 'disclaimer', 'home', 'new', 'continue', 'teams', 'team', 'player', 'season', 'game', 'standings', 'leaders', 'stats', 'league', 'playoffs', 'saves', 'soundtrack'];
   const MORE = [
     ['trade', 'Trades'], ['manage', 'Rotation'], ['draft', 'Draft'], ['league', 'League'], ['playoffs', 'Playoffs'],
     ['live', 'Watch Live'], ['saves', 'Saves'], ['challenge', 'Draft Challenge'], ['fantasy', 'Fantasy Draft'], ['commish', 'Commissioner'], ['soundtrack', 'Soundtrack']
@@ -47,7 +47,8 @@
     ['LEAGUE', [['league', 'League Home'], ['news', 'News'], ['news/transactions', 'Transactions'], ['awards', 'Awards'], ['awardshow', 'Awards Show'],
       ['history', 'History'], ['records', 'Records'], ['retirements', 'Retirements'], ['classes', 'Draft Classes'], ['teams', 'All Teams']]],
     ['MODES', [['new', 'New League'], ['challenge', 'Draft Challenge'], ['challenge/vs', 'Versus'], ['fantasy', 'Fantasy Draft']]],
-    ['GAME', [['saves', 'Saves'], ['settings', 'Settings'], ['commish', 'Commissioner'], ['soundtrack', 'Soundtrack']]]
+    ['GAME', [['saves', 'Saves'], ['settings', 'Settings'], ['commish', 'Commissioner'], ['soundtrack', 'Soundtrack']]],
+    ['INFO', [['about', 'About'], ['faq', 'FAQ'], ['contact', 'Contact'], ['privacy', 'Privacy'], ['terms', 'Terms'], ['disclaimer', 'Disclaimer']]]
   ];
   function buildExtraNav() {
     const nav = document.getElementById('mainnav');
@@ -198,7 +199,7 @@
       if (c.left < n.left || c.right > n.right) nav.scrollLeft += c.left - n.left - 12;
     }
 
-    if (!UI.state.league && page !== 'soundtrack') { app.innerHTML = UI.notBuilt('data'); return; }
+    if (!UI.state.league && page !== 'soundtrack' && !(UI.INFO_ROUTES || []).includes(page)) { app.innerHTML = UI.notBuilt('data'); return; }
     if (page === 'continue') { continueLatest(); return; }
     let decoded = arg;
     try { decoded = decodeURIComponent(arg); } catch (e) { /* keep raw */ }

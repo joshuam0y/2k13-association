@@ -68,6 +68,7 @@
           ${UI.tile('#/saves', 'load', 'LOAD', { cls: 'mt-half' })}
           ${UI.tile('#/soundtrack', 'music', 'SOUNDTRACK', { cls: 'mt-half' })}
         </div>
+        <nav class="mm-foot" aria-label="About and legal">${UI.infoLinks ? UI.infoLinks() : ''}</nav>
       </section>`;
   };
 
