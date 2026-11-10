@@ -20,13 +20,16 @@
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } },
     del(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }
   };
-  let SETUP = Object.assign({ mode: 'year', year: 2013, build: 'free', team: '', name: '', injuries: true, era: 2013, cap: 0 }, ls.get(KEY_SETUP) || {});
+  let SETUP = Object.assign({ mode: 'year', year: 2013, build: 'free', team: '', name: '', injuries: true, era: 2013, cap: 0, ratings: true }, ls.get(KEY_SETUP) || {});
   let CUR = null;        // { cfg, used: [], respins, spin, dr }
   let RUN = null;        // the season being simmed { ch, fast, paused }
   let VIEW = { pos: '', q: '', team: '', season: '', letter: '' };
   let ODDS = null;       // run it back 10 times
 
   // ---------- small helpers ----------
+  // ratings off (cfg.noRatings): no overalls and no fit grades while you draft; they show once the season is played
+  const noR = () => !!(CUR && CUR.cfg && CUR.cfg.noRatings);
+  const ovrSpan = (v, txt) => (noR() ? '' : `<span class="ch-ovr ${UI.ovrClass(v)}">${txt != null ? txt : v}</span>`);
   const seasonLabel = y => (C.seasonInfo(y) || {}).label || String(y);
   const short = y => "'" + String(y - 1).slice(2) + '-' + String(y).slice(2);
   function teamOf(list, abbr) { return (list || []).find(t => t.abbr === abbr) || { abbr, city: abbr, name: '', colors: ['#333', '#777'], logo: null }; }
@@ -144,6 +147,7 @@
           <div class="ch-row">
             <label class="field"><span>TEAM NAME (OPTIONAL)</span><input id="chName" maxlength="32" placeholder="${esc(s.team ? tName(teamOf(teams, s.team)) : 'Keep the real name')}" value="${esc(s.name || '')}"></label>
             <div class="field"><span>INJURIES</span><div class="ch-seg ch-seg-sm"><button type="button" class="ch-seg-b${s.injuries ? ' on' : ''}" data-inj="1"><b>ON</b></button><button type="button" class="ch-seg-b${!s.injuries ? ' on' : ''}" data-inj="0"><b>OFF</b></button></div></div>
+            <div class="field"><span>RATINGS</span><div class="ch-seg ch-seg-sm"><button type="button" class="ch-seg-b${s.ratings !== false || s.cap ? ' on' : ''}" data-rat="1"><b>ON</b></button><button type="button" class="ch-seg-b${s.ratings === false && !s.cap ? ' on' : ''}" data-rat="0"${s.cap ? ' disabled title="The salary cap prices give the ratings away"' : ''}><b>OFF</b></button></div></div>
             <div class="field"><span>SALARY CAP</span><div class="ch-seg ch-seg-sm">${CAPS.map(v => `<button type="button" class="ch-seg-b${(s.cap || 0) === v ? ' on' : ''}" data-cap="${v}"><b>${v ? '$' + v + 'M' : 'OFF'}</b></button>`).join('')}</div></div>
           </div>
         </div>
@@ -165,6 +169,7 @@
     app.querySelectorAll('[data-build]').forEach(b => b.addEventListener('click', () => { SETUP.build = b.dataset.build; redraw(); }));
     app.querySelectorAll('[data-inj]').forEach(b => b.addEventListener('click', () => { SETUP.injuries = b.dataset.inj === '1'; redraw(); }));
     app.querySelectorAll('[data-cap]').forEach(b => b.addEventListener('click', () => { SETUP.cap = +b.dataset.cap; redraw(); }));
+    app.querySelectorAll('[data-rat]').forEach(b => b.addEventListener('click', () => { SETUP.ratings = b.dataset.rat === '1'; redraw(); }));
     app.querySelectorAll('[data-team]').forEach(b => b.addEventListener('click', () => { SETUP.team = b.dataset.team; redraw(); }));
     const nm = UI.$('#chName');
     nm.addEventListener('input', () => { SETUP.name = nm.value; ls.set(KEY_SETUP, SETUP); });
@@ -172,7 +177,7 @@
     UI.$('#chStart').addEventListener('click', () => {
       if (!SETUP.team) return;
       const cfg = { mode: SETUP.mode, year: isAll ? 2013 : SETUP.year, build: SETUP.build, team: SETUP.team, name: (SETUP.name || '').trim(),
-        injuries: SETUP.injuries, era: SETUP.era || 2013, cap: +SETUP.cap || 0, seed: Math.floor(Math.random() * 2147483646) + 1, picks: [] };
+        injuries: SETUP.injuries, era: SETUP.era || 2013, cap: +SETUP.cap || 0, noRatings: SETUP.ratings === false && !SETUP.cap, seed: Math.floor(Math.random() * 2147483646) + 1, picks: [] };
       ensureData(cfg, app, () => {
         try {
           CUR = { cfg, used: [], respins: 1, spin: null, dr: isAll ? C.newDraft(cfg) : null };
@@ -237,7 +242,7 @@
       const from = p.from || p.team;
       const t = p.season && p.season !== 2013 && C.eraTeam(p.season, from) || teamOf(teams, from);
       out.push(`<div class="ch-slot" style="--c1:${esc((t.colors || ['#333'])[0])}">${face(p, (t.colors || ['#444'])[0], 'ch-slot-hs')}
-        <span class="ch-slot-b"><b>${esc(p.name)}</b><small>${esc(C.primaryPos(p.pos))} | ${p.label ? esc(short(p.season)) + ' ' : ''}${esc(t.abbr)}${CUR && CUR.cfg && CUR.cfg.cap ? ' | ' + money(C.price(p)) : ''}</small></span><span class="ch-ovr ${UI.ovrClass(p.ovr)}">${p.ovr}</span>
+        <span class="ch-slot-b"><b>${esc(p.name)}</b><small>${esc(C.primaryPos(p.pos))} | ${p.label ? esc(short(p.season)) + ' ' : ''}${esc(t.abbr)}${CUR && CUR.cfg && CUR.cfg.cap ? ' | ' + money(C.price(p)) : ''}</small></span>${ovrSpan(p.ovr)}
         ${removable ? `<button type="button" class="ch-x" data-drop="${esc(p.id)}" aria-label="Remove ${esc(p.name)}">&times;</button>` : ''}</div>`);
     }
     return `<div class="ch-slots">${out.join('')}</div>`;
@@ -246,7 +251,7 @@
     const from = p.from || p.team;
     const t = p.season && p.season !== 2013 && C.eraTeam(p.season, from) || teamOf(teams, from);
     return `<li class="ch-pl">${face(p, (t.colors || ['#444'])[0])}<span class="ch-pl-b"><b>${esc(p.name)}</b><small>${logo(t, 18)} ${esc(String(p.pos || '').replace(/-/g, '/'))}${p.age ? ' | ' + p.age : ''}${p.label ? ' | ' + esc(p.label) : ''}</small></span>
-      ${CUR && CUR.cfg && CUR.cfg.cap ? priceTag(p) : ''}<span class="ch-ovr ${UI.ovrClass(p.ovr)}">${p.ovr}</span>${btn || ''}</li>`;
+      ${CUR && CUR.cfg && CUR.cfg.cap ? priceTag(p) : ''}${ovrSpan(p.ovr)}${btn || ''}</li>`;
   }
 
   function drawPick(app) {
@@ -268,11 +273,11 @@
         ${list.length ? '' : '<p class="muted">Nobody matches.</p>'}`;
     }
     app.innerHTML = `
-      <div class="ch-top">${logo(me, 48)}<div><div class="ch-top-k">${esc(seasonLabel(cfg.year))} | ${esc(BUILD[cfg.build].label)}</div><div class="ch-top-t">${esc(cfg.name || tName(me))}</div></div>
+      <div class="ch-top">${logo(me, 48)}<div><div class="ch-top-k">${esc(seasonLabel(cfg.year))} | ${esc(BUILD[cfg.build].label)}${cfg.noRatings ? ' | RATINGS OFF' : ''}${cfg.cap ? ' | $' + cfg.cap + 'M CAP' : ''}</div><div class="ch-top-t">${esc(cfg.name || tName(me))}</div></div>
         <a class="btn btn-small" href="#/challenge">SETUP</a></div>
       ${slotsHtml(mine, teams, cfg.build === 'free')}
       ${capBar(cfg.cap, mine)}
-      ${mine.length ? fitHtml(C.lineupFit(mine)) : ''}
+      ${mine.length && !noR() ? fitHtml(C.lineupFit(mine)) : ''}
       ${full ? `<div class="ch-ready"><div><b>YOUR FIVE IS SET.</b><span class="muted"> Eight scrubs fill the bench.</span></div><button type="button" class="btn btn-gold btn-big" id="chSim">SIM THE SEASON</button></div>` : ''}
       ${body}`;
     bindPick(app);
@@ -455,11 +460,11 @@
     }
     const recent = dr.picks.slice(-10).reverse();
     app.innerHTML = `
-      <div class="ch-top">${logo(me, 48)}<div><div class="ch-top-k">ALL-TIME | ${esc(BUILD[cfg.build].label)} | ${esc(seasonLabel(cfg.era))} RULES</div><div class="ch-top-t">${esc(cfg.name || tName(me))}</div></div>
+      <div class="ch-top">${logo(me, 48)}<div><div class="ch-top-k">ALL-TIME | ${esc(BUILD[cfg.build].label)} | ${esc(seasonLabel(cfg.era))} RULES${cfg.noRatings ? ' | RATINGS OFF' : ''}${cfg.cap ? ' | $' + cfg.cap + 'M CAP' : ''}</div><div class="ch-top-t">${esc(cfg.name || tName(me))}</div></div>
         <a class="btn btn-small" href="#/challenge">SETUP</a></div>
       ${slotsHtml(mine, teams, false)}
       ${capBar(cfg.cap, mine)}
-      ${mine.length ? fitHtml(C.lineupFit(mine)) : ''}
+      ${mine.length && !noR() ? fitHtml(C.lineupFit(mine)) : ''}
       ${full ? `<div class="ch-ready"><div><b>THE DRAFT IS DONE.</b><span class="muted"> 30 teams, five each, scrub benches everywhere.</span></div><button type="button" class="btn btn-gold btn-big" id="chSim">SIM THE SEASON</button></div>` : clock}
       ${board}
       ${full ? leagueBoard(dr, teams) : recent.length ? `<section>${UI.header('LATEST PICKS')}<ol class="ch-feed">${recent.map(x => { const e = dr.pool.find(q => q.key === x.key); const t = teamOf(teams, x.team); return `<li><span class="ch-feed-n">#${x.n}</span>${logo(t, 22)}<b>${esc(e.name)}</b><small class="muted">${esc(short(e.season))} | ${e.ovr}</small></li>`; }).join('')}</ol></section>` : ''}`;
@@ -475,7 +480,7 @@
     }).sort((x, y) => y.avg - x.avg);
     return `<section>${UI.header('EVERY FIVE', 'Ranked by average overall')}<ol class="ch-board">${rows.map((r, i) => {
       const t = teamOf(teams, r.a);
-      return `<li class="${r.a === CUR.cfg.team ? 'me' : ''}"><span class="ch-feed-n">${i + 1}</span>${logo(t, 26)}<span class="ch-board-b"><b>${esc(r.a === CUR.cfg.team && CUR.cfg.name ? CUR.cfg.name : t.name)}</b><small>${r.list.map(e => esc(e.name.split(' ').slice(-1)[0]) + ' ' + esc(short(e.season))).join(', ')}</small></span><span class="ch-ovr ${UI.ovrClass(Math.round(r.avg))}">${r.avg.toFixed(1)}</span></li>`;
+      return `<li class="${r.a === CUR.cfg.team ? 'me' : ''}"><span class="ch-feed-n">${i + 1}</span>${logo(t, 26)}<span class="ch-board-b"><b>${esc(r.a === CUR.cfg.team && CUR.cfg.name ? CUR.cfg.name : t.name)}</b><small>${r.list.map(e => esc(e.name.split(' ').slice(-1)[0]) + ' ' + esc(short(e.season))).join(', ')}</small></span>${ovrSpan(Math.round(r.avg), r.avg.toFixed(1))}</li>`;
     }).join('')}</ol></section>`;
   }
 
