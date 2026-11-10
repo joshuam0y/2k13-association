@@ -578,3 +578,6 @@
 .vs-compact li.vs-bench-1 { margin-top: 4px; padding-top: 4px; }
 .vs-compact li.vs-bench-1::before { font-size: 8px; margin-bottom: 1px; }
 .vs-compact .vs-pay { font-size: 9px; }
+
+/* all-time draft: the full list of who is taken scrolls inside its own box */
+.ch-offboard { max-height: 320px; overflow-y: auto; padding-right: 2px; }

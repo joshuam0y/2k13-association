@@ -538,7 +538,7 @@
         ${(() => { const L = byLetter(list, !!q); return L.bar + `<ul class="ch-list">${L.rows.map(e => playerRow(e, teams, capBtn(cfg.cap, mine, e, `<button type="button" class="btn btn-small btn-gold" data-take="${esc(e.key)}">DRAFT</button>`))).join('')}</ul>`; })()}
         ${list.length ? '' : '<p class="muted">Nobody matches.</p>'}`;
     }
-    const recent = dr.picks.slice(-10).reverse();
+    const recent = dr.picks.slice().reverse();   // every pick so far, newest first: who is off the board
     app.innerHTML = `
       <div class="ch-top">${logo(me, 48)}<div><div class="ch-top-k">ALL-TIME | ${esc(BUILD[cfg.build].label)} | ${esc(seasonLabel(cfg.era))} RULES${cfg.noRatings ? ' | RATINGS OFF' : ''}${cfg.cap ? ' | $' + cfg.cap + 'M CAP' : ''}</div><div class="ch-top-t">${esc(cfg.name || tName(me))}</div></div>
         <a class="btn btn-small" href="#/challenge">SETUP</a></div>
@@ -547,7 +547,7 @@
       ${mine.length && !noR() ? fitHtml(C.lineupFit(mine)) : ''}
       ${full ? `<div class="ch-ready"><div><b>THE DRAFT IS DONE.</b><span class="muted"> 30 teams, five each, everybody plays all 48.</span></div><button type="button" class="btn btn-gold btn-big" id="chSim">SIM THE SEASON</button></div>` : clock}
       ${board}
-      ${full ? leagueBoard(dr, teams) : recent.length ? `<section>${UI.header('LATEST PICKS')}<ol class="ch-feed">${recent.map(x => { const e = dr.pool.find(q => q.key === x.key); const t = teamOf(teams, x.team); return `<li><span class="ch-feed-n">#${x.n}</span>${logo(t, 22)}<b>${esc(e.name)}</b><small class="muted">${esc(short(e.season))} | ${e.ovr}</small></li>`; }).join('')}</ol></section>` : ''}`;
+      ${full ? leagueBoard(dr, teams) : recent.length ? `<section>${UI.header('OFF THE BOARD', recent.length + (recent.length === 1 ? ' player' : ' players') + ' drafted')}<ol class="ch-feed ch-offboard">${recent.map(x => { const e = dr.pool.find(q => q.key === x.key); const t = teamOf(teams, x.team); return `<li><span class="ch-feed-n">#${x.n}</span>${logo(t, 22)}<b>${esc(e.name)}</b><small class="muted">${esc(short(e.season))}${noR() ? '' : ' | ' + e.ovr}</small></li>`; }).join('')}</ol></section>` : ''}`;
     bindPick(app);
     const toMe = UI.$('#chToMe');
     if (toMe) toMe.addEventListener('click', () => { C.simToUser(dr); saveCur(); drawDraft(app); });
