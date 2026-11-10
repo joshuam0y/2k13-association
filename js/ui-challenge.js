@@ -412,7 +412,8 @@
     if (reduce) { strip.style.transform = `translateX(${-target}px)`; land(); return; }
     // the reel is driven frame by frame and only counts time while the page is showing, so a phone that dims or a
     // background tab can never skip the spin: the landing waits until the reel has really travelled the whole way
-    const DUR = 5500, ease = t => 1 - Math.pow(1 - t, 2.8);
+    // full speed for the first part, then a long, even slowdown into the winner: it never looks parked before it lands
+    const DUR = 6200, T1 = 0.5, V0 = 1 / (T1 + (1 - T1) / 2), ease = t => t < T1 ? V0 * t : V0 * (T1 + (1 - T1) * (((t - T1) / (1 - T1)) - Math.pow((t - T1) / (1 - T1), 2) / 2));
     let elapsed = 0, last = 0, lastCard = null, fired = false;
     const end = () => { if (fired) return; fired = true; if (window.SFX) window.SFX.play('land'); land(); };
     const frame = now => {

@@ -513,7 +513,7 @@
   // the pick clock: { pick, phase: 'spin' | 'pick', until } shared by both phones. When it runs out the
   // player on the clock spins (or takes the best player on the team the wheel landed on); online, the
   // other phone steps in five seconds later if the first one is gone.
-  const SPIN_MS = 7500;
+  const SPIN_MS = 8200;
   function turnFor(cfg, pick, phase) { return cfg && cfg.timer ? { pick, phase, until: Date.now() + cfg.timer * 1000 + (phase === 'pick' ? SPIN_MS : 0) } : null; }
   let TICK = null;
   function stopTick() { if (TICK) { clearInterval(TICK); TICK = null; } }
@@ -598,7 +598,7 @@
       UI.$('#vsSetup', app).addEventListener('click', () => go('setup'));
       // a new spin on either phone: both animate it
       if (spin && !ANIM[spin.n]) {
-        UI.challengeWheel.animate(app, teams, () => { ANIM[spin.n] = true; if (VS.spin && VS.spin.n === spin.n) draft(app); }, { year: spin.year, abbr: spin.abbr }, { mode: B.era ? 'alltime' : 'versus', seasons: cfg.seasons });
+        UI.challengeWheel.animate(app, teams, () => { ANIM[spin.n] = true; route(); }, { year: spin.year, abbr: spin.abbr }, { mode: B.era ? 'alltime' : 'versus', seasons: cfg.seasons });
       }
       const sp = UI.$('#chSpin', app);
       if (sp) sp.addEventListener('click', () => {
