@@ -982,3 +982,12 @@ body.ct-full-on .mb-pill { display: none; }
 .ch-hero-p, .gs-intro, .gs-t small, .vs-rules small.muted, .tn-rules small.muted, .ts-start-n, .ch-small, .tn-setup .ch-step > small.muted, .vs-rival-mini + small { display: none; }
 .ch-hero { padding-bottom: 8px; }
 .gs-card .gs-k { margin-bottom: 6px; }
+
+/* team tiers (UI.teamTiers): relative to the league, with the age of the core */
+.ts-tag.tier-title { border-color: var(--gold); color: #111; background: var(--gold); }
+.ts-tag.tier-aging { border-color: var(--gold-dim); color: var(--gold2); }
+.ts-tag.tier-rising { border-color: #3f7d55; color: #8fe0a8; }
+.ts-tag.tier-bubble { border-color: #6d6d78; color: var(--text2); }
+.ts-tag.tier-declining { border-color: #8a5a3a; color: #e0b08a; }
+.ts-tag.tier-young, .ts-tag.tier-building { border-color: #3f6d7d; color: #8fcde0; }
+.ts-tag.tier-retooling { border-color: #6d6d78; color: var(--muted); }

@@ -72,6 +72,13 @@ function build(Y) {
       (career[p.id] = career[p.id] || []).push(row);
     });
   }
+  // ---- the real draft record (year, round, pick, team) of everyone drafted from 1947 on (tools/fetch-drafts.py) ----
+  const DCall = fs.existsSync(path.join(ROOT, 'tools', 'draft-cache.json')) ? JSON.parse(fs.readFileSync(path.join(ROOT, 'tools', 'draft-cache.json'), 'utf8')) : {};
+  const DRAFT_OF = {};
+  Object.keys(DCall).forEach(yk => {
+    const dy = +yk, e0 = era(dy), n = e0 ? e0.teams.length : 8;
+    DCall[yk].forEach(r => { if (r[2]) DRAFT_OF[r[2]] = { year: dy, round: Math.max(1, Math.ceil(r[0] / n)), pick: r[0], team: AB[r[1]] || r[1] }; });
+  });
   // ---- contracts ----
   const byTeam = {};
   d.players.forEach(p => { (byTeam[p.team] = byTeam[p.team] || []).push(p); });
@@ -101,6 +108,7 @@ function build(Y) {
     const rc = realContract(p.id, Y, p.team);
     if (rc) { q.salaries = rc.salaries; q.contractEnd = rc.contractEnd; q.salary = rc.salary; realN++; }
     if (p.yearsPro != null) q.yearsPro = p.yearsPro;
+    if (DRAFT_OF[p.id] && DRAFT_OF[p.id].year < Y) q.draft = DRAFT_OF[p.id];
     return q;
   });
   // the opening free agents: veterans who sat out this season but played the next (really unsigned), the best twenty
@@ -154,8 +162,9 @@ function build(Y) {
     // the real rookies of that season who were never drafted
     const used = new Set(cls.map(p => p.id)), e = era(dy + 1);
     (e ? e.players : []).filter(p => p.rookie && !ids.has(p.id) && !used.has(p.id) && p.ovr).sort((x, y) => y.ovr - x.ovr).slice(0, 12).forEach((p, i) => {
+      const late = DRAFT_OF[p.id] && DRAFT_OF[p.id].year === dy ? DRAFT_OF[p.id] : null;   // a later-round pick (before 1989 there were up to ten rounds)
       cls.push({ id: p.id, name: p.name, team: 'DRAFT', pos: p.pos, age: Math.max(19, p.age - 1), ht: p.ht, wt: p.wt, ovr: Math.max(40, p.ovr - 4), pot: Math.min(99, p.ovr + 4), nbaId: p.nbaId || null, injury: null, attrs: p.attrs, stats: null, face: null,
-        draftYear: dy, realPick: null, arrivalYear: dy + 1, undrafted: true, boardRank: rows.length + i + 1 });
+        draftYear: dy, realPick: late ? late.pick : null, arrivalYear: dy + 1, undrafted: !late, boardRank: rows.length + i + 1, draftedBy: late ? late.team : undefined });
     });
     drafts[dy] = cls.filter(p => !ids.has(p.id));
   }

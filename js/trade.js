@@ -147,13 +147,16 @@
     });
     var order = abbrs.slice().sort(function (a, b) { return prof[b].score - prof[a].score; });
     var out = {};
+    // relative to the league that season, not fixed ranks of a 30-team league: the top 28% contend (or the top 42% with a star),
+    // the bottom 28% rebuild (or the bottom 55% with an old core), a team that is losing badly rebuilds
+    var n = order.length;
     order.forEach(function (a, i) {
-      var rank = i + 1, pr = prof[a], prev = st.teams[a] && st.teams[a].direction, d = "neutral";
-      if (rank <= 8 || (rank <= 12 && pr.star >= 88)) d = "contend";
-      else if (rank >= 22 || (rank >= 16 && pr.age >= 29.5) || (pr.gp >= 25 && pr.wp < 0.35)) d = "rebuild";
+      var pct = n > 1 ? 1 - i / (n - 1) : 1, pr = prof[a], prev = st.teams[a] && st.teams[a].direction, d = "neutral";
+      if (pct >= 0.72 || (pct >= 0.58 && pr.star >= 88)) d = "contend";
+      else if (pct <= 0.28 || (pct <= 0.45 && pr.age >= 29.5) || (pr.gp >= 25 && pr.wp < 0.35)) d = "rebuild";
       // hysteresis: keep a plan unless the situation clearly changed
-      if (d === "neutral" && prev === "contend" && rank <= 12) d = "contend";
-      if (d === "neutral" && prev === "rebuild" && rank >= 17) d = "rebuild";
+      if (d === "neutral" && prev === "contend" && pct >= 0.58) d = "contend";
+      if (d === "neutral" && prev === "rebuild" && pct <= 0.42) d = "rebuild";
       out[a] = d;
     });
     ctx.profiles = prof;

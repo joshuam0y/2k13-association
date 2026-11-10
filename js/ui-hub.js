@@ -91,7 +91,29 @@
     r.forEach((p, i) => { s += (p.ovr || 0) * W8[i]; ws += W8[i]; });
     return Math.round(s / ws);
   };
-  UI.teamTier = o => (o >= 81 ? 'Contender' : o >= 77 ? 'Playoff team' : 'Rebuild');
+  // Where a team stands is relative: its rating against every other team in the league that season (rank and how far ahead or
+  // behind the average), and how old the core is. A 76 is a contender in a weak 1950s league and a rebuild now.
+  // list: [{ abbr, ovr, age, star }] -> { abbr: { tier, dir: 'contend' | 'neutral' | 'rebuild', pct } }
+  UI.teamTiers = function (list) {
+    const n = list.length, out = {};
+    if (!n) return out;
+    const sorted = list.slice().sort((a, b) => b.ovr - a.ovr);
+    const mean = sorted.reduce((s, x) => s + x.ovr, 0) / n, sd = Math.sqrt(sorted.reduce((s, x) => s + (x.ovr - mean) * (x.ovr - mean), 0) / n) || 1;
+    sorted.forEach((x, i) => {
+      const pct = n > 1 ? 1 - i / (n - 1) : 1, z = (x.ovr - mean) / sd, age = x.age || 27;
+      let tier;
+      if (pct >= 0.9 && z >= 0.9) tier = 'Title favorite';
+      else if (pct >= 0.72) tier = age >= 30 ? 'Aging contender' : 'Contender';
+      else if (pct >= 0.55) tier = age <= 25 ? 'Rising' : 'Playoff team';
+      else if (pct >= 0.38) tier = age >= 29.5 ? 'Declining' : age <= 24.8 ? 'Young core' : 'Bubble team';
+      else if (pct >= 0.16) tier = age <= 25.5 ? 'Building' : age >= 29 ? 'Declining' : 'Retooling';
+      else tier = 'Rebuild';
+      const dir = pct >= 0.72 || (pct >= 0.58 && (x.star || 0) >= 88) ? 'contend' : pct <= 0.28 || (pct <= 0.45 && age >= 29.5) ? 'rebuild' : 'neutral';
+      out[x.abbr] = { tier, dir, pct };
+    });
+    return out;
+  };
+  UI.teamTier = o => (o >= 81 ? 'Contender' : o >= 77 ? 'Playoff team' : 'Rebuild');   // old fixed cut-offs, kept for anything that only has a rating
 
   // Best starting five: one player per slot, highest total OVR, small penalties for playing off
   // the listed positions (secondary 1, next door 6, further 12+). Healthy players only when possible.
@@ -282,8 +304,11 @@
     const info = L.teams.map(t => {
       const r = rosters[t.abbr] || [];
       const ovr = ovrFrom(r);
-      return { t, r, ovr, tier: UI.teamTier(ovr), cap: UI.payrollInfo(t.abbr, r, false), rec: recOf(t.abbr) };
+      const top = r.slice(0, 8), age = top.length ? top.reduce((s, p) => s + (p.age || 27), 0) / top.length : 27;
+      return { t, r, ovr, age, star: r[0] ? r[0].ovr : 0, cap: UI.payrollInfo(t.abbr, r, false), rec: recOf(t.abbr) };
     });
+    const TIERS = UI.teamTiers(info.map(x => ({ abbr: x.t.abbr, ovr: x.ovr, age: x.age, star: x.star })));
+    info.forEach(x => { x.tier = TIERS[x.t.abbr].tier; x.dir = TIERS[x.t.abbr].dir; });
     const byAbbr = {};
     info.forEach(x => { byAbbr[x.t.abbr] = x; });
     const tierCls = s => 'tier-' + s.split(' ')[0].toLowerCase();
@@ -298,8 +323,8 @@
         <span class="ts-stars">${x.r.slice(0, 3).map(p => `<span><i>${esc(p.name)}</i><b class="${UI.ovrClass(p.ovr)}">${esc(p.ovr)}</b></span>`).join('')}</span>
       </button>`;
     };
-    const FILTERS = [['all', 'ALL'], ['East', 'EAST'], ['West', 'WEST'], ['Contender', 'CONTENDERS'], ['Rebuild', 'REBUILDS']];
-    const visible = f => info.filter(x => f === 'all' || x.t.conf === f || x.tier === f);
+    const FILTERS = [['all', 'ALL'], ['East', 'EAST'], ['West', 'WEST'], ['contend', 'CONTENDERS'], ['neutral', 'IN BETWEEN'], ['rebuild', 'REBUILDS']];
+    const visible = f => info.filter(x => f === 'all' || x.t.conf === f || x.dir === f);
     const slots = UI.saves.list();
     const first = UI.saves.firstEmpty() || 1;
     const seasons = UI.START_YEARS.map(s => `<button type="button" class="ch-chip${s.year === newStart ? ' on' : ''}" data-start="${s.year}" title="${esc(s.note || '')}">${esc(s.label)}</button>`).join('');
@@ -332,7 +357,7 @@
         grid.innerHTML = confs().filter(c => filter === 'all' || c === filter).map(c => `<h3 class="conf-label">${esc(c.toUpperCase())}</h3>
           <div class="ts-grid">${list.filter(x => x.t.conf === c).sort((a, b) => a.t.city.localeCompare(b.t.city) || a.t.name.localeCompare(b.t.name)).map(card).join('')}</div>`).join('');
       } else {
-        grid.innerHTML = `<h3 class="conf-label">${esc(filter === 'Contender' ? 'CONTENDERS' : 'REBUILDS')} <small>${list.length} TEAMS, BEST FIRST</small></h3>
+        grid.innerHTML = `<h3 class="conf-label">${esc(filter === 'contend' ? 'CONTENDERS' : filter === 'neutral' ? 'IN BETWEEN' : 'REBUILDS')} <small>${list.length} TEAMS, BEST FIRST</small></h3>
           <div class="ts-grid">${list.slice().sort((a, b) => b.ovr - a.ovr || a.t.city.localeCompare(b.t.city)).map(card).join('')}</div>`;
       }
       UI.$$('.ts-card', grid).forEach(b => {
