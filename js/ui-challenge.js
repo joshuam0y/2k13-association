@@ -36,11 +36,7 @@
     const img = t.logo ? `<img src="${esc(t.logo)}" alt="" loading="lazy"${t.logoNoRef ? ' referrerpolicy="no-referrer"' : ''} onerror="this.parentNode.classList.add('nologo');this.remove()">` : '';
     return `<span class="logo${t.logo ? '' : ' nologo'}${UI.darkLogo && UI.darkLogo(t) ? ' dark' : ''}" style="--c1:${esc(c1)};--c2:${esc(c2)};--sz:${size || 40}px" title="${esc(tName(t))}">${img}<b>${esc(t.abbr)}</b></span>`;
   }
-  function face(p, color, cls) {
-    const k = 'hs ' + (cls || '');
-    if (!p || !p.nbaId) return `<img class="${k} hs-fallback" src="${UI.faceSvg(color || '#444')}" alt="">`;
-    return `<img class="${k}" src="https://cdn.nba.com/headshots/nba/latest/260x190/${esc(p.nbaId)}.png" data-c="${esc(color || '#444')}" alt="" loading="lazy" onerror="UI.faceFallback(this)">`;
-  }
+  function face(p, color, cls) { return UI.faceImg(p, color, cls); }
   const ord = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
   const pct = v => v == null ? '-' : v.toFixed(1);
   function saveCur() {

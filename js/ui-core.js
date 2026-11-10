@@ -171,20 +171,83 @@
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 190"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${c}" stop-opacity=".95"/><stop offset="1" stop-color="${c}" stop-opacity=".55"/></linearGradient></defs><circle cx="130" cy="78" r="44" fill="url(#g)"/><path d="M42 190c4-52 42-80 88-80s84 28 88 80z" fill="url(#g)"/></svg>`;
     return 'data:image/svg+xml,' + encodeURIComponent(svg);
   };
+  // ---------- faces: the NBA's headshot, else Basketball-Reference's, else a face drawn for him ----------
+  // Real players have Basketball-Reference ids (jamesle01); a pool key (jamesle01@2013) is the same man.
+  const brId = p => { const id = String((p && (p.base || p.id)) || '').split('@')[0]; return /^[a-z]{2,7}\d{2}$/.test(id) ? id : ''; };
+  UI.brHeadshot = p => { const id = brId(p); return id ? 'https://www.basketball-reference.com/req/202106291/images/headshots/' + id + '.jpg' : ''; };
+  // A generated face, the same every time for the same player (seeded by his id or name): skin, head shape,
+  // hair, brows, eyes, nose, mouth, facial hair and a jersey in the team color, on the NBA headshot canvas.
+  const FACES = {};
+  const SKIN = ['#3a2117', '#4a2b1c', '#573421', '#653e28', '#734a31', '#83563a', '#946446', '#a97752', '#bf8d65', '#d4a47c', '#e3b993', '#efcfae'];
+  UI.faceGen = function (seed, c1, c2) {
+    const key = seed + '|' + c1 + '|' + c2;
+    if (FACES[key]) return FACES[key];
+    let h = 2166136261;
+    for (const ch of String(seed || 'x')) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+    const rnd = () => { h += 0x6D2B79F5; let x = h; x = Math.imul(x ^ (x >>> 15), x | 1); x ^= x + Math.imul(x ^ (x >>> 7), x | 61); return ((x ^ (x >>> 14)) >>> 0) / 4294967296; };
+    const pick = a => a[Math.floor(rnd() * a.length)];
+    const col = c1 || '#555', trim = c2 || '#ddd';
+    const si = Math.min(SKIN.length - 1, Math.floor(Math.pow(rnd(), 1.35) * SKIN.length)), skin = SKIN[si];
+    const shade = 'rgba(0,0,0,.18)';
+    const hairC = si >= 9 && rnd() < 0.35 ? pick(['#5a3a1f', '#8a5a2b', '#b8894a']) : pick(['#0e0a07', '#16100b', '#22160e', '#2e1d12']);
+    const cx = 130, cy = 80, rx = 31 + rnd() * 8, ry = 41 + rnd() * 7, jaw = 0.82 + rnd() * 0.14;
+    const top = cy - ry, eyeY = cy - 4 + rnd() * 4, gap = 13 + rnd() * 4;
+    const headPath = `M${cx - rx},${cy - 6} C${cx - rx},${top - 4} ${cx + rx},${top - 4} ${cx + rx},${cy - 6} C${cx + rx},${cy + ry * 0.55} ${cx + rx * jaw * 0.55},${cy + ry} ${cx},${cy + ry} C${cx - rx * jaw * 0.55},${cy + ry} ${cx - rx},${cy + ry * 0.55} ${cx - rx},${cy - 6} Z`;
+    const style = pick(['bald', 'buzz', 'buzz', 'short', 'short', 'fade', 'fade', 'afro', 'twists', 'cornrows', 'locs', 'flat']);
+    let back = '', front = '';
+    if (style === 'afro') back = `<ellipse cx="${cx}" cy="${top + 22}" rx="${rx + 14}" ry="${ry * 0.78}" fill="${hairC}"/>`;
+    if (style === 'locs') back = `<path d="M${cx - rx - 6},${cy - 10} Q${cx - rx - 10},${cy + 40} ${cx - rx + 2},${cy + 52} L${cx + rx - 2},${cy + 52} Q${cx + rx + 10},${cy + 40} ${cx + rx + 6},${cy - 10} Z" fill="${hairC}"/>`;
+    const cap = (dy, op) => `<path d="M${cx - rx - 1},${cy - 4 + dy} C${cx - rx - 2},${top - 8} ${cx + rx + 2},${top - 8} ${cx + rx + 1},${cy - 4 + dy} C${cx + rx * 0.6},${top + 10} ${cx - rx * 0.6},${top + 10} ${cx - rx - 1},${cy - 4 + dy} Z" fill="${hairC}" opacity="${op}"/>`;
+    if (style === 'buzz') front = cap(-12, 0.55);
+    if (style === 'short' || style === 'fade' || style === 'afro' || style === 'locs') front = cap(style === 'fade' ? -14 : -8, style === 'fade' ? 0.9 : 1);
+    if (style === 'fade') front += `<path d="M${cx - rx},${cy - 14} Q${cx - rx + 2},${cy - 2} ${cx - rx + 3},${cy + 4}" stroke="${hairC}" stroke-width="5" opacity=".35" fill="none"/><path d="M${cx + rx},${cy - 14} Q${cx + rx - 2},${cy - 2} ${cx + rx - 3},${cy + 4}" stroke="${hairC}" stroke-width="5" opacity=".35" fill="none"/>`;
+    if (style === 'twists') { front = cap(-8, 1); for (let i = 0; i < 9; i++) { const x = cx - rx + 4 + i * (rx * 2 - 8) / 8; front += `<circle cx="${x}" cy="${top + 2 + (i % 2) * 3}" r="5.5" fill="${hairC}"/>`; } }
+    if (style === 'cornrows') { front = cap(-10, 0.95); for (let i = -3; i <= 3; i++) front += `<path d="M${cx + i * 8},${top + 1} Q${cx + i * 10},${top + 18} ${cx + i * 11},${cy - 14}" stroke="rgba(255,255,255,.12)" stroke-width="1.4" fill="none"/>`; }
+    if (style === 'flat') front = `<path d="M${cx - rx + 3},${top + 12} L${cx - rx + 6},${top - 10} Q${cx},${top - 15} ${cx + rx - 6},${top - 10} L${cx + rx - 3},${top + 12} Z" fill="${hairC}"/>` + cap(-10, 1);
+    const band = rnd() < 0.12 ? `<rect x="${cx - rx - 1}" y="${top + 10}" width="${rx * 2 + 2}" height="7" rx="3" fill="${rnd() < 0.5 ? col : '#f4f4f4'}"/>` : '';
+    const browW = 2.6 + rnd() * 2.2, tilt = -2 + rnd() * 4;
+    const brow = s => `<path d="M${cx + s * (gap - 7)},${eyeY - 8 + tilt * 0.3} Q${cx + s * gap},${eyeY - 11} ${cx + s * (gap + 8)},${eyeY - 8 - tilt * 0.3}" stroke="${hairC}" stroke-width="${browW}" stroke-linecap="round" fill="none"/>`;
+    const eye = s => `<ellipse cx="${cx + s * gap}" cy="${eyeY}" rx="5.2" ry="${2.6 + rnd() * 0.9}" fill="#f4efe6"/><circle cx="${cx + s * gap}" cy="${eyeY + 0.2}" r="2.5" fill="#1b120c"/><path d="M${cx + s * (gap - 5.5)},${eyeY - 1.5} Q${cx + s * gap},${eyeY - 4.6} ${cx + s * (gap + 5.5)},${eyeY - 1.5}" stroke="rgba(0,0,0,.45)" stroke-width="1.2" fill="none"/>`;
+    const nw = 6 + rnd() * 4, ny = eyeY + 18 + rnd() * 4;
+    const nose = `<path d="M${cx - 1},${eyeY + 4} L${cx - 3},${ny - 3}" stroke="${shade}" stroke-width="1.6" fill="none"/><path d="M${cx - nw},${ny} Q${cx},${ny + 5} ${cx + nw},${ny}" stroke="rgba(0,0,0,.35)" stroke-width="2" fill="none" stroke-linecap="round"/>`;
+    const my = ny + 12 + rnd() * 3, mw = 9 + rnd() * 4, smile = rnd() * 3 - 0.6;
+    const mouth = `<path d="M${cx - mw},${my} Q${cx},${my + smile} ${cx + mw},${my}" stroke="#3a1f17" stroke-width="2.2" fill="none" stroke-linecap="round"/><path d="M${cx - mw + 3},${my + 3.5} Q${cx},${my + 6} ${cx + mw - 3},${my + 3.5}" stroke="rgba(0,0,0,.12)" stroke-width="2" fill="none"/>`;
+    const fh = pick(['none', 'none', 'stubble', 'goatee', 'beard', 'beard', 'stache']);
+    let hair2 = '';
+    if (fh === 'stubble') hair2 = `<path d="M${cx - rx + 4},${cy + 6} C${cx - rx + 6},${cy + ry} ${cx + rx - 6},${cy + ry} ${cx + rx - 4},${cy + 6} C${cx + rx * 0.5},${cy + ry * 0.8} ${cx - rx * 0.5},${cy + ry * 0.8} ${cx - rx + 4},${cy + 6} Z" fill="${hairC}" opacity=".28"/>`;
+    if (fh === 'beard') hair2 = `<path d="M${cx - rx + 1},${cy - 2} C${cx - rx + 2},${cy + ry + 4} ${cx + rx - 2},${cy + ry + 4} ${cx + rx - 1},${cy - 2} L${cx + rx - 6},${cy + 8} C${cx + mw + 6},${my + 10} ${cx - mw - 6},${my + 10} ${cx - rx + 6},${cy + 8} Z" fill="${hairC}" opacity=".92"/><path d="M${cx - mw - 2},${my - 4} Q${cx},${my - 9} ${cx + mw + 2},${my - 4}" stroke="${hairC}" stroke-width="4" fill="none" stroke-linecap="round"/>`;
+    if (fh === 'goatee') hair2 = `<path d="M${cx - mw + 1},${my + 4} Q${cx},${my + 20} ${cx + mw - 1},${my + 4} Q${cx},${my + 9} ${cx - mw + 1},${my + 4} Z" fill="${hairC}" opacity=".9"/><path d="M${cx - mw},${my - 4} Q${cx},${my - 8} ${cx + mw},${my - 4}" stroke="${hairC}" stroke-width="3" fill="none" stroke-linecap="round"/>`;
+    if (fh === 'stache') hair2 = `<path d="M${cx - mw - 1},${my - 3} Q${cx},${my - 9} ${cx + mw + 1},${my - 3}" stroke="${hairC}" stroke-width="4" fill="none" stroke-linecap="round"/>`;
+    const ear = s => `<ellipse cx="${cx + s * (rx + 1)}" cy="${eyeY + 6}" rx="5" ry="9" fill="${skin}"/><ellipse cx="${cx + s * (rx + 1)}" cy="${eyeY + 6}" rx="2.2" ry="5" fill="${shade}"/>`;
+    const neckW = 17 + rnd() * 5;
+    const body = `<path d="M${cx - neckW},${cy + ry - 14} L${cx - neckW - 2},${150} L${cx + neckW + 2},${150} L${cx + neckW},${cy + ry - 14} Z" fill="${skin}"/><path d="M${cx - neckW},${cy + ry - 4} Q${cx},${cy + ry + 8} ${cx + neckW},${cy + ry - 4} L${cx + neckW},${cy + ry + 4} Q${cx},${cy + ry + 14} ${cx - neckW},${cy + ry + 4} Z" fill="${shade}"/>
+      <path d="M26,190 C28,158 62,143 ${cx - neckW - 4},139 L${cx + neckW + 4},139 C198,143 232,158 234,190 Z" fill="${skin}"/>
+      <path d="M64,190 C66,166 80,150 ${cx - neckW - 9},145 Q${cx},${172} ${cx + neckW + 9},145 C180,150 194,166 196,190 Z" fill="${col}" stroke="${trim}" stroke-width="4"/>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 190"><g transform="translate(130 182) scale(1.15) translate(-130 -182)">${back}${body}${ear(-1)}${ear(1)}<path d="${headPath}" fill="${skin}"/><path d="${headPath}" fill="url(#sh)" opacity=".5"/>
+      <defs><radialGradient id="sh" cx=".38" cy=".32" r=".8"><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".35"/></radialGradient></defs>
+      ${hair2}${front}${band}${brow(-1)}${brow(1)}${eye(-1)}${eye(1)}${nose}${mouth}</g></svg>`;
+    return (FACES[key] = 'data:image/svg+xml,' + encodeURIComponent(svg));
+  };
+  const faceSeed = p => String((p && (brId(p) || p.base || p.id || p.name)) || 'x').split('@')[0];
+  UI.faceFor = (p, color) => UI.faceGen(faceSeed(p) + (p && p.name ? '|' + p.name : ''), color, '#e9e9e9');
+  // the next picture to try when one does not load: the Basketball-Reference photo, then the drawn face
   UI.faceFallback = function (img) {
+    const br = img.getAttribute('data-br');
+    if (br && img.getAttribute('src') !== br) { img.src = br; img.classList.add('hs-br'); return; }
     img.onerror = null;
-    img.src = UI.faceSvg(img.getAttribute('data-c'));
-    img.classList.add('hs-fallback');
+    img.src = UI.faceGen(img.getAttribute('data-seed') || 'x', img.getAttribute('data-c'), '#e9e9e9');
+    img.classList.remove('hs-br');
+    img.classList.add('hs-gen');
   };
-  UI.headshot = function (p, cls) {
-    const color = UI.teamColor(p.team);
-    let src;
-    if (p.nbaId) src = `https://cdn.nba.com/headshots/nba/latest/260x190/${p.nbaId}.png`;
-    else if (p.face) src = p.face;
-    const klass = 'hs ' + (cls || '');
-    if (!src) return `<img class="${klass} hs-fallback" src="${UI.faceSvg(color)}" alt="">`;
-    return `<img class="${klass}" src="${UI.esc(src)}" data-c="${UI.esc(color)}" alt="" loading="lazy" onerror="UI.faceFallback(this)">`;
+  // one <img> for any player: tries the NBA headshot, the Basketball-Reference photo, then the drawn face
+  UI.faceImg = function (p, color, cls) {
+    const k = 'hs ' + (cls || ''), c = color || '#444', br = UI.brHeadshot(p), seed = faceSeed(p) + (p && p.name ? '|' + p.name : '');
+    const nba = p && p.nbaId ? `https://cdn.nba.com/headshots/nba/latest/260x190/${p.nbaId}.png` : (p && p.face) || '';
+    const first = nba || br;
+    if (!first) return `<img class="${k} hs-gen" src="${UI.faceGen(seed, c, '#e9e9e9')}" alt="">`;
+    return `<img class="${k}${!nba ? ' hs-br' : ''}" src="${UI.esc(first)}" data-br="${nba ? UI.esc(br) : ''}" data-seed="${UI.esc(seed)}" data-c="${UI.esc(c)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="UI.faceFallback(this)">`;
   };
+  UI.headshot = function (p, cls) { return UI.faceImg(p, UI.teamColor(p.team), cls); };
 
   // ---------- players ----------
   // With a league loaded, everyone lives in state.players (NBA, free agents, retired, draft prospects).

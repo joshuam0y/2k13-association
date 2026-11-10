@@ -96,7 +96,7 @@
     if (f.top) {
       const y0 = 960;
       ctx.fillStyle = 'rgba(255,255,255,.06)'; ctx.fillRect(80, y0, W - 160, 210);
-      const hs = f.top.nbaId ? await loadImg('https://cdn.nba.com/headshots/nba/latest/260x190/' + f.top.nbaId + '.png') : null;
+      const hs = (f.top.nbaId ? await loadImg('https://cdn.nba.com/headshots/nba/latest/260x190/' + f.top.nbaId + '.png') : null) || (UI.faceFor ? await loadImg(UI.faceFor(f.top, (f.t && f.t.colors && f.t.colors[0]) || '#444')) : null);   // a drawn face keeps the card shareable
       if (hs) ctx.drawImage(hs, 100, y0 + 20, 234, 171);
       ctx.textAlign = 'left'; const x = hs ? 360 : 120;
       ctx.fillStyle = '#f5c542'; ctx.font = "500 30px Oswald, Arial, sans-serif"; ctx.fillText('BEST PLAYER', x, y0 + 60);

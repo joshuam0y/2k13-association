@@ -60,10 +60,10 @@
         <div class="mm-install" id="mmInstall">${UI.installButton ? UI.installButton() : ''}</div>
         <div class="mm-k">${m && m.year ? 'THE ' + esc(UI.seasonLabel(m.year)) + ' NBA SEASON' : 'EVERY SEASON FROM 2003-04 TO 2026-27'}</div>
         <div class="mm-grid">
-          ${UI.tile('#/new', 'ball', 'PLAY THE ASSOCIATION', { cls: 'mt-hero', disabled: !engineOk, sub: engineOk ? 'NEW LEAGUE' : 'SIM ENGINE NOT LOADED' })}
+          ${UI.tile('#/challenge', 'draft', 'SEASON MODE', { cls: 'mt-hero mt-challenge mt-hot', disabled: !engineOk, sub: engineOk ? 'PICK FIVE, SIM A SEASON' : 'SIM ENGINE NOT LOADED' })}
+          ${UI.tile('#/challenge/vs', 'draft', 'HEAD TO HEAD', { cls: 'mt-hero mt-versus mt-hot', disabled: !engineOk, sub: 'YOU VS A FRIEND, ONLINE OR ONE PHONE' })}
+          ${UI.tile('#/new', 'ball', 'THE ASSOCIATION', { cls: 'mt-assoc', disabled: !engineOk, sub: 'A FULL FRANCHISE' })}
           ${cont}
-          ${UI.tile('#/challenge', 'draft', 'DRAFT CHALLENGE', { cls: 'mt-challenge mt-hot', disabled: !engineOk, sub: 'PICK FIVE, SIM A SEASON' })}
-          ${UI.tile('#/challenge/vs', 'draft', 'VERSUS', { cls: 'mt-versus mt-hot', disabled: !engineOk, sub: 'YOU VS A FRIEND, ONLINE OR ONE PHONE' })}
           ${UI.tile('#/saves', 'load', 'LOAD', { cls: 'mt-half' })}
           ${UI.tile('#/soundtrack', 'music', 'SOUNDTRACK', { cls: 'mt-half' })}
         </div>

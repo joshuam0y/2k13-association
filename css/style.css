@@ -932,3 +932,15 @@ html { scroll-padding-bottom: calc(var(--mb-h, var(--bar-h)) + 12px); }
 @media (max-width: 600px) { .fr-chem { grid-template-columns: minmax(0, 1fr); } .fr-chem ul { grid-template-columns: minmax(0, 1fr); } }
 /* black logos (Nets, Spurs): a thin white outline so they show on the dark page */
 .logo.dark img { filter: drop-shadow(0 0 1px rgba(255, 255, 255, .9)) drop-shadow(0 0 3px rgba(255, 255, 255, .3)); }
+/* the home screen leads with Season Mode and Head to Head; the Association sits below */
+.mm-grid .mt-hero.mt-challenge, .mm-grid .mt-hero.mt-versus { grid-column: span 2; grid-row: span 2; }
+.mm-grid .mt-hero.mt-versus .mt-l { color: #8fe3aa; }
+.mm-grid .mt-assoc, .mm-grid .mt-continue { grid-column: span 2; min-height: 110px; }
+.mm-grid { grid-template-rows: 170px 170px auto auto; }
+@media (max-width: 900px) {
+  .mm-grid { grid-template-rows: none; }
+  .mm-grid .mt-hero.mt-challenge, .mm-grid .mt-hero.mt-versus { grid-column: span 2; grid-row: span 1; }
+  .mm-grid .mt-assoc, .mm-grid .mt-continue { grid-column: span 1; min-height: 110px; }
+}
+/* Basketball-Reference photos are portraits: fill the headshot box from the top */
+img.hs.hs-br { object-fit: cover; object-position: center 18%; }
