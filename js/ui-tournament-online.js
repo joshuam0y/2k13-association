@@ -302,8 +302,8 @@
       if (!s) { hostAct(seat, { k: 'spin' }); return; }
       load(!t.cfg.year && s.year !== 2013 ? [s.year] : [], () => {
         const B = A.board(t.cfg), five = t.picks[seat].map(id => B.byId[id]).filter(Boolean);
-        const pool = A.rosterOf(B, s.key, flat()).filter(p => C.capFits(t.cfg.cap, five, p)).sort((x, y) => y.ovr - x.ovr);
-        hostAct(seat, pool[0] ? { k: 'take', id: pool[0].id } : { k: 'free' });
+        const pool = A.rosterOf(B, s.key, flat()).filter(p => C.capFits(t.cfg.cap, five, p));
+        hostAct(seat, pool[0] ? { k: 'take', id: pool[Math.floor(Math.random() * pool.length)].id } : { k: 'free' });
       });
     });
   }

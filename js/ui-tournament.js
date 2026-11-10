@@ -338,10 +338,11 @@
           if (left > 0) return;
           stopTick();
           if (phase === 'spin') { if (!TN.spin || TN.spin.pick !== k) doSpin(null); return; }
-          const pool = rosterOf(B, spin.key, flat()).filter(p => C.capFits(cfg.cap, five, p)).sort((a, b) => b.ovr - a.ovr);
+          const pool = rosterOf(B, spin.key, flat()).filter(p => C.capFits(cfg.cap, five, p));
           if (!pool[0]) { doSpin(spin.key); return; }
-          UI.toast('Time: ' + nm(w) + ' gets ' + pool[0].name + '.');
-          take(pool[0].id);
+          const rp = pool[Math.floor(Math.random() * pool.length)];
+          UI.toast('Time: ' + nm(w) + ' gets ' + rp.name + '.');
+          take(rp.id);
         };
         TICK = setInterval(tick, 250); tick();
       }

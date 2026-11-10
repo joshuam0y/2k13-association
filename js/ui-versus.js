@@ -557,9 +557,10 @@
           if (turn.phase === 'spin' && !VS.spin) { const s2 = spinFor(cfg, B, taken, null); if (s2) { VS.spin = s2; VS.spun = VS.spun.concat([s2.key]); VS.turn = turnFor(cfg, taken.length, 'pick'); push(); draft(app); } }
           else if (turn.phase === 'pick' && VS.spin && VS.spin.pick === taken.length) {
             const five = cfg.sides[on].picks.map(id => byId[id]).filter(Boolean);
-            const pool = rosterOf(B, VS.spin.key, taken).filter(p => C.capFits(cfg.cap, five, p)).sort((a, b) => b.ovr - a.ovr);
+            const pool = rosterOf(B, VS.spin.key, taken).filter(p => C.capFits(cfg.cap, five, p));
             if (!pool[0]) { VS.spin = null; VS.turn = turnFor(cfg, taken.length, 'spin'); push(); draft(app); return; }
-            if (pool[0]) { VS.cfg.sides[on].picks.push(pool[0].id); VS.spin = null; VS.turn = turnFor(cfg, taken.length + 1, 'spin'); push(); UI.toast('Time: ' + who(on) + ' gets ' + pool[0].name + '.'); draft(app); }
+            const rp = pool[Math.floor(Math.random() * pool.length)];
+            if (rp) { VS.cfg.sides[on].picks.push(rp.id); VS.spin = null; VS.turn = turnFor(cfg, taken.length + 1, 'spin'); push(); UI.toast('Time: ' + who(on) + ' gets ' + rp.name + '.'); draft(app); }
           }
         };
         TICK = setInterval(tick, 250);
