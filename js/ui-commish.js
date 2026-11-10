@@ -84,7 +84,7 @@
       const shown = rows.slice(0, 60);
       UI.$('#cmList').innerHTML = rows.length ? `<div class="tscroll"><table class="stats cm-list"><thead><tr><th class="l">PLAYER</th><th class="l">TEAM</th><th>POS</th><th>AGE</th><th>OVR</th><th>SALARY</th><th>THRU</th><th></th></tr></thead><tbody>
         ${shown.map(p => `<tr><td class="l"><a href="#/commish/player/${esc(p.id)}">${esc(p.name)}</a></td><td class="l">${esc(p.team)}</td><td>${esc(p.pos)}</td><td>${p.age || '-'}</td>
-          <td><b class="${UI.ovrClass ? UI.ovrClass(p.ovr) : ''}">${p.ovr || '-'}</b></td><td>${x$(salaryNow(state, p))}</td><td>${contractEnd(p) || '-'}</td>
+          <td><b class="${UI.ovrClass ? UI.ovrClass(p.ovr) : ''}">${p.ovr || '-'}</b>${UI.mv(p)}</td><td>${x$(salaryNow(state, p))}</td><td>${contractEnd(p) || '-'}</td>
           <td><a class="btn btn-small" href="#/commish/player/${esc(p.id)}">EDIT</a></td></tr>`).join('')}
         </tbody></table></div>${rows.length > shown.length ? `<p class="muted">Showing the top ${shown.length} of ${rows.length}. Search to narrow it down.</p>` : ''}`
         : '<p class="muted">No players match.</p>';

@@ -332,7 +332,7 @@
     if (!needs) return '';
     const cols = ['PG', 'SG', 'SF', 'PF', 'C'].map(P => {
       const x = needs.pos[P];
-      const rows = x.players.slice(0, 4).map(r => `<li><a href="#/player/${esc(r.id)}">${esc(r.name)}</a><span><b class="${UI.ovrClass(r.ovr)}">${r.ovr}</b> ${esc(r.age || '-')}y ${r.years ? r.years + (r.years === 1 ? ' yr' : ' yrs') : 'FA'}</span></li>`).join('');
+      const rows = x.players.slice(0, 4).map(r => `<li><a href="#/player/${esc(r.id)}">${esc(r.name)}</a><span><b class="${UI.ovrClass(r.ovr)}">${r.ovr}</b>${UI.mv(r)} ${esc(r.age || '-')}y ${r.years ? r.years + (r.years === 1 ? ' yr' : ' yrs') : 'FA'}</span></li>`).join('');
       const tag = x.status === 'need' ? '<em class="fa-need">NEED</em>' : x.status === 'thin' ? '<em class="fa-thin">THIN</em>' : '';
       return `<div class="fa-npos fa-n-${x.status}"><h4>${P} ${tag}</h4><ul>${rows || '<li class="muted">Nobody</li>'}</ul></div>`;
     }).join('');
@@ -397,7 +397,7 @@
       const act = r.stashed ? '<span class="muted">Rights kept</span>'
         : !phaseOpen ? '' : `<button type="button" class="btn btn-small btn-danger" data-act="cut" data-id="${esc(p.id)}">${cut ? 'CONFIRM: ' + money(r.guaranteed) + ' DEAD' : 'WAIVE'}</button>${cut ? ' <button type="button" class="btn btn-small" data-act="nocut">KEEP</button>' : ''}`;
       return `<tr class="${r.stashed ? 'fa-stash' : ''}">
-        <td class="fa-tl"><a href="#/player/${esc(p.id)}">${esc(p.name)}</a><small>${esc(p.pos || '')} | ${esc(p.age || '-')} yrs | <span class="${UI.ovrClass(p.ovr)}">${p.ovr}</span></small></td>
+        <td class="fa-tl"><a href="#/player/${esc(p.id)}">${esc(p.name)}</a><small>${esc(p.pos || '')} | ${esc(p.age || '-')} yrs | <span class="${UI.ovrClass(p.ovr)}">${p.ovr}</span>${UI.mv(p)}</small></td>
         <td class="num">${r.stashed ? '<span class="muted">Overseas until ' + esc(p.stashedUntil) + '</span>' : r.now ? money(r.now) + (r.two ? ' <small>two-way</small>' : '') : '<span class="muted">-</span>'}</td>
         <td class="num">${r.stashed ? '-' : r.left}</td>
         <td>${r.thru ? esc(season(r.thru)) : '-'}${r.rookie ? ' <small>rookie</small>' : ''}</td>

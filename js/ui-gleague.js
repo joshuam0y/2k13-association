@@ -106,7 +106,7 @@
     const yrs = r.yearsPro === 0 ? 'Rookie' : n + ord + ' season';
     const stats = side === 'aff' || (r.stats && r.stats.g) ? statLine(r, lg) : '';
     return `<li class="gl-row" data-id="${esc(r.id)}">
-      <span class="gl-ovr ${UI.ovrClass ? UI.ovrClass(r.ovr) : ''}" title="Overall">${esc(r.ovr || '-')}</span>
+      <span class="gl-ovr ${UI.ovrClass ? UI.ovrClass(r.ovr) : ''}" title="Overall">${esc(r.ovr || '-')}${UI.mv(r)}</span>
       <span class="gl-main"><span class="gl-name"><a href="#/player/${encodeURIComponent(r.id)}">${esc(r.name)}</a>${tags}</span>
         <span class="gl-meta">${esc(r.pos)} | Age ${esc(r.age || '-')} | ${esc(r.contract)} | ${esc(yrs)}</span>
         ${stats}${leftLine(r)}</span>

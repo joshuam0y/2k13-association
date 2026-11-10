@@ -163,7 +163,7 @@
     return `<span class="ft-hs">${UI.headshot(p)}</span>
       <span class="ft-main"><b class="ft-name">${esc(p.name)}</b>${opts.stars != null ? F.starsHtml(opts.stars) : ''}
         <span class="ft-meta">${opts.meta != null ? opts.meta : esc(p.pos || '') + ' | ' + esc(p.age || '-') + ' YRS'}</span></span>
-      <span class="ft-ovr ${UI.ovrClass(ovr)}">${ovr}</span>`;
+      <span class="ft-ovr ${UI.ovrClass(ovr)}">${ovr}${UI.mv(p)}</span>`;
   };
 
   // styles for the pieces this file and the draft room add (kept here: no CSS file of our own)
@@ -366,7 +366,7 @@
       const x = removable ? `<button type="button" class="ftx-x" data-act="toggle" data-side="${esc(abbr)}" data-kind="player" data-id="${esc(id)}" aria-label="Remove">&times;</button>` : '';
       const tb = !removable && !noTradeLink && p && p.team !== st.userTeam && st.teams[p.team] ? `<a class="ftx-tradebtn" href="#/trade/for/${esc(p.id)}" title="Build a new trade for him">TRADE</a>` : '';
       const add = mark && mark === id ? '<span class="ftx-addtag">THEY ALSO WANT</span>' : '';
-      items.push(p ? `<li><b class="${UI.ovrClass(p.ovr || 0)}">${p.ovr || '-'}</b> <a href="#/player/${esc(p.id)}">${esc(p.name)}</a>${F.starsHtml(F.stars(st, p))}${add} <small>${esc(p.pos || '')} | ${esc(p.age || '-')} yrs | ${F.money(F.salary(p, F.capYear(st)))} | ${esc(F.contractText(p, st))}</small>${tb}${x}</li>` : `<li>${esc(id)}</li>`);
+      items.push(p ? `<li><b class="${UI.ovrClass(p.ovr || 0)}">${p.ovr || '-'}</b>${UI.mv(p)} <a href="#/player/${esc(p.id)}">${esc(p.name)}</a>${F.starsHtml(F.stars(st, p))}${add} <small>${esc(p.pos || '')} | ${esc(p.age || '-')} yrs | ${F.money(F.salary(p, F.capYear(st)))} | ${esc(F.contractText(p, st))}</small>${tb}${x}</li>` : `<li>${esc(id)}</li>`);
     });
     (g.picks || []).forEach(pk => {
       const x = removable ? `<button type="button" class="ftx-x" data-act="toggle" data-side="${esc(abbr)}" data-kind="pick" data-id="${esc(F.pickKey(pk))}" aria-label="Remove">&times;</button>` : '';

@@ -99,7 +99,7 @@
     if (p.tradeRequest) b += ' <span class="badge fr-b-tr" title="Has asked for a trade">TRADE REQ</span>';
     return b;
   };
-  fr.ovr = p => `<span class="fr-ovr ${UI.ovrClass ? UI.ovrClass(p.ovr || 0) : ''}">${esc(p.ovr || '-')}</span>`;
+  fr.ovr = p => `<span class="fr-ovr ${UI.ovrClass ? UI.ovrClass(p.ovr || 0) : ''}">${esc(p.ovr || '-')}${UI.mv(p)}</span>`;
 
   // ---------- user roster helpers ----------
   function injuryOf(s, p) {

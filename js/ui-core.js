@@ -64,6 +64,15 @@
     const p = w / g;
     return p >= 1 ? '1.000' : '.' + String(Math.round(p * 1000)).padStart(3, '0');
   };
+  // the arrow next to a rating: up or down since last season (development, form, injuries, mood); '' when it has not moved
+  UI.mv = function (x) {
+    const g = UI.state && UI.state.game;
+    if (!g || !x) return '';
+    const p = (x.id && g.players && g.players[x.id]) || (typeof x === 'string' ? g.players && g.players[x] : x);
+    const m = p && p.ovrMove;
+    if (!m || !m.d || m.year !== g.year) return '';
+    return `<i class="mv ${m.d > 0 ? 'up' : 'down'}" title="${m.d > 0 ? 'Up' : 'Down'} ${Math.abs(m.d)} since last season">${Math.abs(m.d)}</i>`;
+  };
   UI.ovrClass = o => (o >= 85 ? 'ovr-elite' : o >= 75 ? 'ovr-good' : o >= 65 ? 'ovr-mid' : 'ovr-low');
 
   // ---------- teams ----------

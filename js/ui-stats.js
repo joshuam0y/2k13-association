@@ -569,7 +569,7 @@
         <td class="l sc-name"><span class="sc-wp">${UI.headshot(x.p, 'sc-mini')}<span>${nameLink(x.p)} <small>${esc(posLabel(x.p))}</small></span></span></td>
         <td class="l sc-draft">${esc(draftText(x.d))}</td><td class="l">${teamCell(x.team)}</td>
         ${cols.map(([k]) => (k === 'seasons' ? `<td class="${st.sort === k ? 'on' : ''}">${x.seasons}</td>` : statCell(k, x.s, 'pg', st.sort))).join('')}
-        <td class="${st.sort === 'ovr' ? 'on' : ''}"><span class="sc-ovr ${UI.ovrClass(x.ovr)}">${x.ovr || '-'}</span></td>
+        <td class="${st.sort === 'ovr' ? 'on' : ''}"><span class="sc-ovr ${UI.ovrClass(x.ovr)}">${x.ovr || '-'}${UI.mv(x)}</span></td>
         <td class="${st.sort === 'ovr0' ? 'on' : ''}">${x.ovr0 != null ? x.ovr0 : '-'}</td>
         <td class="${st.sort === 'dov' ? 'on' : ''}">${x.dov == null ? '-' : `<span class="${x.dov > 0 ? 'sc-up' : x.dov < 0 ? 'sc-down' : 'muted'}">${x.dov > 0 ? '+' : ''}${x.dov}</span>`}</td></tr>`).join('')
       : `<tr><td colspan="${cols.length + 6}" class="l muted">No rookies match this filter.</td></tr>`;

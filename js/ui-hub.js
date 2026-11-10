@@ -221,7 +221,7 @@
       const team = p => (p.team && p.team !== 'FA' ? p.team : 'FA');
       list.innerHTML = hits.length ? hits.map((p, i) => `<li data-i="${i}" role="option"><a href="#/player/${encodeURIComponent(p.id)}" data-id="${esc(p.id)}">
           ${UI.logo(team(p), 28)}<span class="ps-nm"><b>${esc(p.name)}</b><small>${esc(team(p) === 'FA' ? 'Free agent' : UI.teamName(p.team))} | ${esc(posLabel(p))}</small></span>
-          <span class="ps-ovr ${UI.ovrClass(p.ovr)}">${esc(p.ovr == null ? '-' : p.ovr)}</span></a></li>`).join('')
+          <span class="ps-ovr ${UI.ovrClass(p.ovr)}">${esc(p.ovr == null ? '-' : p.ovr)}${UI.mv(p)}</span></a></li>`).join('')
         : '<li class="ps-none">No players match.</li>';
       list.hidden = false;
       mark();
@@ -358,7 +358,7 @@
         <h2 class="ct-t" id="confirmName">${esc(t.city + ' ' + t.name)}</h2><div class="ts-pay">${esc(x.cap.line)}</div></div>
         <button type="button" class="ts-x" id="closeBtn" aria-label="Close">&times;</button>`;
       UI.$('#confirmRoster', app).innerHTML = `<table class="stats ts-rt"><thead><tr><th class="l">PLAYER</th><th>POS</th><th>AGE</th><th>OVR</th><th class="hide-sm">SALARY</th></tr></thead><tbody>${x.r.map(p => `<tr>
-          <td class="l"><span class="ts-pn">${esc(p.name)}</span></td><td>${esc(posLabel(p))}</td><td>${esc(p.age)}</td><td class="${UI.ovrClass(p.ovr)}"><b>${esc(p.ovr)}</b></td><td class="hide-sm">${UI.fmtMoney(p.contract ? UI.salaryOf(p) : p.salary)}</td></tr>`).join('')}</tbody></table>`;
+          <td class="l"><span class="ts-pn">${esc(p.name)}</span></td><td>${esc(posLabel(p))}</td><td>${esc(p.age)}</td><td class="${UI.ovrClass(p.ovr)}"><b>${esc(p.ovr)}</b>${UI.mv(p)}</td><td class="hide-sm">${UI.fmtMoney(p.contract ? UI.salaryOf(p) : p.salary)}</td></tr>`).join('')}</tbody></table>`;
       UI.$('#closeBtn', app).addEventListener('click', close);
       UI.$('#saveName', app).value = t.name + ' Association';
       confirm.hidden = false;
@@ -479,7 +479,7 @@
         <h3>STARTING FIVE <small>best lineup by OVR</small></h3>
         <ol>${five.map(({ slot, p }) => p ? `<li><span class="tm-slot">${slot}</span>
             <a class="tm-pl" href="#/player/${encodeURIComponent(p.id)}"><span class="tm-hs">${UI.headshot(p)}</span><span class="tm-nm"><b>${esc(p.name)}</b><small>${esc(posLabel(p))} | Age ${esc(p.age)}</small></span></a>
-            <b class="tm-ovr ${UI.ovrClass(p.ovr)}">${esc(p.ovr)}</b></li>` : `<li><span class="tm-slot">${slot}</span><span class="muted">Nobody</span></li>`).join('')}</ol>
+            <b class="tm-ovr ${UI.ovrClass(p.ovr)}">${esc(p.ovr)}${UI.mv(p)}</b></li>` : `<li><span class="tm-slot">${slot}</span><span class="muted">Nobody</span></li>`).join('')}</ol>
       </div>
       <div class="tm-side">
         <div class="tm-box tm-needs"><h3>TOP NEEDS</h3>
@@ -541,7 +541,7 @@
     const rowHtml = ({ p, pg, end }) => `<tr>
         <td class="l"><a class="rt-name" href="#/player/${esc(p.id)}"><span class="rt-hs">${UI.headshot(p)}</span><span>${esc(p.name)} ${UI.injuryBadge(p)}</span></a></td>
         <td class="rt-pos">${esc(posLabel(p))}</td><td>${esc(p.age)}</td><td class="hide-sm">${UI.fmtHt(p.ht)}</td>
-        <td class="rt-ovr ${UI.ovrClass(p.ovr)}">${esc(p.ovr)}</td>
+        <td class="rt-ovr ${UI.ovrClass(p.ovr)}">${esc(p.ovr)}${UI.mv(p)}</td>
         ${hasSeason ? `<td class="hide-sm">${pg ? pg.g : 0}</td><td>${pg ? UI.fmt1(pg.pts) : '-'}</td><td class="hide-sm">${pg ? UI.fmt1(pg.reb) : '-'}</td><td class="hide-sm">${pg ? UI.fmt1(pg.ast) : '-'}</td>` : ''}
         <td class="hide-sm">${UI.fmtMoney(UI.salaryOf(p))}</td><td class="hide-sm">${end ? UI.fmtSeasonEnd(end) : '-'}</td>
       </tr>`;
@@ -754,7 +754,7 @@
       return `<tr><td>${esc(r[0])}</td>
         <td class="l">${p ? `<a class="cl-name" href="#/player/${esc(p.id)}"><span class="cl-hs">${UI.headshot(p)}</span><span>${esc(r[2])}</span></a>` : esc(r[2])}</td>
         <td class="l">${r[3] ? UI.logo(r[3], 20) + ' ' + esc(r[3]) : ''}</td><td class="l hide-sm">${esc(r[4] || '')}</td>
-        <td class="${live ? UI.ovrClass(p.ovr) : ''}">${live ? '<b>' + esc(p.ovr) + '</b>' : p && p.retired ? '<span class="muted">RET</span>' : '<span class="muted">-</span>'}</td></tr>`;
+        <td class="${live ? UI.ovrClass(p.ovr) : ''}">${live ? '<b>' + esc(p.ovr) + '</b>' + UI.mv(p) : p && p.retired ? '<span class="muted">RET</span>' : '<span class="muted">-</span>'}</td></tr>`;
     };
     app.innerHTML = UI.header('DRAFT CLASSES', 'The real ' + year + ' draft. OVR is the player\'s rating today in this league.') +
       `<div class="tabs year-tabs">${years.map(y => `<a href="#/classes/${y}" class="${y === year ? 'on' : ''}">${y}</a>`).join('')}</div>
