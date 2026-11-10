@@ -487,6 +487,8 @@
 
   var DRAFTGEN = {
     generate: generate,
+    buildAttrs: buildAttrs,   // (pos, ovr, rng) and body(pos, rng): for tools/build-start.js, which makes real draftees who never played
+    body: body,
     ATTR_KEYS: ATTR_KEYS,
     POSITIONS: POSITIONS,
     COUNTRIES: COUNTRIES.map(function (c) { return c[0]; }),

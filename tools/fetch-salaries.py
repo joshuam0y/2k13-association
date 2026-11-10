@@ -6,7 +6,9 @@
 import json, os, re, subprocess, sys, time
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 CACHE = os.path.join(ROOT, 'tools', 'salary-cache.json')
+ACACHE = os.path.join(ROOT, 'tools', 'awards-cache.json')
 cache = json.load(open(CACHE)) if os.path.exists(CACHE) else {}
+acache = json.load(open(ACACHE)) if os.path.exists(ACACHE) else {}   # { id: [[season-ending year, 'MVP-1,AS,NBA1'], ...] }
 ids, seen = [], set()
 YEARS = [int(a) for a in sys.argv[1:]] or list(range(2003, 1989, -1))   # e.g. python3 tools/fetch-salaries.py 2003
 for y in YEARS:
@@ -14,7 +16,7 @@ for y in YEARS:
     for m in re.finditer(r'\["([a-z]+[0-9]{2})","', s):
         if m.group(1) not in seen:
             seen.add(m.group(1)); ids.append(m.group(1))
-todo = [i for i in ids if i not in cache]
+todo = [i for i in ids if i not in cache or i not in acache]
 print('players', len(ids), 'to fetch', len(todo), flush=True)
 ROW = re.compile(r'data-stat="season"[^>]*>(\d{4}-\d{2})</th>.*?href="/teams/([A-Z]{3})/.*?data-stat="salary" csk="(\d+)"', re.S)
 def fetch(pid):
@@ -40,9 +42,16 @@ for pid in todo:
             m = ROW.search(tr)
             if m: rows.append([m.group(1), m.group(2), int(m.group(3))])
     cache[pid] = rows
+    arows = []
+    for m in re.finditer(r'<tr id="per_game_stats\.(\d{4})"(.*?)</tr>', body, re.S):
+        a = re.search(r'data-stat="awards"[^>]*>(.*?)</td>', m.group(2), re.S)
+        t = re.sub(r'<[^>]+>', '', a.group(1)).strip() if a else ''
+        if t: arows.append([int(m.group(1)), t])
+    acache[pid] = arows
     done += 1
     if done % 10 == 0:
-        json.dump(cache, open(CACHE, 'w'), separators=(',', ':')); print(done, '/', len(todo), pid, len(rows), flush=True)
+        json.dump(cache, open(CACHE, 'w'), separators=(',', ':')); json.dump(acache, open(ACACHE, 'w'), separators=(',', ':')); print(done, '/', len(todo), pid, len(rows), flush=True)
     time.sleep(3.1)
 json.dump(cache, open(CACHE, 'w'), separators=(',', ':'))
+json.dump(acache, open(ACACHE, 'w'), separators=(',', ':'))
 print('done', len(cache), flush=True)

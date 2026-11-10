@@ -112,19 +112,61 @@ function build(Y) {
     });
   }
   const seasonStats = {}; players.forEach(p => { if (p.stats) seasonStats[p.id] = p.stats; });
-  // ---- draft classes: the next summers' rookies, then the real 2004 to 2012 classes ----
-  const drafts = {};
-  const peak = {};
-  for (let y = Y + 1; y <= 2003; y++) { const e = era(y); (e ? e.players : []).forEach(p => { peak[p.id] = Math.max(peak[p.id] || 0, p.ovr); }); }
+  // ---- draft classes: every real pick (tools/fetch-drafts.py), with the real ratings where he played (his first season in any
+  // era or start file), generated ones where he never did; then the real 2004 to 2012 classes ----
+  const drafts = {}, rights = [];
+  const DC = fs.existsSync(path.join(ROOT, 'tools', 'draft-cache.json')) ? JSON.parse(fs.readFileSync(path.join(ROOT, 'tools', 'draft-cache.json'), 'utf8')) : {};
+  run('js/draft-gen.js');
+  const DG = global.DRAFTGEN;
+  const seasonPlayers = y => { if (y <= 2004) { const e = era(y); return e ? e.players : []; } if (!global.START_LEAGUES[y]) run('data/start-' + y + '.js'); return global.START_LEAGUES[y].players; };
+  const idxCache = {};
+  const idx = y => idxCache[y] || (idxCache[y] = new Map(seasonPlayers(y).map(p => [p.id, p])));
+  // the first season he appears after the draft (and his best rating in the seasons after), up to 2012
+  function firstSeen(id, dy) {
+    let first = null, peak = 0;
+    for (let y = dy + 1; y <= 2012; y++) { const r = idx(y).get(id); if (r) { if (!first) first = { rec: r, year: y }; peak = Math.max(peak, r.ovr); } }
+    return first ? Object.assign(first, { peak }) : null;
+  }
+  const mulberry = seed => { let a = seed >>> 0; return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+  const gaussR = r => Math.sqrt(-2 * Math.log(1 - r())) * Math.cos(2 * Math.PI * r());
+  const teamSet = new Set(teams.map(t => t.abbr));
+  const prospect = (dy, row, nTeams) => {
+    const [pick, tm, id, name, college] = row, seen = id && firstSeen(id, dy);
+    const tg = global.TARGETS && id && global.TARGETS[id];
+    let tp = 0; if (tg) Object.keys(tg).forEach(k => { if (/^\d{4}$/.test(k) && typeof tg[k] === 'number') tp = Math.max(tp, tg[k]); });
+    if (seen) {
+      const p = seen.rec, late = seen.year - dy - 1, ovr = Math.max(40, p.ovr - 4 - 2 * late);
+      return { id, name: p.name, team: 'DRAFT', pos: p.pos, age: Math.max(18, p.age - (seen.year - dy)), ht: p.ht, wt: p.wt, ovr, pot: clamp(Math.max(ovr + 6, seen.peak, tp - 2) + Math.round(hash(id) * 3), ovr, 99),
+        nbaId: p.nbaId || null, injury: null, attrs: p.attrs, stats: null, face: null, draftYear: dy, realPick: pick, arrivalYear: seen.year, undrafted: false, boardRank: pick, college: college || undefined, draftedBy: ab(tm) };
+    }
+    // never played in the NBA (or after 2012): a prospect from the slot he went in, a real name and a position by the dice
+    const r = mulberry(Math.floor(hash(name + dy) * 4294967295)), pos = ['PG', 'SG', 'SF', 'PF', 'C'][Math.floor(r() * 5)];
+    const ovr = clamp(Math.round(62 - pick * 0.22 + gaussR(r) * 2), 40, 64), pot = clamp(Math.round(ovr + 14 - pick * 0.1 + r() * 6), ovr + 2, 86);
+    const bd = DG.body(pos, r), attrs = DG.buildAttrs(pos, ovr, r), delay = 1 + Math.floor(r() * 3);
+    return { id: id || ('pr' + dy + '_' + String(pick).padStart(3, '0')), name, team: 'DRAFT', pos, age: 19 + Math.floor(r() * 4), ht: bd.ht, wt: bd.wt, ovr, pot, nbaId: null, injury: null, attrs, stats: null, face: null,
+      draftYear: dy, realPick: pick, arrivalYear: dy + delay, undrafted: false, boardRank: pick, college: college || undefined, draftedBy: ab(tm) };
+  };
+  const cut = dy => 2 * ((era(dy) || { teams: teams }).teams.length) + 2;   // two rounds
   for (let dy = Y; dy <= 2003; dy++) {
-    const e = era(dy + 1); if (!e) continue;
-    const rk = e.players.filter(p => p.rookie && !ids.has(p.id)).sort((a, b) => b.ovr - a.ovr);
-    drafts[dy] = rk.map((p, i) => {
-      const tg = global.TARGETS && global.TARGETS[p.id];
-      let tp = 0; if (tg) Object.keys(tg).forEach(k => { if (/^\d{4}$/.test(k) && typeof tg[k] === 'number') tp = Math.max(tp, tg[k]); });
-      const pot = clamp(Math.max(p.ovr + 6, peak[p.id] || 0, tp - 2) + Math.round(hash(p.id) * 3), p.ovr, 99);
-      return { id: p.id, name: p.name, team: 'DRAFT', pos: p.pos, age: Math.max(18, p.age - 1), ht: p.ht, wt: p.wt, ovr: Math.max(40, p.ovr - 4), pot, nbaId: p.nbaId || null,
-        injury: null, attrs: p.attrs, stats: null, face: null, draftYear: dy, realPick: i + 1, arrivalYear: dy + 1, undrafted: false, boardRank: i + 1 };
+    const rows = (DC[dy] || []).filter(r => r[0] <= cut(dy));
+    if (!rows.length) continue;
+    const cls = rows.map(r => prospect(dy, r, 0));
+    // the real rookies of that season who were never drafted
+    const used = new Set(cls.map(p => p.id)), e = era(dy + 1);
+    (e ? e.players : []).filter(p => p.rookie && !ids.has(p.id) && !used.has(p.id) && p.ovr).sort((x, y) => y.ovr - x.ovr).slice(0, 12).forEach((p, i) => {
+      cls.push({ id: p.id, name: p.name, team: 'DRAFT', pos: p.pos, age: Math.max(19, p.age - 1), ht: p.ht, wt: p.wt, ovr: Math.max(40, p.ovr - 4), pot: Math.min(99, p.ovr + 4), nbaId: p.nbaId || null, injury: null, attrs: p.attrs, stats: null, face: null,
+        draftYear: dy, realPick: null, arrivalYear: dy + 1, undrafted: true, boardRank: rows.length + i + 1 });
+    });
+    drafts[dy] = cls.filter(p => !ids.has(p.id));
+  }
+  // drafted before this season but not here yet (overseas or still in college): their rights belong to the team that drafted them
+  for (let dy = Y - 4; dy < Y; dy++) {
+    (DC[dy] || []).filter(r => r[0] <= cut(dy)).forEach(r => {
+      if (r[2] && ids.has(r[2])) return;
+      const p = prospect(dy, r, 0);
+      if (!(p.arrivalYear > Y) || !teamSet.has(ab(r[1]))) return;
+      p.rights = { team: ab(r[1]), draftYear: dy, pick: r[0], draftedBy: ab(r[1]) };
+      rights.push(p);
     });
   }
   const D04 = global.START_LEAGUES[2004].drafts || {};
@@ -145,7 +187,7 @@ function build(Y) {
   });
   // players who retired at the end of this season are still active at its start
   A04.retired.filter(r => r[3] >= Y).forEach(r => { if (!alltime.active[r[0]]) alltime.active[r[0]] = [r[5].map(v => v), r[6].map(v => v)]; });
-  const out = { season: Y, label: (Y - 1) + '-' + String(Y).slice(2), teams, players, rights: [], drafts, targetsPrior: {}, prior: { career, awards, history: { champions: [], mvp: {}, records }, alltime }, real, champion: ab(d.champion || '') || null, seasonStats };
+  const out = { season: Y, label: (Y - 1) + '-' + String(Y).slice(2), teams, players, rights, drafts, targetsPrior: {}, prior: { career, awards, history: { champions: [], mvp: {}, records }, alltime }, real, champion: ab(d.champion || '') || null, seasonStats };
   console.log(Y, 'real contracts', realN, 'of', d.players.length, 'free agents', players.filter(p => p.team === 'FA').length);
   return out;
 }
