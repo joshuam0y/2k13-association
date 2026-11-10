@@ -115,11 +115,11 @@
     if (s.team && ready && !teams.some(t => t.abbr === s.team)) s.team = '';
     const past = results();
     // seasons by decade (the 2000s hold 2000-01 to 2009-10), one decade shown at a time
-    const decOf = y => (y - 1) - (y - 1) % 10, decs = [...new Set(C.SEASONS.map(x => decOf(x.year)))];
+    const decOf = y => (y - 1) - (y - 1) % 10, decs = [...new Set(C.SEASONS.filter(x => isAll || x.year >= 2004).map(x => decOf(x.year)))];
     const dec = decs.indexOf(+s.decade) >= 0 ? +s.decade : decOf(isAll ? 2013 : s.year);
     const decBtns = decs.length > 1 ? `<div class="ch-chips ch-decades">${decs.map(d => `<button type="button" class="ch-chip sm${d === dec ? ' on' : ''}" data-decade="${d}">${d}s</button>`).join('')}</div>` : '';
     const skip = Array.isArray(s.skip) ? s.skip : [];
-    const seasonBtns = C.SEASONS.filter(x => decs.length < 2 || decOf(x.year) === dec).map(x => {
+    const seasonBtns = C.SEASONS.filter(x => x.year >= 2004).filter(x => decs.length < 2 || decOf(x.year) === dec).map(x => {
       const off = x.ready === false;
       return `<button type="button" class="ch-chip${!isAll && s.year === x.year ? ' on' : ''}" data-year="${x.year}"${off ? ' disabled' : ''}>${esc(x.label)}${off ? '<small>SOON</small>' : ''}</button>`;
     }).join('');

@@ -105,7 +105,7 @@ ok(top && top.v > 18 && top.v < 45, "all-time scoring leader " + (top && top.nam
 // any season from an Association start file: 2007-08
 require("../data/start-2008.js");
 const d08 = C.seasonData(2008);
-ok(C.SEASONS.length === 24 && d08 && d08.teams.find(t => t.abbr === "BOS").real.w === 66, "every season 2003-04 to 2026-27; 2007-08 from its start file, Boston's real 66-16");
+ok(C.SEASONS.length === 81 && d08 && d08.teams.find(t => t.abbr === "BOS").real.w === 66, "every season 1946-47 to 2026-27; 2007-08 from its start file, Boston's real 66-16");
 const kg = d08.players.find(p => p.id === "garneke01");
 ok(kg && kg.team === "BOS" && kg.stats && kg.stats.pts > 15 && !kg.rookie, "Garnett in Boston with his real 2007-08 line (" + (kg && kg.stats && kg.stats.pts) + " ppg)");
 ok(d08.players.find(p => p.id === "duranke01").rookie, "Durant is a rookie that season");
@@ -140,7 +140,7 @@ ok(r08.w + r08.l === 82 && r08.w >= 50, "a 2007-08 super team in Seattle: " + r0
 // the all-time pool file: every finished season
 require("../data/challenge-pool.js");
 const pool = C.allTimePool();
-ok(C.poolSeasons().length === 23 && pool.length > 900 && pool.every(e => !e.rookie && e.tend), "all-time pool file: " + pool.length + " veterans from " + C.poolSeasons().length + " seasons");
+ok(C.poolSeasons().length === 80 && pool.length > 2000 && pool.every(e => !e.rookie && e.tend), "all-time pool file: " + pool.length + " veterans from " + C.poolSeasons().length + " seasons");
 const dr2 = C.newDraft({ mode: "alltime", team: "BOS", seed: 4, build: "free" });
 C.autoDraft(dr2);
 const ach2 = C.buildAllTime({ mode: "alltime", team: "BOS", seed: 4, build: "free" }, dr2);

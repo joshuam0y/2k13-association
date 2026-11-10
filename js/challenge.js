@@ -11,13 +11,15 @@
 (function (root) {
   'use strict';
   var W = root;
-  // Every season from 2003-04 to 2026-27. Three have their own Draft Challenge file (data/era-YYYY.js, rated
-  // from that season's stats); 2012-13 is the game's own league; the rest use the Association start files
-  // (data/start-YYYY.js: opening-night rosters, that season's records and per-game lines). The all-time draft
-  // uses data/challenge-pool.js, the best veterans of every season in one small file.
+  // Every season from 1946-47 (the BAA's first) to 2026-27. 1946-47 to 2002-03 and three later seasons have their
+  // own Draft Challenge file (data/era-YYYY.js, rated from that season's stats; the old seasons are scaled to the
+  // 2012-13 league so a rating means the same in every era); 2012-13 is the game's own league; the rest use the
+  // Association start files (data/start-YYYY.js: opening-night rosters, that season's records and per-game lines).
+  // The all-time draft uses data/challenge-pool.js, the best veterans of every season in one small file.
   var ERA_FILES = { 2004: 'data/era-2004.js', 2009: 'data/era-2009.js', 2017: 'data/era-2017.js' };
+  for (var ey = 1947; ey <= 2003; ey++) ERA_FILES[ey] = 'data/era-' + ey + '.js';
   var SEASONS = [];
-  for (var sy = 2004; sy <= 2027; sy++) SEASONS.push(sy === 2013 ? { year: 2013, label: '2012-13', builtin: true }
+  for (var sy = 1947; sy <= 2027; sy++) SEASONS.push(sy === 2013 ? { year: 2013, label: '2012-13', builtin: true }
     : { year: sy, label: (sy - 1) + '-' + String(sy).slice(2), file: ERA_FILES[sy] || 'data/start-' + sy + '.js', start: !ERA_FILES[sy] });
   var POOL_FILE = 'data/challenge-pool.js';
   var ROUNDS = 5;
