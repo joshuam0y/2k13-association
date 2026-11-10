@@ -14,7 +14,7 @@
   const MQTT_SRC = 'https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js';
   const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081'];
   const SPIN_MS = 4700;
-  const SHARED = ['page', 'n', 'humans', 'names', 'ai', 'seats', 'live', 'opts', 'skip', 'cfg', 'teams', 'picks', 'seeds', 'rounds', 'cur', 'champ', 'rating', 'watch', 'spins', 'respins', 'spun', 'clk', 'hnow'];
+  const SHARED = ['page', 'n', 'humans', 'names', 'ai', 'seats', 'live', 'opts', 'skip', 'cfg', 'teams', 'picks', 'seeds', 'rounds', 'cur', 'champ', 'rating', 'watch', 'spins', 'respins', 'spun', 'clk', 'hnow', 'epoch', 'hostCid'];
   const store = k => ({
     get() { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } },
     set(v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode */ } },
@@ -26,10 +26,10 @@
   const SEEN = {};
   let APP = null, OFF = 0, SIG = '', LAST = { page: '', mine: '' }, PEND = '', TICK = null, ON = false;
   const ANIM = {};
-  const mySeat = () => (NET.role === 'host' ? 0 : TN().seats.indexOf(CID));
+  const mySeat = () => TN().seats.indexOf(CID);
   const flat = () => [].concat.apply([], TN().picks);
   const cleanName = (v, i) => String(v || '').trim().slice(0, 20) || 'PLAYER ' + (i + 1);
-  const fresh = (name) => ({ page: 'lobby', n: 4, humans: 0, ai: [], names: [name], seats: [CID], live: [true], opts: { timer: 24, cap: 0, bestOf: 1, seeding: 'random', ratings: true }, skip: [], cfg: null, teams: [], picks: [], seeds: [], rounds: [], cur: null, champ: -1, rating: null, watch: null, spins: [], respins: [], spun: [], clk: [], hnow: 0 });
+  const fresh = (name) => ({ page: 'lobby', n: 4, humans: 0, ai: [], names: [name], seats: [CID], live: [true], opts: { timer: 24, cap: 0, bestOf: 1, seeding: 'random', ratings: true }, skip: [], cfg: null, teams: [], picks: [], seeds: [], rounds: [], cur: null, champ: -1, rating: null, watch: null, spins: [], respins: [], spun: [], clk: [], hnow: 0, epoch: 0, hostCid: CID });
 
   // ---------- the relay ----------
   function loadMqtt() {
@@ -108,14 +108,18 @@
         if (NET.role === 'host') {
           send({ t: 'ping', hn: Date.now() });
           beat++; if (beat % 5 === 0) push();
-          const t = TN(), live = t.seats.map((c, i) => i === 0 || Date.now() - (SEEN[c] || 0) < 15000);
+          const t = TN(), live = t.seats.map((c, i) => c === CID || Date.now() - (SEEN[c] || 0) < 15000);
           if (JSON.stringify(live) !== JSON.stringify(t.live)) { t.live = live; push(); soft(); }
         } else {
           if (NET.status !== 'connected') hello(); else send({ t: 'ping' });
-          if (NET.status === 'connected' && Date.now() - NET.peerSeen > 15000) { NET.status = 'lost'; refreshNet(); }
+          const quiet = Date.now() - NET.peerSeen;
+          if (NET.status === 'connected' && quiet > 15000) { NET.status = 'lost'; refreshNet(); }
+          // the host is gone: the lowest seat still here takes the room over (each seat waits a little longer than the one before)
+          const seat = mySeat();
+          if (SIG && seat >= 0 && NET.peerSeen && quiet > 20000 + 8000 * seat && TN().page !== 'entry') takeOver(false);
         }
       }, 4000));
-      if (role === 'host') NET.timers.push(setInterval(clockCheck, 500));
+      NET.timers.push(setInterval(clockCheck, 500));
       if (role === 'guest') setTimeout(() => { if (NET.code === code && NET.status === 'connecting') { NET.err = 'No answer from room ' + code + ' yet. Check the code, and that the host still has the room open. Still trying...'; refreshNet(); } }, 20000);
     }).catch(e => { NET.status = 'error'; NET.err = e.message || 'The connection failed.'; refreshNet(); });
   }
@@ -132,6 +136,13 @@
       return;
     }
     if (NET.role === 'host') {
+      if (m.role === 'host') {   // a second host: the one with the newer epoch keeps the room
+        if (m.t !== 'state' || !m.s) return;
+        const ne = m.s.epoch || 0, me0 = TN().epoch || 0;
+        if (ne > me0 || (ne === me0 && String(m.s.hostCid) < CID)) { become('guest'); NET.peerSeen = Date.now(); NET.status = 'connected'; onState(m.s); refreshNet(); }
+        else push();
+        return;
+      }
       if (m.role !== 'guest' || !m.cid) return;
       SEEN[m.cid] = Date.now();
       if (m.t === 'hello') onHello(m);
@@ -143,10 +154,32 @@
     if (NET.status !== 'connected') { NET.status = 'connected'; NET.err = ''; lsRoom.set({ code: NET.code, at: Date.now() }); refreshNet(); }
     if (m.t === 'ping' && m.hn) OFF = m.hn - Date.now();
     else if (m.t === 'full' && m.to === CID) { NET.status = 'error'; NET.err = 'That room is full, or the draft already started. Ask the host.'; refreshNet(); }
-    else if (m.t === 'state' && m.s) onState(m.s);
+    else if (m.t === 'state' && m.s) { if ((m.s.epoch || 0) >= (TN().epoch || 0)) onState(m.s); }
+  }
+  // roles can change in a room: the host hands over (by choice) or drops and a guest takes over
+  function become(role) {
+    NET.role = role; HOOK.host = role === 'host';
+    if (role === 'host') { NET.status = 'ready'; NET.err = ''; SEEN[CID] = Date.now(); }
+    else { NET.status = 'connecting'; NET.peerSeen = Date.now(); }
+  }
+  function takeOver(chosen) {
+    const t = TN();
+    if (NET.role === 'host') return;
+    t.epoch = (t.epoch || 0) + 1; t.hostCid = CID;
+    become('host'); t.seats.forEach(c => { SEEN[c] = Date.now(); });
+    if (!chosen) UI.toast('The host dropped. You are the host now.');
+    A.save(); push(); changed(); refreshNet();
+  }
+  function handOver(i) {
+    const t = TN(), c = t.seats[i];
+    if (NET.role !== 'host' || !c || c === CID) return;
+    if (!window.confirm('Make ' + t.names[i] + ' the host? They run the bracket from here, and you become a regular player.')) return;
+    t.epoch = (t.epoch || 0) + 1; t.hostCid = c;
+    push(); lsHost.del(); become('guest'); refreshNet(); changed();
   }
   function onHello(m) {
     const t = TN();
+    SEEN[m.cid] = Date.now();
     let i = t.seats.indexOf(m.cid);
     if (i < 0) {
       if (t.page !== 'lobby' || t.seats.length >= t.n) { send({ t: 'full', to: m.cid }); return; }
@@ -165,6 +198,7 @@
     else if (t.page === 'entry') entry(APP);
     else A.render();
     LAST = { page: t.page, mine };
+    pill();
   }
   function soft() { if (!APP) return; const t = TN(); if (t.page === 'lobby') lobby(APP); else if (t.page === 'draft') updateProg(); }
   function onState(s) {
@@ -172,6 +206,7 @@
     if (s.hnow) OFF = s.hnow - Date.now();
     const sig = JSON.stringify(s, (k, v) => (k === 'hnow' || k === 'live' ? undefined : v));
     SHARED.forEach(k => { if (k in s) t[k] = s[k]; });
+    if (t.hostCid === CID && NET.role === 'guest') { SIG = sig; takeOver(true); return; }
     if (sig === SIG) { soft(); return; }
     SIG = sig;
     if (t.page === 'match' && t.watch && t.cur && t.watch.r === t.cur.r && t.watch.i === t.cur.i) A.setWatch(t.watch.n);
@@ -255,7 +290,7 @@
       });
     });
   }
-  function act(a) { if (NET.role === 'host') hostAct(0, a); else send({ t: 'act', a }); }
+  function act(a) { if (NET.role === 'host') hostAct(mySeat(), a); else send({ t: 'act', a }); }
 
   // ---------- pages ----------
   const netBar = () => {
@@ -270,7 +305,21 @@
       ${st === 'lost' || st === 'error' ? '<button type="button" class="btn btn-small" id="tnRetry">TRY AGAIN</button>' : ''}
       <button type="button" class="btn btn-small" id="tnLeaveRoom">LEAVE</button></div>`;
   };
+  // a small pill on the bracket, match and champion screens: who is host, hand the room over, leave
+  function pill() {
+    let el = document.getElementById('tnPill');
+    const t = TN(), show = ON && NET.role && ['bracket', 'match', 'champ'].indexOf(t.page) >= 0 && /tournament\/online/.test(location.hash);
+    if (!show) { if (el) el.remove(); return; }
+    if (!el) { el = document.createElement('div'); el.id = 'tnPill'; el.className = 'tn-pill'; document.body.appendChild(el); }
+    const host = NET.role === 'host', hi = t.seats.indexOf(t.hostCid);
+    const others = t.seats.map((c, i) => (c === CID ? '' : `<option value="${i}">${esc(t.names[i])}</option>`)).join('');
+    el.innerHTML = `<span class="vs-net-dot ${NET.status}"></span><span>${NET.status === 'lost' ? 'HOST LOST, A PLAYER TAKES OVER SOON' : host ? 'YOU ARE THE HOST' : 'HOST: ' + esc(t.names[hi] || '?')}</span>
+      ${host && others ? `<select id="tnHandTo">${others}</select><button type="button" class="btn btn-small" id="tnHand">MAKE HOST</button>` : ''}<button type="button" class="btn btn-small" id="tnPillLeave">LEAVE</button>`;
+    const h = el.querySelector('#tnHand'); if (h) h.addEventListener('click', () => handOver(+el.querySelector('#tnHandTo').value));
+    el.querySelector('#tnPillLeave').addEventListener('click', () => HOOK.quit());
+  }
   function refreshNet() {
+    pill();
     const el = document.getElementById('tnNet');
     if (!el) return;
     el.innerHTML = netBar();
@@ -284,7 +333,7 @@
     const lv = el.querySelector('#tnLeaveRoom'); if (lv) lv.addEventListener('click', () => HOOK.quit());
   }
   function leave() {
-    hangUp(); SIG = ''; LAST = { page: '', mine: '' };
+    hangUp(); pill(); SIG = ''; LAST = { page: '', mine: '' };
     A.swap({ page: 'entry' });
     if (APP) A.render();
   }
@@ -344,7 +393,7 @@
     const chips = (list, cur, attr, dis) => list.map(([v, l]) => `<button type="button" class="ch-chip${cur === v ? ' on' : ''}" data-${attr}="${v}"${host && !(dis && dis(v)) ? '' : ' disabled'}>${l}</button>`).join('');
     const decs = [...new Set(A.ALL_YEARS.map(A.decOf))], ch = A.ALL_YEARS.filter(y => t.skip.indexOf(y) < 0);
     const seats = Array.from({ length: n }, (_, i) => t.seats[i]
-      ? `<li class="tn-seat on"><i class="tn-live ${t.live[i] === false ? 'off' : 'on'}"></i><b>${esc(t.names[i] || 'PLAYER ' + (i + 1))}</b>${i === me ? '<small>YOU</small>' : ''}${host && i > 0 ? `<button type="button" class="btn btn-small" data-kick="${i}">REMOVE</button>` : ''}</li>`
+      ? `<li class="tn-seat on"><i class="tn-live ${t.live[i] === false ? 'off' : 'on'}"></i><b>${esc(t.names[i] || 'PLAYER ' + (i + 1))}</b>${i === me ? '<small>YOU</small>' : ''}${host && t.seats[i] !== CID ? `<button type="button" class="btn btn-small" data-host="${i}">MAKE HOST</button><button type="button" class="btn btn-small" data-kick="${i}">REMOVE</button>` : ''}</li>`
       : `<li class="tn-seat"><span class="muted">${i < 2 ? 'WAITING FOR A PLAYER' : 'OPEN (an AI team if nobody joins)'}</span></li>`).join('');
     const scroll = window.scrollY;
     app.innerHTML = `
@@ -374,6 +423,7 @@
     if (!host) return;
     const edit = fn => { fn(); A.save(); lobby(app); };
     app.querySelectorAll('[data-n]').forEach(b => b.addEventListener('click', () => edit(() => { t.n = +b.dataset.n; })));
+    app.querySelectorAll('[data-host]').forEach(b => b.addEventListener('click', () => handOver(+b.dataset.host)));
     app.querySelectorAll('[data-kick]').forEach(b => b.addEventListener('click', () => edit(() => { const i = +b.dataset.kick; t.seats.splice(i, 1); t.names.splice(i, 1); t.live.splice(i, 1); })));
     app.querySelectorAll('[data-yr]').forEach(b => b.addEventListener('click', () => edit(() => { const y = +b.dataset.yr, i = t.skip.indexOf(y); if (!t.skip.length) t.skip = A.ALL_YEARS.filter(x => x !== y); else if (i >= 0) t.skip.splice(i, 1); else t.skip.push(y); })));
     app.querySelectorAll('[data-dec]').forEach(b => b.addEventListener('click', () => edit(() => {
@@ -412,7 +462,7 @@
     const t = TN(), host = NET.role === 'host', me = mySeat();
     return `<ul class="tn-seats tn-prog">${t.seats.map((c, i) => {
       const k = t.picks[i].length;
-      return `<li class="tn-seat on${i === me ? ' me' : ''}"><i class="tn-live ${t.live[i] === false ? 'off' : 'on'}"></i><b>${esc(t.names[i])}</b><span class="tn-pips">${[0, 1, 2, 3, 4].map(j => `<u class="${j < k ? 'on' : ''}"></u>`).join('')}</span>${k >= 5 ? '<small>LOCKED IN</small>' : host && i !== me ? `<button type="button" class="btn btn-small" data-fill="${i}">CPU TAKES OVER</button>` : ''}</li>`;
+      return `<li class="tn-seat on${i === me ? ' me' : ''}"><i class="tn-live ${t.live[i] === false ? 'off' : 'on'}"></i><b>${esc(t.names[i])}</b><span class="tn-pips">${[0, 1, 2, 3, 4].map(j => `<u class="${j < k ? 'on' : ''}"></u>`).join('')}</span>${k >= 5 ? '<small>LOCKED IN</small>' : host && i !== me ? `<button type="button" class="btn btn-small" data-fill="${i}">CPU TAKES OVER</button>` : ''}${host && i !== me && k < 5 ? `<button type="button" class="btn btn-small" data-host="${i}">MAKE HOST</button>` : ''}</li>`;
     }).join('')}</ul>`;
   }
   function updateProg() {
@@ -421,6 +471,7 @@
     el.innerHTML = progHtml(); bindProg(el);
   }
   function bindProg(el) {
+    el.querySelectorAll('[data-host]').forEach(b => b.addEventListener('click', () => handOver(+b.dataset.host)));
     el.querySelectorAll('[data-fill]').forEach(b => b.addEventListener('click', () => {
       const i = +b.dataset.fill;
       if (!window.confirm('Let the CPU finish the draft for ' + TN().names[i] + '?')) return;
@@ -506,7 +557,7 @@
   P.challenge = function (app, arg) {
     const part = String(arg || '').split('/');
     if (part[0] === 'tournament' && (part[1] === 'online' || part[1] === 'join')) return enter(app, part);
-    if (ON) { ON = false; hangUp(); HOOK.on = false; HOOK.host = false; A.swap(null); }
+    if (ON) { ON = false; hangUp(); pill(); HOOK.on = false; HOOK.host = false; A.swap(null); }
     return prev.apply(this, arguments);
   };
   Object.keys(prev).forEach(k => { P.challenge[k] = prev[k]; });

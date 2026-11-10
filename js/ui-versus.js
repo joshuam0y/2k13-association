@@ -14,7 +14,7 @@
     get() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; } },
     set(v) { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) { /* private mode */ } }
   };
-  const FRESH = () => ({ year: 2008, teams: ['BOS', 'LAL'], names: ['', ''], opts: { bestOf: 5, blind: false, timer: 24 }, cfg: null, shown: 0, page: 'setup', spin: null, spun: [], respins: [1, 1], turn: null, pos: '', q: '' });
+  const FRESH = () => ({ year: 2008, teams: ['BOS', 'LAL'], names: ['', ''], opts: { bestOf: 5, blind: false, timer: 24 }, cfg: null, shown: 0, page: 'setup', spin: null, spun: [], respins: [1, 1], turn: null, pos: '', q: '', epoch: 0, hostSide: 0 });
   let VS = Object.assign(FRESH(), ls.get() || {});
   VS.opts = Object.assign({ bestOf: 5, blind: false, timer: 24 }, VS.opts || {});
   if (VS.opts.timer) VS.opts.timer = 24;   // the pick clock is a shot clock: 24 seconds or off
@@ -99,7 +99,7 @@
       <p class="muted">Series won. Games: ${esc(a)} ${R.games[a] || 0}, ${esc(b)} ${R.games[b] || 0}.${sw ? ' Sweeps: ' + esc(sw) + '.' : ''} ${esc(streak)}</p>
       <div class="vs-rival-log">${R.log.slice(0, 8).map(x => `<span class="${x.w === a ? 'a' : 'b'}">${esc(x.w.split(' ')[0])} ${esc(x.s)}<small>${esc(x.y ? short(x.y) : 'ALL')}</small></span>`).join('')}</div></section>`;
   }
-  const SHARED = ['year', 'skip', 'teams', 'names', 'opts', 'cfg', 'shown', 'watch', 'page', 'spin', 'spun', 'respins', 'turn'];
+  const SHARED = ['year', 'skip', 'teams', 'names', 'opts', 'cfg', 'shown', 'watch', 'page', 'spin', 'spun', 'respins', 'turn', 'epoch', 'hostSide'];
   let APP = null;   // the page element the versus screens draw into
 
   // ---------- online (an encrypted relay) ----------
@@ -111,8 +111,8 @@
   // phone is back (the host then sends the whole state again).
   const MQTT_SRC = 'https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js';
   const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081'];
-  const NET = { role: null, code: '', status: '', err: '', client: null, key: null, me: '', peerSeen: 0, broker: 0, timers: [] };
-  const me = () => (NET.role === 'host' ? 0 : NET.role === 'guest' ? 1 : null);   // null: same phone, both sides
+  const NET = { role: null, side: 0, code: '', status: '', err: '', client: null, key: null, me: '', peerSeen: 0, broker: 0, timers: [] };
+  const me = () => (NET.role ? NET.side : null);   // null: same phone, both sides
   const canAct = side => me() === null || me() === side;
   const online = () => !!NET.role;
   const linked = () => NET.status === 'connected';
@@ -143,7 +143,7 @@
   }
   function send(obj) {
     if (!NET.client || !NET.key) return;
-    seal(Object.assign({ from: NET.me, role: NET.role }, obj)).then(txt => { try { NET.client.publish(topic(), txt, { qos: 1 }); } catch (e) { /* reconnecting */ } }).catch(() => {});
+    seal(Object.assign({ from: NET.me, role: NET.role, ep: VS.epoch || 0 }, obj)).then(txt => { try { NET.client.publish(topic(), txt, { qos: 1 }); } catch (e) { /* reconnecting */ } }).catch(() => {});
   }
   function push() {
     ls.set(VS);
@@ -153,16 +153,29 @@
     NET.peerSeen = Date.now();
     if (NET.status !== 'connected') {
       NET.status = 'connected'; NET.err = '';
-      if (NET.role === 'host') push(); else send({ t: 'hello', name: VS.names[1] || '' });
+      if (NET.role === 'host') push(); else send({ t: 'hello', name: VS.names[NET.side] || '' });
       route(); drawChat();
     }
   }
   function onMsg(m) {
-    if (!m || typeof m !== 'object' || m.from === NET.me || m.role === NET.role) return;   // our own echo, or a third phone with our role
+    if (!m || typeof m !== 'object' || m.from === NET.me) return;
+    if (m.role === NET.role) {   // a third phone with our role, or two hosts after a handover: the newer epoch keeps the room
+      if (NET.role === 'host' && (m.ep || 0) !== undefined) {
+        const mine = VS.epoch || 0, theirs = m.ep || 0;
+        if (theirs > mine || (theirs === mine && m.from < NET.me && theirs > 0)) { NET.role = 'guest'; NET.status = 'connecting'; send({ t: 'hello', name: VS.names[NET.side] || '' }); route(); }
+        else push();
+      }
+      return;
+    }
     if (m.t === 'ping') { seen(); return; }
-    if (m.t === 'hello' && NET.role === 'host') { if (m.name) VS.names[1] = String(m.name).slice(0, 20); seen(); push(); route(); return; }
-    if (m.t === 'state' && m.s && NET.role === 'guest' || m.t === 'state' && m.s && NET.role === 'host') {
-      SHARED.forEach(k => { if (k in m.s) VS[k] = m.s[k]; }); ls.set(VS); seen(); route(); return;
+    if (m.t === 'hello' && NET.role === 'host') { if (m.name) VS.names[1 - NET.side] = String(m.name).slice(0, 20); seen(); push(); route(); return; }
+    if (m.t === 'state' && m.s && (m.s.epoch || 0) >= (VS.epoch || 0)) {
+      const prevEp = VS.epoch;
+      SHARED.forEach(k => { if (k in m.s) VS[k] = m.s[k]; }); ls.set(VS);
+      // the host handed the room over to this phone (a newer epoch that names our side as host)
+      if (NET.role === 'guest' && prevEp >= 0 && VS.epoch > prevEp && VS.hostSide === NET.side) { VS.epoch--; becomeHost(true); return; }
+      if (NET.role === 'guest') NET.side = 1 - (VS.hostSide || 0);
+      seen(); route(); return;
     }
     seen();
     if (m.t === 'react' && REACTS.indexOf(m.r) >= 0) bubble(m.r, String(m.name || '').slice(0, 20), false);
@@ -170,6 +183,20 @@
       if (m.k === 'speed') courtCtl.setSpeed(+m.v || 1); else if (m.k === 'play') courtCtl.play(); else if (m.k === 'pause') courtCtl.pause(); else if (m.k === 'skip') courtCtl.skipQuarter();
     }
     if (m.t === 'chat' && m.text) { addChat({ name: String(m.name || '').slice(0, 20), text: String(m.text).slice(0, 300), mine: false }); }
+  }
+  // the other player takes the room: by choice (the host presses MAKE HOST) or when the host drops for good
+  function becomeHost(chosen) {
+    VS.epoch = (VS.epoch || 0) + 1; VS.hostSide = NET.side; NET.role = 'host';
+    NET.status = 'waiting'; NET.peerSeen = 0; NET.err = ''; ls.set(VS);
+    if (!chosen) UI.toast('The host dropped. You are the host now.');
+    route(); drawChat();
+    send({ t: 'ping', name: VS.names[NET.side] || '' });
+  }
+  function handOver() {
+    if (NET.role !== 'host' || !linked()) return;
+    if (!window.confirm('Make ' + who(1 - NET.side) + ' the host? They set the rules and run the room from here.')) return;
+    VS.epoch = (VS.epoch || 0) + 1; VS.hostSide = 1 - NET.side;
+    push(); NET.role = 'guest'; NET.status = 'connecting'; NET.peerSeen = Date.now(); route();
   }
   function hangUp() {
     NET.timers.forEach(t => clearInterval(t)); NET.timers = [];
@@ -180,7 +207,8 @@
   function connectRoom(role, code) {
     NET.timers.forEach(t => clearInterval(t)); NET.timers = [];
     try { if (NET.client) NET.client.end(true); } catch (e) { /* gone */ }
-    Object.assign(NET, { role, code, status: role === 'host' ? 'starting' : 'connecting', err: '', client: null, peerSeen: 0, me: Math.random().toString(36).slice(2, 10) });
+    Object.assign(NET, { role, side: role === 'host' ? 0 : 1, code, status: role === 'host' ? 'starting' : 'connecting', err: '', client: null, peerSeen: 0, me: Math.random().toString(36).slice(2, 10) });
+  if (role === 'host') { VS.epoch = 0; VS.hostSide = 0; } else VS.epoch = -1;
     route();
     Promise.all([loadMqtt(), keyFor(code)]).then(([, key]) => {
       NET.key = key;
@@ -209,6 +237,7 @@
         if (!NET.client || NET.code !== code) return;
         send({ t: NET.role === 'guest' && NET.status !== 'connected' ? 'hello' : 'ping', name: VS.names[me()] || '' });
         if (NET.status === 'connected' && Date.now() - NET.peerSeen > 15000) { NET.status = 'lost'; route(); drawChat(); }
+        else if (NET.role === 'guest' && NET.status === 'lost' && Date.now() - NET.peerSeen > 25000 && VS.cfg) becomeHost(false);
       }, 4000));
       // a guest whose host never answers: say so, but keep listening
       if (role === 'guest') setTimeout(() => { if (NET.code === code && NET.status === 'connecting') { NET.err = 'No answer from room ' + code + ' yet. Check the code, and that your friend still has the room open. Still trying...'; NET.status = 'error-wait'; route(); } }, 20000);
@@ -221,7 +250,7 @@
   const joinLink = () => location.origin + location.pathname + '#/challenge/vs/join/' + NET.code;
   function netBar() {
     if (!online()) return '';
-    const st = NET.status, other = NET.role === 'host' ? who(1) : who(0);
+    const st = NET.status, other = who(1 - NET.side);
     const msg = st === 'connected' ? `Connected with <b>${esc(other)}</b>. You are ${esc(who(me()))}.`
       : st === 'waiting' ? `Room <b>${esc(NET.code)}</b>: send your friend the link, then wait here.`
       : st === 'connecting' || st === 'starting' ? 'Connecting...'
@@ -230,6 +259,7 @@
       : st === 'error-wait' ? esc(NET.err) : esc(NET.err || 'Not connected.');
     return `<div class="vs-net ${st}"><span class="vs-net-dot"></span><span>${msg}</span>
       ${st === 'waiting' ? `<button type="button" class="btn btn-small" id="vsCopy">COPY LINK</button>` : ''}
+      ${NET.role === 'host' && st === 'connected' ? `<button type="button" class="btn btn-small" id="vsHand">MAKE ${esc(who(1 - NET.side).toUpperCase())} HOST</button>` : ''}
       ${st === 'lost' || st === 'error' ? `<button type="button" class="btn btn-small" id="vsRetry">${NET.role === 'host' ? 'NEW ROOM' : 'TRY AGAIN'}</button>` : ''}
       <button type="button" class="btn btn-small" id="vsLeave">LEAVE</button></div>`;
   }
@@ -240,6 +270,7 @@
       if (navigator.share) { try { await navigator.share({ text, url: link }); return; } catch (e) { /* closed */ } }
       try { await navigator.clipboard.writeText(link); UI.toast('Link copied. Send it to your friend.'); } catch (e) { UI.toast(link); }
     });
+    const hd = UI.$('#vsHand', app); if (hd) hd.addEventListener('click', handOver);
     const rt = UI.$('#vsRetry', app); if (rt) rt.addEventListener('click', () => (NET.role === 'host' ? host() : join(NET.code)));
     const lv = UI.$('#vsLeave', app); if (lv) lv.addEventListener('click', () => { hangUp(); route(); });
   }
@@ -337,7 +368,7 @@
       const d = C.seasonData(VS.year || 2013), teams = d.teams.slice().sort((a, b) => tName(a).localeCompare(tName(b)));
       VS.teams = VS.teams.map((a, i) => teams.some(t => t.abbr === a) ? a : teams[i].abbr);
       if (VS.teams[0] === VS.teams[1]) VS.teams[1] = teams.find(t => t.abbr !== VS.teams[0]).abbr;
-      const boss = me() !== 1;   // the host (or the one phone) sets the season and the rules
+      const boss = NET.role !== 'guest';   // the host (or the one phone) sets the season and the rules
       const dis = c => (c ? '' : ' disabled');
       const grid = i => `<div class="ch-teams">${teams.map(t => `<button type="button" class="ch-team${VS.teams[i] === t.abbr ? ' on' : ''}" data-side="${i}" data-team="${esc(t.abbr)}"${VS.teams[1 - i] === t.abbr || !canAct(i) ? ' disabled' : ''} style="--c1:${esc(t.colors[0])}">${logo(t, 30)}<span>${esc(t.name)}</span></button>`).join('')}</div>`;
       const ready = !online() || linked();
