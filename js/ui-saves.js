@@ -195,7 +195,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = '2k13-association-' + slug + '.json';
+    a.download = 'starting-five-' + slug + '.json';
     document.body.appendChild(a);
     a.click();
     a.remove();

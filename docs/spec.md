@@ -6,7 +6,7 @@ Decided with the owner on 2026-10-22. Anything marked "approximate" is a known l
 
 ## 1. Product
 
-- Name: **2K13 Association**. Public repo `2k13-association`, hosted on GitHub Pages.
+- Name: **Starting Five** (formerly 2K13 Association). Public repo `starting-five`, hosted on GitHub Pages.
 - Look: inspired by 2K13's menus. Black and gold, bold condensed type, tile menus, player cards with headshots. No copying of 2K's logos or artwork. Real 2012-13 NBA team logos, with later logos on rebrand dates.
 - Laptop first, works on a phone.
 - Soundtrack: the official 2K13 soundtrack (24 songs, in order) through an embedded YouTube playlist. Starts on the first click and keeps playing; a small bar with skip and mute.
