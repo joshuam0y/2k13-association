@@ -16,6 +16,7 @@
   };
   const FRESH = () => ({ year: 2008, teams: ['BOS', 'LAL'], names: ['', ''], opts: { bestOf: 5, blind: false, timer: 24, bench: 0 }, cfg: null, shown: 0, page: 'setup', spin: null, spun: [], respins: [1, 1], turn: null, pos: '', q: '', epoch: 0, hostSide: 0 });
   let VS = Object.assign(FRESH(), ls.get() || {});
+  if (!VS.cfg || VS.page === 'setup') VS.names = ['', ''];   // a new game starts as Player 1 and Player 2 again
   VS.opts = Object.assign({ bestOf: 5, blind: false, timer: 24, era: 2013, bench: 0 }, VS.opts || {});
   if (VS.opts.timer) VS.opts.timer = 24;   // the pick clock is a shot clock: 24 seconds or off
   // the seasons in play: every season but the ones switched off (VS.skip). One season left is a one-season
@@ -387,7 +388,6 @@
       const boss = NET.role !== 'guest';   // the host (or the one phone) sets the season and the rules
       const dis = c => (c ? '' : ' disabled');
       const grid = i => `<div class="ch-teams">${teams.map(t => `<button type="button" class="ch-team${VS.teams[i] === t.abbr ? ' on' : ''}" data-side="${i}" data-team="${esc(t.abbr)}"${VS.teams[1 - i] === t.abbr || !canAct(i) ? ' disabled' : ''} style="--c1:${esc(t.colors[0])}">${logo(t, 30)}<span>${esc(t.name)}</span></button>`).join('')}</div>`;
-      if (me() !== null && !VS.names[me()] && UI.profile.name()) VS.names[me()] = UI.profile.name();
       const ready = !online() || linked();
       app.innerHTML = `
         <section class="ch-hero"><div class="ch-hero-k">DRAFT CHALLENGE | TWO PLAYERS</div><h1 class="ch-hero-t">YOU VS ME.</h1>
@@ -449,7 +449,7 @@
       app.querySelectorAll('[data-timer]').forEach(b => b.addEventListener('click', () => { VS.opts.timer = +b.dataset.timer; redraw(); }));
       app.querySelectorAll('[data-side]').forEach(b => b.addEventListener('click', () => { VS.teams[+b.dataset.side] = b.dataset.team; redraw(); }));
       app.querySelectorAll('[data-name]').forEach(inp => inp.addEventListener('change', () => { VS.names[+inp.dataset.name] = inp.value.trim().slice(0, 20); if (me() === +inp.dataset.name && VS.names[+inp.dataset.name]) UI.profile.set(VS.names[+inp.dataset.name]); push(); }));
-      UI.profile.wire(app, () => { const i = me(); if (i !== null) VS.names[i] = UI.profile.name(); push(); redraw(); });
+      UI.profile.wire(app, () => redraw());
       const rn = UI.$('#vsResetNames', app);
       if (rn) rn.addEventListener('click', () => { [0, 1].forEach(i => { if (canAct(i)) VS.names[i] = ''; }); push(); redraw(); });
       const bk = UI.$('#vsBack', app); if (bk) bk.addEventListener('click', () => go(C.vsOnClock(VS.cfg) >= 0 ? 'draft' : 'series'));
@@ -513,7 +513,7 @@
   // the pick clock: { pick, phase: 'spin' | 'pick', until } shared by both phones. When it runs out the
   // player on the clock spins (or takes the best player on the team the wheel landed on); online, the
   // other phone steps in five seconds later if the first one is gone.
-  const SPIN_MS = 4700;
+  const SPIN_MS = 7500;
   function turnFor(cfg, pick, phase) { return cfg && cfg.timer ? { pick, phase, until: Date.now() + cfg.timer * 1000 + (phase === 'pick' ? SPIN_MS : 0) } : null; }
   let TICK = null;
   function stopTick() { if (TICK) { clearInterval(TICK); TICK = null; } }
@@ -764,7 +764,7 @@
         if (!window.confirm('Reset the record between ' + who(0) + ' and ' + who(1) + ' on this phone?')) return;
         const all = rivals.all(), k = pairKey(), ids = all[k] ? all[k].ids : []; all[k] = { ids }; rivals.save(all); series(app);   // keeps the ids so this series does not count again
       });
-      if ($('#vsNew')) $('#vsNew').addEventListener('click', () => { VS.cfg = null; VS.shown = 0; VS.watch = null; go('setup'); });
+      if ($('#vsNew')) $('#vsNew').addEventListener('click', () => { VS.cfg = null; VS.shown = 0; VS.watch = null; VS.names = ['', '']; go('setup'); });
       if (want && WATCH !== want) watch(want);   // the other phone pressed WATCH
     });
   }
@@ -788,6 +788,7 @@
     }
     const page = part[1] === 'draft' ? 'draft' : part[1] === 'result' ? 'series' : 'setup';
     if (page !== 'setup' && !VS.cfg) { VS.page = 'setup'; return setup(app); }
+    if (page === 'setup' && !VS.cfg && !NET.role) VS.names = ['', ''];
     VS.page = page;
     if (page === 'draft') return draft(app);
     if (page === 'series') return series(app);

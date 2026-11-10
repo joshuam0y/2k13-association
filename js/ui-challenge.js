@@ -407,31 +407,35 @@
       const w = strip.querySelector('.ch-rcard.win');
       if (w) w.classList.add('lit');
       reel.classList.add('landed');
-      setTimeout(() => { SPINNING = 0; done(); }, reduce ? 150 : 900);
+      setTimeout(() => { SPINNING = 0; done(); }, reduce ? 150 : 1500);
     };
     if (reduce) { strip.style.transform = `translateX(${-target}px)`; land(); return; }
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      view = reel.clientWidth || view; target = REEL_AT * (REEL_W + REEL_GAP) + REEL_W / 2 - view / 2 + jitter;   // measured once the layout is settled
-      strip.style.transition = 'transform 5s cubic-bezier(.4,.3,.5,1)';   // keeps moving until near the end, then rolls to a stop
-      strip.style.transform = `translateX(${-target}px)`;
-    }));
-    let fired = false;
+    // the reel is driven frame by frame and only counts time while the page is showing, so a phone that dims or a
+    // background tab can never skip the spin: the landing waits until the reel has really travelled the whole way
+    const DUR = 5500, ease = t => 1 - Math.pow(1 - t, 2.8);
+    let elapsed = 0, last = 0, lastCard = null, fired = false;
     const end = () => { if (fired) return; fired = true; if (window.SFX) window.SFX.play('land'); land(); };
-    // a click for every card that passes the pointer, slowing down with the reel
-    if (window.SFX && window.SFX.on) {
-      let lastCard = null;
-      const clicks = () => {
-        if (fired) return;
-        const m = new DOMMatrixReadOnly(getComputedStyle(strip).transform), at = Math.floor((-m.m41 + view / 2) / (REEL_W + REEL_GAP));
+    const frame = now => {
+      if (fired) return;
+      if (!strip.isConnected) { SPINNING = 0; fired = true; return; }   // the page was redrawn under it: the next draw spins again
+      if (last && !document.hidden) elapsed += Math.min(now - last, 100);
+      last = now;
+      const p = Math.min(1, elapsed / DUR), x = ease(p) * target;
+      strip.style.transform = `translateX(${-x}px)`;
+      if (window.SFX && window.SFX.on) {   // a click for every card that passes the pointer, slowing down with the reel
+        const at = Math.floor((x + view / 2) / (REEL_W + REEL_GAP));
         if (lastCard !== null && at !== lastCard) window.SFX.play('tick');
         lastCard = at;
-        requestAnimationFrame(clicks);
-      };
-      requestAnimationFrame(clicks);
-    }
-    // only the reel's own slide ends the spin (a card's small transition bubbling up used to cut it short)
-    strip.addEventListener('transitionend', e => { if (e.target === strip && e.propertyName === 'transform') end(); });
-    setTimeout(end, 5600);
+      }
+      SPINNING = Date.now() + 9000;   // still running: keep other redraws away
+      if (p >= 1) { strip.style.transform = `translateX(${-target}px)`; end(); return; }
+      requestAnimationFrame(frame);
+    };
+    strip.style.transition = 'none';
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      view = reel.clientWidth || view; target = REEL_AT * (REEL_W + REEL_GAP) + REEL_W / 2 - view / 2 + jitter;   // measured once the layout is settled
+      requestAnimationFrame(frame);
+    }));
   }
 
   function bindPick(app) {

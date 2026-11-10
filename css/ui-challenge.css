@@ -564,3 +564,17 @@
 .vs-side ol li.vs-bench-1::before { content: 'BENCH'; display: block; font-size: 10px; letter-spacing: .14em; color: var(--gold, #f5c542); margin-bottom: 2px; }
 .vs-typing { min-height: 18px; padding: 2px 12px 4px; font-size: 12px; font-style: italic; color: var(--muted, #9a9a9a); }
 .vs-chat-btn small { font-weight: 600; opacity: .8; }
+
+/* the two-player draft: both fives stay small enough to fit the screen, on every width */
+.vs-sides.vs-compact { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 8px 0; }
+.vs-compact .vs-side { padding: 6px 8px; }
+.vs-compact .vs-side-h { gap: 6px; }
+.vs-compact .vs-side-h .logo { --sz: 22px !important; }
+.vs-compact .vs-side-h small { font-size: 9px; }
+.vs-compact .vs-side-h b { font-size: 12px; }
+.vs-compact ol { margin-top: 4px; padding-left: 15px; font-size: 11.5px; line-height: 1.25; }
+.vs-compact li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vs-compact li small { font-size: 9px; }
+.vs-compact li.vs-bench-1 { margin-top: 4px; padding-top: 4px; }
+.vs-compact li.vs-bench-1::before { font-size: 8px; margin-bottom: 1px; }
+.vs-compact .vs-pay { font-size: 9px; }
