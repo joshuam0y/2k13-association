@@ -57,6 +57,7 @@
     app.innerHTML = `
       <section class="mm">
         <div class="mm-brand"><span class="mm-2k">2K13</span><span class="mm-a">ASSOCIATION</span></div>
+        <div class="mm-joint"><span>A</span> JOSHUA MOY <span>JOINT</span></div>
         <div class="mm-install" id="mmInstall">${UI.installButton ? UI.installButton() : ''}</div>
         <div class="mm-k">${m && m.year ? 'THE ' + esc(UI.seasonLabel(m.year)) + ' NBA SEASON' : 'EVERY SEASON FROM 2003-04 TO 2026-27'}</div>
         <div class="mm-grid">

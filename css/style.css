@@ -944,3 +944,6 @@ html { scroll-padding-bottom: calc(var(--mb-h, var(--bar-h)) + 12px); }
 }
 /* Basketball-Reference photos are portraits: fill the headshot box from the top */
 img.hs.hs-br { object-fit: cover; object-position: center 18%; }
+/* the credit under the title, like "A Spike Lee Joint" */
+.mm-joint { margin-top: 10px; font-family: var(--display); font-style: italic; font-weight: 700; font-size: clamp(15px, 2vw, 20px); letter-spacing: .22em; color: #fff; display: inline-block; padding: 4px 12px 4px 10px; border-left: 3px solid var(--gold); background: linear-gradient(90deg, rgba(243, 207, 94, .14), transparent); }
+.mm-joint span { color: var(--gold2); font-weight: 500; }

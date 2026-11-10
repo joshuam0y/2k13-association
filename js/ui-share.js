@@ -4,6 +4,8 @@
 (function () {
   'use strict';
   // a soft white outline around a mostly black logo (the Nets, the Spurs) so it shows on the dark card
+  // the credit, like the title card of a Spike Lee joint
+  function joint(ctx, x, y) { ctx.save(); ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(243,207,94,.85)'; ctx.font = 'italic 600 24px Oswald, Arial, sans-serif'; ctx.fillText('A JOSHUA MOY JOINT', x, y); ctx.restore(); }
   function glow(ctx, on) { if (on) { ctx.save(); ctx.shadowColor = 'rgba(255,255,255,.9)'; ctx.shadowBlur = 12; } return on; }
   const P = UI.pages, esc = UI.esc;
   const ROUND = ['THE FIRST ROUND', 'THE CONFERENCE SEMIFINALS', 'THE CONFERENCE FINALS', 'THE NBA FINALS'];
@@ -110,6 +112,7 @@
     }
     ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.font = "500 26px Oswald, Arial, sans-serif";
     ctx.fillText(location.host ? location.host.toUpperCase() + location.pathname.replace(/index\.html$/, '').toUpperCase() : '2K13 ASSOCIATION', W / 2, H - 30);
+    joint(ctx, W / 2, H - 68);
     return cv;
   }
 
@@ -147,6 +150,7 @@
     });
     ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.font = '500 26px Oswald, Arial, sans-serif';
     ctx.fillText((location.host + location.pathname.replace(/index\.html$/, '')).toUpperCase(), W / 2, H - 30);
+    joint(ctx, W / 2, H - 68);
     return new Promise(res => { try { cv.toBlob(b => res(b), 'image/png'); } catch (e) { res(null); } });
   };
   // Shares a result the way phones do best: the picture plus the text and link in the share sheet (Messages,
