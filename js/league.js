@@ -499,6 +499,7 @@
     }
     safe("injuryReturns", function () { injuryReturns(state, injBefore, inj); });
     if (state.realLife && mod("REALLIFE")) safe("realLife", function () { var nd = currentDate(state); if (nd) W.REALLIFE.applyUntil(state, state.season.phase === "done" ? nd : W.REALLIFE.dayBefore(nd)); });
+    if (mod("COACH") && W.COACH.realSync) safe("coachReal", function () { var cd = currentDate(state); if (cd) W.COACH.realSync(state, cd); });
     if (mod("TRADE") && state.season.phase === "regular") {
       if (!state.realLife) safe("aiTrades", function () { W.TRADE.aiTrades(state, rng); });
       if (rng() < 0.08 * days) safe("aiOffers", function () { (W.TRADE.aiOffers(state, rng) || []).forEach(function (o) { state.events.push({ type: "tradeOffer", offer: o, quiet: !autoOn(state, "tradeOffers") }); }); });
@@ -872,6 +873,7 @@
       state.notices = [];
       state.events = state.events.filter(function (e) { return !(e && e.quiet && e.type === "tradeOffer"); });
       startSeason(state);
+      if (mod("COACH") && W.COACH.realSync) safe("coachReal", function () { W.COACH.realSync(state, null); });
       if (state.realLife && mod("REALLIFE") && state.season && state.season.days[0]) safe("realLife", function () { W.REALLIFE.applyUntil(state, W.REALLIFE.dayBefore(state.season.days[0].date)); });
       news(state, "The " + (state.year - 1) + "-" + String(state.year).slice(2) + " season begins", "", []);
     }

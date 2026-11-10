@@ -171,6 +171,7 @@
   function fire(state, abbr) {
     var c = of(state, abbr);
     if (!c) return { ok: false, reason: 'No head coach to fire.' };
+    if (abbr === state.userTeam && !state._aiFiring) state.userCoachYear = yearOf(state);
     c.status = 'free'; c.team = null; c.hiredYear = null;
     c.firedYears.push(yearOf(state));
     if (state.teams && state.teams[abbr]) state.teams[abbr].coach = null;
@@ -184,6 +185,7 @@
     if (c.status === 'retired') return { ok: false, reason: c.name + ' has retired.' };
     if (c.status === 'employed' && c.team !== abbr) return { ok: false, reason: c.name + ' is under contract with ' + c.team + '.' };
     if ((c.available || 0) > yearOf(state)) return { ok: false, reason: c.name + ' is not available yet.' };
+    if (abbr === state.userTeam) state.userCoachYear = yearOf(state);
     var cur = of(state, abbr);
     if (cur && cur.id === coachId) return { ok: true, coach: coachId };
     if (cur) fire(state, abbr);
@@ -249,10 +251,56 @@
 
   // After the regular season: AI teams with bad or disappointing seasons may change coaches.
   // Returns [{ team, fired, hired }].
+  function hist() { return (typeof window !== 'undefined' && window.COACH_HISTORY) || (root && root.COACH_HISTORY) || null; }
+  // Real coaching history (data/coach-history.js): while the save is in the seasons the data covers, every
+  // bench follows real life: each season's opening-night coach and the real mid-season changes on their
+  // dates. The user's team too, unless he hired or fired his own coach that season.
+  function realSync(state, date) {
+    var H = hist();
+    if (!H || !state || !state.coaches || !state.teams) return 0;
+    var y = yearOf(state), open = H[y];
+    if (!open) return 0;
+    var byName = {};
+    Object.keys(state.coaches).forEach(function (id) { byName[state.coaches[id].name] = state.coaches[id]; });
+    var done = state.coachReal = state.coachReal || {}, n = 0;
+    var find = function (name) {
+      if (byName[name]) return byName[name];
+      // an interim or a coach the lists do not have: a plain record so the bench is right
+      var id = (H.ids && H.ids[name]) || 'real-' + String(name).toLowerCase().replace(/[^a-z]+/g, '');
+      state.coaches[id] = makeCoach({ id: id, name: name, born: 1965, offense: 62, defense: 62, development: 62, motivation: 62, last: y }, 'free');
+      byName[name] = state.coaches[id];
+      return state.coaches[id];
+    };
+    var put = function (abbr, name, note) {
+      if (abbr === state.userTeam && state.userCoachYear === y) return;
+      var c = find(name), cur = of(state, abbr);
+      if (cur && cur.id === c.id) return;
+      if (cur) { cur.status = 'free'; cur.team = null; cur.hiredYear = null; state.teams[abbr].coach = null; }
+      if (c.status === 'employed' && c.team && c.team !== abbr && state.teams[c.team]) state.teams[c.team].coach = null;
+      place(state, abbr, c.id, y);
+      if (note) log(state, note, [c.id]);
+      n++;
+    };
+    var team = function (a) { return state.teams[a] ? a : a === 'SEA' && state.teams.OKC ? 'OKC' : a === 'OKC' && state.teams.SEA ? 'SEA' : null; };
+    if (!done['open' + y]) {
+      done['open' + y] = true;
+      Object.keys(open).forEach(function (a) { var t = team(a); if (t) put(t, open[a], null); });
+    }
+    if (date) (H.changes || []).forEach(function (c, i) {
+      if (+c.season !== y || c.date > date || done['c' + i]) return;
+      done['c' + i] = true;
+      var t = team(c.team);
+      if (t) put(t, c['in'], 'The ' + teamName(state, t) + ' replace ' + c.out + ' with ' + c['in'] + (c.interim ? ' (interim)' : '') + '.');
+    });
+    return n;
+  }
+
   function aiChanges(state, rng) {
     rng = rngOf(rng);
     if (!state || !state.coaches) return [];
     recordSeason(state);
+    var Hh = hist();
+    if (Hh && Hh[yearOf(state) + 1]) return [];   // next season's real benches come from the data (realSync)
     var changes = [];
     var st = (state.season && state.season.standings) || {};
     Object.keys(st).forEach(function (abbr) {
@@ -368,6 +416,7 @@
 
   var COACH = {
     history: history,
+    realSync: realSync,
     init: init,
     ovr: ovr,
     of: of,
