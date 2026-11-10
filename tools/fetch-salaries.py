@@ -13,9 +13,14 @@ ids, seen = [], set()
 YEARS = [int(a) for a in sys.argv[1:]] or list(range(2003, 1989, -1))   # e.g. python3 tools/fetch-salaries.py 2003
 for y in YEARS:
     s = open(os.path.join(ROOT, 'data', 'era-%d.js' % y), encoding='utf8').read()
-    for m in re.finditer(r'\["([a-z]+[0-9]{2})","[^"]*","[A-Za-z]{2,3}","[A-Za-z/-]*",\d+,\d+,\d+,(\d+)', s):
-        if m.group(1) not in seen:
-            seen.add(m.group(1)); ids.append((int(m.group(2)), m.group(1)))
+    per = {}
+    for m in re.finditer(r'\["([a-z]+[0-9]{2})","[^"]*","([A-Za-z]{2,3})","[A-Za-z/-]*",\d+,\d+,\d+,(\d+)', s):
+        per.setdefault(m.group(2), []).append((int(m.group(3)), m.group(1)))
+    TOP = int(os.environ.get('TOP', '0'))   # e.g. TOP=6: only the best six of every team (the stars), for the seasons with no salary data
+    for team, lst in per.items():
+        for ovr, pid in sorted(lst, reverse=True)[:TOP or len(lst)]:
+            if pid not in seen:
+                seen.add(pid); ids.append((ovr, pid))
 ids = [i for _, i in sorted(set(ids), key=lambda x: (-x[0], x[1]))]   # the best players first, so a partial run still covers the stars
 todo = [i for i in ids if i not in cache or i not in acache]
 print('players', len(ids), 'to fetch', len(todo), flush=True)

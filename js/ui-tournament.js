@@ -65,6 +65,17 @@
   }
   const f1 = v => (v == null ? '-' : (+v).toFixed(1));
   const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  // take-turns drafts: the phone goes round in snake order, one pick each (1 2 3 4, then 4 3 2 1, ...)
+  const turnsOn = () => TN.opts.order !== 'all' && humDone() > 1;
+  function nextSeat() {
+    const H = humDone(), c = Array.from({ length: H }, () => 0);
+    for (let j = 0; j < H * 5; j++) {
+      const r = Math.floor(j / H), i = j % H, sd = r % 2 === 0 ? i : H - 1 - i;
+      if (TN.picks[sd].length > c[sd]) { c[sd]++; continue; }
+      return sd;
+    }
+    return -1;
+  }
   const rounds = () => (TN.n === 8 ? 3 : 2);
   const roundName = r => { const left = rounds() - r; return left === 1 ? 'FINAL' : left === 2 ? 'SEMIFINALS' : 'QUARTERFINALS'; };
   const baseYear = cfg => (cfg && cfg.year) || 2013;
@@ -202,6 +213,7 @@
         <div class="ch-step"><div class="ch-step-k">3 | THE RULES</div>
           <div class="tn-rules">
             <div><span class="ts-start-k">EACH ROUND</span><div class="ch-chips">${chips([[1, 'BEST OF 1'], [3, 'BEST OF 3']], o.bestOf, 'bo')}</div></div>
+            ${hum() > 1 ? `<div><span class="ts-start-k">DRAFT ORDER</span><div class="ch-chips">${chips([['turns', 'TAKE TURNS'], ['all', 'ALL FIVE AT ONCE']], o.order || 'turns', 'order')}</div></div>` : ''}
             ${chosen().length === 1 ? '' : `<div><span class="ts-start-k">GAME RULES</span><div class="ch-chips">${ERAS.map(([v, l]) => `<button type="button" class="ch-chip${(o.era || 2013) === v ? ' on' : ''}" data-era="${v}">${l}</button>`).join('')}</div></div>`}
             <div><span class="ts-start-k">SEEDING</span><div class="ch-chips">${chips([['random', 'RANDOM'], ['rating', 'BY TEAM RATING']], o.seeding, 'seed')}</div></div>
             <div><span class="ts-start-k">SHOT CLOCK</span><div class="ch-chips">${chips([[24, '24 SEC'], [0, 'OFF']], o.timer ? 24 : 0, 'timer')}</div></div>
@@ -224,6 +236,7 @@
     app.querySelectorAll('[data-seas]').forEach(b => b.addEventListener('click', () => { TN.skip = b.dataset.seas === 'all' ? [] : ALL_YEARS.slice(); redraw(); }));
     app.querySelectorAll('[data-bo]').forEach(b => b.addEventListener('click', () => { o.bestOf = +b.dataset.bo; redraw(); }));
     app.querySelectorAll('[data-era]').forEach(b => b.addEventListener('click', () => { o.era = +b.dataset.era; redraw(); }));
+    app.querySelectorAll('[data-order]').forEach(b => b.addEventListener('click', () => { o.order = b.dataset.order; redraw(); }));
     app.querySelectorAll('[data-seed]').forEach(b => b.addEventListener('click', () => { o.seeding = b.dataset.seed; redraw(); }));
     app.querySelectorAll('[data-timer]').forEach(b => b.addEventListener('click', () => { o.timer = +b.dataset.timer; redraw(); }));
     app.querySelectorAll('[data-rate]').forEach(b => b.addEventListener('click', () => { o.ratings = b.dataset.rate === 'true'; redraw(); }));
@@ -266,7 +279,7 @@
         app.innerHTML = `<section class="tn-pass" style="--c1:${esc(t.colors[0])}">
             <div class="ch-hero-k">${meta}</div>${logo(t, 84)}
             <div class="tn-pass-k">PASS THE PHONE TO</div><h1 class="tn-pass-n">${esc(nm(w)).toUpperCase()}</h1>
-            <p class="muted">${esc(tName(t))}. Player ${w + 1} of ${humDone()}. Five spins, one re-spin. Everyone else look away.</p>
+            <p class="muted">${esc(tName(t))}. ${turnsOn() ? 'Pick ' + (k + 1) + ' of 5, one re-spin each.' : 'Player ' + (w + 1) + ' of ' + humDone() + '. Five spins, one re-spin. Everyone else look away.'}</p>
             <button type="button" class="btn btn-gold btn-big" id="tnReady">I AM ${esc(nm(w)).toUpperCase()}, LET'S GO</button>
             ${done ? `<ul class="tn-locked">${done}</ul>` : ''}
             <button type="button" class="btn btn-small" id="tnQuit">QUIT TOURNAMENT</button></section>`;
@@ -314,6 +327,12 @@
       const take = id => {
         TN.picks[w].push(id); TN.spin = null;
         if (window.SFX) window.SFX.play('chime');
+        if (turnsOn()) {
+          const nx = nextSeat();
+          if (nx >= 0) { TN.who = nx; TN.hand = true; save(); draft(app); window.scrollTo(0, 0); return; }
+          if (humDone() < TN.n) { runAI(B); TN.cpu = true; TN.spin = null; save(); draft(app); } else startBracket(B);
+          return;
+        }
         if (TN.picks[w].length >= 5) {
           if (w + 1 < humDone()) { TN.who = w + 1; TN.hand = true; UI.toast(nm(w) + ' is locked in. Pass the phone.'); save(); draft(app); }
           else if (humDone() < TN.n) { runAI(B); TN.cpu = true; TN.spin = null; save(); draft(app); }
