@@ -365,9 +365,11 @@
 
   function loadThen(app, year, fn) {
     if (!year) {   // every season: the all-time pool plus the 2012-13 franchises
-      if (C.loaded('pool') && C.loaded(2013)) { fn(); return; }
+      // players drafted from a landed season's full roster need that season's file, also after a reload
+      const yrs = [...new Set([].concat(...((VS.cfg && VS.cfg.sides) || []).map(sd => sd.picks)).map(k => +String(k).split('@')[1]).filter(y => y && y !== 2013 && !C.loaded(y)))];
+      if (C.loaded('pool') && C.loaded(2013) && !yrs.length) { fn(); return; }
       app.innerHTML = '<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING EVERY SEASON...</div></section>';
-      Promise.all([C.load('pool'), C.load(2013)]).then(fn).catch(e => { app.innerHTML = UI.empty('ROSTERS DID NOT LOAD', esc(e.message || e), '<div class="row-btns"><a class="btn" href="#/challenge">BACK</a></div>'); });
+      Promise.all([C.load('pool'), C.load(2013)].concat(yrs.map(y => C.load(y)))).then(() => fn()).catch(e => { app.innerHTML = UI.empty('ROSTERS DID NOT LOAD', esc(e.message || e), '<div class="row-btns"><a class="btn" href="#/challenge">BACK</a></div>'); });
       return;
     }
     if (C.loaded(year)) { fn(); return; }
