@@ -930,19 +930,26 @@
   function draftFromResult(r, cfg) {
     const dr = C.newDraft(r.cfg);
     (r.draft || []).forEach(x => { const y = +String(x.key).split('@')[1]; if (y && C.loaded(y)) C.extendPool(dr, y); });   // picks from a season's full roster
-    (r.draft || []).forEach(x => C.draftPick(dr, x.key));
+    // every pick goes back on the team that made it (replaying by the clock put a pick on the wrong team whenever an earlier one was missing)
+    (r.draft || []).forEach((x, i) => {
+      const e = dr.pool.find(q => q.key === x.key);
+      if (!e || dr.taken[e.base]) return;
+      dr.taken[e.base] = true;
+      dr.picks.push({ n: x.n || i + 1, round: x.round || Math.floor(i / dr.order.length) + 1, team: x.team, key: x.key });
+    });
     dr.cfg = cfg;
     return dr;
   }
   function rerun(r) {
     const cfg = cfgFromResult(r);
+    const years = [...new Set((r.draft || []).map(x => +String(x.key).split('@')[1]).filter(y => y && y !== 2013))];   // the seasons the picks came from
     ensureData(cfg, document.getElementById('app'), () => {
       try {
         const dr = cfg.mode === 'alltime' ? draftFromResult(r, cfg) : null;
         RUN = { ch: buildChallenge(cfg, dr), fast: false, paused: false, ticker: [] };
         location.hash = '#/challenge/sim';
       } catch (e) { UI.toast('Could not run it back: ' + (e && e.message ? e.message : e), 'error'); }
-    });
+    }, years);
   }
 
   // Ten more seasons with the same five: how often they win it all
