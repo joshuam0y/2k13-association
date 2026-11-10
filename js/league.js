@@ -426,7 +426,21 @@
     "exumda01":[2016],"knighbr03":[2018],"nunnke01":[2022],"fryech01":[2013],"okafoem01":[2014],"richaja01":[2014],"haywobr01":[2014],"cartemi01":[2022],
     "colliza01":[2021],"wisemja01":[2022],"curryse01":[2018],"kolokch01":[2024],"cancavl01":[2024],"sumneed01":[2022],"williel01":[2013],"pondequ01":[2016,2017],
     "milleda01":[2020]};
+  // Real players' positions season by season (data/pos-history.js): each season after the start, while the
+  // data covers it, a player still on his real path takes his real position that season.
+  function realPositions(state) {
+    var H = W.POS_HISTORY;
+    if (!H || !(state.year > (state.startYear || 2013)) || state.year > 2027) return;
+    Object.keys(H).forEach(function (id) {
+      var p = state.players[id];
+      if (!p || p.retired || p.offPath || p.team === "DRAFT") return;
+      var rows = H[id], pos = null;
+      for (var i = 0; i < rows.length; i++) if (rows[i][0] <= state.year) pos = rows[i][1];
+      if (pos && rows[rows.length - 1][0] >= state.year - 1) p.pos = pos;   // only while his real career is still going
+    });
+  }
   function startSeason(state) {
+    safe("realPositions", function () { realPositions(state); });
     var move = RELOCATIONS[state.year];
     if (move) safe("relocation", function () { relocate(state, move); });
     applyBrands(state);
