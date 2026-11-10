@@ -700,8 +700,14 @@
           options: [{ value: "restore", label: "Put him back in the starting lineup" }, { value: "keep", label: "Keep the current lineup" }, { value: "rotation", label: "Open rotation" }] });
       } else {
         if (sw) delete t.injurySwaps[id];
-        state.notices = state.notices || [];
-        state.notices.push({ text: back + (isManual(t) ? "" : " Your coach put him back in the rotation."), ids: [id], year: state.year });
+        var line = back + (isManual(t) ? "" : " Your coach put him back in the rotation.");
+        if (autoOn(state, "injuryAlerts")) {
+          // like the trade deadline: the sim stops so the user sees who is healthy again
+          state.events.push({ type: "injuryReturn", playerId: id, text: line, options: [{ value: "ok", label: "OK" }] });
+        } else {
+          state.notices = state.notices || [];
+          state.notices.push({ text: line, ids: [id], year: state.year });
+        }
       }
     }
   }
