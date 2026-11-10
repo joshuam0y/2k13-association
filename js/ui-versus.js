@@ -183,7 +183,8 @@
     if (m.t === 'court' && courtCtl && WATCH === m.n) {   // the other phone tapped pause, play, a speed or skip
       if (m.k === 'speed') courtCtl.setSpeed(+m.v || 1); else if (m.k === 'play') courtCtl.play(); else if (m.k === 'pause') courtCtl.pause(); else if (m.k === 'skip') courtCtl.skipQuarter();
     }
-    if (m.t === 'chat' && m.text) { addChat({ name: String(m.name || '').slice(0, 20), text: String(m.text).slice(0, 300), mine: false }); }
+    if (m.t === 'typing') { CHAT.typingUntil = Date.now() + 3500; CHAT.typingName = String(m.name || '').slice(0, 20); showTyping(); setTimeout(showTyping, 3600); }
+    if (m.t === 'chat' && m.text) { CHAT.typingUntil = 0; addChat({ name: String(m.name || '').slice(0, 20), text: String(m.text).slice(0, 300), mine: false }); }
   }
   // the other player takes the room: by choice (the host presses MAKE HOST) or when the host drops for good
   function becomeHost(chosen) {
@@ -305,7 +306,13 @@
   }
 
   // ---------- chat (online): a message panel on both phones ----------
-  const CHAT = { list: [], open: false, unread: 0 };
+  const CHAT = { list: [], open: false, unread: 0, typingUntil: 0, typingName: '', sentAt: 0 };
+  // "X is typing": only the indicator is touched, so what you are typing yourself is never redrawn away
+  function showTyping() {
+    const on = Date.now() < CHAT.typingUntil, line = on ? esc(CHAT.typingName || who(me() === 0 ? 1 : 0)) + ' is typing...' : '';
+    const el = document.getElementById('vsTyping'); if (el) el.innerHTML = line;
+    const b = document.getElementById('vsChatTyping'); if (b) b.textContent = on ? ' | typing...' : '';
+  }
   function addChat(msg) {
     CHAT.list.push(Object.assign({ at: Date.now() }, msg));
     if (CHAT.list.length > 100) CHAT.list.shift();
@@ -321,6 +328,10 @@
       box.addEventListener('click', e => {
         if (e.target.closest('[data-chat="toggle"]')) { CHAT.open = !CHAT.open; if (CHAT.open) CHAT.unread = 0; drawChat(); if (CHAT.open) { const i = box.querySelector('input'); if (i) i.focus(); } }
       });
+      box.addEventListener('input', e => {
+        if (e.target.tagName !== 'INPUT' || Date.now() - CHAT.sentAt < 2000) return;
+        CHAT.sentAt = Date.now(); send({ t: 'typing', name: who(me()) });
+      });
       box.addEventListener('submit', e => {
         e.preventDefault();
         const i = box.querySelector('input'), text = (i.value || '').trim().slice(0, 300);
@@ -333,11 +344,12 @@
       });
     }
     const msgs = CHAT.list.map(m => `<li class="${m.mine ? 'mine' : ''}"><small>${esc(m.name)}</small><span>${esc(m.text)}</span></li>`).join('');
-    box.innerHTML = `<button type="button" class="vs-chat-btn" data-chat="toggle" aria-expanded="${CHAT.open}">💬 CHAT${CHAT.unread ? `<b>${CHAT.unread}</b>` : ''}</button>
+    box.innerHTML = `<button type="button" class="vs-chat-btn" data-chat="toggle" aria-expanded="${CHAT.open}">💬 CHAT<small id="vsChatTyping"></small>${CHAT.unread ? `<b>${CHAT.unread}</b>` : ''}</button>
       ${CHAT.open ? `<div class="vs-chat-panel"><div class="vs-chat-h"><span>CHAT WITH ${esc(who(me() === 0 ? 1 : 0)).toUpperCase()}</span><button type="button" data-chat="toggle" aria-label="Close chat">&times;</button></div>
-        <ol class="vs-chat-list">${msgs || '<li class="muted">Say something. Trash talk welcome.</li>'}</ol>
+        <ol class="vs-chat-list">${msgs || '<li class="muted">Say something. Trash talk welcome.</li>'}</ol><div class="vs-typing" id="vsTyping" aria-live="polite"></div>
         <form class="vs-chat-form"><input maxlength="300" placeholder="Message" autocomplete="off" enterkeyhint="send"><button type="submit" class="btn btn-gold btn-small">SEND</button></form></div>` : ''}`;
     const list = box.querySelector('.vs-chat-list'); if (list) list.scrollTop = list.scrollHeight;
+    showTyping();
   }
   window.addEventListener('hashchange', drawChat);
 
