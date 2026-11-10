@@ -960,3 +960,5 @@ img.hs.hs-br { object-fit: cover; object-position: center 18%; }
 .inf-form input, .inf-form textarea { font: inherit; padding: 10px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, .2); background: rgba(255, 255, 255, .06); color: inherit; }
 
 body.no-assoc-nav .mainnav > a { display: none; }
+body.no-assoc-nav .nm-group[data-grp="MY TEAM"], body.no-assoc-nav .nm-group[data-grp="SEASON"], body.no-assoc-nav .nm-group[data-grp="LEAGUE"], body.no-assoc-nav .nm-group[data-grp="MORE"],
+body.no-assoc-nav .navmore-list a[data-nav="settings"], body.no-assoc-nav .navmore-list a[data-nav="commish"] { display: none; }

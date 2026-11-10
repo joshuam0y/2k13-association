@@ -62,7 +62,7 @@
     const more = document.createElement('details');
     more.className = 'navmore';
     more.innerHTML = `<summary>Menu</summary><div class="navmore-list" role="menu">${groups.map(([title, items]) =>
-      `<div class="nm-group"><div class="nm-k">${esc(title)}</div>${items.map(([r, l]) =>
+      `<div class="nm-group" data-grp="${esc(title)}"><div class="nm-k">${esc(title)}</div>${items.map(([r, l]) =>
         `<a href="#/${esc(r)}" data-nav="${esc(r.split('/')[0])}">${esc(l)}</a>`).join('')}</div>`).join('')}</div>`;
     nav.appendChild(more);
     const place = () => {
