@@ -10,7 +10,6 @@ console.warn = () => {};
 const C = window.CHALLENGE, E = window.ENGINE, PER_TEAM = 1.3;
 const out = { teams: {}, players: [] };
 C.SEASONS.forEach(s => {
-  if (s.year >= 2027) return;
   if (s.file) require("../" + s.file);
   const d = C.seasonData(s.year);
   if (!d) { console.log("no data", s.year); return; }
@@ -31,7 +30,7 @@ C.SEASONS.forEach(s => {
   console.log(s.label, pool.length, pool.slice(0, 3).map(p => p.name + " " + p.ovr).join(", "));
 });
 const head = "/* 2K13 Association: the all-time Draft Challenge pool (js/challenge.js). The best veterans of every season\n" +
-  "   from 1946-47 to 2025-26 by that season's rating (48 a season from 2003-04, " + PER_TEAM + " per team before), with attributes,\n" +
+  "   from 1946-47 to 2026-27 (the current one, as it opened) by that season's rating (48 a season from 2003-04, " + PER_TEAM + " per team before), with attributes,\n" +
   "   style of play and real per-game line.\n" +
   "   Built by tools/build-challenge-pool.js from data/era-YYYY.js, data/league2012.js and data/start-YYYY.js. */\n";
 fs.writeFileSync("data/challenge-pool.js", head + "window.CHALLENGE_POOL = " + JSON.stringify(out) + ";\n");

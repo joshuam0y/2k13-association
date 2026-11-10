@@ -484,7 +484,7 @@
       const q = VIEW.q.trim().toLowerCase();
       const list = C.available(dr).filter(e => (!VIEW.pos || C.primaryPos(e.pos) === VIEW.pos) && (!VIEW.season || e.season === +VIEW.season) && (!q || e.name.toLowerCase().indexOf(q) >= 0));
       board = `<div class="ch-filters">${[''].concat(POS).map(x => `<button type="button" class="ch-chip sm${VIEW.pos === x ? ' on' : ''}" data-pos="${x}">${x || 'ALL'}</button>`).join('')}
-          <select id="chSeasonF" aria-label="Season"><option value="">ALL SEASONS</option>${C.SEASONS.filter(s => C.poolSeasons().indexOf(s.year) >= 0).map(s => `<option value="${s.year}"${+VIEW.season === s.year ? ' selected' : ''}>${esc(s.label)}</option>`).join('')}</select>
+          <select id="chSeasonF" aria-label="Season"><option value="">ALL SEASONS</option>${C.SEASONS.filter(s => C.poolSeasons().indexOf(s.year) >= 0 && (!cfg.seasons || cfg.seasons.indexOf(s.year) >= 0)).map(s => `<option value="${s.year}"${+VIEW.season === s.year ? ' selected' : ''}>${esc(s.label)}</option>`).join('')}</select>
           <input id="chQ" placeholder="Search players" value="${esc(VIEW.q)}" autocomplete="off"></div>
         ${(() => { const L = byLetter(list, !!q); return L.bar + `<ul class="ch-list">${L.rows.map(e => playerRow(e, teams, capBtn(cfg.cap, mine, e, `<button type="button" class="btn btn-small btn-gold" data-take="${esc(e.key)}">DRAFT</button>`))).join('')}</ul>`; })()}
         ${list.length ? '' : '<p class="muted">Nobody matches.</p>'}`;
