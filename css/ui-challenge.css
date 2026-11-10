@@ -558,3 +558,7 @@
 @keyframes inFade { from { opacity: 0; } to { opacity: 1; } }
 @media (min-width: 720px) { .in-c { min-height: 62px; } .in-hs { width: 52px; height: 52px; } .in-n b { font-size: 20px; } }
 @media (prefers-reduced-motion: reduce) { .in-c { transform: none; } }
+
+/* Head to Head with a bench: the bench starts after a divider */
+.vs-side ol li.vs-bench-1 { margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(255, 255, 255, .22); }
+.vs-side ol li.vs-bench-1::before { content: 'BENCH'; display: block; font-size: 10px; letter-spacing: .14em; color: var(--gold, #f5c542); margin-bottom: 2px; }

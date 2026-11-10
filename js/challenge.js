@@ -262,9 +262,11 @@
   // ---------- versus: two players, one league ----------
   // snake order of the ten picks: A B B A A B B A A B
   var VS_ORDER = [0, 1, 1, 0, 0, 1, 1, 0, 0, 1];
+  // picks each: the five, plus cfg.bench (0 or 3) bench players; the snake keeps going A B B A A B B A ...
+  function vsPer(cfg) { return 5 + (cfg && +cfg.bench > 0 ? +cfg.bench : 0); }
   function vsOnClock(cfg) {
     var n = cfg.sides[0].picks.length + cfg.sides[1].picks.length;
-    return n >= 10 ? -1 : VS_ORDER[n];
+    return n >= 2 * vsPer(cfg) ? -1 : (n === 0 ? 0 : (Math.floor((n - 1) / 2) % 2 === 0 ? 1 : 0));
   }
   // Versus: no season. The two fives meet in a series (cfg.bestOf 3, 5 or 7; home court on a coin flip:
   // 1-1-1, 2-2-1 or 2-2-1-1-1), each playing all 48 minutes, nobody on the bench. Fit and positions count
@@ -298,13 +300,15 @@
       var t = clone(d.teams.filter(function (x) { return x.abbr === sd.team; })[0] || { abbr: sd.team, city: sd.team, name: '' });
       t.orig = { city: t.city, name: t.name };
       if (sd.name) { var nm = splitName(sd.name, t); t.city = nm.city; t.name = nm.name; }
-      var five = sd.picks.map(function (id, i) { var p = clone(byId[id]); p.team = sd.team; p.realTeam = byId[id].from || byId[id].team; p.pick = i + 1; p.injury = null; return p; });
-      if (five.length !== 5) throw new Error('Pick five players first.');
+      var all = sd.picks.map(function (id, i) { var p = clone(byId[id]); p.team = sd.team; p.realTeam = byId[id].from || byId[id].team; p.pick = i + 1; p.injury = null; return p; });
+      if (all.length !== vsPer(cfg)) throw new Error('Pick your players first.');
+      var five = all.slice(0, 5), bench = all.slice(5);
       var fit = lineupFit(five);
       applyFit(five, fit);
       var mins = {};
-      five.forEach(function (p) { mins[p.id] = 48; });
-      return { abbr: sd.team, team: t, five: five, fit: fit, obj: { abbr: sd.team, players: five, minutes: mins, ironman: true, strategy: null } };
+      five.forEach(function (p) { mins[p.id] = bench.length ? 34 : 48; });
+      bench.forEach(function (p) { mins[p.id] = 70 / bench.length; });
+      return { abbr: sd.team, team: t, five: five, bench: bench, fit: fit, obj: { abbr: sd.team, players: five.concat(bench), minutes: mins, ironman: true, strategy: null } };
     });
     var norms = E.computeNorms({ season: d.year, teams: d.teams, players: d.players });
     var era = E.eraFor(cfg.year || +(cfg.era || 2013));
@@ -340,7 +344,8 @@
     return { cfg: cfg, label: everyEra ? 'Every season' : d.label, bestOf: bestOf, need: need, home: sides[hi].abbr, games: games, wins: wins, winner: winner,
       mvp: mvp ? { id: mvp.id, name: mvp.name, line: lines[mvp.id] } : null, lines: lines,
       sides: sides.map(function (sd) { return { abbr: sd.abbr, team: { abbr: sd.team.abbr, city: sd.team.city, name: sd.team.name, colors: sd.team.colors, logo: sd.team.logo, logoNoRef: sd.team.logoNoRef },
-        fit: sd.fit, five: sd.five.map(function (p) { return { id: p.id, name: p.name, pos: p.pos, ovr: p.baseOvr || p.ovr, nbaId: p.nbaId || null, slot: SLOTS[p.slot], season: p.season || null }; }) }; }) };
+        fit: sd.fit, five: sd.five.map(function (p) { return { id: p.id, name: p.name, pos: p.pos, ovr: p.baseOvr || p.ovr, nbaId: p.nbaId || null, slot: SLOTS[p.slot], season: p.season || null }; }),
+        bench: sd.bench.map(function (p) { return { id: p.id, name: p.name, pos: p.pos, ovr: p.baseOvr || p.ovr, nbaId: p.nbaId || null, season: p.season || null }; }) }; }) };
   }
 
   function splitName(full, t) {
@@ -827,7 +832,7 @@
     SEASONS: SEASONS, ROUNDS: ROUNDS, seasonInfo: seasonInfo, seasonData: seasonData, loaded: loaded, load: load, loadAll: loadAll,
     allTimePool: allTimePool, poolSeasons: poolSeasons, eraTeam: eraTeam, buildYear: buildYear, buildAllTime: buildAllTime, newDraft: newDraft, onClock: onClock,
     draftSlot: draftSlot, draftPick: draftPick, aiPick: aiPick, simToUser: simToUser, autoDraft: autoDraft, available: available,
-    teamPicks: teamPicks, lineupFit: lineupFit, posLabel: posLabel, secondPos: secondPos, SLOTS: SLOTS, vsOnClock: vsOnClock, playVersus: playVersus, VS_ORDER: VS_ORDER, spin: spin, extendPool: extendPool, franchise: franchise, spinRoster: spinRoster, matchups: matchups, start: start, step: step, runAll: runAll,
+    teamPicks: teamPicks, lineupFit: lineupFit, posLabel: posLabel, secondPos: secondPos, SLOTS: SLOTS, vsOnClock: vsOnClock, vsPer: vsPer, playVersus: playVersus, VS_ORDER: VS_ORDER, spin: spin, extendPool: extendPool, franchise: franchise, spinRoster: spinRoster, matchups: matchups, start: start, step: step, runAll: runAll,
     progress: progress, summary: summary, play: play, perGame: perGame, groupOf: groupOf, primaryPos: primaryPos, rng: mulberry32
   };
   W.CHALLENGE = API;
