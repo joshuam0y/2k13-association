@@ -449,3 +449,31 @@
   .vs-next p { font-size: 12px; }
   .vs-glist li { padding: 6px 8px; padding-right: 76px; font-size: 13px; }
 }
+
+/* a game's box score under its line in the series list */
+.vs-rewatch { top: 6px; transform: none; }
+.vs-gbox { grid-column: 1 / -1; margin-top: 4px; }
+.vs-gbox summary { cursor: pointer; font-family: var(--display); font-size: 11px; letter-spacing: .14em; color: var(--gold); list-style: none; }
+.vs-gbox summary::-webkit-details-marker { display: none; }
+.vs-gbox summary::after { content: ' +'; }
+.vs-gbox[open] summary::after { content: ' -'; }
+.vs-gbox .vs-res { margin-top: 8px; }
+.vs-tbl tfoot td { font-weight: 600; border-top: 1px solid var(--line2); }
+
+/* the rivalry: series won between the same two names */
+.vs-rival { margin: 10px 0; padding: 10px 12px; border: 1px solid var(--line2); border-left: 3px solid var(--gold); background: var(--bg2); }
+.vs-rival-h { display: flex; justify-content: space-between; align-items: center; }
+.vs-rival-row { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 4px 0; }
+.vs-rival-row span { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.vs-rival-row b { font-family: var(--display); font-size: 15px; letter-spacing: .04em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 34vw; }
+.vs-rival-row strong { font-family: var(--display); font-size: 40px; line-height: 1; color: var(--text2); }
+.vs-rival-row .up strong { color: var(--gold); }
+.vs-rival-row i { font-style: normal; color: var(--muted); font-size: 24px; }
+.vs-rival p { margin: 2px 0 6px; font-size: 12px; text-align: center; }
+.vs-rival-log { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
+.vs-rival-log span { font-family: var(--display); font-size: 11px; letter-spacing: .06em; padding: 3px 7px; border: 1px solid var(--line2); }
+.vs-rival-log span.a { border-color: var(--gold-dim, #7a6420); }
+.vs-rival-log small { margin-left: 4px; color: var(--muted); }
+.vs-rival-mini { margin: 4px 0 10px; text-align: center; font-family: var(--display); letter-spacing: .06em; font-size: 14px; }
+.vs-rival-mini span { color: var(--gold); letter-spacing: .14em; font-size: 11px; margin-right: 6px; }
+.vs-rival-mini b { color: #fff; }

@@ -805,9 +805,11 @@
       $('.ct-skip').disabled = st.ended;
       el.querySelectorAll('.ct-spd').forEach(x => { x.classList.toggle('on', Number(x.getAttribute('data-speed')) === st.speed); x.disabled = st.ended; });
     }
-    $('.ct-play').addEventListener('click', () => { st.playing = !st.playing; syncControls(); wake(); });
-    el.querySelectorAll('.ct-spd').forEach(b => b.addEventListener('click', () => { st.speed = Number(b.getAttribute('data-speed')) || 1; syncControls(); }));
-    $('.ct-skip').addEventListener('click', skipQuarter);
+    // opts.onControl(kind, value): a tap on the controls, so a watch party can do the same on the other phone
+    const told = (k, v) => { if (typeof opts.onControl === 'function') { try { opts.onControl(k, v); } catch (e) { /* the page's problem */ } } };
+    $('.ct-play').addEventListener('click', () => { st.playing = !st.playing; syncControls(); wake(); told(st.playing ? 'play' : 'pause'); });
+    el.querySelectorAll('.ct-spd').forEach(b => b.addEventListener('click', () => { st.speed = Number(b.getAttribute('data-speed')) || 1; syncControls(); told('speed', st.speed); }));
+    $('.ct-skip').addEventListener('click', () => { skipQuarter(); told('skip'); });
 
     function onResize() {
       const want = el.clientWidth && el.clientWidth < NARROW ? 'v' : 'h';

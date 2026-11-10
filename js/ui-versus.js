@@ -23,6 +23,49 @@
   const tOf = (teams, a) => teams.find(t => t.abbr === a) || { abbr: a, city: a, name: '', colors: ['#333', '#777'] };
   const tName = t => ((t.city || '') + ' ' + (t.name || '')).trim();
   const who = i => VS.names[i] || ('PLAYER ' + (i + 1));
+  // ---------- the rivalry: every finished series between the same two names, kept on this phone ----------
+  const RKEY = 'a13-vs-rivals';
+  const rivals = {
+    all() { try { return JSON.parse(localStorage.getItem(RKEY) || '{}') || {}; } catch (e) { return {}; } },
+    save(v) { try { localStorage.setItem(RKEY, JSON.stringify(v)); } catch (e) { /* private mode */ } }
+  };
+  const norm = s => String(s || '').trim().toUpperCase();
+  const pairKey = () => [norm(who(0)), norm(who(1))].sort().join('|');
+  function rivalry() {
+    const names = [norm(who(0)), norm(who(1))].sort();
+    return Object.assign({ names, series: {}, games: {}, sweeps: {}, log: [], ids: [] }, rivals.all()[pairKey()] || {});
+  }
+  // counts a finished series once (by its seed and picks), on each phone
+  function recordSeries(r, cfg) {
+    const R = rivalry(), id = cfg.seed + ':' + cfg.sides.map(s => s.picks.join(',')).join('/');
+    if (R.ids.indexOf(id) >= 0) return R;
+    const S = r.sides, wi = S[0].abbr === r.winner ? 0 : 1, wn = norm(who(wi)), ln = norm(who(1 - wi));
+    const ww = r.wins[r.winner], lw = r.wins[S[1 - wi].abbr];
+    R.series[wn] = (R.series[wn] || 0) + 1;
+    R.games[wn] = (R.games[wn] || 0) + ww; R.games[ln] = (R.games[ln] || 0) + lw;
+    if (!lw) R.sweeps[wn] = (R.sweeps[wn] || 0) + 1;
+    R.log.unshift({ w: wn, s: ww + '-' + lw, y: cfg.year || 0, at: Date.now() }); R.log = R.log.slice(0, 12);
+    R.ids.unshift(id); R.ids = R.ids.slice(0, 60);
+    const all = rivals.all(); all[pairKey()] = R; rivals.save(all);
+    return R;
+  }
+  function rivalLead(R) {
+    const [a, b] = R.names, sa = R.series[a] || 0, sb = R.series[b] || 0;
+    if (!sa && !sb) return '';
+    return sa === sb ? `${a} and ${b} are tied ${sa}-${sb}` : `${sa > sb ? a : b} leads ${sa > sb ? b : a} ${Math.max(sa, sb)}-${Math.min(sa, sb)}`;
+  }
+  function rivalBox(R, compact) {
+    const [a, b] = R.names, sa = R.series[a] || 0, sb = R.series[b] || 0;
+    if (!sa && !sb) return '';
+    if (compact) return `<p class="vs-rival-mini"><span>THE RIVALRY</span> ${esc(a)} <b>${sa}</b> | ${esc(b)} <b>${sb}</b></p>`;
+    let run = 0; while (run < R.log.length && R.log[run].w === R.log[0].w) run++;
+    const streak = R.log.length ? (run >= 2 ? `${R.log[0].w} has won ${run} straight.` : `${R.log[0].w} won the last one.`) : '';
+    const sw = [a, b].filter(n => R.sweeps[n]).map(n => `${n} ${R.sweeps[n]}`).join(', ');
+    return `<section class="vs-rival"><div class="vs-rival-h"><div class="ch-hero-k">THE RIVALRY</div><button type="button" class="btn btn-small" id="vsRivalReset">RESET</button></div>
+      <div class="vs-rival-row"><span class="${sa > sb ? 'up' : ''}"><b>${esc(a)}</b><strong>${sa}</strong></span><i>-</i><span class="${sb > sa ? 'up' : ''}"><strong>${sb}</strong><b>${esc(b)}</b></span></div>
+      <p class="muted">Series won. Games: ${esc(a)} ${R.games[a] || 0}, ${esc(b)} ${R.games[b] || 0}.${sw ? ' Sweeps: ' + esc(sw) + '.' : ''} ${esc(streak)}</p>
+      <div class="vs-rival-log">${R.log.slice(0, 8).map(x => `<span class="${x.w === a ? 'a' : 'b'}">${esc(x.w.split(' ')[0])} ${esc(x.s)}<small>${esc(x.y ? short(x.y) : 'ALL')}</small></span>`).join('')}</div></section>`;
+  }
   const SHARED = ['year', 'teams', 'names', 'opts', 'cfg', 'shown', 'watch', 'page', 'spin', 'spun', 'respins', 'turn'];
   let APP = null;   // the page element the versus screens draw into
 
@@ -90,6 +133,9 @@
     }
     seen();
     if (m.t === 'react' && REACTS.indexOf(m.r) >= 0) bubble(m.r, String(m.name || '').slice(0, 20), false);
+    if (m.t === 'court' && courtCtl && WATCH === m.n) {   // the other phone tapped pause, play, a speed or skip
+      if (m.k === 'speed') courtCtl.setSpeed(+m.v || 1); else if (m.k === 'play') courtCtl.play(); else if (m.k === 'pause') courtCtl.pause(); else if (m.k === 'skip') courtCtl.skipQuarter();
+    }
     if (m.t === 'chat' && m.text) { addChat({ name: String(m.name || '').slice(0, 20), text: String(m.text).slice(0, 300), mine: false }); }
   }
   function hangUp() {
@@ -283,6 +329,7 @@
                 <small class="muted">${VS.opts.blind ? 'No ratings and no fit grades until the series is over: pick on what you know.' : 'Ratings and fit grades show while you draft.'}</small></div></div></div>
           ${[0, 1].map(i => `<div class="ch-step"><div class="ch-step-k">${i + 4} | PLAYER ${i + 1}${me() === i ? ' (YOU)' : ''}</div>
             <label class="field"><span>NAME</span><input data-name="${i}" maxlength="20" placeholder="Player ${i + 1}" value="${esc(VS.names[i] || '')}"${dis(canAct(i))}></label>${grid(i)}</div>`).join('')}
+          ${rivalBox(rivalry(), true)}
           <div class="ch-go">${boss ? `<button type="button" class="btn btn-gold btn-big" id="vsStart"${ready ? '' : ' disabled'}>${ready ? 'START THE DRAFT' : 'WAITING FOR PLAYER 2'}</button>` : '<p class="muted">Your friend starts the draft when you are both set.</p>'}
             ${VS.cfg ? '<button type="button" class="btn" id="vsBack">BACK TO OUR DRAFT</button>' : ''}<a class="btn" href="#/challenge">ONE PLAYER</a></div>
         </div>`;
@@ -503,10 +550,20 @@
             ${r.mvp ? `<p>Series MVP: <b>${esc(r.mvp.name)}</b> (${esc(f1(r.mvp.line.pts) + ' PTS, ' + f1(r.mvp.line.reb) + ' REB, ' + f1(r.mvp.line.ast) + ' AST')})</p>` : ''}</div></section>`
         : `<section class="vs-next"><div class="ch-hero-k">BEST OF ${r.bestOf} | ${esc(lbl(cfg.year))}${cfg.blind ? ' | BLIND' : ''}</div><h1>${WATCH ? 'GAME ' + WATCH + ', LIVE' : shown ? 'GAME ' + (shown + 1) + ' IS NEXT' : 'THE SERIES'}</h1>
             <p class="muted">${esc(whoA(r.home))} has home court (${homeGames}). First to ${r.need}. All ten players go the full 48.</p></section>`;
+      const gameBox = side => {
+        const i = idx(side.abbr), rows = side.box || [], sum = k => rows.reduce((s, x) => s + (+x[k] || 0), 0), ms = (m, a) => m + '-' + a;
+        const tr = x => `<td>${x.pts}</td><td>${(x.oreb || 0) + (x.dreb || 0)}</td><td>${x.ast}</td><td>${x.stl}</td><td>${x.blk}</td><td>${x.tov}</td><td>${ms(x.fgm, x.fga)}</td><td>${ms(x.tpm, x.tpa)}</td><td>${ms(x.ftm, x.fta)}</td>`;
+        return `<div class="vs-res" style="--c1:${esc((S[i].team.colors || ['#333'])[0])}"><div class="vs-side-h">${logo(S[i].team, 26)}<div><small>${esc(who(i))}</small><b>${esc(nm(i))} ${side.pts}</b></div></div>
+          <div class="vs-tbl-w"><table class="vs-tbl"><thead><tr><th class="l">PLAYER</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>FG</th><th>3P</th><th>FT</th><th>+/-</th></tr></thead>
+          <tbody>${rows.map(x => `<tr><td class="l">${esc(x.name)}</td>${tr(x)}<td>${x.pm > 0 ? '+' : ''}${x.pm || 0}</td></tr>`).join('')}</tbody>
+          <tfoot><tr><td class="l">TOTALS</td>${tr({ pts: sum('pts'), oreb: sum('oreb'), dreb: sum('dreb'), ast: sum('ast'), stl: sum('stl'), blk: sum('blk'), tov: sum('tov'), fgm: sum('fgm'), fga: sum('fga'), tpm: sum('tpm'), tpa: sum('tpa'), ftm: sum('ftm'), fta: sum('fta') })}<td></td></tr></tfoot></table></div></div>`;
+      };
+      const R = done ? recordSeries(r, cfg) : null;
       const games = r.games.slice(0, shown).map(g => {
         const t = g.top && PL[g.top.id];
         return `<li><span class="vs-g-n">GAME ${g.n}</span><span class="vs-g-s"><b class="${g.winner === g.away ? 'w' : ''}">${esc(whoA(g.away))} ${g.as}</b> @ <b class="${g.winner === g.home ? 'w' : ''}">${esc(whoA(g.home))} ${g.hs}</b>${g.ot ? ' <small>(' + (g.ot > 1 ? g.ot : '') + 'OT)</small>' : ''}</span>${t ? `<small class="muted">${esc(t.name)}: ${g.top.pts} pts, ${g.top.reb} reb, ${g.top.ast} ast</small>` : ''}
-          <button type="button" class="btn btn-small vs-rewatch" data-rewatch="${g.n}">WATCH</button></li>`;
+          <button type="button" class="btn btn-small vs-rewatch" data-rewatch="${g.n}">WATCH</button>
+          ${g.res ? `<details class="vs-gbox"><summary>BOX SCORE</summary>${['away', 'home'].map(k => gameBox(g.res[k])).join('')}</details>` : ''}</li>`;
       }).join('');
       const box = done ? `<section class="vs-box">${UI.header('SERIES BOX', 'Per game')}<div class="vs-sides">${S.map((sd, i) => `<div class="vs-res" style="--c1:${esc((sd.team.colors || ['#333'])[0])}"><div class="vs-side-h">${logo(sd.team, 32)}<div><small>${esc(who(i))}</small><b>${esc(nm(i))}</b></div></div>
           <div class="vs-tbl-w"><table class="vs-tbl"><thead><tr><th class="l">PLAYER</th><th>SPOT</th><th>OVR</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>3PM</th><th>FG%</th><th>3P%</th><th>FT%</th></tr></thead><tbody>${sd.five.slice().sort((a, b) => C.SLOTS.indexOf(a.slot) - C.SLOTS.indexOf(b.slot)).map(p => { const l = r.lines[p.id] || {}; return `<tr><td class="l">${esc(p.name)}${p.season && !cfg.year ? ' <small class="muted">' + esc(short(p.season)) + '</small>' : ''}</td><td>${esc(p.slot || '')}</td><td>${esc(p.ovr)}</td><td>${f1(l.pts)}</td><td>${f1(l.reb)}</td><td>${f1(l.ast)}</td><td>${f1(l.stl)}</td><td>${f1(l.blk)}</td><td>${f1(l.tov)}</td><td>${f1(l.tpm)}</td><td>${f1(l.fgp)}</td><td>${f1(l.tpp)}</td><td>${f1(l.ftp)}</td></tr>`; }).join('')}</tbody></table></div></div>`).join('')}</div></section>` : '';
@@ -519,6 +576,7 @@
         ${WATCH ? '<div class="ct-host" id="vsCourt"></div>' : ''}
         <div class="row-btns center ch-acts vs-acts">${acts}</div>
         ${games ? `<ol class="vs-glist">${games}</ol>` : ''}
+        ${R ? rivalBox(R) : ''}
         ${box}
         ${done ? `<div class="vs-fits">${S.map((sd, i) => UI.challengeFit(sd.fit, { compact: true, title: (who(i) + "'s lineup").toUpperCase() })).join('')}</div>` : ''}${reactBar()}`;
       if (keep) { const ph = UI.$('#vsCourt', app); if (ph) ph.replaceWith(keep); }
@@ -529,7 +587,8 @@
         const el = UI.$('#vsCourt', app), g = r.games[n - 1];
         if (!el || !g || !g.res || !(window.COURT && window.COURT.available(g.res))) { if (el) el.innerHTML = '<p class="muted">The court view did not load.</p>'; return; }
         courtCtl = window.COURT.mount(el, { game: g.res, start: 0, autoplay: true, team: a => S[idx(a)].team, player: id => PL[id] || null,
-          logo: (a, size) => logo(S[idx(a)].team, size), onEnd: () => { if (WATCH === n && n > (VS.shown || 0)) reveal(n); } });
+          logo: (a, size) => logo(S[idx(a)].team, size), onEnd: () => { if (WATCH === n && n > (VS.shown || 0)) reveal(n); },
+          onControl: (k, v) => { if (linked()) send({ t: 'court', n, k, v }); } });
         if (courtCtl && UI.extras && typeof UI.extras.onLeave === 'function') UI.extras.onLeave(dropCourt);
         el.scrollIntoView({ block: 'start', behavior: 'smooth' });
       };
@@ -556,8 +615,13 @@
         const nail = close && Math.abs(close.hs - close.as) <= 3 ? ` Game ${close.n} came down to ${Math.abs(close.hs - close.as)}.` : '';
         const five = S[wi].five.map(p => p.name.split(' ').pop()).join(', ');
         const end = [`${who(li)} wants a rematch. Spin your own:`, `${who(li)} is already asking for game 2. Spin your own:`, `Think you can draft better? Spin your own:`][Math.floor(Math.random() * 3)];
-        const text = `${how} in a ${lbl(cfg.year)} versus draft. Winning five: ${five}.${mv}${nail} ${end}`;
+        const riv = R && R.log.length > 1 ? ' ' + rivalLead(R) + ' in our rivalry.' : '';
+        const text = `${how} in a ${lbl(cfg.year)} versus draft. Winning five: ${five}.${mv}${nail}${riv} ${end}`;
         UI.shareResult(spec, text, location.origin + location.pathname + '#/challenge/vs', 'versus');
+      });
+      if ($('#vsRivalReset')) $('#vsRivalReset').addEventListener('click', () => {
+        if (!window.confirm('Reset the record between ' + who(0) + ' and ' + who(1) + ' on this phone?')) return;
+        const all = rivals.all(), k = pairKey(), ids = all[k] ? all[k].ids : []; all[k] = { ids }; rivals.save(all); series(app);   // keeps the ids so this series does not count again
       });
       if ($('#vsNew')) $('#vsNew').addEventListener('click', () => { VS.cfg = null; VS.shown = 0; VS.watch = null; go('setup'); });
       if (want && WATCH !== want) watch(want);   // the other phone pressed WATCH

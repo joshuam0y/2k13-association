@@ -3,8 +3,8 @@
 // awards your players won. Shared through the phone's share sheet when it can take files, else downloaded.
 (function () {
   'use strict';
-  // a light disc behind a mostly black logo (the Nets, the Spurs) so it shows on the dark card
-  function disc(ctx, x, y, rad) { ctx.save(); ctx.fillStyle = '#f2f2f2'; ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+  // a soft white outline around a mostly black logo (the Nets, the Spurs) so it shows on the dark card
+  function glow(ctx, on) { if (on) { ctx.save(); ctx.shadowColor = 'rgba(255,255,255,.9)'; ctx.shadowBlur = 12; } return on; }
   const P = UI.pages, esc = UI.esc;
   const ROUND = ['THE FIRST ROUND', 'THE CONFERENCE SEMIFINALS', 'THE CONFERENCE FINALS', 'THE NBA FINALS'];
   const ORD = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'TH' : ['TH', 'ST', 'ND', 'RD'][n % 10] || 'TH');
@@ -85,8 +85,7 @@
     ctx.fillStyle = '#f5c542'; ctx.font = "700 40px Oswald, Arial, sans-serif"; ctx.fillText('2K13 ASSOCIATION', W / 2, 90);
     ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.font = "500 34px Oswald, Arial, sans-serif"; ctx.fillText('THE ' + f.label + ' SEASON', W / 2, 140);
     const logo = await loadImg(f.t.logo);
-    if (logo && UI.darkLogo && UI.darkLogo(f.t)) disc(ctx, W / 2, 180 + 130, 150);
-    if (logo) { const s = 260, r = Math.min(s / logo.width, s / logo.height); ctx.drawImage(logo, W / 2 - logo.width * r / 2, 180 + (s - logo.height * r) / 2, logo.width * r, logo.height * r); }
+    if (logo) { const s = 260, r = Math.min(s / logo.width, s / logo.height), g = glow(ctx, UI.darkLogo && UI.darkLogo(f.t)); ctx.drawImage(logo, W / 2 - logo.width * r / 2, 180 + (s - logo.height * r) / 2, logo.width * r, logo.height * r); if (g) ctx.restore(); }
     ctx.fillStyle = '#fff'; fit(ctx, (f.t.city + ' ' + f.t.name).toUpperCase(), W - 120, 76); ctx.fillText((f.t.city + ' ' + f.t.name).toUpperCase(), W / 2, 530);
     ctx.font = "700 190px Oswald, Arial, sans-serif"; ctx.fillStyle = '#fff'; ctx.fillText(f.st.w + '-' + f.st.l, W / 2, 720);
     ctx.font = "500 40px Oswald, Arial, sans-serif"; ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.fillText(ORD(f.rank) + ' IN THE ' + f.conf.toUpperCase(), W / 2, 780);
@@ -129,8 +128,7 @@
     ctx.fillStyle = 'rgba(255,255,255,.8)'; fit(ctx, spec.kicker || '', W - 120, 34, 500); ctx.fillText(spec.kicker || '', W / 2, 140);
     let y = 180;
     const lg = await loadImg(spec.logo);
-    if (lg && UI.darkLogo && UI.darkLogo({ logo: spec.logo })) disc(ctx, W / 2, y + 110, 130);
-    if (lg) { const sz = 220, r = Math.min(sz / lg.width, sz / lg.height); ctx.drawImage(lg, W / 2 - lg.width * r / 2, y + (sz - lg.height * r) / 2, lg.width * r, lg.height * r); }
+    if (lg) { const sz = 220, r = Math.min(sz / lg.width, sz / lg.height), g = glow(ctx, UI.darkLogo && UI.darkLogo({ logo: spec.logo })); ctx.drawImage(lg, W / 2 - lg.width * r / 2, y + (sz - lg.height * r) / 2, lg.width * r, lg.height * r); if (g) ctx.restore(); }
     y = 470;
     ctx.fillStyle = '#fff'; fit(ctx, spec.title || '', W - 120, 72); ctx.fillText(spec.title || '', W / 2, y);
     if (spec.big) { ctx.font = '700 170px Oswald, Arial, sans-serif'; ctx.fillText(spec.big, W / 2, y + 175); }
