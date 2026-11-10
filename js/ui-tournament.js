@@ -15,6 +15,7 @@
     del() { try { localStorage.removeItem(KEY); } catch (e) { /* private mode */ } }
   };
   const ALL_YEARS = C.SEASONS.map(s => s.year);
+  const ERAS = [[2013, 'MODERN'], [2003, '2000S'], [1993, '1990S'], [1985, '1980S'], [1975, '1970S'], [1965, '1960S'], [1955, '1950S']];   // the rules a mixed-seasons game plays by: pace, the three-point line (none before 1979-80), shooting
   const FRESH = () => ({ v: 1, page: 'setup', n: 4, humans: 0, ai: [], cpu: false, names: [], skip: [], opts: { timer: 24, cap: 0, bestOf: 1, seeding: 'random', ratings: true },
     cfg: null, teams: [], picks: [], who: 0, hand: false, spin: null, spun: [], respins: [], seeds: [], rounds: [], cur: null, champ: -1 });
   let TN = Object.assign(FRESH(), ls.get() || {});
@@ -138,7 +139,7 @@
   }
   const ready = m => m.a >= 0 && m.b >= 0;
   function curRound() { for (let r = 0; r < TN.rounds.length; r++) if (TN.rounds[r].some(m => !m.done)) return r; return TN.rounds.length - 1; }
-  const matchCfg = m => ({ mode: 'versus', year: TN.cfg.year, seasons: TN.cfg.seasons, bestOf: m.bestOf, blind: false, cap: TN.cfg.cap, timer: 0, injuries: false, seed: m.seed,
+  const matchCfg = m => ({ mode: 'versus', year: TN.cfg.year, seasons: TN.cfg.seasons, era: TN.cfg.era || 2013, bestOf: m.bestOf, blind: false, cap: TN.cfg.cap, timer: 0, injuries: false, seed: m.seed,
     sides: [m.a, m.b].map(i => ({ team: TN.teams[i], name: nm(i), picks: TN.picks[i] })) });
   const RUNS = {};   // match key -> the series with its play-by-play (deterministic from the seed)
   function run(m) {
@@ -201,6 +202,7 @@
         <div class="ch-step"><div class="ch-step-k">3 | THE RULES</div>
           <div class="tn-rules">
             <div><span class="ts-start-k">EACH ROUND</span><div class="ch-chips">${chips([[1, 'BEST OF 1'], [3, 'BEST OF 3']], o.bestOf, 'bo')}</div></div>
+            ${chosen().length === 1 ? '' : `<div><span class="ts-start-k">GAME RULES</span><div class="ch-chips">${ERAS.map(([v, l]) => `<button type="button" class="ch-chip${(o.era || 2013) === v ? ' on' : ''}" data-era="${v}">${l}</button>`).join('')}</div></div>`}
             <div><span class="ts-start-k">SEEDING</span><div class="ch-chips">${chips([['random', 'RANDOM'], ['rating', 'BY TEAM RATING']], o.seeding, 'seed')}</div></div>
             <div><span class="ts-start-k">SHOT CLOCK</span><div class="ch-chips">${chips([[24, '24 SEC'], [0, 'OFF']], o.timer ? 24 : 0, 'timer')}</div></div>
             <div><span class="ts-start-k">RATINGS</span><div class="ch-chips">${[[true, 'ON'], [false, 'OFF']].map(([v, l]) => `<button type="button" class="ch-chip${(o.ratings !== false) === v ? ' on' : ''}" data-rate="${v}">${l}</button>`).join('')}</div></div>
@@ -221,6 +223,7 @@
     }));
     app.querySelectorAll('[data-seas]').forEach(b => b.addEventListener('click', () => { TN.skip = b.dataset.seas === 'all' ? [] : ALL_YEARS.slice(); redraw(); }));
     app.querySelectorAll('[data-bo]').forEach(b => b.addEventListener('click', () => { o.bestOf = +b.dataset.bo; redraw(); }));
+    app.querySelectorAll('[data-era]').forEach(b => b.addEventListener('click', () => { o.era = +b.dataset.era; redraw(); }));
     app.querySelectorAll('[data-seed]').forEach(b => b.addEventListener('click', () => { o.seeding = b.dataset.seed; redraw(); }));
     app.querySelectorAll('[data-timer]').forEach(b => b.addEventListener('click', () => { o.timer = +b.dataset.timer; redraw(); }));
     app.querySelectorAll('[data-rate]').forEach(b => b.addEventListener('click', () => { o.ratings = b.dataset.rate === 'true'; redraw(); }));
@@ -230,7 +233,7 @@
       const c = chosen();
       if (!c.length) { UI.toast('Switch on at least one season', 'error'); return; }
       const year = c.length === 1 ? c[0] : 0;
-      const cfg = { mode: 'versus', year, seasons: c.length > 1 && c.length < ALL_YEARS.length ? c : null, bestOf: o.bestOf, blind: false, cap: +o.cap || 0, timer: o.timer ? 24 : 0, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1 };
+      const cfg = { mode: 'versus', year, seasons: c.length > 1 && c.length < ALL_YEARS.length ? c : null, bestOf: o.bestOf, blind: false, cap: +o.cap || 0, timer: o.timer ? 24 : 0, era: +o.era || 2013, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1 };
       ensure(app, cfg, () => {
         const d = C.seasonData(year || 2013);
         TN.cfg = cfg;

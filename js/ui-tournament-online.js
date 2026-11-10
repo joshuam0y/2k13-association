@@ -14,6 +14,7 @@
   const MQTT_SRC = 'https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js';
   const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081'];
   const SPIN_MS = 4700;
+  const ERAS = [[2013, 'MODERN'], [2003, '2000S'], [1993, '1990S'], [1985, '1980S'], [1975, '1970S'], [1965, '1960S'], [1955, '1950S']];   // the rules a mixed-seasons game plays by: pace, the three-point line (none before 1979-80), shooting
   const SHARED = ['page', 'n', 'humans', 'names', 'ai', 'seats', 'live', 'opts', 'skip', 'cfg', 'teams', 'picks', 'seeds', 'rounds', 'cur', 'champ', 'rating', 'watch', 'spins', 'respins', 'spun', 'clk', 'hnow', 'epoch', 'hostCid'];
   const store = k => ({
     get() { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } },
@@ -430,6 +431,7 @@
         <div class="ch-step"><div class="ch-step-k">3 | THE RULES</div>
           <div class="tn-rules">
             <div><span class="ts-start-k">EACH ROUND</span><div class="ch-chips">${chips([[1, 'BEST OF 1'], [3, 'BEST OF 3']], o.bestOf, 'bo')}</div></div>
+            ${ch.length === 1 ? '' : `<div><span class="ts-start-k">GAME RULES</span><div class="ch-chips">${chips(ERAS, o.era || 2013, 'era')}</div></div>`}
             <div><span class="ts-start-k">DRAFT ORDER</span><div class="ch-chips">${chips([['all', 'ALL AT ONCE'], ['turns', 'TAKE TURNS']], o.order || 'turns', 'order')}</div>
               <small class="muted">${(o.order || 'turns') === 'turns' ? 'One pick each, snake order, everyone watches every spin.' : 'Everyone drafts their five at the same time.'}</small></div>
             <div><span class="ts-start-k">SEEDING</span><div class="ch-chips">${chips([['random', 'RANDOM'], ['rating', 'BY TEAM RATING']], o.seeding, 'seed')}</div></div>
@@ -453,6 +455,7 @@
     })));
     app.querySelectorAll('[data-seas]').forEach(b => b.addEventListener('click', () => edit(() => { t.skip = b.dataset.seas === 'all' ? [] : A.ALL_YEARS.slice(); })));
     app.querySelectorAll('[data-order]').forEach(b => b.addEventListener('click', () => edit(() => { o.order = b.dataset.order; })));
+    app.querySelectorAll('[data-era]').forEach(b => b.addEventListener('click', () => edit(() => { o.era = +b.dataset.era; })));
     app.querySelectorAll('[data-bo]').forEach(b => b.addEventListener('click', () => edit(() => { o.bestOf = +b.dataset.bo; })));
     app.querySelectorAll('[data-seed]').forEach(b => b.addEventListener('click', () => edit(() => { o.seeding = b.dataset.seed; })));
     app.querySelectorAll('[data-timer]').forEach(b => b.addEventListener('click', () => edit(() => { o.timer = +b.dataset.timer; })));
@@ -463,7 +466,7 @@
       const c = A.ALL_YEARS.filter(y => t.skip.indexOf(y) < 0);
       if (!c.length) { UI.toast('Switch on at least one season', 'error'); return; }
       const year = c.length === 1 ? c[0] : 0;
-      const cfg = { mode: 'versus', year, seasons: c.length > 1 && c.length < A.ALL_YEARS.length ? c : null, bestOf: o.bestOf, blind: false, cap: +o.cap || 0, timer: o.timer ? 24 : 0, turns: (o.order || 'turns') === 'turns', injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1 };
+      const cfg = { mode: 'versus', year, seasons: c.length > 1 && c.length < A.ALL_YEARS.length ? c : null, bestOf: o.bestOf, blind: false, cap: +o.cap || 0, timer: o.timer ? 24 : 0, turns: (o.order || 'turns') === 'turns', era: +o.era || 2013, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1 };
       A.ensure(app, cfg, () => {
         const d = C.seasonData(year || 2013), hn = t.seats.length, bots = A.shuffle(A.CPU_NAMES.slice());
         t.cfg = cfg;

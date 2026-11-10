@@ -976,3 +976,9 @@ body.ct-full-on .mb-pill { display: none; }
 .mv.up::before { border-bottom: 6px solid currentColor; }
 .mv.down { color: #ff6b6b; }
 .mv.down::before { border-top: 6px solid currentColor; }
+
+/* less text on screen: the long explanations (setup notes, hero paragraphs, settings descriptions) stay out of the way;
+   settings rows keep theirs as a hover or long-press tooltip */
+.ch-hero-p, .gs-intro, .gs-t small, .vs-rules small.muted, .tn-rules small.muted, .ts-start-n, .ch-small, .tn-setup .ch-step > small.muted, .vs-rival-mini + small { display: none; }
+.ch-hero { padding-bottom: 8px; }
+.gs-card .gs-k { margin-bottom: 6px; }

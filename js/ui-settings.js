@@ -87,7 +87,7 @@
     const speed = UI.liveSpeedPref();
     const diff = String((g.settings && g.settings.difficulty) || 'normal');
     const row = ([key, title, text]) => `<li class="gs-row">
-        <span class="gs-t"><b id="gs-l-${key}">${esc(title)}</b><small>${esc(text)}</small></span>
+        <span class="gs-t" title="${esc(text)}"><b id="gs-l-${key}">${esc(title)}</b><small>${esc(text)}</small></span>
         <button type="button" class="gs-sw${a[key] ? ' on' : ''}" role="switch" aria-checked="${a[key] ? 'true' : 'false'}" aria-labelledby="gs-l-${key}" data-key="${key}"><i></i><span>${a[key] ? 'ON' : 'OFF'}</span></button>
       </li>`;
     app.innerHTML = `${UI.header('SETTINGS', 'Saved with this league.')}
@@ -143,7 +143,7 @@
     const F = window.FUTURE;
     if (!F) return '';
     const sw = (key, title, text) => { const on = g.settings[key] !== false; return `<li class="gs-row">
-        <span class="gs-t"><b id="gs-l-${key}">${esc(title)}</b><small>${esc(text)}</small></span>
+        <span class="gs-t" title="${esc(text)}"><b id="gs-l-${key}">${esc(title)}</b><small>${esc(text)}</small></span>
         <button type="button" class="gs-sw${on ? ' on' : ''}" role="switch" aria-checked="${on}" aria-labelledby="gs-l-${key}" data-fkey="${key}"><i></i><span>${on ? 'ON' : 'OFF'}</span></button></li>`; };
     const list = F.timeline(g);
     const label = y => (y - 1) + '-' + String(y).slice(2);

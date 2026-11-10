@@ -16,7 +16,7 @@
   };
   const FRESH = () => ({ year: 2008, teams: ['BOS', 'LAL'], names: ['', ''], opts: { bestOf: 5, blind: false, timer: 24 }, cfg: null, shown: 0, page: 'setup', spin: null, spun: [], respins: [1, 1], turn: null, pos: '', q: '', epoch: 0, hostSide: 0 });
   let VS = Object.assign(FRESH(), ls.get() || {});
-  VS.opts = Object.assign({ bestOf: 5, blind: false, timer: 24 }, VS.opts || {});
+  VS.opts = Object.assign({ bestOf: 5, blind: false, timer: 24, era: 2013 }, VS.opts || {});
   if (VS.opts.timer) VS.opts.timer = 24;   // the pick clock is a shot clock: 24 seconds or off
   // the seasons in play: every season but the ones switched off (VS.skip). One season left is a one-season
   // draft (cfg.year); more is the era spin over just those (cfg.year 0, cfg.seasons)
@@ -31,6 +31,7 @@
     return run ? lbl(s[0]) + ' TO ' + lbl(s[s.length - 1]) : s.length + ' SEASONS';
   };
   const POS = ['PG', 'SG', 'SF', 'PF', 'C'];
+  const ERAS = [[2013, 'MODERN'], [2003, '2000S'], [1993, '1990S'], [1985, '1980S'], [1975, '1970S'], [1965, '1960S'], [1955, '1950S']];   // the rules a mixed-seasons game plays by: pace, the three-point line (none before 1979-80), shooting
   const lbl = y => (y ? (y - 1) + '-' + String(y).slice(2) : 'EVERY SEASON');   // y 0: era spin, every season
   const logo = (t, n) => UI.logoFor(t || { abbr: '?' }, n);
   const tOf = (teams, a) => teams.find(t => t.abbr === a) || { abbr: a, city: a, name: '', colors: ['#333', '#777'] };
@@ -391,6 +392,7 @@
             <div class="vs-rules"><div><span class="ts-start-k">SERIES</span><div class="ch-chips">${[3, 5, 7].map(n => `<button type="button" class="ch-chip${VS.opts.bestOf === n ? ' on' : ''}" data-bo="${n}"${dis(boss)}>BEST OF ${n}</button>`).join('')}</div></div>
               <div><span class="ts-start-k">SHOT CLOCK</span><div class="ch-chips">${[[24, '24 SEC'], [0, 'OFF']].map(([v, l]) => `<button type="button" class="ch-chip${(VS.opts.timer || 0) === v ? ' on' : ''}" data-timer="${v}"${dis(boss)}>${l}</button>`).join('')}</div>
                 <small class="muted">${VS.opts.timer ? 'Run out of time and the wheel spins for you, or you get the best player on its team.' : 'No clock.'}</small></div>
+              ${chosen().length === 1 ? '' : `<div><span class="ts-start-k">GAME RULES</span><div class="ch-chips">${ERAS.map(([v, l]) => `<button type="button" class="ch-chip${(VS.opts.era || 2013) === v ? ' on' : ''}" data-era="${v}"${dis(boss)}>${l}</button>`).join('')}</div></div>`}
               <div><span class="ts-start-k">BLIND DRAFT</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.blind ? ' on' : ''}" data-blind="0"${dis(boss)}>OFF</button><button type="button" class="ch-chip${VS.opts.blind ? ' on' : ''}" data-blind="1"${dis(boss)}>ON</button></div>
                 <small class="muted">${VS.opts.cap ? 'Off with a salary cap: the prices give the ratings away.' : VS.opts.blind ? 'No ratings and no fit grades until the series is over: pick on what you know.' : 'Ratings and fit grades show while you draft.'}</small></div>
               <div><span class="ts-start-k">SALARY CAP</span><div class="ch-chips">${UI.challengeCap.CAPS.map(v => `<button type="button" class="ch-chip${(VS.opts.cap || 0) === v ? ' on' : ''}" data-cap="${v}"${dis(boss)}>${v ? '$' + v + 'M' : 'OFF'}</button>`).join('')}</div>
@@ -421,6 +423,7 @@
       }));
       app.querySelectorAll('[data-seas]').forEach(b => b.addEventListener('click', () => { VS.skip = b.dataset.seas === 'all' ? [] : ALL_YEARS.slice(); setYear(); redraw(); }));
       app.querySelectorAll('[data-bo]').forEach(b => b.addEventListener('click', () => { VS.opts.bestOf = +b.dataset.bo; redraw(); }));
+      app.querySelectorAll('[data-era]').forEach(b => b.addEventListener('click', () => { VS.opts.era = +b.dataset.era; redraw(); }));
       app.querySelectorAll('[data-cap]').forEach(b => b.addEventListener('click', () => { VS.opts.cap = +b.dataset.cap; if (VS.opts.cap) VS.opts.blind = false; redraw(); }));
       app.querySelectorAll('[data-blind]').forEach(b => b.addEventListener('click', () => { VS.opts.blind = b.dataset.blind === '1'; redraw(); }));
       app.querySelectorAll('[data-timer]').forEach(b => b.addEventListener('click', () => { VS.opts.timer = +b.dataset.timer; redraw(); }));
@@ -433,7 +436,7 @@
         const ch = chosen();
         if (!ch.length) { UI.toast('Switch on at least one season', 'error'); return; }
         VS.year = ch.length === 1 ? ch[0] : 0;
-        VS.cfg = { mode: 'versus', year: VS.year, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null, bestOf: VS.opts.bestOf, blind: !VS.opts.cap && !!VS.opts.blind, cap: +VS.opts.cap || 0, timer: +VS.opts.timer || 0, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
+        VS.cfg = { mode: 'versus', year: VS.year, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null, bestOf: VS.opts.bestOf, blind: !VS.opts.cap && !!VS.opts.blind, cap: +VS.opts.cap || 0, timer: +VS.opts.timer || 0, era: +VS.opts.era || 2013, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
           sides: [0, 1].map(i => ({ team: VS.teams[i], name: VS.names[i] ? VS.names[i] + "'s " + tOf(teams, VS.teams[i]).name : '', picks: [] })) };
         VS.spin = null; VS.spun = []; VS.respins = [1, 1]; VS.shown = 0; VS.pos = ''; VS.q = '';
         VS.turn = turnFor(VS.cfg, 0, 'spin');
