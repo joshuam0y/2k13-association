@@ -22,17 +22,93 @@
   var BENCH_MIN4 = [24, 22, 18, 14];
   // Auto rotation styles (team.autoStyle; the coach still starts the best healthy five for the style):
   // starters' and bench minutes by rank, and young = a youth bonus when ranking players
+  // bias(p): extra ranking points for what the style wants; posK: how much playing out of position costs
+  function A(p, k) { return p && p.attrs && p.attrs[k] != null ? +p.attrs[k] : 55; }
   var AUTO_STYLES = {
-    best: { label: 'BEST FIT', note: 'Best players, normal minutes' },
+    best: { label: 'BEST FIT', note: 'Best five that covers every position, normal minutes' },
     stars: { label: 'STAR HEAVY', note: 'Starters play 35 to 38', starters: [38, 37, 35, 33, 31], bench: [20, 16, 10] },
+    nine: { label: '9-MAN', note: 'Regular season rotation, nine deep', starters: [34, 33, 32, 31, 30], bench: [24, 22, 20, 14] },
     eight: { label: '8-MAN', note: 'Tight playoff rotation', starters: [36, 35, 34, 33, 32], bench: [26, 24, 20] },
-    seven: { label: '7-MAN', note: 'Shortest rotation', starters: [38, 37, 36, 35, 34], bench: [32, 28] },
-    depth: { label: 'DEPTH', note: '10 men, fresh legs', starters: [32, 31, 30, 29, 28], bench: [22, 20, 18, 16, 14] },
+    shoot: { label: '3-POINT SHOOTING', note: 'Shooters on the floor, spacing first', bias: function (p) { return clamp((A(p, 'three') - 65) * 0.35, -6, 8); } },
+    defense: { label: 'DEFENSE FIRST', note: 'Stoppers and rim protection', bias: function (p) { return clamp(((A(p, 'perD') + A(p, 'intD') + A(p, 'block')) / 3 - 58) * 0.3, -6, 8); } },
+    small: { label: 'SMALL BALL', note: 'Speed and shooting, a wing at the 4', posK: 0.55, bias: function (p) { return clamp(((A(p, 'speed') + A(p, 'three')) / 2 - 62) * 0.3, -6, 7); } },
+    big: { label: 'BIG LINEUP', note: 'Size, boards and the paint', bias: function (p) { return clamp(((A(p, 'dreb') + A(p, 'block') + A(p, 'strength')) / 3 - 55) * 0.3, -6, 7); } },
     young: { label: 'YOUNG PLAYERS', note: 'Develop the kids', young: true, starters: [34, 33, 32, 30, 29], bench: [24, 22, 18, 12, 6] },
     // Draft Challenge teams (js/challenge.js): the five picks carry the load, the scrub bench fills in
     challenge: { label: 'IRON FIVE', note: 'Starters play 38 to 40', starters: [40, 39, 38, 38, 37], bench: [18, 14, 10, 6] }
   };
   function youthBonus(p) { return clamp((26 - (+p.age || 26)) * 1.5, 0, 9); }
+  // The best five out of the top players for the spots PG, SG, SF, PF, C: total ranking points minus what
+  // playing away from his position costs each player (his listed positions, or his size and game when the
+  // listing has one). list: items, get(item) -> player, rv(item) -> ranking points. Returns five items.
+  var SLOT_IDX = { PG: 0, G: 0.5, SG: 1, GF: 1.5, SF: 2, F: 2.5, PF: 3, FC: 3.5, C: 4 }, SLOT_PEN = [0, 1.5, 4, 7, 10];
+  function posSpan(p) {
+    var parts = String(p.pos || 'SF').toUpperCase().split(/[-\/ ,]+/).map(function (x) { return SLOT_IDX[x]; }).filter(function (x) { return x != null; });
+    if (!parts.length) parts = [2];
+    var lo = Math.min.apply(null, parts), hi = Math.max.apply(null, parts);
+    if (lo === hi) {   // one listed spot: the next one he can play from his size and game
+      var ht = +p.ht || 79;
+      if (lo === 0) hi = 1;
+      else if (lo === 1) { if (ht >= 78 || A(p, 'handle') < 70) hi = 2; else lo = 0; }
+      else if (lo === 2) { if (ht >= 81 || A(p, 'dreb') >= 65) hi = 3; else lo = 1; }
+      else if (lo === 3) { if (ht >= 82 || A(p, 'block') >= 70) hi = 4; else lo = 2; }
+      else if (lo === 4) lo = 3;
+    }
+    return [lo, hi];
+  }
+  function slotCost(p, k) {
+    var r = posSpan(p), d = k < r[0] ? r[0] - k : k > r[1] ? k - r[1] : 0, i = Math.floor(d), f = d - i;
+    return i >= 4 ? SLOT_PEN[4] : SLOT_PEN[i] + (SLOT_PEN[i + 1] - SLOT_PEN[i]) * f;
+  }
+  // the cheapest way to put five players in the five spots (dp over the spots taken), with the order
+  function assign(five) {
+    var cost = five.map(function (p) { return [0, 1, 2, 3, 4].map(function (k) { return slotCost(p, k); }); });
+    var best = {}, from = {};
+    best[0] = 0;
+    for (var i = 0; i < 5; i++) {
+      var next = {}, nf = {};
+      Object.keys(best).forEach(function (m) {
+        m = +m;
+        for (var k = 0; k < 5; k++) if (!(m & (1 << k))) {
+          var nm = m | (1 << k), v = best[m] + cost[i][k];
+          if (next[nm] == null || v < next[nm]) { next[nm] = v; nf[nm] = (from[m] || []).concat([k]); }
+        }
+      });
+      best = next; from = nf;
+    }
+    return { cost: best[31], slots: from[31] };
+  }
+  var FIVE_CACHE = {}, FIVE_N = 0, PERMS = null;
+  function perms5() {
+    if (PERMS) return PERMS;
+    PERMS = [];
+    (function go(arr, k) { if (k === 5) { PERMS.push(arr.slice()); return; } for (var i = k; i < 5; i++) { var t = arr[k]; arr[k] = arr[i]; arr[i] = t; go(arr, k + 1); t = arr[k]; arr[k] = arr[i]; arr[i] = t; } })([0, 1, 2, 3, 4], 0);
+    return PERMS;
+  }
+  function bestFive(list, get, rv, style) {
+    var top = list.slice(0, Math.min(8, list.length));
+    if (top.length <= 5) return top.slice();
+    // the same eight (and the same ranking) give the same five: cached, the sim asks every game
+    var key = (style && style.label || '') + '|' + top.map(function (x) { var p = get(x); return (p && p.id) + ':' + Math.round(rv(x) * 10); }).join(',');
+    var hit = FIVE_CACHE[key];
+    if (hit) return hit.map(function (i) { return top[i]; });
+    var K = style && style.posK != null ? style.posK : 1.2, best = null, bestScore = -1e9, k = top.length;
+    var cost = top.map(function (x) { var p = get(x); return [slotCost(p, 0), slotCost(p, 1), slotCost(p, 2), slotCost(p, 3), slotCost(p, 4)]; });
+    var val = top.map(rv), P = perms5();
+    for (var a = 0; a < k; a++) for (var b = a + 1; b < k; b++) for (var c = b + 1; c < k; c++)
+      for (var d = c + 1; d < k; d++) for (var e = d + 1; e < k; e++) {
+        var ix = [a, b, c, d, e], score = val[a] + val[b] + val[c] + val[d] + val[e], low = 1e9;
+        for (var q = 0; q < P.length; q++) {
+          var pm = P[q], sum = cost[ix[0]][pm[0]] + cost[ix[1]][pm[1]] + cost[ix[2]][pm[2]] + cost[ix[3]][pm[3]] + cost[ix[4]][pm[4]];
+          if (sum < low) low = sum;
+        }
+        score -= K * low;
+        if (score > bestScore) { bestScore = score; best = [top[a], top[b], top[c], top[d], top[e]]; }
+      }
+    if (++FIVE_N > 4000) { FIVE_CACHE = {}; FIVE_N = 0; }
+    FIVE_CACHE[key] = best.map(function (x) { return top.indexOf(x); });
+    return best;
+  }
 
   // Tuning knobs (calibrated against 2012-13 league averages by tools/engine-test.js).
   // Rating effects are in z-scores against league norms, so the engine stays calibrated
@@ -468,7 +544,7 @@
     return !!(p.injury && p.injury.games > 0);
   }
 
-  function pickStarters(avail, forced) {
+  function pickStarters(avail, forced, style) {
     if (forced && forced.length) {
       var f = avail.filter(function (s) { return forced.indexOf(s.id) >= 0; }).slice(0, 5);
       if (f.length === 5) return f;
@@ -478,22 +554,7 @@
         return f;
       }
     }
-    var top = avail.slice(0, Math.min(8, avail.length));
-    if (top.length <= 5) return top.slice();
-    var best = null, bestScore = -1e9;
-    var k = top.length;
-    for (var a = 0; a < k; a++) for (var b = a + 1; b < k; b++) for (var c = b + 1; c < k; c++)
-      for (var d = c + 1; d < k; d++) for (var e = d + 1; e < k; e++) {
-        var set = [top[a], top[b], top[c], top[d], top[e]];
-        var g = 0, bg = 0, score = 0;
-        set.forEach(function (s) { score += s.rv != null ? s.rv : s.ovr; if (s.group === 'G') g++; if (s.group === 'B') bg++; });
-        if (g === 0) score -= 14;
-        if (bg === 0) score -= 14;
-        if (g > 2) score -= 4 * (g - 2);
-        if (bg > 2) score -= 4 * (bg - 2);
-        if (score > bestScore) { bestScore = score; best = set; }
-      }
-    return best;
+    return bestFive(avail, function (x) { return x.p; }, function (x) { return x.rv != null ? x.rv : x.ovr; }, style);
   }
 
   function buildTeam(team, side, rng, opts, n) {
@@ -514,10 +575,10 @@
     }
     // auto style (ignored once the user saved his own minutes)
     var style = !team.minutes && AUTO_STYLES[team.autoStyle] || null;
-    if (style && style.young) avail.forEach(function (s) { s.rv = s.ovr + youthBonus(s.p); });
+    if (style && (style.young || style.bias)) avail.forEach(function (s) { s.rv = s.ovr + (style.young ? youthBonus(s.p) : 0) + (style.bias ? style.bias(s.p) : 0); });
     var rank = function (s) { return s.rv != null ? s.rv : s.ovr; };
     avail.sort(function (a, b) { return rank(b) - rank(a); });
-    var starters = pickStarters(avail, team.starters);
+    var starters = pickStarters(avail, team.starters, style);
     var bench = avail.filter(function (s) { return starters.indexOf(s) < 0; });
     starters.sort(function (a, b) { return rank(b) - rank(a); });
     var startMin = style && style.starters || STARTER_MIN;
@@ -2011,7 +2072,7 @@
     TEND_KEYS: TEND_KEYS,
     TEND_SCALE: TEND_SCALE,
     ERA: ERA,
-    AUTO_STYLES: AUTO_STYLES,
+    AUTO_STYLES: AUTO_STYLES, bestFive: bestFive, posSpan: posSpan,
     STARTER_MIN: STARTER_MIN, BENCH_MIN5: BENCH_MIN5, BENCH_MIN4: BENCH_MIN4,
     youthBonus: youthBonus,
     eraFor: eraFor,

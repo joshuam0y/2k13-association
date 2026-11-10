@@ -138,31 +138,19 @@
 
   // The lineup the engine picks on its own: the best five of the top eight healthy players,
   // with at least one guard and one big, then the bench by overall. Injured players sit.
-  // Auto rotation styles from the engine (team.autoStyle): BEST FIT, STAR HEAVY, 8-MAN, 7-MAN, DEPTH, YOUNG PLAYERS
+  // Auto rotation styles from the engine (team.autoStyle): BEST FIT, STAR HEAVY, 9-MAN, 8-MAN, 3-POINT SHOOTING,
+  // DEFENSE FIRST, SMALL BALL, BIG LINEUP, YOUNG PLAYERS
   const autoStyles = () => (window.ENGINE && window.ENGINE.AUTO_STYLES) || {};
   const styleOf = s => { const t = s.teams[s.userTeam] || {}; return autoStyles()[t.autoStyle] || null; };
   function autoLineup(s) {
     const roster = userRoster(s), style = styleOf(s);
     const yb = window.ENGINE && window.ENGINE.youthBonus;
-    const rv = p => (p.ovr || 0) + (style && style.young && yb ? yb(p) : 0);
+    const rv = p => (p.ovr || 0) + (style && style.young && yb ? yb(p) : 0) + (style && style.bias ? style.bias(p) : 0);
     const healthy = roster.filter(p => !injuryOf(s, p)).sort((a, b) => rv(b) - rv(a));
     const hurt = roster.filter(p => injuryOf(s, p)).sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
-    const top = healthy.slice(0, Math.min(8, healthy.length));
-    let best = top.slice(0, 5), bestScore = -1e9;
-    if (top.length > 5) {
-      const k = top.length;
-      for (let a = 0; a < k; a++) for (let b = a + 1; b < k; b++) for (let c = b + 1; c < k; c++)
-        for (let d = c + 1; d < k; d++) for (let e = d + 1; e < k; e++) {
-          const set = [top[a], top[b], top[c], top[d], top[e]];
-          let g = 0, bg = 0, score = 0;
-          set.forEach(p => { score += rv(p); const gr = posGroup(p.pos); if (gr === 'G') g++; if (gr === 'B') bg++; });
-          if (g === 0) score -= 14;
-          if (bg === 0) score -= 14;
-          if (g > 2) score -= 4 * (g - 2);
-          if (bg > 2) score -= 4 * (bg - 2);
-          if (score > bestScore) { bestScore = score; best = set; }
-        }
-    }
+    // the same pick the engine makes (ENGINE.bestFive): best five for the spots PG to C
+    const BF = window.ENGINE && window.ENGINE.bestFive;
+    const best = BF ? BF(healthy, p => p, rv, style) : healthy.slice(0, 5);
     const starters = slotOrder(best);
     const bench = healthy.filter(p => best.indexOf(p) < 0);
     const minutes = {};
