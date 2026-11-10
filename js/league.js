@@ -606,6 +606,12 @@
   }
   function injuryEvent(state, id, e) {
     var p = state.players[id], t = state.teams[state.userTeam], rep = null;
+    // a minor injury he can play through: he stays in the lineup at a lower rating unless the user sits him
+    if (e.hurt && e.games < 900 && t && t.playHurt !== false) {
+      return { type: "injury", playerId: id, hurt: e.hurt, text: p.name + " has " + injuryName(e.type) + " (about " + e.games + (e.games === 1 ? " game" : " games") +
+        "). He can play through it at " + e.hurt + " overall below his usual level, so he stays in the lineup.",
+        options: [{ value: "ok", label: "Let him play" }, { value: "sit", label: "Sit him until he is healthy" }] };
+    }
     var slot = isManual(t) ? t.rotation.indexOf(id) : -1;
     if (slot >= 0 && slot < 5) {
       var inj = state.season.injuries || {}, starters = t.rotation.slice(0, 5), out = t.inactive || [];
@@ -655,6 +661,7 @@
   function injuryAnswer(state, e, answer) {
     var t = state.teams[state.userTeam], id = e.playerId;
     if (answer === "rotation") e.navigate = "#/manage";
+    if (answer === "sit" && state.season && state.season.injuries && state.season.injuries[id]) { delete state.season.injuries[id].hurt; return; }   // out until healthy
     if (e.type !== "injuryReturn" || !t || !t.injurySwaps || !t.injurySwaps[id]) return;
     var sw = t.injurySwaps[id];
     delete t.injurySwaps[id];

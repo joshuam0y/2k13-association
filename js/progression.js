@@ -819,10 +819,31 @@
   // ---------------------------------------------------------------------------
   // In season: one month of streaks (call once per month)
   // ---------------------------------------------------------------------------
+  // In-season form, like 2K's +1 / +2 / -1: every few weeks a player can move a point or two. Whether up or
+  // down follows how he is playing for his rating (game score per 36 against what players of his rating
+  // put up this season) and his mood, and drifts back toward zero (p.form = his change since opening night).
+  function gameScore36(t) {
+    if (!t || !(t.min > 0)) return null;
+    var gs = (t.pts || 0) + 0.4 * (t.fgm || 0) - 0.7 * (t.fga || 0) - 0.4 * ((t.fta || 0) - (t.ftm || 0)) + 0.7 * (t.oreb || 0) + 0.3 * (t.dreb || 0)
+      + (t.stl || 0) + 0.7 * (t.ast || 0) + 0.7 * (t.blk || 0) - 0.4 * (t.pf || 0) - (t.tov || 0);
+    return gs * 36 / t.min;
+  }
+  function formModel(state) {
+    var st = state.season && state.season.playerStats || {}, xs = [];
+    Object.keys(st).forEach(function (id) { var p = state.players[id], t = st[id]; if (p && t && t.min >= 150) { var g = gameScore36(t); if (g != null) xs.push([p.ovr, g]); } });
+    if (xs.length < 40) return null;
+    var n = xs.length, mx = 0, my = 0;
+    xs.forEach(function (x) { mx += x[0]; my += x[1]; }); mx /= n; my /= n;
+    var sxy = 0, sxx = 0; xs.forEach(function (x) { sxy += (x[0] - mx) * (x[1] - my); sxx += (x[0] - mx) * (x[0] - mx); });
+    var b = sxx ? sxy / sxx : 0, a = my - b * mx, sd = 0;
+    xs.forEach(function (x) { var r = x[1] - (a + b * x[0]); sd += r * r; });
+    return { a: a, b: b, sd: Math.sqrt(sd / n) || 1 };
+  }
   function inSeason(state, rng) {
     rng = makeRng(state, rng, (state.day || 0) * 7919 + 0x99);
     var out = [];
     var players = state.players || {};
+    var M = formModel(state), stats = state.season && state.season.playerStats || {};
     Object.keys(players).forEach(function (id) {
       var p = players[id];
       if (!p || p.retired || !isNbaTeam(state, p.team)) return;
@@ -830,13 +851,16 @@
       var form = p.form || 0;
       if (rng() < 0.5) return;
       var step = rng() < 0.8 ? 1 : 2;
-      var up = rng() < clamp(0.5 - 0.15 * form, 0.1, 0.9);
+      var t = stats[id], z = 0;
+      if (M && t && t.min >= 120) { var g = gameScore36(t); if (g != null) z = clamp((g - (M.a + M.b * p.ovr)) / M.sd, -2.5, 2.5); }
+      var mood = p.mood != null ? (p.mood - 60) / 200 : 0;
+      var up = rng() < clamp(0.5 + 0.17 * z + mood - 0.15 * form, 0.08, 0.92);
       var nf = clamp(form + (up ? step : -step), -FORM_MAX, FORM_MAX);
       if (nf === form) return;
       var before = p.ovr;
       setOvr(p, p.ovr + (nf - form), { keepPot: true });
       p.form = form + (p.ovr - before);
-      if (p.ovr !== before) out.push({ id: id, from: before, to: p.ovr });
+      if (p.ovr !== before) { p.formLast = { d: p.ovr - before, day: state.day || 0, year: state.year }; out.push({ id: id, from: before, to: p.ovr }); }
     });
     return out;
   }

@@ -146,8 +146,12 @@
     const roster = userRoster(s), style = styleOf(s);
     const yb = window.ENGINE && window.ENGINE.youthBonus;
     const rv = p => (p.ovr || 0) + (style && style.young && yb ? yb(p) : 0) + (style && style.bias ? style.bias(p) : 0);
-    const healthy = roster.filter(p => !injuryOf(s, p)).sort((a, b) => rv(b) - rv(a));
-    const hurt = roster.filter(p => injuryOf(s, p)).sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+    // a minor injury he can play through (ENGINE.hurtPenalty): he stays in, with the rating he gives up
+    const tm = s.teams[s.userTeam] || {};
+    const hurtPen = p => { const i = injuryOf(s, p); return i && i.hurt && tm.playHurt !== false && i.games < 900 ? +i.hurt : 0; };
+    const out = p => injuryOf(s, p) && !hurtPen(p);
+    const healthy = roster.filter(p => !out(p)).sort((a, b) => (rv(b) - hurtPen(b)) - (rv(a) - hurtPen(a)));
+    const hurt = roster.filter(p => out(p)).sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
     // the same pick the engine makes (ENGINE.bestFive): best five for the spots PG to C
     const BF = window.ENGINE && window.ENGINE.bestFive;
     const best = BF ? BF(healthy, p => p, rv, style) : healthy.slice(0, 5);

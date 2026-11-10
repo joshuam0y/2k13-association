@@ -274,7 +274,12 @@
   UI.injuryBadge = function (p) {
     const inj = UI.injuryOf(p);
     let out = '';
-    if (inj) out += `<span class="badge badge-inj" title="${UI.esc(inj.type || 'Injured')}">${inj.type === 'Playing overseas' ? 'OVERSEAS' : 'INJ' + (inj.games && inj.games < 900 ? ' ' + inj.games + 'G' : '')}</span>`;
+    const t = p && UI.state.game && UI.state.game.teams && UI.state.game.teams[p.team];
+    const hurt = inj && inj.hurt && inj.games > 0 && inj.games < 900 && !(t && t.playHurt === false);
+    if (inj && hurt) out += `<span class="badge badge-hurt" title="${UI.esc((inj.type || 'Injured') + ': playing through it, ' + inj.hurt + ' overall for about ' + inj.games + ' more games')}">HURT -${inj.hurt}</span>`;
+    else if (inj) out += `<span class="badge badge-inj" title="${UI.esc((inj.type || 'Injured') + (inj.type !== 'Playing overseas' ? ': out' : ''))}">${inj.type === 'Playing overseas' ? 'OVERSEAS' : 'OUT' + (inj.games && inj.games < 900 ? ' ' + inj.games + 'G' : ' SEASON')}</span>`;
+    // in-season form, like 2K: his change since opening night
+    if (p && p.form && UI.state.season && UI.state.season.phase !== 'done') out += ` <span class="badge badge-form ${p.form > 0 ? 'up' : 'down'}" title="In-season form: ${p.form > 0 ? '+' : ''}${p.form} overall since opening night (how he is playing for his rating, and his mood)">${p.form > 0 ? '&#9650;+' : '&#9660;'}${p.form}</span>`;
     if (p && p.gleague) out += ' <span class="badge badge-dim">G LEAGUE</span>';
     if (p && p.contract && p.contract.twoWay) out += ' <span class="badge badge-dim">TWO-WAY</span>';
     return out;

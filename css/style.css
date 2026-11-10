@@ -910,3 +910,9 @@ html { scroll-padding-bottom: calc(var(--mb-h, var(--bar-h)) + 12px); }
 /* Draft Challenge and Versus side by side on the home screen */
 .mm-grid .mt-challenge, .mm-grid .mt-versus { grid-column: span 1; }
 .mm-grid .mt-versus { border-color: var(--gold-dim); background: radial-gradient(300px 200px at 80% 10%, rgba(95, 211, 138, .16), transparent 70%), linear-gradient(180deg, #0c140f 0%, #050505 100%); }
+
+/* playing hurt and in-season form badges (UI.injuryBadge) */
+.badge-hurt { background: #3a2a06; color: #ffcf6b; border: 1px solid #8a6a1a; }
+.badge-form { font-family: var(--display); letter-spacing: .04em; border: 1px solid currentColor; background: transparent; }
+.badge-form.up { color: #5fd38a; }
+.badge-form.down { color: #ff7b7b; }

@@ -187,19 +187,20 @@
   };
 
   var INJURIES = [
-    // [type, weight, minGames, maxGames]  (999 = out for the season)
-    ['Sprained ankle', 24, 2, 8],
-    ['Bruised knee', 11, 1, 4],
-    ['Back spasms', 9, 1, 5],
+    // [type, weight, minGames, maxGames, playThrough]  (999 = out for the season). playThrough: the rating
+    // he loses playing through it (like 2K, some injuries he can play on, the rest keep him out)
+    ['Sprained ankle', 24, 2, 8, 4],
+    ['Bruised knee', 11, 1, 4, 3],
+    ['Back spasms', 9, 1, 5, 4],
     ['Hamstring strain', 9, 3, 12],
     ['Groin strain', 7, 3, 10],
     ['Calf strain', 6, 3, 10],
     ['Concussion', 5, 1, 7],
     ['Sprained knee', 6, 6, 20],
-    ['Plantar fasciitis', 4, 5, 15],
-    ['Sprained wrist', 4, 2, 6],
-    ['Bruised thigh', 4, 1, 4],
-    ['Sore Achilles', 3, 2, 8],
+    ['Plantar fasciitis', 4, 5, 15, 5],
+    ['Sprained wrist', 4, 2, 6, 3],
+    ['Bruised thigh', 4, 1, 4, 2],
+    ['Sore Achilles', 3, 2, 8, 4],
     ['Broken hand', 3, 15, 30],
     ['Broken foot', 2, 25, 50],
     ['Torn meniscus', 2, 15, 40],
@@ -543,6 +544,19 @@
     if (injuries) { var e = injuries[p.id]; return !!(e && e.games > 0); }
     return !!(p.injury && p.injury.games > 0);
   }
+  // an injury he can play through: the rating he gives up, else 0 (team.playHurt === false sits him anyway)
+  function hurtPenalty(p, injuries, team) {
+    if (team && team.playHurt === false) return 0;
+    var e = injuries ? injuries[p.id] : p.injury;
+    return e && e.games > 0 && e.games < 900 && e.hurt ? +e.hurt : 0;
+  }
+  function hurtCopy(p, pen) {
+    var q = {}, k;
+    for (k in p) q[k] = p[k];
+    q.ovr = (p.ovr || 50) - pen;
+    if (p.attrs) { q.attrs = {}; for (k in p.attrs) q.attrs[k] = typeof p.attrs[k] === 'number' ? Math.max(25, p.attrs[k] - pen) : p.attrs[k]; }
+    return q;
+  }
 
   function pickStarters(avail, forced, style) {
     if (forced && forced.length) {
@@ -559,8 +573,8 @@
 
   function buildTeam(team, side, rng, opts, n) {
     var injuries = opts.injuries || null;
-    var all = (team.players || []).map(function (p) { return makeState(p, n); });
-    var avail = all.filter(function (s) { return !isInjured(s.p, injuries); });
+    var all = (team.players || []).map(function (p) { var pen = hurtPenalty(p, injuries, team); return pen ? makeState(hurtCopy(p, pen), n) : makeState(p, n); });
+    var avail = all.filter(function (s) { return !isInjured(s.p, injuries) || hurtPenalty(s.p, injuries, team) > 0; });
     if (avail.length < 5) {
       // Emergency: bring back the least injured, then fill with replacement players
       var hurt = all.filter(function (s) { return avail.indexOf(s) < 0; });
@@ -818,7 +832,7 @@
           if (s.injuryAt >= 0 && !s.out && elapsed >= s.injuryAt) {
             var inj = rollInjury(rng);
             s.out = true; s.injury = inj; s.injuryAt = -1;
-            injuriesOut.push({ id: s.id, name: s.name, team: t.abbr, type: inj.type, games: inj.games });
+            injuriesOut.push({ id: s.id, name: s.name, team: t.abbr, type: inj.type, games: inj.games, hurt: inj.hurt || undefined });
             log(t, s.name + ' leaves the game with an injury (' + inj.type + ')', PBX.INJ, s);
             if (hit.indexOf(t) < 0) hit.push(t);
           }
@@ -1143,7 +1157,9 @@
   function rollInjury(rng) {
     var row = pickWeighted(INJURIES, INJURIES.map(function (r) { return r[1]; }), rng);
     var games = row[2] >= 999 ? 999 : randInt(row[2], row[3], rng);
-    return { type: row[0], games: games };
+    var out = { type: row[0], games: games };
+    if (row[4]) out.hurt = row[4];
+    return out;
   }
 
   // ---------------------------------------------------------------------------
@@ -1435,7 +1451,8 @@
       starters: (lineups && lineups.starters) || (lt && lt.starters) || null,
       minutes: (lineups && lineups.minutes) || null,
       strategy: (lt && lt.strategy) || (season.strategies && season.strategies[abbr]) || null,
-      autoStyle: (lt && lt.autoStyle) || null
+      autoStyle: (lt && lt.autoStyle) || null,
+      playHurt: lt ? lt.playHurt !== false : true
     };
   }
 
@@ -1609,7 +1626,7 @@
         inj.seasonEnding = true;
       }
       var cur = season.injuries[inj.id];
-      if (!cur || cur.games < inj.games) season.injuries[inj.id] = { type: inj.type, games: inj.games };
+      if (!cur || cur.games < inj.games) season.injuries[inj.id] = inj.hurt ? { type: inj.type, games: inj.games, hurt: inj.hurt } : { type: inj.type, games: inj.games };
       // the season's injury log (offseason progression reads it): longest injury and total games
       var log = season.injuryLog || (season.injuryLog = {}), lg = log[inj.id];
       if (!lg) lg = log[inj.id] = { type: inj.type, games: 0, total: 0 };
@@ -2072,7 +2089,7 @@
     TEND_KEYS: TEND_KEYS,
     TEND_SCALE: TEND_SCALE,
     ERA: ERA,
-    AUTO_STYLES: AUTO_STYLES, bestFive: bestFive, posSpan: posSpan,
+    AUTO_STYLES: AUTO_STYLES, bestFive: bestFive, posSpan: posSpan, hurtPenalty: hurtPenalty,
     STARTER_MIN: STARTER_MIN, BENCH_MIN5: BENCH_MIN5, BENCH_MIN4: BENCH_MIN4,
     youthBonus: youthBonus,
     eraFor: eraFor,
