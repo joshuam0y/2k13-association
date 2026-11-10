@@ -389,8 +389,8 @@
     strip.style.transition = 'none';
     strip.style.transform = 'translateX(0px)';
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const view = reel.clientWidth, jitter = (Math.random() - 0.5) * REEL_W * 0.6;
-    const target = REEL_AT * (REEL_W + REEL_GAP) + REEL_W / 2 - view / 2 + jitter;
+    const jitter = (Math.random() - 0.5) * REEL_W * 0.6;
+    let view = reel.clientWidth, target = REEL_AT * (REEL_W + REEL_GAP) + REEL_W / 2 - view / 2 + jitter;
     const land = () => {
       const w = strip.querySelector('.ch-rcard.win');
       if (w) w.classList.add('lit');
@@ -399,6 +399,7 @@
     };
     if (reduce) { strip.style.transform = `translateX(${-target}px)`; land(); return; }
     requestAnimationFrame(() => requestAnimationFrame(() => {
+      view = reel.clientWidth || view; target = REEL_AT * (REEL_W + REEL_GAP) + REEL_W / 2 - view / 2 + jitter;   // measured once the layout is settled
       strip.style.transition = 'transform 4.2s cubic-bezier(.08,.72,.12,1)';
       strip.style.transform = `translateX(${-target}px)`;
     }));
@@ -416,7 +417,8 @@
       };
       requestAnimationFrame(clicks);
     }
-    strip.addEventListener('transitionend', end, { once: true });
+    // only the reel's own slide ends the spin (a card's small transition bubbling up used to cut it short)
+    strip.addEventListener('transitionend', e => { if (e.target === strip && e.propertyName === 'transform') end(); });
     setTimeout(end, 4600);
   }
 

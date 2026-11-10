@@ -32,8 +32,32 @@
   // Real expansions for leagues that start before they happened (js/league.js runs them after that summer's draft).
   // 2004: the Charlotte Bobcats, and the league goes to six divisions (New Orleans moves to the West).
   var HISTORIC = {
+    hornetsheat: {
+      after: 1988, year: 1989,
+      teams: [{ abbr: 'NOH', city: 'Charlotte', name: 'Hornets', conf: 'East', div: 'Atlantic', colors: ['#00778B', '#5A2D81'] }, { abbr: 'MIA', city: 'Miami', name: 'Heat', conf: 'West', div: 'Midwest', colors: ['#98002E', '#F9A01B'] }],
+      align: {},
+      headline: 'The Charlotte Hornets and Miami Heat join the NBA',
+      body: 'Two expansion teams start play in 1988-89 and the league goes to 25 teams. Each took players in the expansion draft.',
+      tx: 'The NBA expands to 25 teams: the Charlotte Hornets and the Miami Heat join for 1988-89.'
+    },
+    wolvesmagic: {
+      after: 1989, year: 1990,
+      teams: [{ abbr: 'MIN', city: 'Minnesota', name: 'Timberwolves', conf: 'West', div: 'Midwest', colors: ['#236192', '#00843D'] }, { abbr: 'ORL', city: 'Orlando', name: 'Magic', conf: 'East', div: 'Central', colors: ['#0077C0', '#111111'] }],
+      align: {},
+      headline: 'The Minnesota Timberwolves and Orlando Magic join the NBA',
+      body: 'Two more expansion teams start play in 1989-90 and the league goes to 27 teams.',
+      tx: 'The NBA expands to 27 teams: the Minnesota Timberwolves and the Orlando Magic join for 1989-90.'
+    },
+    raptorsgrizzlies: {
+      after: 1995, year: 1996,
+      teams: [{ abbr: 'TOR', city: 'Toronto', name: 'Raptors', conf: 'East', div: 'Central', colors: ['#CE1141', '#000000'] }, { abbr: 'MEM', city: 'Vancouver', name: 'Grizzlies', conf: 'West', div: 'Midwest', colors: ['#00B2A9', '#E43C40'] }],
+      align: {},
+      headline: 'The Toronto Raptors and Vancouver Grizzlies join the NBA',
+      body: 'The NBA goes to Canada: two expansion teams start play in 1995-96 and the league goes to 29 teams.',
+      tx: 'The NBA expands to 29 teams: the Toronto Raptors and the Vancouver Grizzlies join for 1995-96.'
+    },
     bobcats: {
-      year: 2005,
+      after: 2004, year: 2005,
       teams: [{ abbr: 'CHA', city: 'Charlotte', name: 'Bobcats', conf: 'East', div: 'Southeast', colors: ['#F26532', '#0C2340'] }],
       align: { BOS: ['East', 'Atlantic'], BKN: ['East', 'Atlantic'], NYK: ['East', 'Atlantic'], PHI: ['East', 'Atlantic'], TOR: ['East', 'Atlantic'],
         CHI: ['East', 'Central'], CLE: ['East', 'Central'], DET: ['East', 'Central'], IND: ['East', 'Central'], MIL: ['East', 'Central'],

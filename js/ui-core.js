@@ -94,6 +94,28 @@
 
   // Seasons a new Association can open in. Other than 2012-13 they load data/start-YYYY.js on demand.
   UI.START_YEARS = [
+    { year: 1977, label: '1976-77', note: 'The first season after the ABA merger', file: 'data/start-1977.js' },
+    { year: 1978, label: '1977-78', note: 'The Bullets win it all', file: 'data/start-1978.js' },
+    { year: 1979, label: '1978-79', note: 'The Sonics win the title', file: 'data/start-1979.js' },
+    { year: 1980, label: '1979-80', note: 'Magic and Bird arrive', file: 'data/start-1980.js' },
+    { year: 1981, label: '1980-81', note: "Bird's Celtics win it all", file: 'data/start-1981.js' },
+    { year: 1982, label: '1981-82', note: "Magic's Lakers win it", file: 'data/start-1982.js' },
+    { year: 1983, label: '1982-83', note: "Dr. J and Moses's Sixers win it", file: 'data/start-1983.js' },
+    { year: 1984, label: '1983-84', note: 'The Celtics beat the Lakers', file: 'data/start-1984.js' },
+    { year: 1985, label: '1984-85', note: "Jordan's rookie season", file: 'data/start-1985.js' },
+    { year: 1986, label: '1985-86', note: 'The 67-win Celtics', file: 'data/start-1986.js' },
+    { year: 1987, label: '1986-87', note: 'The Lakers win again', file: 'data/start-1987.js' },
+    { year: 1988, label: '1987-88', note: 'The Lakers repeat', file: 'data/start-1988.js' },
+    { year: 1989, label: '1988-89', note: 'The Pistons win their first', file: 'data/start-1989.js' },
+    { year: 1990, label: '1989-90', note: 'The Pistons repeat', file: 'data/start-1990.js' },
+    { year: 1991, label: '1990-91', note: "Jordan's first title", file: 'data/start-1991.js' },
+    { year: 1992, label: '1991-92', note: 'The Dream Team summer', file: 'data/start-1992.js' },
+    { year: 1993, label: '1992-93', note: "Jordan's three-peat", file: 'data/start-1993.js' },
+    { year: 1994, label: '1993-94', note: 'The Rockets win it', file: 'data/start-1994.js' },
+    { year: 1995, label: '1994-95', note: "Hakeem's Rockets repeat", file: 'data/start-1995.js' },
+    { year: 1996, label: '1995-96', note: 'The 72-win Bulls', file: 'data/start-1996.js' },
+    { year: 1997, label: '1996-97', note: "The Bulls again, Kobe's rookie year", file: 'data/start-1997.js' },
+    { year: 1998, label: '1997-98', note: "Jordan's last title with the Bulls", file: 'data/start-1998.js' },
     { year: 1999, label: '1998-99', note: 'The lockout season, the Spurs win it (82 games here)', file: 'data/start-1999.js' },
     { year: 2000, label: '1999-00', note: "Shaq's MVP and the Lakers' first title together", file: 'data/start-2000.js' },
     { year: 2001, label: '2000-01', note: "Iverson's MVP year, the Lakers repeat", file: 'data/start-2001.js' },
@@ -162,10 +184,20 @@
   // A logo from a team object (for teams outside the loaded league, like another start year's)
   // logos that are mostly black (the Brooklyn Nets, the Spurs) vanish on the dark page
   UI.darkLogo = t => !!t.logo && /logos\/(BKN|SAS)-/.test(t.logo);
+  // a franchise's logo files (assets/logos), oldest first: older seasons with no logo of their own borrow the franchise's earliest one when the city matches
+  UI.LOGO_FILES = {ATL: ['ATL-1996.svg', 'ATL-2008.png', 'ATL-2016.png', 'ATL-2021.svg'], BKN: ['BKN-2013.png', 'BKN-2025.svg'], BOS: ['BOS-1997.svg'], CHA: ['CHA-2005.svg', 'CHA-2013.png', 'CHA-2015.svg'], CHI: ['CHI-1967.svg'], CLE: ['CLE-2004.svg', 'CLE-2011.png', 'CLE-2018.png', 'CLE-2023.svg'], DAL: ['DAL-2002.png', 'DAL-2018.svg'], DEN: ['DEN-2009.png', 'DEN-2019.svg'], DET: ['DET-2002.svg', 'DET-2006.png', 'DET-2018.svg'], GSW: ['GSW-1998.svg', 'GSW-2011.png', 'GSW-2020.svg'], HOU: ['HOU-2004.png', 'HOU-2020.png', 'HOU-2027.svg'], IND: ['IND-1991.svg', 'IND-2006.png', 'IND-2018.svg'], LAC: ['LAC-1985.svg', 'LAC-2011.png', 'LAC-2016.png', 'LAC-2025.svg'], LAL: ['LAL-2002.svg'], MEM: ['MEM-2005.png', 'MEM-2019.svg'], MIA: ['MIA-2000.svg'], MIL: ['MIL-1994.svg', 'MIL-2007.png', 'MIL-2016.svg'], MIN: ['MIN-1997.svg', 'MIN-2009.png', 'MIN-2018.png', 'MIN-2027.svg'], NJN: ['NJN-1998.svg'], NOH: ['NOH-2003.svg', 'NOH-2009.png', 'NOH-2014.png', 'NOH-2024.svg'], NYK: ['NYK-2012.svg'], OKC: ['OKC-2009.svg'], ORL: ['ORL-2001.svg', 'ORL-2011.png', 'ORL-2026.svg'], PHI: ['PHI-1998.svg', 'PHI-2010.png', 'PHI-2016.svg'], PHX: ['PHX-2001.png', 'PHX-2014.svg'], POR: ['POR-2003.svg', 'POR-2005.png', 'POR-2018.svg'], SAC: ['SAC-1995.png', 'SAC-2017.svg'], SAS: ['SAS-2003.png', 'SAS-2018.svg'], SEA: ['SEA-2002.svg'], TOR: ['TOR-1996.svg', 'TOR-2009.png', 'TOR-2016.png', 'TOR-2021.svg'], UTA: ['UTA-1997.svg', 'UTA-2005.svg', 'UTA-2011.png', 'UTA-2017.png', 'UTA-2023.png', 'UTA-2026.svg'], WAS: ['WAS-1998.svg', 'WAS-2008.svg', 'WAS-2012.png', 'WAS-2016.svg']};
+  UI.LOGO_CITY = {ATL: /^(Atlanta)$/, BKN: /^(New Jersey|Brooklyn)$/, CHA: /^(Charlotte)$/, CHI: /^(Chicago)$/, CLE: /^(Cleveland)$/, DAL: /^(Dallas)$/, DEN: /^(Denver)$/, DET: /^(Detroit)$/, GSW: /^(Golden State|San Francisco)$/, HOU: /^(Houston)$/, IND: /^(Indiana)$/, LAC: /^(Los Angeles)$/, LAL: /^(Los Angeles)$/, MEM: /^(Memphis)$/, MIA: /^(Miami)$/, MIL: /^(Milwaukee)$/, MIN: /^(Minnesota)$/, NOH: /^(New Orleans|Charlotte)$/, NJN: /^(New Jersey)$/, NYK: /^(New York)$/, OKC: /^(Oklahoma City)$/, ORL: /^(Orlando)$/, PHI: /^(Philadelphia)$/, PHX: /^(Phoenix)$/, POR: /^(Portland)$/, SAC: /^(Sacramento)$/, SAS: /^(San Antonio)$/, SEA: /^(Seattle)$/, TOR: /^(Toronto)$/, UTA: /^(Utah)$/, WAS: /^(Washington)$/};
+  UI.logoSrc = t => {
+    if (t.logo) return t.logo;
+    const list = UI.LOGO_FILES[t.abbr];
+    return list && list.length && UI.LOGO_CITY[t.abbr] && UI.LOGO_CITY[t.abbr].test(String(t.city || '')) ? 'assets/logos/' + list[0] : '';
+  };
   UI.logoFor = function (t, size) {
     const c1 = (t.colors && t.colors[0]) || '#333';
     const c2 = (t.colors && t.colors[1]) || '#999';
     const style = `--c1:${c1};--c2:${c2};--sz:${size || 40}px`;
+    const src0 = UI.logoSrc(t), t0 = src0 === t.logo ? t : Object.assign({}, t, { logo: src0 });
+    t = t0;
     const img = t.logo ? `<img src="${UI.esc(t.logo)}" alt="" loading="lazy"${t.logoNoRef || /wikia|nocookie/.test(t.logo) ? ' referrerpolicy="no-referrer"' : ''} onerror="this.parentNode.classList.add('nologo');this.remove()">` : '';
     return `<span class="logo${t.logo ? '' : ' nologo'}${UI.darkLogo(t) ? ' dark' : ''}" style="${style}" title="${UI.esc(((t.city || '') + ' ' + (t.name || '')).trim())}">${img}<b>${UI.esc(t.abbr)}</b></span>`;
   };

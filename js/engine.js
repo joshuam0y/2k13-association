@@ -1220,7 +1220,23 @@
     }
     return games;
   }
+  // leagues under 29 teams (the 1970s to 1990s): everyone plays everyone base times, the rest against the nearest teams on a
+  // shuffled circle, so each team plays 82 (one short when the maths needs an odd number of extra games)
+  function anyMatchups(abbrs, rng) {
+    var order = abbrs.slice();
+    for (var k = order.length - 1; k > 0; k--) { var r = Math.floor(rng() * (k + 1)); var tmp = order[k]; order[k] = order[r]; order[r] = tmp; }
+    var N = order.length, base = Math.floor(82 / (N - 1)), rest = 82 - base * (N - 1), extra = {}, games = [];
+    for (var d = 1; d <= Math.floor(rest / 2); d++) extra[d] = true;
+    if (rest % 2 && N % 2 === 0) extra[N / 2] = true;
+    for (var i = 0; i < N; i++) for (var j = i + 1; j < N; j++) {
+      var a = order[i], b = order[j], dist = Math.min(j - i, N - (j - i));
+      for (var g = 0; g < base; g++) games.push(g % 2 ? { home: a, away: b } : { home: b, away: a });
+      if (extra[dist]) games.push(base % 2 ? { home: b, away: a } : { home: a, away: b });
+    }
+    return games;
+  }
   function buildMatchups(teams, rng) {
+    if (teams.length < 29) return anyMatchups(teams.map(function (t) { return t.abbr; }), rng);
     if (teams.length !== 30 && teams.length !== 32 && teams.length >= 29) return circleMatchups(teams.map(function (t) { return t.abbr; }), rng);
     var confs = {};
     teams.forEach(function (t) {

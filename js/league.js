@@ -917,9 +917,12 @@
       quietOffseasonDecisions(state);
       // an expansion announced earlier happens now, right after the draft (js/expansion.js)
       if (mod("EXPANSION")) safe("expansion", function () { W.EXPANSION.applyPending(state); });
-      // a league that opened in 2003-04: the Bobcats join after the 2004 draft
-      if (mod("EXPANSION") && W.EXPANSION.applyHistoric && state.startYear && state.startYear <= 2004 && state.year === 2004 && !state.teams.CHA)
-        safe("bobcats", function () { W.EXPANSION.applyHistoric(state, "bobcats"); });
+      // a league that opened before a real expansion: the new teams join right after that summer's draft
+      // (1988 Charlotte and Miami, 1989 Minnesota and Orlando, 1995 Toronto and Vancouver, 2004 the Bobcats)
+      if (mod("EXPANSION") && W.EXPANSION.applyHistoric && state.startYear) Object.keys(W.EXPANSION.HISTORIC).forEach(function (k) {
+        var H = W.EXPANSION.HISTORIC[k];
+        if (state.startYear <= H.after && state.year === H.after && !state.teams[H.teams[0].abbr]) safe("expansion " + k, function () { W.EXPANSION.applyHistoric(state, k); });
+      });
     } else if (phase === "resign") {
       // real-life mode: the summer's real trades and signings before the AI's free agency
       if (state.realLife && mod("REALLIFE")) safe("realLife", function () { W.REALLIFE.applyUntil(state, state.year + "-09-30"); });
