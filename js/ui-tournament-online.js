@@ -375,10 +375,10 @@
     const edit = fn => { fn(); A.save(); lobby(app); };
     app.querySelectorAll('[data-n]').forEach(b => b.addEventListener('click', () => edit(() => { t.n = +b.dataset.n; })));
     app.querySelectorAll('[data-kick]').forEach(b => b.addEventListener('click', () => edit(() => { const i = +b.dataset.kick; t.seats.splice(i, 1); t.names.splice(i, 1); t.live.splice(i, 1); })));
-    app.querySelectorAll('[data-yr]').forEach(b => b.addEventListener('click', () => edit(() => { const y = +b.dataset.yr, i = t.skip.indexOf(y); if (i >= 0) t.skip.splice(i, 1); else t.skip.push(y); })));
+    app.querySelectorAll('[data-yr]').forEach(b => b.addEventListener('click', () => edit(() => { const y = +b.dataset.yr, i = t.skip.indexOf(y); if (!t.skip.length) t.skip = A.ALL_YEARS.filter(x => x !== y); else if (i >= 0) t.skip.splice(i, 1); else t.skip.push(y); })));
     app.querySelectorAll('[data-dec]').forEach(b => b.addEventListener('click', () => edit(() => {
       const ys = A.ALL_YEARS.filter(y => A.decOf(y) === +b.dataset.dec), allOn = ys.every(y => t.skip.indexOf(y) < 0);
-      t.skip = allOn ? [...new Set(t.skip.concat(ys))] : t.skip.filter(y => ys.indexOf(y) < 0);
+      t.skip = !t.skip.length ? A.ALL_YEARS.filter(y => ys.indexOf(y) < 0) : allOn ? [...new Set(t.skip.concat(ys))] : t.skip.filter(y => ys.indexOf(y) < 0);
     })));
     app.querySelectorAll('[data-seas]').forEach(b => b.addEventListener('click', () => edit(() => { t.skip = b.dataset.seas === 'all' ? [] : A.ALL_YEARS.slice(); })));
     app.querySelectorAll('[data-bo]').forEach(b => b.addEventListener('click', () => edit(() => { o.bestOf = +b.dataset.bo; })));

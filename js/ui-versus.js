@@ -381,11 +381,11 @@
       }));
       const jb = UI.$('#vsJoin', app); if (jb) jb.addEventListener('click', () => { const v = UI.$('#vsCode', app).value; if (v.trim().length >= 4) join(v); });
       const setYear = () => { const c = chosen(); VS.year = c.length === 1 ? c[0] : 0; };
-      app.querySelectorAll('[data-yr]').forEach(b => b.addEventListener('click', () => { const y = +b.dataset.yr, i = VS.skip.indexOf(y); if (i >= 0) VS.skip.splice(i, 1); else VS.skip.push(y); setYear(); redraw(); }));
+      app.querySelectorAll('[data-yr]').forEach(b => b.addEventListener('click', () => { const y = +b.dataset.yr, i = VS.skip.indexOf(y); if (!VS.skip.length) VS.skip = ALL_YEARS.filter(x => x !== y); else if (i >= 0) VS.skip.splice(i, 1); else VS.skip.push(y); setYear(); redraw(); }));
       // a decade button switches its seasons all on, or all off when they already are
       app.querySelectorAll('[data-dec]').forEach(b => b.addEventListener('click', () => {
         const ys = ALL_YEARS.filter(y => decOf(y) === +b.dataset.dec), allOn = ys.every(y => VS.skip.indexOf(y) < 0);
-        VS.skip = allOn ? [...new Set(VS.skip.concat(ys))] : VS.skip.filter(y => ys.indexOf(y) < 0); setYear(); redraw();
+        VS.skip = !VS.skip.length ? ALL_YEARS.filter(y => ys.indexOf(y) < 0) : allOn ? [...new Set(VS.skip.concat(ys))] : VS.skip.filter(y => ys.indexOf(y) < 0); setYear(); redraw();
       }));
       app.querySelectorAll('[data-seas]').forEach(b => b.addEventListener('click', () => { VS.skip = b.dataset.seas === 'all' ? [] : ALL_YEARS.slice(); setYear(); redraw(); }));
       app.querySelectorAll('[data-bo]').forEach(b => b.addEventListener('click', () => { VS.opts.bestOf = +b.dataset.bo; redraw(); }));

@@ -213,10 +213,10 @@
     app.querySelectorAll('[data-n]').forEach(b => b.addEventListener('click', () => { const was = hum() === TN.n; TN.n = +b.dataset.n; TN.humans = was ? TN.n : Math.min(hum(), TN.n); redraw(); }));
     app.querySelectorAll('[data-hum]').forEach(b => b.addEventListener('click', () => { TN.humans = +b.dataset.hum; redraw(); }));
     app.querySelectorAll('[data-name]').forEach(inp => inp.addEventListener('change', () => { readNames(); save(); }));
-    app.querySelectorAll('[data-yr]').forEach(b => b.addEventListener('click', () => { const y = +b.dataset.yr, i = TN.skip.indexOf(y); if (i >= 0) TN.skip.splice(i, 1); else TN.skip.push(y); redraw(); }));
+    app.querySelectorAll('[data-yr]').forEach(b => b.addEventListener('click', () => { const y = +b.dataset.yr, i = TN.skip.indexOf(y); if (!TN.skip.length) TN.skip = ALL_YEARS.filter(x => x !== y); else if (i >= 0) TN.skip.splice(i, 1); else TN.skip.push(y); redraw(); }));
     app.querySelectorAll('[data-dec]').forEach(b => b.addEventListener('click', () => {
       const ys = ALL_YEARS.filter(y => decOf(y) === +b.dataset.dec), allOn = ys.every(y => TN.skip.indexOf(y) < 0);
-      TN.skip = allOn ? [...new Set(TN.skip.concat(ys))] : TN.skip.filter(y => ys.indexOf(y) < 0); redraw();
+      TN.skip = !TN.skip.length ? ALL_YEARS.filter(y => ys.indexOf(y) < 0) : allOn ? [...new Set(TN.skip.concat(ys))] : TN.skip.filter(y => ys.indexOf(y) < 0); redraw();
     }));
     app.querySelectorAll('[data-seas]').forEach(b => b.addEventListener('click', () => { TN.skip = b.dataset.seas === 'all' ? [] : ALL_YEARS.slice(); redraw(); }));
     app.querySelectorAll('[data-bo]').forEach(b => b.addEventListener('click', () => { o.bestOf = +b.dataset.bo; redraw(); }));
