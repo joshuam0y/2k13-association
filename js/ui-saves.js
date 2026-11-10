@@ -160,6 +160,17 @@
     try { await idb('readwrite', store => store.delete(key(slot))); } catch (e) { console.warn('Delete failed', e); }
   };
 
+  // Deletes every league slot plus Season Mode, Head to Head and fantasy draft data (settings like sound stay).
+  const OTHER = ['a13-ch-cur', 'a13-ch-results', 'a13-ch-setup', 'a13-ch-vs', 'a13-fantasy-draft', 'a13-fantasy-draft-stub', 'a13-live-view', 'a13-vs-rivals'];
+  Saves.eraseAll = async function () {
+    for (let n = 1; n <= SLOTS; n++) await Saves.remove(n);
+    lsDel(ACTIVE);
+    OTHER.forEach(lsDel);
+    try { Object.keys(localStorage).forEach(k => { if (k.indexOf(PREFIX) === 0 || k.indexOf('a13-ch-') === 0) lsDel(k); }); } catch (e) { /* ignore */ }
+    UI.state.slot = null; UI.state.save = null; UI.state.game = null;
+    UI.bump();
+  };
+
   Saves.rename = async function (slot, name) {
     name = String(name || '').trim().slice(0, 40) || 'My Association';
     if (UI.state.slot === slot && UI.state.save) {

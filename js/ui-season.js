@@ -1653,7 +1653,13 @@
       </div>`;
     };
     app.innerHTML = UI.header('LOAD', 'Your leagues save in this browser after every sim. Use Export to keep a copy.') +
-      `<div class="slots">${list.map(card).join('')}</div><input type="file" id="importFile" accept=".json,application/json" hidden>`;
+      `<div class="slots">${list.map(card).join('')}</div><div class="row-btns center"><button type="button" class="btn btn-danger" id="eraseAll">DELETE ALL SAVES</button></div><p class="muted center ch-small">Deletes every league, Season Mode run, Head to Head record and fantasy draft on this device.</p><input type="file" id="importFile" accept=".json,application/json" hidden>`;
+    const ea = UI.$('#eraseAll');
+    ea.addEventListener('click', async () => {
+      if (ea.getAttribute('data-confirm') !== '1') { ea.setAttribute('data-confirm', '1'); ea.textContent = 'TAP AGAIN TO DELETE EVERYTHING'; setTimeout(() => { ea.removeAttribute('data-confirm'); ea.textContent = 'DELETE ALL SAVES'; }, 5000); return; }
+      ea.disabled = true;
+      try { await UI.saves.eraseAll(); UI.toast('All saves deleted.'); UI.updateChrome(); UI.route(); } catch (e) { UI.toast('Could not delete: ' + e.message, 'error'); ea.disabled = false; }
+    });
 
     const fileInput = UI.$('#importFile');
     let importSlot = null;
