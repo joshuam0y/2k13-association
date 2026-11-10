@@ -236,7 +236,7 @@
   const capBtn = (cap, list, p, html) => (!cap || C.capFits(cap, list, p) ? html : '<button type="button" class="btn btn-small" disabled>OVER CAP</button>');
   UI.challengeCap = { CAPS, money, priceTag, bar: capBar, btn: capBtn };
   // the wheel, for js/ui-versus.js: UI.challengeWheel.strip(teams) and .animate(app, teams, done, spin, cfg)
-  UI.challengeWheel = { strip: teams => wheelStrip(teams), animate: (app, teams, done, s, cfg) => animateSpin(app, teams, done, s, cfg) };
+  UI.challengeWheel = { strip: (teams, cfg) => wheelStrip(teams, cfg), animate: (app, teams, done, s, cfg) => animateSpin(app, teams, done, s, cfg) };
   // Draft lists go A to Z by last name, never by rating (the order would give the ratings away). A long list
   // shows one letter at a time (the letter bar) unless a search or a team narrows it.
   const sortKey = n => { const w = String(n || '').split(' '); const last = w.length > 1 && /^(jr\.?|sr\.?|ii|iii|iv)$/i.test(w[w.length - 1]) ? w[w.length - 2] : w[w.length - 1]; return (last + ' ' + w.join(' ')).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); };
@@ -311,7 +311,7 @@
     const left = 5 - cfg.picks.length;
     if (full) return '';
     if (!CUR.spin) {
-      return `<section class="ch-wheel">${wheelStrip(teams)}<div class="ch-wheel-k">SPIN ${cfg.picks.length + 1} OF 5</div>
+      return `<section class="ch-wheel">${wheelStrip(teams, cfg)}<div class="ch-wheel-k">SPIN ${cfg.picks.length + 1} OF 5</div>
         <button type="button" class="btn btn-gold btn-big" id="chSpin">SPIN THE WHEEL</button><p class="muted ch-small">${left} spin${left === 1 ? '' : 's'} left${CUR.respins ? ', one re-spin saved' : ''}.</p></section>`;
     }
     const s = CUR.spin, t = cfg.mode === 'alltime' ? (C.eraTeam(s.year, s.abbr) || teamOf(teams, s.abbr)) : teamOf(teams, s.abbr);
@@ -327,7 +327,21 @@
     const c1 = (t.colors && t.colors[0]) || '#333', c2 = (t.colors && t.colors[1]) || '#777';
     return `<div class="ch-rcard${cls ? ' ' + cls : ''}" style="--c1:${esc(c1)};--c2:${esc(c2)}">${logo(t, 58)}<b>${esc(t.name || t.abbr)}</b>${season ? `<small>${esc(seasonLabel(season))}</small>` : ''}</div>`;
   }
-  function wheelStrip(teams) {
+  // the team-seasons the wheel can really land on in an all-seasons draft: only the seasons switched on (never a team that did not exist then)
+  function eraDeck(cfg) {
+    const PT = window.CHALLENGE_POOL && window.CHALLENGE_POOL.teams, pool = C.poolSeasons();
+    if (!cfg || cfg.mode !== 'alltime' || !PT) return [];
+    const on = cfg.seasons && cfg.seasons.length ? cfg.seasons : null, yrs = on && pool.filter(y => on.indexOf(y) >= 0).length ? pool.filter(y => on.indexOf(y) >= 0) : pool, out = [];
+    yrs.forEach(y => (PT[y] || PT[y - 1] || []).forEach(t => out.push({ t, y })));
+    return out;
+  }
+  function wheelStrip(teams, cfg) {
+    const deck = eraDeck(cfg);
+    if (deck.length) {
+      const pick = [], used = {};
+      for (let g = 0; g < 400 && pick.length < 9; g++) { const x = deck[Math.floor(Math.random() * deck.length)], k = x.t.abbr + x.y; if (!used[k]) { used[k] = 1; pick.push(x); } }
+      return `<div class="ch-reel" aria-hidden="true"><div class="ch-reel-in">${pick.concat(pick).map(x => reelCard(x.t, x.y)).join('')}</div><i class="ch-reel-mark"></i></div>`;
+    }
     const list = teams.slice(0, 9);
     return `<div class="ch-reel" aria-hidden="true"><div class="ch-reel-in">${list.concat(list).map(t => reelCard(t)).join('')}</div><i class="ch-reel-mark"></i></div>`;
   }
@@ -340,7 +354,7 @@
       // a re-spin from the landed card: put a reel in its place
       const host = app.querySelector('.ch-landed');
       if (!host) { done(); return; }
-      host.insertAdjacentHTML('beforebegin', '<section class="ch-wheel">' + wheelStrip(teams) + '</section>');
+      host.insertAdjacentHTML('beforebegin', '<section class="ch-wheel">' + wheelStrip(teams, cfg) + '</section>');
       reel = app.querySelector('.ch-reel');
     }
     const strip = reel.querySelector('.ch-reel-in');
@@ -358,12 +372,18 @@
       deck.push(...sh);
     }
     [REEL_AT - 1, REEL_AT + 1].forEach(k => { if (deck[k] && deck[k].abbr === winner.abbr) { const j = k + 3; [deck[k], deck[j]] = [deck[j], deck[k]]; } });
-    const cards = [];
+    const cards = [], eras = eraDeck(cfg);
+    let last = null;
     for (let i = 0; i < REEL_N; i++) {
-      if (i === REEL_AT) { cards.push(reelCard(winner, alltime ? s.year : null, 'win')); continue; }
+      if (i === REEL_AT) { cards.push(reelCard(winner, alltime ? s.year : null, 'win')); last = { t: winner, y: s.year }; continue; }
+      if (eras.length) {   // an all-seasons draft: real team-seasons from the seasons switched on, never two alike in a row
+        let x = eras[Math.floor(Math.random() * eras.length)];
+        for (let g = 0; g < 6 && last && x.t.abbr === last.t.abbr && x.y === last.y; g++) x = eras[Math.floor(Math.random() * eras.length)];
+        if (i === REEL_AT - 1 || i === REEL_AT + 1) { for (let g = 0; g < 8 && x.t.abbr === winner.abbr && x.y === s.year; g++) x = eras[Math.floor(Math.random() * eras.length)]; }
+        last = x; cards.push(reelCard(x.t, x.y)); continue;
+      }
       const t = deck[i];
-      const yr = alltime ? yrs[Math.floor(Math.random() * yrs.length)] : null;
-      cards.push(reelCard(t, yr));
+      cards.push(reelCard(t, null));
     }
     strip.innerHTML = cards.join('');
     strip.style.transition = 'none';

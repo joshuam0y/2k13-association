@@ -201,9 +201,10 @@
     return -1;
   }
   function mySig() { const t = TN(), w = mySeat(), on = t.cfg && t.cfg.turns ? onClockSeat(t) : w; return JSON.stringify([t.picks[w], t.spins[w], t.respins[w], t.clk[w], on, t.picks[on], t.spins[on], t.clk[on]]); }
+  const onPage = () => /#\/challenge\/tournament\/online/.test(location.hash);
   function changed() {
     const t = TN(), mine = mySig();
-    if (!APP) return;
+    if (!APP || !onPage()) return;
     if (t.page === 'draft' && LAST.page === 'draft' && mine === LAST.mine) updateProg();
     else if (t.page === 'lobby' && LAST.page === 'lobby') lobby(APP);
     else if (t.page === 'entry') entry(APP);
@@ -211,7 +212,7 @@
     LAST = { page: t.page, mine };
     pill();
   }
-  function soft() { if (!APP) return; const t = TN(); if (t.page === 'lobby') lobby(APP); else if (t.page === 'draft') updateProg(); }
+  function soft() { if (!APP || !onPage()) return; const t = TN(); if (t.page === 'lobby') lobby(APP); else if (t.page === 'draft') updateProg(); }
   function onState(s) {
     const t = TN();
     if (s.hnow) OFF = s.hnow - Date.now();
@@ -349,6 +350,7 @@
     const rt = el.querySelector('#tnRetry'); if (rt) rt.addEventListener('click', () => connect(NET.role, NET.code));
     const lv = el.querySelector('#tnLeaveRoom'); if (lv) lv.addEventListener('click', () => HOOK.quit());
   }
+  window.addEventListener('hashchange', () => pill());
   function leave() {
     hangUp(); pill(); SIG = ''; LAST = { page: '', mine: '' };
     A.swap({ page: 'entry' });
@@ -515,7 +517,7 @@
       if (cfg.turns && on < 0) body = '<div class="ch-ready"><div><b>THE DRAFT IS DONE.</b><span class="muted"> The bracket is coming up.</span></div></div>';
       else if (k >= 5 && !cfg.turns) body = '<div class="ch-ready"><div><b>YOU ARE LOCKED IN.</b><span class="muted"> The bracket starts when everyone is done.</span></div></div>';
       else if (!spin || !ANIM[spin.n]) {
-        body = `<section class="ch-wheel">${UI.challengeWheel.strip(teams)}<div class="ch-wheel-k">${spin ? 'SPINNING...' : mineTurn ? 'YOUR SPIN' : 'WAITING FOR ' + onName.toUpperCase() + ' TO SPIN'}</div>${spin || !mineTurn ? '' : '<button type="button" class="btn btn-gold btn-big" id="chSpin">SPIN THE WHEEL</button>'}</section>`;
+        body = `<section class="ch-wheel">${UI.challengeWheel.strip(teams, { mode: B.era ? 'alltime' : 'versus', seasons: cfg.seasons })}<div class="ch-wheel-k">${spin ? 'SPINNING...' : mineTurn ? 'YOUR SPIN' : 'WAITING FOR ' + onName.toUpperCase() + ' TO SPIN'}</div>${spin || !mineTurn ? '' : '<button type="button" class="btn btn-gold btn-big" id="chSpin">SPIN THE WHEEL</button>'}</section>`;
       } else if (B.era && spin.year !== 2013 && !C.loaded(spin.year)) {
         body = `<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE ${esc(A.lbl(spin.year))} ROSTER...</div></section>`;
         C.load(spin.year).then(() => { const cs = TN().spins[on]; if (cs && cs.n === spin.n) draft(app); }).catch(() => UI.toast('That roster did not load. Try a re-spin.', 'error'));

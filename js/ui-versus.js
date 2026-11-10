@@ -342,6 +342,7 @@
 
   // ---------- routing ----------
   function route() {
+    if (!/^#\/challenge\/vs/.test(location.hash)) return;   // the user went elsewhere (the menu, another mode): a ping must not pull the page back
     const target = '#/challenge/vs' + (VS.page === 'draft' ? '/draft' : VS.page === 'series' ? '/result' : '');
     if (location.hash.split('?')[0] !== target) { location.hash = target; return; }
     if (!APP) return;
@@ -514,7 +515,7 @@
       if (on < 0) body = `<div class="ch-ready"><div><b>BOTH FIVES ARE SET.</b><span class="muted"> Best of ${cfg.bestOf || 5}, all five play 48 minutes.</span></div><button type="button" class="btn btn-gold btn-big" id="vsSim">TO THE SERIES</button></div>`;
       else if (!spin || !ANIM[spin.n]) {
         body = `<div class="vs-clock">ON THE CLOCK: <b>${esc(who(on))}</b> <span class="muted">(pick ${taken.length + 1} of 10)</span></div>
-          <section class="ch-wheel">${UI.challengeWheel.strip(teams)}<div class="ch-wheel-k">${spin ? 'SPINNING...' : mine ? 'YOUR SPIN' : 'WAITING FOR ' + esc(who(on)).toUpperCase() + ' TO SPIN'}</div>
+          <section class="ch-wheel">${UI.challengeWheel.strip(teams, { mode: B.era ? 'alltime' : 'versus', seasons: cfg.seasons })}<div class="ch-wheel-k">${spin ? 'SPINNING...' : mine ? 'YOUR SPIN' : 'WAITING FOR ' + esc(who(on)).toUpperCase() + ' TO SPIN'}</div>
           ${mine && !spin ? '<button type="button" class="btn btn-gold btn-big" id="chSpin">SPIN THE WHEEL</button>' : ''}</section>`;
       } else if (B.era && spin.year !== 2013 && !C.loaded(spin.year)) {
         // the landed season's full rosters: load them, then draw again

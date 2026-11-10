@@ -273,7 +273,7 @@
       const mine = ids => ids.map(id => byId[id]).filter(Boolean);
       let body = '';
       if (!spin || !ANIM[spin.n]) {
-        body = `<section class="ch-wheel">${UI.challengeWheel.strip(teams)}<div class="ch-wheel-k">${spin ? 'SPINNING...' : 'YOUR SPIN'}</div>
+        body = `<section class="ch-wheel">${UI.challengeWheel.strip(teams, { mode: B.era ? 'alltime' : 'versus', seasons: cfg.seasons })}<div class="ch-wheel-k">${spin ? 'SPINNING...' : 'YOUR SPIN'}</div>
           ${spin ? '' : '<button type="button" class="btn btn-gold btn-big" id="chSpin">SPIN THE WHEEL</button>'}</section>`;
       } else if (B.era && spin.year !== 2013 && !C.loaded(spin.year)) {
         body = `<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE ${esc(lbl(spin.year))} ROSTER...</div></section>`;
