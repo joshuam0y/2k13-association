@@ -19,7 +19,7 @@
   var PHYSICAL = { speed: 1, vert: 1, stamina: 1, durability: 1, strength: 0.5 };
   var CRAFT = { three: 1, mid: 1, ft: 1, pass: 1, oiq: 1, diq: 1, post: 0.5 };
 
-  var FORM_MAX = 2;      // in-season streaks move a player at most 2 points either way
+  var FORM_MAX = 4;      // in-season form moves a player at most 4 points either way (like 2K's +4 / -4)
   var OVR_MIN = 35, OVR_MAX = 99, ATTR_MIN = 25, ATTR_MAX = 99;
 
   // ---------------------------------------------------------------------------
@@ -850,9 +850,11 @@
       if (p.stashedUntil && p.stashedUntil > state.year) return; // overseas
       var form = p.form || 0;
       if (rng() < 0.5) return;
-      var step = rng() < 0.8 ? 1 : 2;
       var t = stats[id], z = 0;
       if (M && t && t.min >= 120) { var g = gameScore36(t); if (g != null) z = clamp((g - (M.a + M.b * p.ovr)) / M.sd, -2.5, 2.5); }
+      // bigger jumps only for players far above or below their rating
+      var az = Math.abs(z), r0 = rng();
+      var step = az >= 2 && r0 < 0.25 ? 3 : (az >= 1.2 && r0 < 0.5) || r0 < 0.15 ? 2 : 1;
       var mood = p.mood != null ? (p.mood - 60) / 200 : 0;
       var up = rng() < clamp(0.5 + 0.17 * z + mood - 0.15 * form, 0.08, 0.92);
       var nf = clamp(form + (up ? step : -step), -FORM_MAX, FORM_MAX);
