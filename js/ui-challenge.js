@@ -236,7 +236,8 @@
   const capBtn = (cap, list, p, html) => (!cap || C.capFits(cap, list, p) ? html : '<button type="button" class="btn btn-small" disabled>OVER CAP</button>');
   UI.challengeCap = { CAPS, money, priceTag, bar: capBar, btn: capBtn };
   // the wheel, for js/ui-versus.js: UI.challengeWheel.strip(teams) and .animate(app, teams, done, spin, cfg)
-  UI.challengeWheel = { strip: (teams, cfg) => wheelStrip(teams, cfg), animate: (app, teams, done, s, cfg) => animateSpin(app, teams, done, s, cfg) };
+  let SPINNING = 0;   // while a spin is running, other redraws (a ping, a friend's pick, the clock) wait: they cut the spin short or restart it
+  UI.challengeWheel = { busy: () => Date.now() < SPINNING, strip: (teams, cfg) => wheelStrip(teams, cfg), animate: (app, teams, done, s, cfg) => animateSpin(app, teams, done, s, cfg) };
   // Draft lists go A to Z by last name, never by rating (the order would give the ratings away). A long list
   // shows one letter at a time (the letter bar) unless a search or a team narrows it.
   const sortKey = n => { const w = String(n || '').split(' '); const last = w.length > 1 && /^(jr\.?|sr\.?|ii|iii|iv)$/i.test(w[w.length - 1]) ? w[w.length - 2] : w[w.length - 1]; return (last + ' ' + w.join(' ')).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); };
@@ -361,6 +362,7 @@
   function animateSpin(app, teams, done, s, cfg) {
     const btn = UI.$('#chSpin') || UI.$('#chRespin');
     if (btn) btn.disabled = true;
+    SPINNING = Date.now() + 7500;   // the longest a spin can take, in case it never reports back
     let reel = app.querySelector('.ch-reel');
     if (!reel) {
       // a re-spin from the landed card: put a reel in its place
@@ -401,7 +403,7 @@
       const w = strip.querySelector('.ch-rcard.win');
       if (w) w.classList.add('lit');
       reel.classList.add('landed');
-      setTimeout(done, reduce ? 150 : 900);
+      setTimeout(() => { SPINNING = 0; done(); }, reduce ? 150 : 900);
     };
     if (reduce) { strip.style.transform = `translateX(${-target}px)`; land(); return; }
     requestAnimationFrame(() => requestAnimationFrame(() => {

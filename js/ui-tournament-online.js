@@ -504,6 +504,7 @@
     }));
   }
   function draft(app) {
+    if (UI.challengeWheel.busy && UI.challengeWheel.busy()) return;   // a spin is running: its landing redraws the page
     stopTick();
     const t = TN(), cfg = t.cfg, w = mySeat();
     if (!cfg) return;

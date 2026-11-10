@@ -495,6 +495,7 @@
   let TICK = null;
   function stopTick() { if (TICK) { clearInterval(TICK); TICK = null; } }
   function draft(app) {
+    if (UI.challengeWheel.busy && UI.challengeWheel.busy()) return;   // a spin is running: its landing redraws the page
     const cfg = VS.cfg;
     if (!cfg) { go('setup'); return; }
     loadThen(app, cfg.year, () => {

@@ -254,6 +254,7 @@
   let TICK = null, CLOCK = null;
   function stopTick() { if (TICK) { clearInterval(TICK); TICK = null; } }
   function draft(app) {
+    if (UI.challengeWheel.busy && UI.challengeWheel.busy()) return;   // a spin is running: its landing redraws the page
     const cfg = TN.cfg;
     ensure(app, cfg, () => {
       const B = board(cfg), teams = B.teams, byId = B.byId, w = TN.who, mineIds = TN.picks[w], k = mineIds.length;
