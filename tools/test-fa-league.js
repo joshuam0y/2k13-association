@@ -100,7 +100,7 @@ check(starsHeld === 0 || starsStayed / starsHeld >= 0.7, 'stars mostly stay with
       L.resolveEvent(u, i, answer(u.events[i]));   // the user's answer: any roster change here is his choice
       if (u.events[i] && u.events[i].type === 'injuryReturn' && u.events[i].answer === 'restore') {
         const t = u.teams[u.userTeam];
-        if (t.rotation.indexOf(u.events[i].playerId) >= 0 && t.rotation.indexOf(u.events[i].playerId) < 5) seen.restored++;
+        if (t.rotation && t.rotation.indexOf(u.events[i].playerId) >= 0 && t.rotation.indexOf(u.events[i].playerId) < 5) seen.restored++;   // (an auto rotation has no list: the return popup is then just OK)
       }
     }
     L.clearResolved(u);
@@ -182,7 +182,7 @@ check(starsHeld === 0 || starsStayed / starsHeld >= 0.7, 'stars mostly stay with
   check(seen.summary > 0, 'user run: "While you simmed" summaries after simming past steps (' + seen.summary + ')');
   check(seen.injury > 0, 'user run: injury popups (' + seen.injury + ')');
   check(seen.injuryReturn > 0 && seen.restored > 0, 'user run: back from injury popups put manual starters back (' + seen.injuryReturn + ' asked, ' + seen.restored + ' restored)');
-  check(seen.notices > 0, 'user run: auto rotation returns are short notices (' + seen.notices + ')');
+  check(seen.injuryReturn > 0, 'user run: every return from injury stops the sim with a popup, auto rotation too (' + seen.injuryReturn + ')');
   check(!stale.length, 'user run: no messages from an earlier summer in a later one ' + stale.slice(0, 4).join('; '));
   check(!injuredPlayed.length, 'user run: hurt players never play ' + injuredPlayed.slice(0, 5).join(', '));
   console.log('user run: ' + JSON.stringify(seen));

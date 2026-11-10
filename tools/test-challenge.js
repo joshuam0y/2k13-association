@@ -27,7 +27,7 @@ const cfg = { mode: "year", year: 2013, team: "CHA", name: "Queen City Legends",
 const ch = C.buildYear(cfg);
 const on = abbr => ch.league.players.filter(p => p.team === abbr);
 ok(five.every(id => ch.players[id].team === "CHA"), "the five are on the user's team");
-ok(on("CHA").length === 13 && on("CHA").filter(p => p.scrub).length === 8, "five plus an eight-man scrub bench");
+ok(on("CHA").length === 5 && on("CHA").filter(p => p.scrub).length === 0, "just the five (no bench: all 48 minutes)");
 ok(on("CHA").filter(p => p.scrub).every(p => p.ovr >= 38 && p.ovr <= 55), "scrubs rated 38 to 55");
 ok(!ch.league.players.some(p => p.team === "CHA" && !p.scrub && five.indexOf(p.id) < 0), "the real Bobcats are gone");
 ok(["LAL", "BOS", "DAL", "MIA"].every(a => ch.moves.some(m => m.team === a)) && ch.moves.length === 5, "every team that lost a pick signed a replacement (" + ch.moves.map(m => m.team + " " + m.inName).join(", ") + ")");
@@ -95,7 +95,7 @@ ok(dr.picks.length === 150, "150 picks");
 const bases = dr.picks.map(x => dr.pool.find(e => e.key === x.key).base);
 ok(new Set(bases).size === 150, "no player drafted twice, even from different seasons");
 const ach = C.buildAllTime(acfg, dr);
-ok(ach.teams.every(t => ach.league.players.filter(p => p.team === t.abbr).length === 13), "every all-time team: 5 picks and 8 scrubs");
+ok(ach.teams.every(t => ach.league.players.filter(p => p.team === t.abbr).length === 5), "every all-time team: its five");
 C.start(ach);
 const ra = C.runAll(ach);
 ok(ra.w + ra.l === 82 && ra.five.length === 5, "all-time season: " + ra.w + "-" + ra.l + ", " + ra.result);
@@ -140,7 +140,7 @@ ok(r08.w + r08.l === 82 && r08.w >= 50, "a 2007-08 super team in Seattle: " + r0
 // the all-time pool file: every finished season
 require("../data/challenge-pool.js");
 const pool = C.allTimePool();
-ok(C.poolSeasons().length === 80 && pool.length > 2000 && pool.every(e => !e.rookie && e.tend), "all-time pool file: " + pool.length + " veterans from " + C.poolSeasons().length + " seasons");
+ok(C.poolSeasons().length === 81 && pool.length > 2000 && pool.every(e => !e.rookie && e.tend), "all-time pool file: " + pool.length + " veterans from " + C.poolSeasons().length + " seasons");
 const dr2 = C.newDraft({ mode: "alltime", team: "BOS", seed: 4, build: "free" });
 C.autoDraft(dr2);
 const ach2 = C.buildAllTime({ mode: "alltime", team: "BOS", seed: 4, build: "free" }, dr2);
