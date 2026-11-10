@@ -44,7 +44,7 @@
   const pct = v => v == null ? '-' : v.toFixed(1);
   function saveCur() {
     if (!CUR) { ls.del(KEY_CUR); return; }
-    ls.set(KEY_CUR, { cfg: CUR.cfg, used: CUR.used, respins: CUR.respins, spin: CUR.spin, draft: CUR.dr ? CUR.dr.picks.map(x => x.key) : null });
+    ls.set(KEY_CUR, { cfg: CUR.cfg, used: CUR.used, respins: CUR.respins, spin: CUR.spin, draft: CUR.dr ? CUR.dr.picks.map(x => x.key) : null, ext: CUR.dr ? Object.keys(CUR.dr.ext || {}).map(Number) : [] });
   }
   function results() { return ls.get(KEY_RES) || []; }
   function keepResult(r) {
@@ -63,10 +63,12 @@
     if (!s || !s.cfg) return false;
     if (s.cfg.mode === 'alltime' && !C.loaded(2013)) return false;
     if (s.cfg.mode !== 'alltime' && !C.loaded(s.cfg.year)) return false;
+    if (s.cfg.mode === 'alltime' && (s.ext || []).some(y => !C.loaded(y))) return false;   // the seasons whose full rosters joined the pool load first
     try {
       CUR = { cfg: s.cfg, used: s.used || [], respins: s.respins != null ? s.respins : 1, spin: s.spin || null, dr: null };
       if (s.cfg.mode === 'alltime') {
         CUR.dr = C.newDraft(s.cfg);
+        (s.ext || []).forEach(y => C.extendPool(CUR.dr, y));
         (s.draft || []).forEach(k => C.draftPick(CUR.dr, k));
       }
       return true;
@@ -75,10 +77,11 @@
 
   const needYears = cfg => cfg.mode === 'alltime' ? ['pool', 2013] : [cfg.year];
   const loadFor = cfg => Promise.all(needYears(cfg).map(y => C.load(y)));
-  function ensureData(cfg, app, then) {
-    if (needYears(cfg).every(y => C.loaded(y))) { then(); return; }
+  function ensureData(cfg, app, then, extra) {
+    const years = needYears(cfg).concat(extra || []);
+    if (years.every(y => C.loaded(y))) { then(); return; }
     app.innerHTML = `<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE ${cfg.mode === 'alltime' ? 'ALL-TIME POOL' : esc(seasonLabel(cfg.year)) + ' ROSTERS'}...</div></section>`;
-    loadFor(cfg)
+    Promise.all(years.map(y => C.load(y)))
       .then(then)
       .catch(e => { app.innerHTML = UI.empty('ROSTERS DID NOT LOAD', esc(e && e.message ? e.message : e), '<div class="row-btns"><a class="btn" href="#/challenge">BACK</a></div>'); });
   }
@@ -98,7 +101,7 @@
     }
     const part = String(arg || '').split('/');
     if (part[0] === 'pick') {
-      if (!restore()) { const s = ls.get(KEY_CUR); if (s && s.cfg) { ensureData(s.cfg, app, () => P.challenge(app, 'pick')); return; } location.hash = '#/challenge'; return; }
+      if (!restore()) { const s = ls.get(KEY_CUR); if (s && s.cfg) { ensureData(s.cfg, app, () => P.challenge(app, 'pick'), s.ext); return; } location.hash = '#/challenge'; return; }
       ensureData(CUR.cfg, app, () => (CUR.cfg.mode === 'alltime' ? drawDraft(app) : drawPick(app)));
       return;
     }
@@ -433,6 +436,12 @@
   function bindPick(app) {
     const cfg = CUR.cfg;
     const redraw = () => { saveCur(); cfg.mode === 'alltime' ? drawDraft(app) : drawPick(app); };
+    // an all-seasons spin lands: the whole roster of that team-season joins the pool first (its season file loads), then the page draws
+    const landed = sp => {
+      if (cfg.mode !== 'alltime' || !CUR.dr || !sp || !sp.year) { redraw(); return; }
+      if (!C.loaded(sp.year)) app.innerHTML = `<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE ${esc(seasonLabel(sp.year))} ROSTER...</div></section>`;
+      C.load(sp.year).then(() => { C.extendPool(CUR.dr, sp.year); redraw(); }).catch(() => redraw());
+    };
     app.querySelectorAll('[data-pos]').forEach(b => b.addEventListener('click', () => { VIEW.pos = b.dataset.pos; redraw(); }));
     app.querySelectorAll('[data-letter]').forEach(b => b.addEventListener('click', () => { VIEW.letter = b.dataset.letter; redraw(); }));
     UI.centerChips(app);
@@ -461,7 +470,7 @@
     if (spinBtn) spinBtn.addEventListener('click', () => {
       const s = C.spin(cfg, CUR.used, Math.random, CUR.dr);
       if (!s) { UI.toast('No teams left to spin.', 'error'); return; }
-      animateSpin(app, seasonTeams(cfg), () => { CUR.spin = s; CUR.used.push(s.key); redraw(); }, s, cfg);
+      animateSpin(app, seasonTeams(cfg), () => { CUR.spin = s; CUR.used.push(s.key); landed(s); }, s, cfg);
     });
     const re = UI.$('#chRespin');
     if (re) re.addEventListener('click', () => {
@@ -469,7 +478,7 @@
       const s = C.spin(cfg, CUR.used, Math.random, CUR.dr);
       if (!s) { UI.toast('No other teams left.', 'error'); return; }
       CUR.respins--;
-      animateSpin(app, seasonTeams(cfg), () => { CUR.spin = s; CUR.used.push(s.key); redraw(); }, s, cfg);
+      animateSpin(app, seasonTeams(cfg), () => { CUR.spin = s; CUR.used.push(s.key); landed(s); }, s, cfg);
     });
     app.querySelectorAll('[data-take]').forEach(b => b.addEventListener('click', () => {
       const id = b.dataset.take;
@@ -920,6 +929,7 @@
   function cfgFromResult(r) { return Object.assign({}, r.cfg, { seed: Math.floor(Math.random() * 2147483646) + 1 }); }
   function draftFromResult(r, cfg) {
     const dr = C.newDraft(r.cfg);
+    (r.draft || []).forEach(x => { const y = +String(x.key).split('@')[1]; if (y && C.loaded(y)) C.extendPool(dr, y); });   // picks from a season's full roster
     (r.draft || []).forEach(x => C.draftPick(dr, x.key));
     dr.cfg = cfg;
     return dr;

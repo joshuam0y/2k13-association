@@ -366,6 +366,25 @@
     if (pool.length < order.length * ROUNDS) throw new Error('Not enough players in those seasons for ' + order.length + ' teams of five. Switch on more seasons.');
     return { cfg: cfg, order: order, picks: [], taken: {}, pool: pool, spins: [], respins: 1 };
   }
+  // an all-seasons draft offers the whole roster of the team-season the wheel lands on, not only the few best veterans of the
+  // pool file: the season's file loads and its players join the pool (same keys: id@season)
+  function extendPool(dr, year) {
+    var d = seasonData(year), E = W.ENGINE;
+    dr.ext = dr.ext || {};
+    if (!d || dr.ext[year]) return 0;
+    dr.ext[year] = true;
+    var have = {}, n = 0;
+    dr.pool.forEach(function (e) { have[e.key] = true; });
+    d.players.forEach(function (p) {
+      var key = p.id + '@' + year;
+      if (have[key]) return;
+      var q = clone(p);
+      q.base = p.id; q.key = key; q.from = p.team; q.label = (year - 1) + '-' + String(year).slice(2);
+      if (!q.tend && E) { var t = clone(E.tendencyOf(p)), r = E.defRates(p); t.blk = Math.round(r.blk * 100) / 10; t.stl = Math.round(r.stl * 100) / 10; delete t.generated; q.tend = t; }
+      dr.pool.push(q); n++;
+    });
+    return n;
+  }
   function draftSlot(dr, n) {
     var N = dr.order.length, r = Math.floor(n / N), k = n % N;
     return { n: n, round: r + 1, pick: k + 1, team: r % 2 === 0 ? dr.order[k] : dr.order[N - 1 - k] };
@@ -808,7 +827,7 @@
     SEASONS: SEASONS, ROUNDS: ROUNDS, seasonInfo: seasonInfo, seasonData: seasonData, loaded: loaded, load: load, loadAll: loadAll,
     allTimePool: allTimePool, poolSeasons: poolSeasons, eraTeam: eraTeam, buildYear: buildYear, buildAllTime: buildAllTime, newDraft: newDraft, onClock: onClock,
     draftSlot: draftSlot, draftPick: draftPick, aiPick: aiPick, simToUser: simToUser, autoDraft: autoDraft, available: available,
-    teamPicks: teamPicks, lineupFit: lineupFit, posLabel: posLabel, secondPos: secondPos, SLOTS: SLOTS, vsOnClock: vsOnClock, playVersus: playVersus, VS_ORDER: VS_ORDER, spin: spin, franchise: franchise, spinRoster: spinRoster, matchups: matchups, start: start, step: step, runAll: runAll,
+    teamPicks: teamPicks, lineupFit: lineupFit, posLabel: posLabel, secondPos: secondPos, SLOTS: SLOTS, vsOnClock: vsOnClock, playVersus: playVersus, VS_ORDER: VS_ORDER, spin: spin, extendPool: extendPool, franchise: franchise, spinRoster: spinRoster, matchups: matchups, start: start, step: step, runAll: runAll,
     progress: progress, summary: summary, play: play, perGame: perGame, groupOf: groupOf, primaryPos: primaryPos, rng: mulberry32
   };
   W.CHALLENGE = API;
