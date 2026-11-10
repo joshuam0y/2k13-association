@@ -189,7 +189,18 @@
   }
 
   // ---------- state coming in (guests) and redrawing without disturbing what is playing ----------
-  function mySig() { const t = TN(), w = mySeat(); return JSON.stringify([t.picks[w], t.spins[w], t.respins[w], t.clk[w]]); }
+  // take-turns drafts: snake order over the human seats, one pick each, skipping seats the CPU has already filled
+  function onClockSeat(t) {
+    if (!t.cfg || !t.cfg.turns || !t.seats.length) return -1;
+    const H = t.seats.length, c = t.seats.map(() => 0);
+    for (let j = 0; j < H * 5; j++) {
+      const r = Math.floor(j / H), i = j % H, sd = r % 2 === 0 ? i : H - 1 - i;
+      if (t.picks[sd].length > c[sd]) { c[sd]++; continue; }
+      return sd;
+    }
+    return -1;
+  }
+  function mySig() { const t = TN(), w = mySeat(), on = t.cfg && t.cfg.turns ? onClockSeat(t) : w; return JSON.stringify([t.picks[w], t.spins[w], t.respins[w], t.clk[w], on, t.picks[on], t.spins[on], t.clk[on]]); }
   function changed() {
     const t = TN(), mine = mySig();
     if (!APP) return;
@@ -247,11 +258,17 @@
       LAST = { page: t.page, mine: mySig() };
       return;
     }
+    if (t.cfg && t.cfg.turns) {
+      const on = onClockSeat(t);
+      t.seats.forEach((_, i) => { if (i !== on) t.clk[i] = null; });
+      if (on >= 0 && !t.clk[on]) setClk(on, t.spins[on] ? 'pick' : 'spin');
+    }
     A.save(); changed();
   }
   function hostAct(seat, a) {
     const t = TN(), cfg = t.cfg;
     if (t.page !== 'draft' || !cfg || seat < 0 || seat >= t.seats.length || t.picks[seat].length >= 5) return;
+    if (cfg.turns && seat !== onClockSeat(t)) return;
     const s = t.spins[seat];
     if (a.k === 'spin') { if (s) return; newSpin(seat, null); }
     else if (a.k === 'respin' || a.k === 'free') {
@@ -266,7 +283,7 @@
         if (!p || !A.rosterOf(B, cur.key, flat()).some(x => x.id === a.id)) return;
         const five = t.picks[seat].map(id => B.byId[id]).filter(Boolean);
         if (cfg.cap && !C.capFits(cfg.cap, five, p)) return;
-        t.picks[seat].push(a.id); t.spins[seat] = null; setClk(seat, 'spin');
+        t.picks[seat].push(a.id); t.spins[seat] = null; if (cfg.turns) t.clk[seat] = null; else setClk(seat, 'spin');
         afterChange();
       });
       return;
@@ -411,6 +428,8 @@
         <div class="ch-step"><div class="ch-step-k">3 | THE RULES</div>
           <div class="tn-rules">
             <div><span class="ts-start-k">EACH ROUND</span><div class="ch-chips">${chips([[1, 'BEST OF 1'], [3, 'BEST OF 3']], o.bestOf, 'bo')}</div></div>
+            <div><span class="ts-start-k">DRAFT ORDER</span><div class="ch-chips">${chips([['all', 'ALL AT ONCE'], ['turns', 'TAKE TURNS']], o.order || 'all', 'order')}</div>
+              <small class="muted">${o.order === 'turns' ? 'One pick each, snake order, everyone watches every spin.' : 'Everyone drafts their five at the same time.'}</small></div>
             <div><span class="ts-start-k">SEEDING</span><div class="ch-chips">${chips([['random', 'RANDOM'], ['rating', 'BY TEAM RATING']], o.seeding, 'seed')}</div></div>
             <div><span class="ts-start-k">SHOT CLOCK</span><div class="ch-chips">${chips([[24, '24 SEC'], [0, 'OFF']], o.timer ? 24 : 0, 'timer')}</div></div>
             <div><span class="ts-start-k">RATINGS</span><div class="ch-chips">${[[true, 'ON'], [false, 'OFF']].map(([v, l]) => `<button type="button" class="ch-chip${(o.ratings !== false) === v ? ' on' : ''}" data-rate="${v}"${ds}>${l}</button>`).join('')}</div></div>
@@ -431,6 +450,7 @@
       t.skip = !t.skip.length ? A.ALL_YEARS.filter(y => ys.indexOf(y) < 0) : allOn ? [...new Set(t.skip.concat(ys))] : t.skip.filter(y => ys.indexOf(y) < 0);
     })));
     app.querySelectorAll('[data-seas]').forEach(b => b.addEventListener('click', () => edit(() => { t.skip = b.dataset.seas === 'all' ? [] : A.ALL_YEARS.slice(); })));
+    app.querySelectorAll('[data-order]').forEach(b => b.addEventListener('click', () => edit(() => { o.order = b.dataset.order; })));
     app.querySelectorAll('[data-bo]').forEach(b => b.addEventListener('click', () => edit(() => { o.bestOf = +b.dataset.bo; })));
     app.querySelectorAll('[data-seed]').forEach(b => b.addEventListener('click', () => edit(() => { o.seeding = b.dataset.seed; })));
     app.querySelectorAll('[data-timer]').forEach(b => b.addEventListener('click', () => edit(() => { o.timer = +b.dataset.timer; })));
@@ -441,7 +461,7 @@
       const c = A.ALL_YEARS.filter(y => t.skip.indexOf(y) < 0);
       if (!c.length) { UI.toast('Switch on at least one season', 'error'); return; }
       const year = c.length === 1 ? c[0] : 0;
-      const cfg = { mode: 'versus', year, seasons: c.length > 1 && c.length < A.ALL_YEARS.length ? c : null, bestOf: o.bestOf, blind: false, cap: +o.cap || 0, timer: o.timer ? 24 : 0, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1 };
+      const cfg = { mode: 'versus', year, seasons: c.length > 1 && c.length < A.ALL_YEARS.length ? c : null, bestOf: o.bestOf, blind: false, cap: +o.cap || 0, timer: o.timer ? 24 : 0, turns: o.order === 'turns', injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1 };
       A.ensure(app, cfg, () => {
         const d = C.seasonData(year || 2013), hn = t.seats.length, bots = A.shuffle(A.CPU_NAMES.slice());
         t.cfg = cfg;
@@ -449,7 +469,7 @@
         t.ai = t.names.map((_, i) => i >= hn); t.humans = hn;
         t.teams = A.shuffle(d.teams.map(x => x.abbr)).slice(0, t.n);
         t.picks = t.names.map(() => []); t.respins = t.names.map(() => 1); t.spins = t.names.map(() => null); t.spun = [];
-        t.clk = t.names.map(() => null); t.seats.forEach((_, i) => setClk(i, 'spin'));
+        t.clk = t.names.map(() => null); if (cfg.turns) setClk(onClockSeat(t), 'spin'); else t.seats.forEach((_, i) => setClk(i, 'spin'));
         t.rounds = []; t.seeds = []; t.cur = null; t.champ = -1; t.watch = null; t.page = 'draft';
         A.clearRuns(); A.save(); LAST = { page: '', mine: '' }; A.render(); LAST = { page: 'draft', mine: mySig() };
       });
@@ -486,38 +506,44 @@
       const B = A.board(cfg), teams = B.teams, byId = B.byId;
       if (w < 0) { app.innerHTML = UI.empty('YOU ARE NOT IN THIS DRAFT', 'Ask the host for the link to the next one.', '<div class="row-btns"><button type="button" class="btn" id="tnOut">LEAVE</button></div>'); UI.$('#tnOut', app).addEventListener('click', leave); return; }
       const k = t.picks[w].length, tm = A.teamOf(w), five = t.picks[w].map(id => byId[id]).filter(Boolean);
-      const spin = t.spins[w] && t.spins[w].pick === k ? t.spins[w] : null;
+      const on = cfg.turns ? onClockSeat(t) : w, mineTurn = on === w;
+      const onK = on >= 0 ? t.picks[on].length : 5;
+      const spin = on >= 0 && t.spins[on] && t.spins[on].pick === onK ? t.spins[on] : null;
+      const onName = on >= 0 ? esc(t.names[on]) : '';
       const meta = `${esc(A.lblC(cfg))} | ${t.n} TEAMS | BEST OF ${t.opts.bestOf}${cfg.timer ? ' | ' + cfg.timer + ' SEC CLOCK' : ''}${cfg.cap ? ' | $' + cfg.cap + 'M CAP' : ''}`;
       let body = '';
-      if (k >= 5) body = '<div class="ch-ready"><div><b>YOU ARE LOCKED IN.</b><span class="muted"> The bracket starts when everyone is done.</span></div></div>';
+      if (cfg.turns && on < 0) body = '<div class="ch-ready"><div><b>THE DRAFT IS DONE.</b><span class="muted"> The bracket is coming up.</span></div></div>';
+      else if (k >= 5 && !cfg.turns) body = '<div class="ch-ready"><div><b>YOU ARE LOCKED IN.</b><span class="muted"> The bracket starts when everyone is done.</span></div></div>';
       else if (!spin || !ANIM[spin.n]) {
-        body = `<section class="ch-wheel">${UI.challengeWheel.strip(teams)}<div class="ch-wheel-k">${spin ? 'SPINNING...' : 'YOUR SPIN'}</div>${spin ? '' : '<button type="button" class="btn btn-gold btn-big" id="chSpin">SPIN THE WHEEL</button>'}</section>`;
+        body = `<section class="ch-wheel">${UI.challengeWheel.strip(teams)}<div class="ch-wheel-k">${spin ? 'SPINNING...' : mineTurn ? 'YOUR SPIN' : 'WAITING FOR ' + onName.toUpperCase() + ' TO SPIN'}</div>${spin || !mineTurn ? '' : '<button type="button" class="btn btn-gold btn-big" id="chSpin">SPIN THE WHEEL</button>'}</section>`;
       } else if (B.era && spin.year !== 2013 && !C.loaded(spin.year)) {
         body = `<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE ${esc(A.lbl(spin.year))} ROSTER...</div></section>`;
-        C.load(spin.year).then(() => { const cs = TN().spins[w]; if (cs && cs.n === spin.n) draft(app); }).catch(() => UI.toast('That roster did not load. Try a re-spin.', 'error'));
+        C.load(spin.year).then(() => { const cs = TN().spins[on]; if (cs && cs.n === spin.n) draft(app); }).catch(() => UI.toast('That roster did not load. Try a re-spin.', 'error'));
       } else {
         const st = B.teamFor(spin.abbr, spin.year), ros = UI.challengeAlpha(A.rosterOf(B, spin.key, flat()));
-        const none = cfg.cap && !ros.some(p => C.capFits(cfg.cap, five, p));
-        const row = p => { const pt = B.teamFor(p.team, p.season); return `<li class="ch-pl"><span class="ch-pl-b"><b>${esc(p.name)}</b><small>${A.logo(pt, 18)} ${esc(C.posLabel(p))}${B.era && p.season ? ' | ' + A.short(p.season) : p.age ? ' | ' + p.age : ''}</small></span>${cfg.cap ? UI.challengeCap.priceTag(p) : ''}${A.ovrTag(p)}${UI.challengeCap.btn(cfg.cap, five, p, `<button type="button" class="btn btn-small btn-gold" data-add="${esc(p.id)}">TAKE</button>`)}</li>`; };
+        const onFive = on >= 0 ? t.picks[on].map(id => byId[id]).filter(Boolean) : five;
+        const none = mineTurn && cfg.cap && !ros.some(p => C.capFits(cfg.cap, onFive, p));
+        const row = p => { const pt = B.teamFor(p.team, p.season); return `<li class="ch-pl"><span class="ch-pl-b"><b>${esc(p.name)}</b><small>${A.logo(pt, 18)} ${esc(C.posLabel(p))}${B.era && p.season ? ' | ' + A.short(p.season) : p.age ? ' | ' + p.age : ''}</small></span>${cfg.cap ? UI.challengeCap.priceTag(p) : ''}${A.ovrTag(p)}${mineTurn ? UI.challengeCap.btn(cfg.cap, five, p, `<button type="button" class="btn btn-small btn-gold" data-add="${esc(p.id)}">TAKE</button>`) : ''}</li>`; };
         body = `<section class="ch-landed" style="--c1:${esc(st.colors[0])}">${A.logo(st, 64)}<div><div class="ch-wheel-k">THE WHEEL SAYS</div><div class="ch-landed-t">${B.era ? esc(A.lbl(spin.year)) + ' ' : ''}${esc(A.tName(st))}</div></div>
-            ${t.respins[w] > 0 ? '<button type="button" class="btn btn-small" id="chRespin">RE-SPIN (1 LEFT)</button>' : ''}</section>
-          ${cfg.cap ? UI.challengeCap.bar(cfg.cap, five) : ''}
+            ${mineTurn && t.respins[w] > 0 ? '<button type="button" class="btn btn-small" id="chRespin">RE-SPIN (1 LEFT)</button>' : ''}</section>
+          ${mineTurn ? '' : '<p class="muted">' + onName + ' is picking from this roster.</p>'}
+          ${cfg.cap && mineTurn ? UI.challengeCap.bar(cfg.cap, five) : ''}
           ${none ? '<div class="ch-ready"><div><b>NOBODY HERE FITS UNDER YOUR CAP.</b><span class="muted"> Spin again, on the house.</span></div><button type="button" class="btn btn-gold" id="tnFree">SPIN AGAIN</button></div>' : ''}
           <ul class="ch-list">${ros.map(row).join('')}</ul>`;
       }
       const fit = five.length ? UI.challengeFit(C.lineupFit(five), { compact: true, title: (t.names[w] + "'s lineup").toUpperCase() }) : '';
-      const clk = t.clk[w] && k < 5;
+      const clk = on >= 0 && t.clk[on] && onK < 5;
       app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${meta}</div><div class="ch-top-t">THE DRAFT</div></div><button type="button" class="btn btn-small" id="tnQuit">LEAVE</button></div>
         <div id="tnNet">${netBar()}</div>
         <div id="tnProg">${progHtml()}</div>
         <div class="vs-side tn-me" style="--c1:${esc(tm.colors[0])}"><div class="vs-side-h">${A.logo(tm, 36)}<div><small>${esc(t.names[w])} | YOU</small><b>${esc(A.tName(tm))}</b>${cfg.cap ? ' <small class="vs-pay">' + UI.challengeCap.money(C.capState(cfg.cap, five).spent) + ' of $' + cfg.cap + 'M</small>' : ''}</div></div>
           <ol>${[0, 1, 2, 3, 4].map(i => `<li>${five[i] ? esc(five[i].name) + ' <small class="muted">' + esc(C.posLabel(five[i])) + (B.era && five[i].season ? ' ' + A.short(five[i].season) : '') + '</small> <b class="ch-ovr ' + UI.ovrClass(five[i].ovr) + '">' + esc(five[i].ovr) + '</b>' : '<span class="muted">-</span>'}</li>`).join('')}</ol></div>
-        ${k < 5 ? `<div class="vs-clock">PICK <b>${k + 1}</b> OF 5</div>` : ''}
+        ${on >= 0 ? `<div class="vs-clock">${cfg.turns ? (mineTurn ? 'YOU ARE ON THE CLOCK' : 'ON THE CLOCK: <b>' + onName + '</b>') + ' | ' : ''}PICK <b>${onK + 1}</b> OF 5</div>` : ''}
         ${clk ? `<div class="vs-timer" id="vsTimer"><i style="--w:100%"></i><span>${cfg.timer}</span></div>` : ''}
         ${body}${fit}`;
       refreshNet(); bindProg(UI.$('#tnProg', app));
       UI.$('#tnQuit', app).addEventListener('click', () => HOOK.quit());
-      if (spin && !ANIM[spin.n]) UI.challengeWheel.animate(app, teams, () => { ANIM[spin.n] = true; const cs = TN().spins[w]; if (cs && cs.n === spin.n) draft(app); }, { year: spin.year, abbr: spin.abbr }, { mode: B.era ? 'alltime' : 'versus' });
+      if (spin && !ANIM[spin.n]) UI.challengeWheel.animate(app, teams, () => { ANIM[spin.n] = true; const cs = TN().spins[on]; if (cs && cs.n === spin.n) draft(app); }, { year: spin.year, abbr: spin.abbr }, { mode: B.era ? 'alltime' : 'versus' });
       const once = (id, a) => { const b = UI.$(id, app); if (b) b.addEventListener('click', () => { b.disabled = true; act(a); }); };
       once('#chSpin', { k: 'spin' }); once('#chRespin', { k: 'respin' }); once('#tnFree', { k: 'free' });
       app.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => {
@@ -529,9 +555,9 @@
         window.scrollTo(0, 0);
       }));
       if (clk) {
-        const total = cfg.timer * 1000 + (t.clk[w].phase === 'pick' ? SPIN_MS : 0);
+        const total = cfg.timer * 1000 + (t.clk[on].phase === 'pick' ? SPIN_MS : 0);
         TICK = setInterval(() => {
-          const el = UI.$('#vsTimer', app), c = TN().clk[w];
+          const el = UI.$('#vsTimer', app), c = TN().clk[on];
           if (!el || !c) { stopTick(); return; }
           const left = c.until - (Date.now() + OFF);
           el.querySelector('span').textContent = Math.max(0, Math.ceil(left / 1000));
