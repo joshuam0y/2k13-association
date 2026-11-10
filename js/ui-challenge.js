@@ -146,7 +146,7 @@
           <div class="ch-seg">${Object.keys(BUILD).map(k => `<button type="button" class="ch-seg-b${s.build === k ? ' on' : ''}" data-build="${k}"><b>${BUILD[k].label}</b><small>${esc(isAll && k === 'free' ? 'Snake draft: take anyone left when you are up.' : isAll ? 'When you are up, the wheel picks a team and season.' : BUILD[k].note)}</small></button>`).join('')}</div>
         </div>
         <div class="ch-step"><div class="ch-step-k">3 | YOUR FRANCHISE</div>
-          <p class="muted ch-small">${isAll ? 'Every team drafts five. You get this franchise\'s name and court.' : 'You take over this team. Its real roster leaves, and your five plus the scrubs take its place.'}</p>
+          <p class="muted ch-small">${isAll ? 'Every team drafts five. You get this franchise\'s name and court.' : 'You take over this team. Its real roster leaves. Your five play all 48 minutes and never get hurt.'}</p>
           ${ready ? `<div class="ch-teams">${teams.map(t => `<button type="button" class="ch-team${s.team === t.abbr ? ' on' : ''}" data-team="${esc(t.abbr)}" style="--c1:${esc(t.colors[0])}">${logo(t, 34)}<span>${esc(t.name)}</span></button>`).join('')}</div>` : '<p class="muted">Loading teams...</p>'}
           <div class="ch-row">
             <label class="field"><span>TEAM NAME (OPTIONAL)</span><input id="chName" maxlength="32" placeholder="${esc(s.team ? tName(teamOf(teams, s.team)) : 'Keep the real name')}" value="${esc(s.name || '')}"></label>
