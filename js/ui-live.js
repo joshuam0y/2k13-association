@@ -316,17 +316,18 @@
     if (s.lw === 4) s.winner = s.lo;
     const round = b.rounds[b.round - 1];
     if (!round.every(x => x.winner)) return;
-    if (b.round === 4 || round.length === 1) {
+    const R = Math.round(Math.log(season.playoffK || 8) / Math.LN2) + 1;
+    if (b.round === R || round.length === 1) {
       b.champion = round[0].winner;
       b.finalsMvp = finalsMvp(season, round[0]);
       return;
     }
     const nextRound = [];
     const startDay = b.cal + 1;
-    if (b.round === 3) {
+    if (b.round === R - 1) {
       const e = round.filter(x => x.conf === 'East')[0];
       const w = round.filter(x => x.conf === 'West')[0];
-      nextRound.push(makeSeries(season, 'F', 'Finals', 4, e.winner, seedOf(e, e.winner), w.winner, seedOf(w, w.winner), startDay));
+      nextRound.push(makeSeries(season, 'F', 'Finals', R, e.winner, seedOf(e, e.winner), w.winner, seedOf(w, w.winner), startDay));
     } else {
       ['East', 'West'].forEach((c, ci) => {
         const list = round.filter(x => x.conf === c);

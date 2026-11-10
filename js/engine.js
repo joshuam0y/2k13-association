@@ -1794,8 +1794,9 @@
   }
 
   function buildBracket(season, seeds, startDate) {
-    seeds = seeds || { East: conferenceSeeds(season, 'East'), West: conferenceSeeds(season, 'West') };
-    var pairs = [[1, 8], [4, 5], [3, 6], [2, 7]];
+    var K = season.playoffK || 8;   // teams per conference: 8 (today), 4 or 2 for the small leagues of the old days
+    seeds = seeds || { East: conferenceSeeds(season, 'East', K), West: conferenceSeeds(season, 'West', K) };
+    var pairs = K === 2 ? [[1, 2]] : K === 4 ? [[1, 4], [2, 3]] : [[1, 8], [4, 5], [3, 6], [2, 7]];
     var round1 = [];
     ['East', 'West'].forEach(function (c, ci) {
       pairs.forEach(function (pr, i) {
@@ -2024,7 +2025,8 @@
     if (s.lw === 4) s.winner = s.lo;
     var round = b.rounds[b.round - 1];
     if (!round.every(function (x) { return x.winner; })) return;
-    if (b.round === 4 || round.length === 1) {
+    var R = Math.round(Math.log(season.playoffK || 8) / Math.LN2) + 1;   // rounds: 4 with 8 a conference, 3 with 4, 2 with 2
+    if (b.round === R || round.length === 1) {
       b.champion = round[0].winner;
       b.finalsMvp = finalsMvp(season, round[0]);
       return;
@@ -2032,10 +2034,10 @@
     // next round
     var nextRound = [];
     var startDay = b.cal + 1;
-    if (b.round === 3) {
+    if (b.round === R - 1) {
       var e = round.filter(function (x) { return x.conf === 'East'; })[0];
       var w = round.filter(function (x) { return x.conf === 'West'; })[0];
-      nextRound.push(makeSeries(season, 'F', 'Finals', 4, e.winner, seedOf(e, e.winner), w.winner, seedOf(w, w.winner), startDay));
+      nextRound.push(makeSeries(season, 'F', 'Finals', R, e.winner, seedOf(e, e.winner), w.winner, seedOf(w, w.winner), startDay));
     } else {
       ['East', 'West'].forEach(function (c, ci) {
         var list = round.filter(function (x) { return x.conf === c; });

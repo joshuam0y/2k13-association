@@ -591,8 +591,9 @@
   // ---------- schedule ----------
   // Every team plays 82: three games against everyone, minus the pairs at the smallest distances on a
   // shuffled circle (two games instead), so each team drops the same number. Works for 29 to 32 teams.
-  function matchups(abbrs, rng) {
-    var order = shuffle(abbrs.slice(), rng), N = order.length;
+  function matchups(abbrs, rng, games82) {
+    var order = shuffle(abbrs.slice(), rng), N = order.length, G = games82 || 82;
+    if (N < 28 || G !== 82) return matchupsAny(order, G);
     var r = 3 * (N - 1) - 82, drop = {};
     for (var d = 1; d <= Math.floor(r / 2); d++) drop[d] = true;
     if (r % 2) drop[N / 2] = true;
@@ -609,6 +610,26 @@
     return games;
   }
 
+  // any league size and season length (the old leagues: 8 to 27 teams, 60 to 82 games): everyone plays everyone
+  // base times, then the rest against the teams nearest on a shuffled circle; one game short when the maths needs it
+  function matchupsAny(order, G) {
+    var N = order.length, base = Math.floor(G / (N - 1)), r = G - base * (N - 1), games = [], extra = {};
+    for (var d = 1; d <= Math.floor(r / 2); d++) extra[d] = true;
+    if (r % 2 && N % 2 === 0) extra[N / 2] = true;
+    for (var i = 0; i < N; i++) for (var j = i + 1; j < N; j++) {
+      var a = order[i], b = order[j], dist = Math.min(j - i, N - (j - i));
+      for (var k = 0; k < base; k++) games.push(k % 2 ? { home: a, away: b } : { home: b, away: a });
+      if (extra[dist]) games.push(base % 2 ? { home: b, away: a } : { home: a, away: b });
+    }
+    return games;
+  }
+  // the games every team plays that season, from the real records (the most common total)
+  function seasonGames(ch) {
+    var c = {}, best = 82, n = 0;
+    ch.teams.forEach(function (t) { var rr = t.real; if (!rr) return; var g = rr.w + rr.l; c[g] = (c[g] || 0) + 1; });
+    Object.keys(c).forEach(function (g) { if (c[g] > n) { n = c[g]; best = +g; } });
+    return best;
+  }
   // ---------- the season ----------
   function start(ch) {
     var E = W.ENGINE;
@@ -616,7 +637,13 @@
     var rng = mulberry32((ch.cfg.seed ^ 0x6C8E9CF5) >>> 0);
     var y = ch.year;
     var season = E.newSeason(ch.league, { year: y, realSchedule: false, playIn: false, rng: rng, userTeam: ch.user });
-    season.days = E.buildSchedule(season.teams, rng, (y - 1) + '-10-30', y + '-04-16', matchups(season.teams.map(function (t) { return t.abbr; }), rng));
+    var nT = season.teams.length, G = nT >= 28 ? 82 : Math.max(40, Math.min(82, seasonGames(ch)));
+    if (nT < 28) {   // the old small leagues: fewer playoff teams a conference
+      var cs = {}; season.teams.forEach(function (t) { cs[t.conf] = (cs[t.conf] || 0) + 1; });
+      var small = Math.min.apply(null, Object.keys(cs).map(function (k) { return cs[k]; }).concat([8]));
+      season.playoffK = nT >= 20 && small >= 8 ? 8 : small >= 4 && nT >= 12 ? 4 : 2;
+    }
+    season.days = E.buildSchedule(season.teams, rng, (y - 1) + '-10-30', y + '-04-16', matchups(season.teams.map(function (t) { return t.abbr; }), rng, G));
     season.era = E.eraFor(ch.eraYear);
     season.userTeam = ch.user;
     // all-time teams are rated against a normal league (2012-13), so stars still look like stars
@@ -679,12 +706,12 @@
       list.forEach(function (x) {
         if (x.hi !== u && x.lo !== u) return;
         var mineHi = x.hi === u, w = mineHi ? x.hw : x.lw, l = mineHi ? x.lw : x.hw;
-        series.push({ round: ri + 1, name: ROUND_NAME[ri] || 'Round ' + (ri + 1), opp: mineHi ? x.lo : x.hi, oppName: nameOf(ch, mineHi ? x.lo : x.hi), w: w, l: l, won: x.winner === u });
+        series.push({ round: ri + 1, name: ROUND_NAME[ri + 4 - (Math.round(Math.log(s.playoffK || 8) / Math.LN2) + 1)] || 'Round ' + (ri + 1), opp: mineHi ? x.lo : x.hi, oppName: nameOf(ch, mineHi ? x.lo : x.hi), w: w, l: l, won: x.winner === u });
       });
     });
     var champ = s.champion || (s.playoffs && s.playoffs.champion) || null;
     if (champ === u) exit = 'champion';
-    else if (series.length) exit = ['first', 'semis', 'conf', 'finals'][series[series.length - 1].round - 1] || 'first';
+    else if (series.length) exit = ['first', 'semis', 'conf', 'finals'][series[series.length - 1].round - 1 + 4 - (Math.round(Math.log(s.playoffK || 8) / Math.LN2) + 1)] || 'first';
     var lastS = series[series.length - 1];
     var resultText = exit === 'champion' ? 'NBA Champions' : exit === 'missed' ? 'Missed the playoffs'
       : 'Lost in the ' + lastS.name + ' to the ' + lastS.oppName + ' ' + lastS.w + '-' + lastS.l;
