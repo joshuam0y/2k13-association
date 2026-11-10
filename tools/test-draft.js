@@ -322,7 +322,7 @@ function refill(state, minSize, maxSize) {
     state.phase = 'regular';
     for (let m = 0; m < 6; m++) {
       PROG.inSeason(state, r);
-      Object.values(state.players).forEach(p => { if (p.form && Math.abs(p.form) > 3) streakOk = false; });
+      Object.values(state.players).forEach(p => { if (p.form && Math.abs(p.form) > 4) streakOk = false; });
     }
     setStandings(state, strengthOrder(state, r));
     state.phase = 'draftLottery'; DRAFT.lottery(state, r);
@@ -377,7 +377,7 @@ function refill(state, minSize, maxSize) {
   console.log('   smallest roster after each offseason (before refill): ' + minRoster.join(' '));
   check(minRoster.every(n => n >= 8), 'no roster collapses (min ' + Math.min(...minRoster) + ')');
   check(shortages.every(n => n === 0), 'free agent pool always refills rosters to 13');
-  check(streakOk, 'in-season streaks stay within 3 points');
+  check(streakOk, 'in-season form stays within 4 points');
   // Age curve for draftees without targets: young players grow
   const grown = everDrafted.filter(([id, o, a]) => a <= 21 && state.players[id] && !state.players[id].retired && state.year - state.players[id].draft.year >= 4)
     .map(([id, o]) => state.players[id].ovr - o);

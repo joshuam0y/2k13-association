@@ -791,7 +791,12 @@
       const stash = p.arrivalYear && p.arrivalYear > year + 1 ? `<span class="badge badge-dim">OVERSEAS</span>` : '';
       return `<tr><td>${p.undrafted ? '<span class="muted">UDFA</span>' : esc(p.realPick || '-')}</td>
         <td class="l"><a class="cl-name" href="#/player/${esc(p.id)}"><span class="cl-hs">${UI.headshot(live)}</span><span>${esc(p.name)} ${stash}</span></a></td>
-        <td>${esc(p.pos)}</td><td>${esc(p.age)}</td><td class="hide-sm">${UI.fmtHt(p.ht)}</td><td class="${UI.ovrClass(p.ovr)}"><b>${esc(p.ovr)}</b></td></tr>`;
+        <td>${esc(p.pos)}</td><td>${esc(p.age)}</td><td class="hide-sm">${UI.fmtHt(p.ht)}</td>${(() => {
+          // a class still to be drafted: the user's scouting view (js/draft.js userView), a range until scouted
+          const g = UI.state.game, V = window.DRAFT && window.DRAFT.userView;
+          const v = g && V && live && live.team === 'DRAFT' ? V(g, live) : null;
+          return v && !v.scouted ? `<td><span class="ftd-range" title="Not scouted yet">${v.lo}-${v.hi}</span></td>` : `<td class="${UI.ovrClass(p.ovr)}"><b>${esc(p.ovr)}</b></td>`;
+        })()}</tr>`;
     };
     const head = () => CLASS_COLS.map(([k, l, cls]) => {
       const on = classSort.key === k;

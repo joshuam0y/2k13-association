@@ -825,10 +825,63 @@
   // Scouting view: exact for the user, a fixed amount of noise for AI teams (no budget effect)
   // ---------------------------------------------------------------------------
   var AI_SCOUT_SD = 2.6;
+  // ---------------------------------------------------------------------------
+  // Scouting fog (the user's view of a class): a prospect he has not scouted shows a rating range about
+  // 8 points wide (the true rating always inside it). Prospects ranked around his own picks are scouted
+  // on their own (the front office does that work); he also has a few scouting trips per draft
+  // (more with a bigger scouting budget). state.scouting = { year, used, ids: { id: 1 } }.
+  // ---------------------------------------------------------------------------
+  function scoutState(state, year) {
+    var sc = state.scouting;
+    if (!sc || sc.year !== year) sc = state.scouting = { year: year, used: 0, ids: {} };
+    return sc;
+  }
+  function scoutPoints(state) {
+    var t = teams(state)[state.userTeam], b = t && t.budget ? +t.budget.scouting || 50 : 50;
+    return 5 + Math.round((b - 50) / 12.5);
+  }
+  // the user's picks this draft as overall slots (the real order once set, else projected from the standings)
+  function userSlots(state, year) {
+    var u = state.userTeam;
+    if (state.draft && state.draft.year === year && state.draft.order) return state.draft.order.filter(function (s) { return s.team === u; }).map(function (s) { return s.overall; });
+    var st = state.season && state.season.standings || {}, pct = function (a) { var x = st[a] || { w: 0, l: 0 }; return x.w + x.l ? x.w / (x.w + x.l) : 0.5; };
+    var order = Object.keys(teams(state)).sort(function (a, b) { return pct(a) - pct(b); }), n = order.length, out = [];
+    ((teams(state)[u] || {}).picks || []).forEach(function (pk) {
+      if (+pk.year !== year) return;
+      var i = order.indexOf(pk.original || u);
+      if (i >= 0) out.push((+pk.round === 2 ? n : 0) + i + 1);
+    });
+    return out;
+  }
+  function autoScout(state, year) {
+    var sc = scoutState(state, year), slots = userSlots(state, year);
+    var cls = Object.keys(state.players).map(function (id) { return state.players[id]; }).filter(function (p) { return p && p.team === 'DRAFT' && +p.draftYear === year; })
+      .sort(function (a, b) { return (b.ovr * 0.6 + (b.pot || b.ovr) * 0.4) - (a.ovr * 0.6 + (a.pot || a.ovr) * 0.4); });   // the consensus board
+    slots.forEach(function (o) { for (var k = Math.max(0, o - 5); k < Math.min(cls.length, o + 6); k++) sc.ids[cls[k].id] = 'auto'; });
+    return sc;
+  }
+  function scout(state, id) {
+    var p = state.players[id];
+    if (!p || p.team !== 'DRAFT') return { ok: false, reason: 'Not a prospect.' };
+    var sc = scoutState(state, +p.draftYear);
+    if (sc.ids[id]) return { ok: true, already: true };
+    if (sc.used >= scoutPoints(state)) return { ok: false, reason: 'No scouting trips left this draft.' };
+    sc.used++; sc.ids[id] = 'trip';
+    return { ok: true, left: scoutPoints(state) - sc.used };
+  }
+  function userView(state, p) {
+    if (!p || p.team !== 'DRAFT') return { ovr: p ? p.ovr : 0, scouted: true };
+    var sc = scoutState(state, +p.draftYear);
+    if (sc.ids[p.id]) return { ovr: p.ovr, scouted: true, how: sc.ids[p.id] };
+    var r = mulberry32(hashStr('fog:' + p.id + ':' + (state.rngSeed || 0)));
+    var lo = Math.round(p.ovr - 1 - r() * 6), hi = lo + 8;
+    return { ovr: Math.round((lo + hi) / 2), lo: lo, hi: hi, scouted: false };
+  }
+
   function view(state, abbr, id) {
     var p = state.players[id];
     if (!p) return null;
-    if (abbr === state.userTeam) return { ovr: p.ovr, pot: p.pot };
+    if (abbr === state.userTeam) { var uv = userView(state, p); return { ovr: uv.ovr, pot: p.pot, lo: uv.lo, hi: uv.hi, scouted: uv.scouted }; }
     var r = mulberry32(hashStr(abbr + ':' + id + ':' + (state.rngSeed || 0)));
     return { ovr: Math.round(p.ovr + gauss(r) * AI_SCOUT_SD * 0.5), pot: Math.round(p.pot + gauss(r) * AI_SCOUT_SD) };
   }
@@ -1166,7 +1219,7 @@
     cleanClasses: cleanClasses,
     alreadyInLeague: alreadyInLeague,
     generateClass: generateClass,
-    view: view,
+    view: view, scout: scout, autoScout: autoScout, userView: userView, scoutPoints: scoutPoints, scoutState: scoutState,
     protectedNow: protectedNow,
     protectionText: protectionText,
     ensurePicks: ensurePicks,

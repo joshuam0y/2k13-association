@@ -916,3 +916,4 @@ html { scroll-padding-bottom: calc(var(--mb-h, var(--bar-h)) + 12px); }
 .badge-form { font-family: var(--display); letter-spacing: .04em; border: 1px solid currentColor; background: transparent; }
 .badge-form.up { color: #5fd38a; }
 .badge-form.down { color: #ff7b7b; }
+.ftd-range { font-family: var(--display); font-size: 14px; letter-spacing: .04em; color: var(--text2); border: 1px dashed var(--line2); padding: 1px 6px; white-space: nowrap; }

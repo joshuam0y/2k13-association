@@ -32,6 +32,11 @@
     .ftd-pl small { grid-column: 2; color: var(--muted); font-size: 11px; }
     .ftd-pl.new a { color: var(--gold2); }
     .ftd-empty { font-size: 12px; color: #ff9b9b; }
+    .ftd-range { font-family: var(--display); font-size: 14px; letter-spacing: .04em; color: var(--text2); border: 1px dashed var(--line2); padding: 1px 6px; white-space: nowrap; }
+    .ftd-scout { margin-left: 6px; padding: 2px 7px; font-family: var(--display); font-size: 10.5px; letter-spacing: .1em; background: transparent; border: 1px solid var(--gold-dim); color: var(--gold2); cursor: pointer; }
+    .ftd-auto { margin-left: 4px; font-size: 10px; color: var(--gold); font-family: var(--display); }
+    .ftd-scoutbar { font-size: 13px; color: var(--text2); margin: 4px 0 10px; }
+    .ftd-scoutbar b { font-family: var(--display); letter-spacing: .14em; color: var(--gold); margin-right: 6px; }
     .ftd-fit { display: inline-block; font-size: 10px; letter-spacing: .06em; padding: 2px 6px; border: 1px solid var(--line2); color: var(--muted); white-space: nowrap; }
     .ftd-fit.great { border-color: var(--gold); color: #000; background: var(--gold); }
     .ftd-fit.good { border-color: var(--gold-dim); color: var(--gold2); }
@@ -225,6 +230,10 @@
   }
 
   // The user's own scouting view of a prospect (DRAFT.view). Potential is never shown.
+  function scoutView(st, p) {
+    const V = F.fn('DRAFT', 'userView');
+    return V && p && p.team === 'DRAFT' ? F.try('DRAFT.userView', () => V.userView(st, p), null) : null;
+  }
   function scoutOvr(st, p) {
     const V = F.fn('DRAFT', 'view');
     if (V && p && p.team === 'DRAFT') {
@@ -249,6 +258,9 @@
     const myNext = slots ? slots.find(s => !s.player && s.team === user) : null;
     const onClock = live && next && next.team === user;
 
+    const DR = F.mod('DRAFT');
+    if (DR && DR.autoScout) F.try('DRAFT.autoScout', () => DR.autoScout(st, year), null);
+    const sc = DR && DR.scoutState ? DR.scoutState(st, year) : null, trips = DR && DR.scoutPoints ? DR.scoutPoints(st) - (sc ? sc.used : 0) : 0;
     let pool = prospects(st, year);
     if (view.pos !== 'ALL') pool = pool.filter(p => String(p.pos || '').toUpperCase().split(/[-/ ]/).indexOf(view.pos) >= 0);
     const key = view.sort;
@@ -274,7 +286,7 @@
         <td>${i + 1}</td>
         <td class="l"><span class="ft-cell-p"><span class="ft-hs ft-hs-sm">${UI.headshot(p)}</span><span><b>${esc(p.name)}</b>${arr ? `<small class="ft-stash">Playing overseas until ${arr}</small>` : p.college || p.school ? `<small>${esc(p.college || p.school)}</small>` : ''}</span></span></td>
         <td>${esc(p.pos || '-')}</td><td>${esc(p.age || '-')}</td><td class="hide-sm">${UI.fmtHt(p.ht)}</td>
-        <td><b class="${UI.ovrClass(so.get(p.id))}">${so.get(p.id) || '-'}</b></td>
+        <td>${(() => { const v = scoutView(st, p); return v && !v.scouted ? `<span class="ftd-range" title="Not scouted yet: somewhere in this range">${v.lo}-${v.hi}</span>${trips > 0 ? `<button type="button" class="ftd-scout" data-act="scout" data-id="${esc(p.id)}">SCOUT</button>` : ''}` : `<b class="${UI.ovrClass(so.get(p.id))}">${so.get(p.id) || '-'}</b>${v && v.how === 'auto' ? '<small class="ftd-auto" title="Scouted by your front office: he is ranked near your pick">A</small>' : ''}`; })()}</td>
         <td><span class="ftd-fit ${fit.get(p.id).cls}" title="${esc(posOf(p).pos)}${posOf(p).pos2 ? '/' + esc(posOf(p).pos2) : ''}: ${fit.get(p.id).n >= 0.8 ? 'a position you need' : fit.get(p.id).n >= 0.4 ? 'you are thin here' : 'you are set here'}">${esc(fit.get(p.id).label)}</span></td>
         <td>${onClock && canPick ? `<button type="button" class="btn btn-small btn-gold" data-act="pick" data-id="${esc(p.id)}">DRAFT</button>` : ''}</td>
       </tr>`;
@@ -336,6 +348,7 @@
         ${teamPanel(st, nd, teamOpen)}
         <section class="ft-class">
           ${UI.header('THE CLASS', pool.length + ' prospects' + (view.pos !== 'ALL' ? ' at ' + view.pos : '') + ' available')}
+          <p class="ftd-scoutbar"><b>SCOUTING</b> ${trips > 0 ? trips + ' trip' + (trips > 1 ? 's' : '') + ' left' : 'no trips left'} | Unscouted prospects show a range. Your front office scouts the players ranked around your pick (marked A).</p>
           <nav class="tabs">${['ALL', 'PG', 'SG', 'SF', 'PF', 'C'].map(x => `<a href="#/draft" data-act="pos" data-pos="${x}" class="${view.pos === x ? 'on' : ''}">${x}</a>`).join('')}</nav>
           ${pool.length ? `<div class="tscroll"><table class="stats ft-classt"><thead><tr><th>#</th>${head('name', 'PLAYER', 'l')}${head('pos', 'POS')}${head('age', 'AGE')}<th class="hide-sm">HT</th>${head('ovr', 'OVR')}${head('fit', 'FIT')}<th></th></tr></thead><tbody>${rows}</tbody></table></div>`
             : `<p class="muted">${done ? 'Every prospect from this class has been drafted or signed.' : 'No prospects found for this draft year.'}</p>`}
@@ -353,6 +366,13 @@
       if (!b || b.disabled) return;
       const act = b.getAttribute('data-act');
       if (act === 'pos') { ev.preventDefault(); view.pos = b.getAttribute('data-pos'); render(app, st); }
+      else if (act === 'scout') {
+        const D = F.fn('DRAFT', 'scout');
+        if (!D) return;
+        const r = D.scout(st, b.getAttribute('data-id'));
+        if (r && !r.ok) UI.toast(r.reason || 'Could not scout him.', 'error');
+        else { F.save && F.save(); render(app, st); }
+      }
       else if (act === 'sort') {
         const k = b.getAttribute('data-k');
         if (view.sort === k) view.dir = -view.dir; else { view.sort = k; view.dir = (k === 'age' || k === 'name' || k === 'pos') ? 1 : -1; }   // fit: best first
