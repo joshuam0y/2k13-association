@@ -23,6 +23,7 @@
   const ALL_YEARS = C.SEASONS.map(s => s.year);
   if (!Array.isArray(VS.skip)) VS.skip = VS.year ? ALL_YEARS.filter(y => y !== VS.year) : [];
   const chosen = () => ALL_YEARS.filter(y => VS.skip.indexOf(y) < 0);
+  const decOf = y => (y - 1) - (y - 1) % 10, DECADES = () => [...new Set(ALL_YEARS.map(decOf))];
   const inPlay = (cfg, y) => !cfg.seasons || cfg.seasons.indexOf(+y) >= 0;
   const lblC = cfg => {
     if (cfg.year || !cfg.seasons) return lbl(cfg.year);
@@ -331,7 +332,7 @@
               <button type="button" class="ch-seg-b${NET.role === 'guest' ? ' on' : ''}" data-net="join"><b>JOIN ONLINE</b><small>Enter your friend's code</small></button></div>
             ${NET.role === 'guest' && !linked() ? `<div class="vs-join"><label class="field"><span>ROOM CODE</span><input id="vsCode" maxlength="5" placeholder="ABCDE" value="${esc(NET.code)}" autocomplete="off" autocapitalize="characters"></label><button type="button" class="btn btn-gold" id="vsJoin">JOIN</button></div>` : ''}
           </div>
-          <div class="ch-step"><div class="ch-step-k">2 | THE SEASON</div><div class="row-btns vs-seas-all"><button type="button" class="btn btn-small${!VS.skip.length ? ' on' : ''}" data-seas="all"${dis(boss)}>ALL</button><button type="button" class="btn btn-small" data-seas="none"${dis(boss)}>CLEAR</button><span class="muted">${chosen().length} of ${ALL_YEARS.length} on</span></div>
+          <div class="ch-step"><div class="ch-step-k">2 | THE SEASON</div><div class="row-btns vs-seas-all"><button type="button" class="btn btn-small${!VS.skip.length ? ' on' : ''}" data-seas="all"${dis(boss)}>ALL</button><button type="button" class="btn btn-small" data-seas="none"${dis(boss)}>CLEAR</button>${DECADES().length > 1 ? DECADES().map(d => { const ys = ALL_YEARS.filter(y => decOf(y) === d), n = ys.filter(y => VS.skip.indexOf(y) < 0).length; return `<button type="button" class="btn btn-small${n === ys.length ? ' on' : n ? ' part' : ''}" data-dec="${d}"${dis(boss)}>${d}s</button>`; }).join('') : ''}<span class="muted">${chosen().length} of ${ALL_YEARS.length} on</span></div>
             <div class="vs-seas">${C.SEASONS.map(s => `<button type="button" class="ch-chip${VS.skip.indexOf(s.year) < 0 ? ' on' : ''}" data-yr="${s.year}"${dis(boss)}>${esc(s.label)}</button>`).join('')}</div>
             <small class="muted">${!chosen().length ? 'Pick at least one season.' : chosen().length === 1 ? 'One season: the whole ' + esc(lbl(chosen()[0])) + ' league.' : 'Every spin lands on a team and a season from the ones on. Nobody can be drafted twice, even from different seasons. Tap a season to switch it off.'}</small></div>
           <div class="ch-step"><div class="ch-step-k">3 | THE RULES</div>
@@ -361,6 +362,11 @@
       const jb = UI.$('#vsJoin', app); if (jb) jb.addEventListener('click', () => { const v = UI.$('#vsCode', app).value; if (v.trim().length >= 4) join(v); });
       const setYear = () => { const c = chosen(); VS.year = c.length === 1 ? c[0] : 0; };
       app.querySelectorAll('[data-yr]').forEach(b => b.addEventListener('click', () => { const y = +b.dataset.yr, i = VS.skip.indexOf(y); if (i >= 0) VS.skip.splice(i, 1); else VS.skip.push(y); setYear(); redraw(); }));
+      // a decade button switches its seasons all on, or all off when they already are
+      app.querySelectorAll('[data-dec]').forEach(b => b.addEventListener('click', () => {
+        const ys = ALL_YEARS.filter(y => decOf(y) === +b.dataset.dec), allOn = ys.every(y => VS.skip.indexOf(y) < 0);
+        VS.skip = allOn ? [...new Set(VS.skip.concat(ys))] : VS.skip.filter(y => ys.indexOf(y) < 0); setYear(); redraw();
+      }));
       app.querySelectorAll('[data-seas]').forEach(b => b.addEventListener('click', () => { VS.skip = b.dataset.seas === 'all' ? [] : ALL_YEARS.slice(); setYear(); redraw(); }));
       app.querySelectorAll('[data-bo]').forEach(b => b.addEventListener('click', () => { VS.opts.bestOf = +b.dataset.bo; redraw(); }));
       app.querySelectorAll('[data-cap]').forEach(b => b.addEventListener('click', () => { VS.opts.cap = +b.dataset.cap; if (VS.opts.cap) VS.opts.blind = false; redraw(); }));

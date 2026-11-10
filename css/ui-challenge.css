@@ -497,3 +497,6 @@
 .ch-cap.over .ch-cap-bar i { background: #ff6b6b; }
 .ch-cap small { font-size: 12px; }
 .vs-pay { display: block; color: #8fd19e; font-size: 11px; letter-spacing: .04em; }
+.ch-decades { margin-bottom: 6px; }
+.vs-seas-all { flex-wrap: wrap; }
+.vs-seas-all .btn.part { border-color: var(--gold-dim, #7a6420); }

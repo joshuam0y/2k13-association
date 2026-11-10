@@ -111,7 +111,11 @@
     const teams = ready ? C.seasonData(year).teams.slice().sort((a, b) => tName(a).localeCompare(tName(b))) : [];
     if (s.team && ready && !teams.some(t => t.abbr === s.team)) s.team = '';
     const past = results();
-    const seasonBtns = C.SEASONS.map(x => {
+    // seasons by decade (the 2000s hold 2000-01 to 2009-10), one decade shown at a time
+    const decOf = y => (y - 1) - (y - 1) % 10, decs = [...new Set(C.SEASONS.map(x => decOf(x.year)))];
+    const dec = decs.indexOf(+s.decade) >= 0 ? +s.decade : decOf(isAll ? 2013 : s.year);
+    const decBtns = decs.length > 1 ? `<div class="ch-chips ch-decades">${decs.map(d => `<button type="button" class="ch-chip sm${d === dec ? ' on' : ''}" data-decade="${d}">${d}s</button>`).join('')}</div>` : '';
+    const seasonBtns = C.SEASONS.filter(x => decs.length < 2 || decOf(x.year) === dec).map(x => {
       const off = x.ready === false;
       return `<button type="button" class="ch-chip${!isAll && s.year === x.year ? ' on' : ''}" data-year="${x.year}"${off ? ' disabled' : ''}>${esc(x.label)}${off ? '<small>SOON</small>' : ''}</button>`;
     }).join('');
@@ -129,7 +133,7 @@
             <button type="button" class="ch-seg-b${isAll ? ' on' : ''}" data-mode="alltime"><b>ALL-TIME</b><small>Vets from every season, 30 teams draft</small></button>
             <a class="ch-seg-b" href="#/challenge/vs"><b>VERSUS</b><small>Two players, one phone, then a showdown</small></a>
           </div>
-          ${isAll ? `<div class="ch-sub">ERA RULES (PACE AND THREES)</div><div class="ch-chips ch-swipe">${eraBtns}</div>` : `<div class="ch-chips ch-swipe">${seasonBtns}</div>`}
+          ${isAll ? `<div class="ch-sub">ERA RULES (PACE AND THREES)</div><div class="ch-chips ch-swipe">${eraBtns}</div>` : `${decBtns}<div class="ch-chips ch-swipe">${seasonBtns}</div>`}
         </div>
         <div class="ch-step"><div class="ch-step-k">2 | HOW YOU BUILD</div>
           <div class="ch-seg">${Object.keys(BUILD).map(k => `<button type="button" class="ch-seg-b${s.build === k ? ' on' : ''}" data-build="${k}"><b>${BUILD[k].label}</b><small>${esc(isAll && k === 'free' ? 'Snake draft: take anyone left when you are up.' : isAll ? 'When you are up, the wheel picks a team and season.' : BUILD[k].note)}</small></button>`).join('')}</div>
@@ -156,6 +160,7 @@
       if (!C.loaded(SETUP.year)) C.load(SETUP.year).then(() => drawSetup(app)).catch(e => UI.toast(e.message, 'error'));
       redraw();
     }));
+    app.querySelectorAll('[data-decade]').forEach(b => b.addEventListener('click', () => { SETUP.decade = +b.dataset.decade; redraw(); }));
     app.querySelectorAll('[data-era]').forEach(b => b.addEventListener('click', () => { SETUP.era = +b.dataset.era; redraw(); }));
     app.querySelectorAll('[data-build]').forEach(b => b.addEventListener('click', () => { SETUP.build = b.dataset.build; redraw(); }));
     app.querySelectorAll('[data-inj]').forEach(b => b.addEventListener('click', () => { SETUP.injuries = b.dataset.inj === '1'; redraw(); }));
