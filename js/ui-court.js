@@ -148,9 +148,10 @@
   }
 
   // Lines of the floor, drawn in court coordinates.
-  function floorSvg(id, paint) {
-    const half = `
-      <rect class="ct-paint" x="0" y="17" width="19" height="16" fill="${esc(paint)}"/>
+  function floorSvg(id, paint, paint2, abHome, abAway) {
+    const half = (col, ab) => `
+      <rect class="ct-paint" x="0" y="17" width="19" height="16" fill="${esc(col)}"/>
+      <text class="ct-end" x="-0.9" y="25" transform="rotate(-90 -0.9 25)">${esc(ab || '')}</text>
       <rect class="ct-ln" x="0" y="17" width="19" height="16"/>
       <path class="ct-ln" d="M19 19 A6 6 0 0 1 19 31"/>
       <path class="ct-ln ct-dash" d="M19 19 A6 6 0 0 0 19 31"/>
@@ -161,14 +162,17 @@
       <circle class="ct-rim" cx="5.25" cy="25" r="0.75"/>`;
     return `
       <defs><pattern id="ctWood${id}" width="94" height="2.5" patternUnits="userSpaceOnUse">
-        <rect width="94" height="2.5" class="ct-plank"/><path d="M0 2.45 H94" class="ct-seam"/></pattern></defs>
+        <rect width="94" height="2.5" class="ct-plank"/><rect width="94" height="2.5" class="ct-plank2" y="0" opacity=".5"/><path d="M0 2.45 H94" class="ct-seam"/></pattern>
+        <radialGradient id="ctGloss${id}" cx="50%" cy="45%" r="70%"><stop offset="0" stop-color="#fff" stop-opacity=".16"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".35"/></radialGradient></defs>
       <rect x="${-M}" y="${-M}" width="${CW + 2 * M}" height="${CH + 2 * M}" class="ct-apron"/>
       <rect x="0" y="0" width="${CW}" height="${CH}" fill="url(#ctWood${id})"/>
       <rect x="0" y="0" width="${CW}" height="${CH}" class="ct-ln ct-edge"/>
       <path class="ct-ln" d="M47 0 V50"/>
       <circle class="ct-ln" cx="47" cy="25" r="6"/><circle class="ct-ln" cx="47" cy="25" r="2"/>
-      ${half}
-      <g transform="translate(94 0) scale(-1 1)">${half}</g>`;
+      <circle class="ct-mid-fill" cx="47" cy="25" r="6" fill="${esc(paint)}"/>
+      ${half(paint, abHome)}
+      <g transform="translate(94 0) scale(-1 1)">${half(paint2, abAway)}</g>
+      <rect x="0" y="0" width="${CW}" height="${CH}" fill="url(#ctGloss${id})" pointer-events="none"/>`;
   }
 
   // ---------- mount ----------
@@ -242,7 +246,7 @@
       svg.classList.toggle('ct-names', !v && el.clientWidth >= 760);
       svg.innerHTML = '';
       const floor = mk('g', { transform: v ? `translate(${CH + M} ${M}) rotate(90)` : `translate(${M} ${M})` }, svg);
-      floor.innerHTML = floorSvg(id, kit.home.paint);
+      floor.innerHTML = floorSvg(id, kit.home.paint, kit.away.fill, abbr.home, abbr.away);
       const mid = toScreen(47, 25);
       mk('text', { class: 'ct-mid', x: mid[0], y: mid[1] }, svg).textContent = tl.home;
       const dl = mk('g', { class: 'ct-dots' }, svg);
