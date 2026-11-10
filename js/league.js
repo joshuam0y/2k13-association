@@ -138,7 +138,7 @@
         p.yearsPro = Math.max(0, (p.age || 22) - 21);
         p.yearsWithTeam = p.contract && p.contract.rookie ? Math.min(p.yearsPro, 3) : 2;
       }
-      p.draft = null; p.personality = personalityFor(p.id, rng); p.mood = 60;
+      p.draft = p0.draft || null; p.personality = personalityFor(p.id, rng); p.mood = 60;   // the real draft year, round and pick when the start file has them
       p.stashedUntil = null; p.gleague = false; p.careerStats = []; p.awards = []; p.retired = false; p.hof = false;
       // potential = the real career peak from the history targets, when known
       var tg = W.TARGETS && W.TARGETS[p.id];
@@ -537,16 +537,28 @@
     state.day = state.season.day || state.day + days;
     // injuries to the user's players become events, and so do returns (see userInjuries below)
     var inj = state.season.injuries || {};
-    // an injury costs rating points for real (about 40% never come back; the rest returns in the offseason):
-    // 5+ games -1, 20+ -2, 45+ -3, 90+ -4, 150+ (a torn ACL and worse) -5. Shown as a red arrow next to his rating.
+    // being hurt costs a big share of his rating while it lasts, so the lineups (the AI's and the auto rotation) really see him as worse:
+    // playing through it -14% (a 99 plays like an 85), out -24% (a 99 is a 75), out 45+ games -28%. It all comes back the day he is
+    // healthy, except after a very long injury (60+ games keeps 15% of the loss, 120+ keeps 30%). A red arrow shows next to his rating.
     // Taken once per injury (q.injHit), including injuries that were already there when this was added.
     safe("injuryRating", function () {
-      Object.keys(state.players).forEach(function (hid) { var h = state.players[hid]; if (h && h.injHit && !(inj[hid] && inj[hid].games > 0)) h.injHit = false; });
+      Object.keys(state.players).forEach(function (hid) {
+        var h = state.players[hid];
+        if (!h || !h.injHit || (inj[hid] && inj[hid].games > 0)) return;
+        h.injHit = false;
+        var keep = (h.injGames || 0) >= 120 ? 0.3 : (h.injGames || 0) >= 60 ? 0.15 : 0, back = (h.injPen || 0) - Math.ceil((h.injPen || 0) * keep);
+        if (back > 0 && mod("PROG") && W.PROG.setOvr) {
+          var w0 = h.ovr; W.PROG.setOvr(h, h.ovr + back, { keepPot: true });
+          var gain = h.ovr - w0;
+          if (gain) { var mv0 = h.ovrMove && h.ovrMove.year === state.year ? h.ovrMove : { d: 0, year: state.year }; mv0.d += gain; mv0.day = state.day || 0; h.ovrMove = mv0; }
+        }
+        h.injPen = 0; h.injGames = 0;
+      });
       for (var iid in inj) {
         var q = state.players[iid], ij = inj[iid];
-        if (!q || q.injHit || q.retired || !ij || !(ij.games >= 5) || /overseas/i.test(ij.type || "") || !mod("PROG") || !W.PROG.setOvr) continue;
-        q.injHit = true;
-        var pen = ij.games >= 150 ? 5 : ij.games >= 90 ? 4 : ij.games >= 45 ? 3 : ij.games >= 20 ? 2 : 1, was = q.ovr;
+        if (!q || q.injHit || q.retired || !ij || !(ij.games >= 1) || /overseas/i.test(ij.type || "") || !mod("PROG") || !W.PROG.setOvr) continue;
+        q.injHit = true; q.injGames = ij.games;
+        var pen = Math.max(1, Math.round(q.ovr * (ij.hurt ? 0.14 : ij.games >= 45 ? 0.28 : 0.24))), was = q.ovr;
         W.PROG.setOvr(q, q.ovr - pen, { keepPot: true });
         var got = was - q.ovr;
         if (got > 0) {
