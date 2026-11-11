@@ -778,7 +778,7 @@
   let WATCH = 0;    // the game being watched on this phone (1-based), 0 = none
   let courtCtl = null;
   function runFor(cfg) {
-    const key = JSON.stringify([cfg.seed, cfg.year, cfg.bestOf, cfg.sides.map(s => s.picks)]);
+    const key = JSON.stringify([cfg.seed, cfg.year, cfg.bestOf, cfg.noBench ? 1 : 0, cfg.sides.map(s => s.picks)]);
     if (!RUN || RUN.key !== key) RUN = { key, r: C.playVersus(cfg, { pbp: true }) };
     return RUN.r;
   }
@@ -827,7 +827,7 @@
             <h1>${esc(whoA(r.winner)).toUpperCase()} WINS ${r.wins[r.winner]}-${r.wins[r.winner === S[0].abbr ? S[1].abbr : S[0].abbr]}</h1>
             ${r.mvp ? `<p>Series MVP: <b>${esc(r.mvp.name)}</b> (${esc(f1(r.mvp.line.pts) + ' PTS, ' + f1(r.mvp.line.reb) + ' REB, ' + f1(r.mvp.line.ast) + ' AST')})</p>` : ''}</div></section>`
         : `<section class="vs-next"><div class="ch-hero-k">BEST OF ${r.bestOf} | ${esc(lblC(cfg))}${cfg.blind ? ' | BLIND' : ''}</div><h1>${WATCH ? 'GAME ' + WATCH + ', LIVE' : shown ? 'GAME ' + (shown + 1) + ' IS NEXT' : 'THE SERIES'}</h1>
-            <p class="muted">${esc(whoA(r.home))} has home court (${homeGames}). First to ${r.need}. ${cfg.bench ? 'Starters play about 34 minutes, the bench the rest.' : 'All ten players go the full 48.'}</p></section>`;
+            <p class="muted">${esc(whoA(r.home))} has home court (${homeGames}). First to ${r.need}. ${cfg.bench && !cfg.noBench ? 'Starters play about 34 minutes, the bench the rest.' : 'All ten players go the full 48.'}</p>${cfg.bench ? `<div class="ch-chips"><button type="button" class="ch-chip${!cfg.noBench ? ' on' : ''}" data-nb="0">WITH THE BENCH</button><button type="button" class="ch-chip${cfg.noBench ? ' on' : ''}" data-nb="1">STARTERS ONLY</button></div>` : ''}</section>`;
       const gameBox = side => {
         const i = idx(side.abbr), rows = side.box || [], sum = k => rows.reduce((s, x) => s + (+x[k] || 0), 0), ms = (m, a) => m + '-' + a;
         const tr = x => `<td>${x.min != null ? f1(x.min) : ''}</td><td>${x.pts}</td><td>${(x.oreb || 0) + (x.dreb || 0)}</td><td>${x.ast}</td><td>${x.stl}</td><td>${x.blk}</td><td>${x.tov}</td><td>${ms(x.fgm, x.fga)}</td><td>${ms(x.tpm, x.tpa)}</td><td>${ms(x.ftm, x.fta)}</td>`;
@@ -882,6 +882,7 @@
         courtCtl = window.COURT && window.COURT.available(g.res) ? window.COURT.mount(el, { game: g.res, start: 0, autoplay: true, team: a => S[idx(a)].team, player: id => PL[id] || null, logo: (a, size) => logo(S[idx(a)].team, size) }) : null;
         if (!courtCtl) el.innerHTML = '<p class="muted">The court view did not load.</p>';
       }));
+      app.querySelectorAll('[data-nb]').forEach(b => b.addEventListener('click', () => { const v = +b.dataset.nb; if ((VS.cfg.noBench ? 1 : 0) === v) return; VS.cfg.noBench = v; VS.shown = 0; WATCH = 0; VS.watch = null; dropCourt(); push(); series(app); }));
       if ($('#vsAgain')) $('#vsAgain').addEventListener('click', () => { VS.cfg.seed = Math.floor(Math.random() * 2147483646) + 1; VS.shown = 0; WATCH = 0; VS.watch = null; push(); series(app); window.scrollTo(0, 0); });
       if ($('#vsShare')) $('#vsShare').addEventListener('click', () => {
         const wi = idx(r.winner), li = 1 - wi, ws = r.wins[r.winner] + '-' + r.wins[S[li].abbr];

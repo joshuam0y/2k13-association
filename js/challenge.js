@@ -302,7 +302,7 @@
       if (sd.name) { var nm = splitName(sd.name, t); t.city = nm.city; t.name = nm.name; }
       var all = sd.picks.map(function (id, i) { var p = clone(byId[id]); p.team = sd.team; p.realTeam = byId[id].from || byId[id].team; p.pick = i + 1; p.injury = null; return p; });
       if (all.length !== vsPer(cfg)) throw new Error('Pick your players first.');
-      var five = all.slice(0, 5), bench = all.slice(5);
+      var five = all.slice(0, 5), bench = cfg.noBench ? [] : all.slice(5);   // noBench: the eight were drafted, the five play all 48
       var fit = lineupFit(five);
       applyFit(five, fit);
       var mins = {};
