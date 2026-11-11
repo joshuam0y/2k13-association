@@ -653,3 +653,9 @@
 .pf-dot.on { background: #4ade80; box-shadow: 0 0 6px #4ade80; }
 .pf-on { color: #4ade80; letter-spacing: .1em; }
 .pf-invite { position: fixed; left: 50%; transform: translateX(-50%); top: calc(12px + env(safe-area-inset-top)); z-index: 10001; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; max-width: 94vw; padding: 10px 14px; background: var(--bg2); border: 1px solid var(--gold); box-shadow: 0 8px 30px rgba(0, 0, 0, .6); }
+
+/* 8-man: tap to swap starters and bench */
+.vs-swap li[data-sw] { cursor: pointer; border-radius: 6px; }
+.vs-swap li[data-sw]:hover { background: rgba(255, 255, 255, .07); }
+.vs-swap li[data-sel] { background: rgba(245, 197, 66, .18); outline: 1px solid var(--gold, #f5c542); }
+.vs-swap-h { display: block; margin-top: 4px; font-size: 11px; }

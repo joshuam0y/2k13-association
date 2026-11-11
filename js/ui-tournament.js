@@ -278,7 +278,7 @@
   }
 
   // ---------- the open board (no wheel): everyone left, filtered and sorted; every season's roster loads in the background ----------
-  const TV = { pos: '', q: '', season: '', sort: '', lim: 60 };
+  const TV = { pos: '', q: '', season: '', sort: '', bud: '', lim: 60 };
   const BGT = { run: false, fill: null, skip: [] };
   const POSL = ['PG', 'SG', 'SF', 'PF', 'C'];
   const noRt = () => TN.opts && TN.opts.ratings === false;
@@ -286,7 +286,8 @@
     const S = UI.boardSorts || [], blind = noRt();
     return `<div class="ch-filters">${[''].concat(POSL).map(x => `<button type="button" class="ch-chip sm${(TV.pos || '') === x ? ' on' : ''}" data-bpos="${x}">${x || 'ALL'}</button>`).join('')}
         ${B.era ? `<select id="vsBSeason" aria-label="Season"><option value="">ALL SEASONS</option>${ALL_YEARS.filter(y => inPlay(cfg, y)).map(y => `<option value="${y}"${+TV.season === y ? ' selected' : ''}>${esc(lbl(y))}</option>`).join('')}</select>` : ''}
-        <select id="vsBSort" aria-label="Sort players">${S.filter(x => !blind || x[0] === 'az').map(x => `<option value="${x[0]}"${(TV.sort || (blind ? 'az' : 'ovr')) === x[0] ? ' selected' : ''}>${x[1]}</option>`).join('')}</select>
+        <select id="vsBSort" aria-label="Sort players">${S.filter(x => (!blind || x[0] === 'az') && (x[3] !== 'cap' || cfg.cap)).map(x => `<option value="${x[0]}"${(TV.sort || (blind ? 'az' : 'ovr')) === x[0] ? ' selected' : ''}>${x[1]}</option>`).join('')}</select>
+        ${cfg.cap ? UI.challengeCap.budgetSel('vsBBud', TV.bud) : ''}
         <input id="vsBQ" placeholder="Search players" value="${esc(TV.q || '')}" autocomplete="off"></div>
       ${cfg.cap ? UI.challengeCap.bar(cfg.cap, five) : ''}
       <p class="muted ch-small" id="vsLoadN"></p><p class="muted ch-small" id="vsBN"></p><ul class="ch-list" id="vsBList"></ul>`;
@@ -297,10 +298,10 @@
     const fill = () => {
       if (B.era) { const nb = board(cfg); if (nb.players.length !== B.players.length) { B.players = nb.players; Object.assign(B.byId, nb.byId); } }
       const q = (TV.q || '').trim().toLowerCase();
-      const all = B.players.concat(B.extra || []).filter(p => !tkn.has(B.base(p)) && (!TV.pos || C.primaryPos(p.pos) === TV.pos) && (!TV.season || p.season === +TV.season) && (!q || p.name.toLowerCase().indexOf(q) >= 0));
-      const so = S.find(x => x[0] === (blind ? 'az' : (TV.sort || 'ovr'))) || S[0];
+      const all = B.players.concat(B.extra || []).filter(p => !tkn.has(B.base(p)) && (!TV.pos || C.primaryPos(p.pos) === TV.pos) && (!TV.season || p.season === +TV.season) && (!q || p.name.toLowerCase().indexOf(q) >= 0) && (!cfg.cap || UI.challengeCap.budgetOk(TV.bud, cfg.cap, five, p)));
+      const so = S.find(x => x[0] === (blind ? 'az' : (TV.sort || 'ovr')) && (x[3] !== 'cap' || cfg.cap)) || S[0];
       if (so && so[2]) all.sort((a, b) => so[2](b) - so[2](a) || b.ovr - a.ovr); else all.sort((a, b) => a.name.localeCompare(b.name));
-      const shown = p => (blind || !so || !so[2] || so[0] === 'ovr' || so[0] === 'low' ? '' : '<span class="vs-sortv">' + esc(String(Math.round(so[2](p) * 10) / 10)) + '</span>');
+      const shown = p => (blind || !so || !so[2] || so[0] === 'ovr' || so[0] === 'low' ? '' : '<span class="vs-sortv">' + esc(String(Math.round(so[3] === 'cap' ? (so[0] === 'cheap' ? -so[2](p) : so[2](p)) * 10 : so[2](p) * 10) / 10)) + '</span>');
       const L = UI.$('#vsBList', app), N = UI.$('#vsBN', app);
       if (!L) return;
       L.innerHTML = all.slice(0, TV.lim).map(p => playerRow(p, B, shown(p) + (canTake ? UI.challengeCap.btn(cfg.cap, five, p, `<button type="button" class="btn btn-small btn-gold" data-bpick="${esc(p.id)}">TAKE</button>`) : ''))).join('');
@@ -312,6 +313,7 @@
     fill();
     BGT.fill = fill;
     app.querySelectorAll('[data-bpos]').forEach(b => b.addEventListener('click', () => { TV.pos = b.dataset.bpos; TV.lim = 60; app.querySelectorAll('[data-bpos]').forEach(x => x.classList.toggle('on', x === b)); fill(); }));
+    const sb = UI.$('#vsBBud', app); if (sb) sb.addEventListener('change', () => { TV.bud = sb.value; TV.lim = 60; fill(); });
     const so = UI.$('#vsBSort', app); if (so) so.addEventListener('change', () => { TV.sort = so.value; TV.lim = 60; fill(); });
     const sq = UI.$('#vsBQ', app); if (sq) sq.addEventListener('input', () => { TV.q = sq.value; TV.lim = 60; fill(); });
     const need = () => ALL_YEARS.filter(y => inPlay(cfg, y) && y !== 2013 && !C.loaded(y) && BGT.skip.indexOf(y) < 0);
@@ -364,7 +366,9 @@
       const spin = TN.spin && TN.spin.who === w && TN.spin.pick === k ? TN.spin : null;
       const mine = ids => ids.map(id => byId[id]).filter(Boolean);
       let body = '';
-      if (cfg.board) {
+      if (TN.lineup) {
+        body = '<div class="ch-ready"><div><b>YOUR ' + per() + ' ARE IN.</b><span class="muted"> Tap a starter, then a bench player, to swap who starts. The first five start.</span></div><button type="button" class="btn btn-gold btn-big" id="tnLineup">LOCK IN MY LINEUP</button></div>';
+      } else if (cfg.board) {
         body = boardHtml(cfg, B, five);
       } else if (!spin || !ANIM[spin.n]) {
         body = `<section class="ch-wheel">${UI.challengeWheel.strip(teams, { mode: B.era ? 'alltime' : 'versus', seasons: cfg.seasons })}<div class="ch-wheel-k">${spin ? 'SPINNING...' : 'YOUR SPIN'}</div>
@@ -385,9 +389,9 @@
       app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${meta}</div><div class="ch-top-t">THE DRAFT</div></div><button type="button" class="btn btn-small" id="tnQuit">QUIT</button></div>
         <div class="tn-dots">${TN.names.slice(0, humDone()).map((_, i) => `<i class="${i < w ? 'done' : i === w ? 'on' : ''}" title="${esc(nm(i))}"></i>`).join('')}</div>
         <div class="vs-side tn-me" style="--c1:${esc(t.colors[0])}"><div class="vs-side-h">${logo(t, 36)}<div><small>${esc(nm(w))} | PLAYER ${w + 1} OF ${humDone()}</small><b>${esc(tName(t))}</b>${cfg.cap ? ' <small class="vs-pay">' + UI.challengeCap.money(C.capState(cfg.cap, five).spent) + ' of $' + cfg.cap + 'M</small>' : ''}</div></div>
-          <ol>${Array.from({ length: per() }, (_, i) => i).map(i => `<li${i === 5 ? ' class="vs-bench-1"' : ''}>${five[i] ? esc(five[i].name) + ' <small class="muted">' + esc(C.posLabel(five[i])) + (B.era && five[i].season ? ' ' + short(five[i].season) : '') + '</small> <b class="' + UI.ovrClass(five[i].ovr) + '">' + esc(five[i].ovr) + '</b>' : '<span class="muted">-</span>'}</li>`).join('')}</ol></div>
-        <div class="vs-clock">PICK <b>${k + 1}</b> OF ${per()}</div>
-        ${cfg.timer ? `<div class="vs-timer" id="vsTimer"><i style="--w:100%"></i><span>${cfg.timer}</span></div>` : ''}
+          ${UI.swapOl(per(), i => (five[i] ? esc(five[i].name) + ' <small class="muted">' + esc(C.posLabel(five[i])) + (B.era && five[i].season ? ' ' + short(five[i].season) : '') + '</small> <b class="' + UI.ovrClass(five[i].ovr) + '">' + esc(five[i].ovr) + '</b>' : '<span class="muted">-</span>'), TN.sw != null ? TN.sw : null, !!cfg.bench && five.length > 5)}</div>
+        <div class="vs-clock">${TN.lineup ? 'SET YOUR STARTERS' : 'PICK <b>' + (k + 1) + '</b> OF ' + per()}</div>
+        ${cfg.timer && !TN.lineup ? `<div class="vs-timer" id="vsTimer"><i style="--w:100%"></i><span>${cfg.timer}</span></div>` : ''}
         ${body}${fit}`;
       UI.$('#tnQuit', app).addEventListener('click', quit);
       const doSpin = avoid => {
@@ -409,6 +413,10 @@
       const take = id => {
         TN.picks[w].push(id); TN.spin = null;
         if (window.SFX) window.SFX.play('chime');
+        if (cfg.bench && TN.picks[w].length >= per() && (!turnsOn() || nextSeat() < 0)) { TN.lineup = true; TN.sw = null; save(); draft(app); window.scrollTo(0, 0); return; }
+        advance();
+      };
+      const advance = () => {
         if (turnsOn()) {
           const nx = nextSeat();
           if (nx >= 0) { TN.who = nx; TN.hand = true; save(); draft(app); window.scrollTo(0, 0); return; }
@@ -423,7 +431,15 @@
         }
         save(); draft(app); window.scrollTo(0, 0);
       };
-      if (cfg.board) boardBind(app, cfg, B, five, takeChecked);
+      UI.swapBind(app, i => {
+        const pk = TN.picks[w];
+        if (TN.sw == null) TN.sw = i;
+        else if (TN.sw === i) TN.sw = null;
+        else { const x = pk[i]; pk[i] = pk[TN.sw]; pk[TN.sw] = x; TN.sw = null; }
+        save(); draft(app);
+      });
+      const lk = UI.$('#tnLineup', app); if (lk) lk.addEventListener('click', () => { TN.lineup = false; TN.sw = null; save(); advance(); });
+      if (cfg.board && !TN.lineup) boardBind(app, cfg, B, five, takeChecked);
       app.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => {
         const p = byId[b.dataset.add];
         if (cfg.cap && p && !C.capFits(cfg.cap, five, p)) { UI.toast('That contract does not fit under the cap.', 'error'); return; }
@@ -431,7 +447,7 @@
       }));
       // the shot clock: runs out, the wheel spins itself, then the best player that fits is taken
       stopTick();
-      if (cfg.timer) {
+      if (cfg.timer && !TN.lineup) {
         const phase = cfg.board || (spin && ANIM[spin.n]) ? 'pick' : 'spin', ck = w + ':' + k + ':' + phase;
         if (!CLOCK || CLOCK.key !== ck) CLOCK = { key: ck, until: Date.now() + cfg.timer * 1000 };
         const clk = CLOCK, total = cfg.timer * 1000;

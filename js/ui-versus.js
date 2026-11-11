@@ -519,7 +519,8 @@
     ['three', '3-POINT SHOOTING', A_('three')], ['mid', 'MID-RANGE', A_('mid')], ['fin', 'FINISHING AT THE RIM', A_('layup', 'dunk')], ['post', 'POST GAME', A_('post')], ['ft', 'FREE THROWS', A_('ft')],
     ['handle', 'BALL HANDLING', A_('handle')], ['pass', 'PASSING', A_('pass')], ['reb', 'REBOUNDING', A_('oreb', 'dreb')], ['perD', 'PERIMETER DEFENSE', A_('perD')], ['intD', 'INTERIOR DEFENSE', A_('intD')],
     ['steal', 'STEALS', A_('steal')], ['block', 'BLOCKS', A_('block')], ['speed', 'SPEED', A_('speed')], ['vert', 'VERTICAL', A_('vert')], ['str', 'STRENGTH', A_('strength')], ['iq', 'BASKETBALL IQ', A_('oiq', 'diq')],
-    ['ppg', 'POINTS PER GAME', p => (p.stats && p.stats.pts != null ? p.stats.pts : -1)], ['rpg', 'REBOUNDS PER GAME', p => (p.stats && p.stats.reb != null ? p.stats.reb : -1)], ['apg', 'ASSISTS PER GAME', p => (p.stats && p.stats.ast != null ? p.stats.ast : -1)]];   // the open board loads every season's roster in the background, one after another   // how many of the open board's players are listed
+    ['ppg', 'POINTS PER GAME', p => (p.stats && p.stats.pts != null ? p.stats.pts : -1)], ['rpg', 'REBOUNDS PER GAME', p => (p.stats && p.stats.reb != null ? p.stats.reb : -1)], ['apg', 'ASSISTS PER GAME', p => (p.stats && p.stats.ast != null ? p.stats.ast : -1)],
+    ['cheap', 'CHEAPEST FIRST', p => -C.price(p), 'cap'], ['dear', 'MOST EXPENSIVE', p => C.price(p), 'cap'], ['value', 'BEST VALUE (OVR PER $)', p => p.ovr / C.price(p), 'cap']];   // the open board loads every season's roster in the background, one after another   // how many of the open board's players are listed
   UI.boardSorts = SORTS;   // the tournament's open board uses the same sorts
   const ANIM = {};   // spins already animated on this phone
   function ovrTag(p, blind) { return blind ? '' : `<b class="ch-ovr ${UI.ovrClass(p.ovr)}">${esc(p.ovr)}</b>`; }
@@ -582,7 +583,7 @@
       const fives = cfg.sides.map((sd, i) => {
         const t = tOf(teams, sd.team), mine = sd.picks.map(id => byId[id]).filter(Boolean);
         return `<div class="vs-side${on === i ? ' on' : ''}" style="--c1:${esc(t.colors[0])}"><div class="vs-side-h">${logo(t, 36)}<div><small>${esc(who(i))}${me() === i ? ' (YOU)' : ''}</small><b>${esc(sd.name || tName(t))}</b>${pay(sd)}</div></div>
-          <ol>${Array.from({ length: C.vsPer(cfg) }, (_, k) => k).map(k => `<li${k === 5 ? ' class="vs-bench-1"' : ''}>${mine[k] ? esc(mine[k].name) + ' <small class="muted">' + esc(C.posLabel(mine[k])) + (B.era && mine[k].season ? ' ' + short(mine[k].season) : '') + '</small>' + (blind ? '' : ' <b class="' + UI.ovrClass(mine[k].ovr) + '">' + esc(mine[k].ovr) + '</b>') : '<span class="muted">-</span>'}</li>`).join('')}</ol></div>`;
+          ${UI.swapOl(C.vsPer(cfg), k => (mine[k] ? esc(mine[k].name) + ' <small class="muted">' + esc(C.posLabel(mine[k])) + (B.era && mine[k].season ? ' ' + short(mine[k].season) : '') + '</small>' + (blind ? '' : ' <b class="' + UI.ovrClass(mine[k].ovr) + '">' + esc(mine[k].ovr) + '</b>') : '<span class="muted">-</span>'), VS.sw && VS.sw.s === i ? VS.sw.k : null, !!cfg.bench && canAct(i) && mine.length > 5)}</div>`;
       }).join('');
       const fitCard = (sd, i) => {
         if (!sd.picks.length) return '';
@@ -599,7 +600,8 @@
         body = `<div class="vs-clock">ON THE CLOCK: <b>${esc(who(on))}</b> <span class="muted">(pick ${taken.length + 1} of ${2 * C.vsPer(cfg)})</span></div>
           <div class="ch-filters">${[''].concat(POS).map(x => `<button type="button" class="ch-chip sm${(VS.pos || '') === x ? ' on' : ''}" data-bpos="${x}">${x || 'ALL'}</button>`).join('')}
             ${B.era ? `<select id="vsBSeason" aria-label="Season"><option value="">ALL SEASONS</option>${ALL_YEARS.filter(y => inPlay(cfg, y)).map(y => `<option value="${y}"${+VS.season === y ? ' selected' : ''}>${esc(lbl(y))}</option>`).join('')}</select>` : ''}
-            <select id="vsBSort" aria-label="Sort players">${SORTS.filter(x => !blind || x[0] === 'az').map(x => `<option value="${x[0]}"${(VS.sort || (blind ? 'az' : 'ovr')) === x[0] ? ' selected' : ''}>${x[1]}</option>`).join('')}</select>
+            <select id="vsBSort" aria-label="Sort players">${SORTS.filter(x => (!blind || x[0] === 'az') && (x[3] !== 'cap' || cfg.cap)).map(x => `<option value="${x[0]}"${(VS.sort || (blind ? 'az' : 'ovr')) === x[0] ? ' selected' : ''}>${x[1]}</option>`).join('')}</select>
+            ${cfg.cap ? UI.challengeCap.budgetSel('vsBBud', VS.bud) : ''}
             <input id="vsBQ" placeholder="Search players" value="${esc(VS.q || '')}" autocomplete="off">
             </div>
           <p class="muted ch-small" id="vsLoadN"></p>
@@ -641,11 +643,10 @@
         const fill = () => {
           const q = (VS.q || '').trim().toLowerCase();
           if (B.era) { const nb = board(cfg); if (nb.players.length !== B.players.length) { B.players = nb.players; Object.assign(B.byId, nb.byId); } }   // rosters that finished loading
-          const all = B.players.concat(B.extra || []).filter(p => !tkn.has(B.base(p)) && (!VS.pos || C.primaryPos(p.pos) === VS.pos) && (!VS.season || p.season === +VS.season) && (!q || p.name.toLowerCase().indexOf(q) >= 0))
-;
-          const so = SORTS.find(x => x[0] === (blind ? 'az' : (VS.sort || 'ovr'))) || SORTS[0];
+          const all = B.players.concat(B.extra || []).filter(p => !tkn.has(B.base(p)) && (!VS.pos || C.primaryPos(p.pos) === VS.pos) && (!VS.season || p.season === +VS.season) && (!q || p.name.toLowerCase().indexOf(q) >= 0) && (!cfg.cap || UI.challengeCap.budgetOk(VS.bud, cfg.cap, five, p)));
+          const so = SORTS.find(x => x[0] === (blind ? 'az' : (VS.sort || 'ovr')) && (x[3] !== 'cap' || cfg.cap)) || SORTS[0];
           if (so[2]) all.sort((a, b) => so[2](b) - so[2](a) || b.ovr - a.ovr); else all.sort((a, b) => a.name.localeCompare(b.name));
-          const shown = p => (blind || !so[2] || so[0] === 'ovr' || so[0] === 'low' ? '' : '<span class="vs-sortv">' + esc(String(Math.round(so[2](p) * 10) / 10)) + '</span>');
+          const shown = p => (blind || !so[2] || so[0] === 'ovr' || so[0] === 'low' ? '' : '<span class="vs-sortv">' + esc(String(Math.round(so[3] === 'cap' ? (so[0] === 'cheap' ? -so[2](p) : so[2](p)) * 10 : so[2](p) * 10) / 10)) + '</span>');
           const L = UI.$('#vsBList', app), N = UI.$('#vsBN', app);
           if (!L) return;
           L.innerHTML = all.slice(0, BLIM).map(p => playerRow(p, B, shown(p) + (mine ? UI.challengeCap.btn(cfg.cap, five, p, `<button type="button" class="btn btn-small btn-gold" data-bpick="${esc(p.id)}">TAKE</button>`) : ''), blind)).join('');
@@ -677,6 +678,7 @@
           };
           step();
         } else if (note && B.era) note.textContent = need().length ? 'Loading every roster...' : 'Every roster is loaded: anyone who ever played is on the board.';
+        const bbd = UI.$('#vsBBud', app); if (bbd) bbd.addEventListener('change', () => { VS.bud = bbd.value; BLIM = 60; fill(); });
         const bso = UI.$('#vsBSort', app); if (bso) bso.addEventListener('change', () => { VS.sort = bso.value; BLIM = 60; fill(); });
         const bq = UI.$('#vsBQ', app); if (bq) bq.addEventListener('input', () => { VS.q = bq.value; BLIM = 60; fill(); });
         const L = UI.$('#vsBList', app);
@@ -750,6 +752,13 @@
         draft(app); window.scrollTo(0, 0);
       }
       app.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => takeP(b.dataset.add)));
+      app.querySelectorAll('.vs-side').forEach((el, i) => UI.swapBind(el, k => {
+        const sw = VS.sw, pk = VS.cfg.sides[i].picks;
+        if (!sw || sw.s !== i) { VS.sw = { s: i, k }; }
+        else if (sw.k === k) { VS.sw = null; }
+        else { const t = pk[k]; pk[k] = pk[sw.k]; pk[sw.k] = t; VS.sw = null; push(); }
+        draft(app);
+      }));
       const sim = UI.$('#vsSim', app);
       if (sim) sim.addEventListener('click', () => {
         const go2 = () => { VS.shown = 0; go('series'); };

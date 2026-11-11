@@ -240,7 +240,15 @@
       <small class="muted">${s.open ? `${money(s.left)} left for ${s.open} spot${s.open === 1 ? '' : 's'}. The next pick can cost up to ${money(s.max)}.` : `${money(s.left)} under the cap.`}</small></div>`;
   }
   const capBtn = (cap, list, p, html) => (!cap || C.capFits(cap, list, p) ? html : '<button type="button" class="btn btn-small" disabled>OVER CAP</button>');
-  UI.challengeCap = { CAPS, money, priceTag, bar: capBar, btn: capBtn };
+  // 8-man rosters: the first five picks start. Tap one player, then another, to swap a starter with the bench.
+  // swapOl draws the list (inner(k) is a row's html), swapBind wires the taps: onTap(k).
+  UI.swapOl = (per, inner, sel, can) => `<ol${can ? ' class="vs-swap"' : ''}>${Array.from({ length: per }, (_, k) => k).map(k => `<li${k === 5 ? ' class="vs-bench-1"' : ''}${can && inner(k) && inner(k).indexOf('class="muted">-<') < 0 ? ` data-sw="${k}"` : ''}${sel === k ? ' data-sel="1"' : ''}>${inner(k)}</li>`).join('')}</ol>${can ? '<small class="muted vs-swap-h">' + (sel == null ? 'Tap a starter, then a bench player, to swap who starts.' : 'Now tap who to swap with.') + '</small>' : ''}`;
+  UI.swapBind = (root, onTap) => root.querySelectorAll('[data-sw]').forEach(li => li.addEventListener('click', () => onTap(+li.dataset.sw, li)));
+  // budget filter for the open boards: any price, only what still fits under the cap, or a price ceiling
+  const BUDGETS = [['', 'ANY PRICE'], ['fit', 'I CAN AFFORD'], ['5', 'UNDER $5M'], ['10', 'UNDER $10M'], ['20', 'UNDER $20M'], ['30', 'UNDER $30M']];
+  const budgetSel = (id, cur) => `<select id="${id}" aria-label="Budget">${BUDGETS.map(b => `<option value="${b[0]}"${String(cur || '') === b[0] ? ' selected' : ''}>${b[1]}</option>`).join('')}</select>`;
+  const budgetOk = (bud, cap, list, p) => !bud || (bud === 'fit' ? C.capFits(cap, list, p) : C.price(p) <= +bud + 1e-9);
+  UI.challengeCap = { CAPS, money, priceTag, bar: capBar, btn: capBtn, budgetSel, budgetOk };
   // the wheel, for js/ui-versus.js: UI.challengeWheel.strip(teams) and .animate(app, teams, done, spin, cfg)
   let SPINNING = 0;   // while a spin is running, other redraws (a ping, a friend's pick, the clock) wait: they cut the spin short or restart it
   UI.challengeWheel = { busy: () => Date.now() < SPINNING, strip: (teams, cfg) => wheelStrip(teams, cfg), animate: (app, teams, done, s, cfg) => animateSpin(app, teams, done, s, cfg) };

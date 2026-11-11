@@ -27,6 +27,7 @@
   const SEEN = {};
   let APP = null, OFF = 0, SIG = '', LAST = { page: '', mine: '' }, PEND = '', TICK = null, ON = false;
   const ANIM = {};
+  let SW = null;   // 8-man: the roster spot tapped first, waiting for its swap partner
   const per = t => 5 + ((t || TN()).cfg && +(t || TN()).cfg.bench > 0 ? +(t || TN()).cfg.bench : 0);   // picks each: five, plus the bench (8-man)
   (UI.rooms = UI.rooms || {}).tn = () => (NET.role && NET.code ? NET.code : '');   // for friend invites
   const mySeat = () => ((TN() || {}).seats || []).indexOf(CID);
@@ -285,6 +286,11 @@
   }
   function hostAct(seat, a) {
     const t = TN(), cfg = t.cfg;
+    if (a && a.k === 'swap') {   // 8-man: trade a starter and a bench player
+      const pk = t.picks[seat], i = +a.i, j = +a.j;
+      if (t.page === 'draft' && cfg && cfg.bench && seat >= 0 && seat < t.seats.length && i !== j && pk[i] != null && pk[j] != null) { const x = pk[i]; pk[i] = pk[j]; pk[j] = x; A.save(); push(); changed(); }
+      return;
+    }
     if (t.page !== 'draft' || !cfg || seat < 0 || seat >= t.seats.length || t.picks[seat].length >= per(t)) return;
     if (cfg.turns && seat !== onClockSeat(t)) return;
     if (cfg.board) {   // the open board: no wheel, just take anyone who is left
@@ -590,11 +596,17 @@
         <div id="tnNet">${netBar()}</div>
         <div id="tnProg">${progHtml()}</div>
         <div class="vs-side tn-me" style="--c1:${esc(tm.colors[0])}"><div class="vs-side-h">${A.logo(tm, 36)}<div><small>${esc(t.names[w])} | YOU</small><b>${esc(A.tName(tm))}</b>${cfg.cap ? ' <small class="vs-pay">' + UI.challengeCap.money(C.capState(cfg.cap, five).spent) + ' of $' + cfg.cap + 'M</small>' : ''}</div></div>
-          <ol>${Array.from({ length: per(t) }, (_, i) => i).map(i => `<li${i === 5 ? ' class="vs-bench-1"' : ''}>${five[i] ? esc(five[i].name) + ' <small class="muted">' + esc(C.posLabel(five[i])) + (B.era && five[i].season ? ' ' + A.short(five[i].season) : '') + '</small> <b class="ch-ovr ' + UI.ovrClass(five[i].ovr) + '">' + esc(five[i].ovr) + '</b>' : '<span class="muted">-</span>'}</li>`).join('')}</ol></div>
+          ${UI.swapOl(per(t), i => (five[i] ? esc(five[i].name) + ' <small class="muted">' + esc(C.posLabel(five[i])) + (B.era && five[i].season ? ' ' + A.short(five[i].season) : '') + '</small> <b class="ch-ovr ' + UI.ovrClass(five[i].ovr) + '">' + esc(five[i].ovr) + '</b>' : '<span class="muted">-</span>'), SW, !!cfg.bench && five.length > 5)}</div>
         ${on >= 0 ? `<div class="vs-clock">${cfg.turns ? (mineTurn ? 'YOU ARE ON THE CLOCK' : 'ON THE CLOCK: <b>' + onName + '</b>') + ' | ' : ''}PICK <b>${onK + 1}</b> OF ${per(t)}</div>` : ''}
         ${clk ? `<div class="vs-timer" id="vsTimer"><i style="--w:100%"></i><span>${cfg.timer}</span></div>` : ''}
         ${body}${fit}`;
       refreshNet(); bindProg(UI.$('#tnProg', app));
+      UI.swapBind(app, i => {
+        if (SW == null) SW = i;
+        else if (SW === i) SW = null;
+        else { const a = SW; SW = null; act({ k: 'swap', i: a, j: i }); }
+        draft(app);
+      });
       UI.$('#tnQuit', app).addEventListener('click', () => HOOK.quit());
       if (spin && !ANIM[spin.n]) UI.challengeWheel.animate(app, teams, () => { ANIM[spin.n] = true; const cs = TN().spins[on]; if (cs && cs.n === spin.n) draft(app); }, { year: spin.year, abbr: spin.abbr }, { mode: B.era ? 'alltime' : 'versus', seasons: cfg.seasons });
       const once = (id, a) => { const b = UI.$(id, app); if (b) b.addEventListener('click', () => { b.disabled = true; act(a); }); };
