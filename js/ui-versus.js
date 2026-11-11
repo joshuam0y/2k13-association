@@ -37,6 +37,7 @@
   const logo = (t, n) => UI.logoFor(t || { abbr: '?' }, n);
   const tOf = (teams, a) => teams.find(t => t.abbr === a) || { abbr: a, city: a, name: '', colors: ['#333', '#777'] };
   const tName = t => ((t.city || '') + ' ' + (t.name || '')).trim();
+  const myName = () => (me() !== null && VS.names[me()]) || UI.profile.name() || '';   // signed in: that is your name in the room
   const who = i => VS.names[i] || ('PLAYER ' + (i + 1));
   // ---------- the rivalry: every finished series between the same two names, kept on this phone ----------
   const RKEY = 'a13-vs-rivals';
@@ -155,7 +156,7 @@
     NET.peerSeen = Date.now();
     if (NET.status !== 'connected') {
       NET.status = 'connected'; NET.err = '';
-      if (NET.role === 'host') push(); else send({ t: 'hello', name: VS.names[NET.side] || '' });
+      if (NET.role === 'host') push(); else send({ t: 'hello', name: myName() });
       route(); drawChat();
     }
   }
@@ -164,7 +165,7 @@
     if (m.role === NET.role) {   // a third phone with our role, or two hosts after a handover: the newer epoch keeps the room
       if (NET.role === 'host' && (m.ep || 0) !== undefined) {
         const mine = VS.epoch || 0, theirs = m.ep || 0;
-        if (theirs > mine || (theirs === mine && m.from < NET.me && theirs > 0)) { NET.role = 'guest'; NET.status = 'connecting'; send({ t: 'hello', name: VS.names[NET.side] || '' }); route(); }
+        if (theirs > mine || (theirs === mine && m.from < NET.me && theirs > 0)) { NET.role = 'guest'; NET.status = 'connecting'; send({ t: 'hello', name: myName() }); route(); }
         else push();
       }
       return;
@@ -193,7 +194,7 @@
     NET.status = 'waiting'; NET.peerSeen = 0; NET.err = ''; ls.set(VS);
     if (!chosen) UI.toast('The host dropped. You are the host now.');
     route(); drawChat();
-    send({ t: 'ping', name: VS.names[NET.side] || '' });
+    send({ t: 'ping', name: myName() });
   }
   function handOver() {
     if (NET.role !== 'host' || !linked()) return;
@@ -227,7 +228,7 @@
           client.subscribe(topic(), { qos: 1 }, () => {
             if (NET.status === 'starting') NET.status = 'waiting';
             if (NET.role === 'guest' && NET.status !== 'connected') NET.status = 'connecting';
-            send({ t: NET.role === 'guest' ? 'hello' : 'ping', name: VS.names[me()] || '' });
+            send({ t: NET.role === 'guest' ? 'hello' : 'ping', name: myName() });
             route();
           });
         });
@@ -238,7 +239,7 @@
       // pings both ways; silence means lost, a ping back heals it
       NET.timers.push(setInterval(() => {
         if (!NET.client || NET.code !== code) return;
-        send({ t: NET.role === 'guest' && NET.status !== 'connected' ? 'hello' : 'ping', name: VS.names[me()] || '' });
+        send({ t: NET.role === 'guest' && NET.status !== 'connected' ? 'hello' : 'ping', name: myName() });
         if (NET.status === 'connected' && Date.now() - NET.peerSeen > 15000) { NET.status = 'lost'; route(); drawChat(); }
         else if (NET.role === 'guest' && NET.status === 'lost' && Date.now() - NET.peerSeen > 25000 && VS.cfg) becomeHost(false);
       }, 4000));
@@ -388,6 +389,7 @@
       const boss = NET.role !== 'guest';   // the host (or the one phone) sets the season and the rules
       const dis = c => (c ? '' : ' disabled');
       const grid = i => `<div class="ch-teams">${teams.map(t => `<button type="button" class="ch-team${VS.teams[i] === t.abbr ? ' on' : ''}" data-side="${i}" data-team="${esc(t.abbr)}"${VS.teams[1 - i] === t.abbr || !canAct(i) ? ' disabled' : ''} style="--c1:${esc(t.colors[0])}">${logo(t, 30)}<span>${esc(t.name)}</span></button>`).join('')}</div>`;
+      if (me() !== null && !VS.names[me()] && UI.profile.name()) VS.names[me()] = UI.profile.name();
       const ready = !online() || linked();
       app.innerHTML = `
         <section class="ch-hero"><div class="ch-hero-k">DRAFT CHALLENGE | TWO PLAYERS</div><h1 class="ch-hero-t">YOU VS ME.</h1>
@@ -452,7 +454,7 @@
       app.querySelectorAll('[data-timer]').forEach(b => b.addEventListener('click', () => { VS.opts.timer = +b.dataset.timer; redraw(); }));
       app.querySelectorAll('[data-side]').forEach(b => b.addEventListener('click', () => { VS.teams[+b.dataset.side] = b.dataset.team; redraw(); }));
       app.querySelectorAll('[data-name]').forEach(inp => inp.addEventListener('change', () => { VS.names[+inp.dataset.name] = inp.value.trim().slice(0, 20); if (me() === +inp.dataset.name && VS.names[+inp.dataset.name]) UI.profile.set(VS.names[+inp.dataset.name]); push(); }));
-      UI.profile.wire(app, () => redraw());
+      UI.profile.wire(app, () => { const i = me(); if (i !== null) VS.names[i] = UI.profile.name(); push(); redraw(); });
       const rn = UI.$('#vsResetNames', app);
       if (rn) rn.addEventListener('click', () => { [0, 1].forEach(i => { if (canAct(i)) VS.names[i] = ''; }); push(); redraw(); });
       const bk = UI.$('#vsBack', app); if (bk) bk.addEventListener('click', () => go(C.vsOnClock(VS.cfg) >= 0 ? 'draft' : 'series'));
