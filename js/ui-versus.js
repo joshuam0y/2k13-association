@@ -504,7 +504,8 @@
   }
 
   // ---------- the draft: a spin for every pick ----------
-  let BLIM = 60;   // how many of the open board's players are listed
+  let BLIM = 60;
+  const BG = { run: false, fill: null };   // the open board loads every season's roster in the background, one after another   // how many of the open board's players are listed
   const ANIM = {};   // spins already animated on this phone
   function ovrTag(p, blind) { return blind ? '' : `<b class="ch-ovr ${UI.ovrClass(p.ovr)}">${esc(p.ovr)}</b>`; }
   // the draft board: one season's league, or every season (era spin: the all-time pool, keys id@season,
@@ -521,7 +522,8 @@
     });
     if (!era) d.free.forEach(p => { byId[p.id] = p; });
     const base = p => (era ? (cfg.dupes ? p.id : p.base) : p.id);   // duplicates on: the same player from another season is a different pick
-    return { era, teams, byId, players, base, cap: +cfg.cap || 0,
+    const extra = !era ? d.free.slice() : [];   // free agents can be drafted from the open board, but the wheel never lands on them
+    return { era, teams, byId, players, extra, base, cap: +cfg.cap || 0,
       takenSet: ids => new Set(ids.map(id => (byId[id] ? base(byId[id]) : id))),
       teamFor: (abbr, year) => (era && C.eraTeam(year, abbr)) || tOf(teams, abbr),
       groupKey: p => (era ? p.season : cfg.year) + ':' + p.team };
@@ -583,8 +585,8 @@
           <div class="ch-filters">${[''].concat(POS).map(x => `<button type="button" class="ch-chip sm${(VS.pos || '') === x ? ' on' : ''}" data-bpos="${x}">${x || 'ALL'}</button>`).join('')}
             ${B.era ? `<select id="vsBSeason" aria-label="Season"><option value="">ALL SEASONS</option>${ALL_YEARS.filter(y => inPlay(cfg, y)).map(y => `<option value="${y}"${+VS.season === y ? ' selected' : ''}>${esc(lbl(y))}</option>`).join('')}</select>` : ''}
             <input id="vsBQ" placeholder="Search players" value="${esc(VS.q || '')}" autocomplete="off">
-            ${B.era && ALL_YEARS.some(y => inPlay(cfg, y) && y !== 2013 && !C.loaded(y)) ? '<button type="button" class="btn btn-small" id="vsLoadAll">LOAD EVERY ROSTER</button>' : ''}</div>
-          <p class="muted ch-small" id="vsLoadN">${B.era ? 'The board lists the stars of every season. Pick a season, or load every roster, to draft anyone who ever played.' : ''}</p>
+            </div>
+          <p class="muted ch-small" id="vsLoadN"></p>
           ${cfg.cap ? UI.challengeCap.bar(cfg.cap, five) : ''}
           ${mine ? '' : `<p class="muted">${esc(who(on))} is picking. Everyone taken is already off the board.</p>`}
           <p class="muted ch-small" id="vsBN"></p><ul class="ch-list" id="vsBList"></ul>`;
@@ -622,7 +624,8 @@
         const tkn = B.takenSet(taken), five = cfg.sides[on].picks.map(id => byId[id]).filter(Boolean);
         const fill = () => {
           const q = (VS.q || '').trim().toLowerCase();
-          const all = B.players.filter(p => !tkn.has(B.base(p)) && (!VS.pos || C.primaryPos(p.pos) === VS.pos) && (!VS.season || p.season === +VS.season) && (!q || p.name.toLowerCase().indexOf(q) >= 0))
+          if (B.era) { const nb = board(cfg); if (nb.players.length !== B.players.length) { B.players = nb.players; Object.assign(B.byId, nb.byId); } }   // rosters that finished loading
+          const all = B.players.concat(B.extra || []).filter(p => !tkn.has(B.base(p)) && (!VS.pos || C.primaryPos(p.pos) === VS.pos) && (!VS.season || p.season === +VS.season) && (!q || p.name.toLowerCase().indexOf(q) >= 0))
             .sort((a, b) => (blind ? a.name.localeCompare(b.name) : b.ovr - a.ovr));
           const L = UI.$('#vsBList', app), N = UI.$('#vsBN', app);
           if (!L) return;
@@ -641,14 +644,20 @@
           if (y && y !== 2013 && !C.loaded(y)) { UI.$('#vsLoadN', app).textContent = 'Loading the ' + lbl(y) + ' rosters...'; C.load(y).then(() => draft(app)).catch(() => { UI.toast('That roster did not load.', 'error'); draft(app); }); return; }
           draft(app);
         });
-        const la = UI.$('#vsLoadAll', app);
-        if (la) la.addEventListener('click', () => {
-          const need = ALL_YEARS.filter(y => inPlay(cfg, y) && y !== 2013 && !C.loaded(y)); let k = 0;
-          la.disabled = true;
-          const next = () => { if (k >= need.length) { draft(app); return; } UI.$('#vsLoadN', app).textContent = 'Loading every roster: ' + k + ' of ' + need.length + '...'; C.load(need[k++]).then(next).catch(next); };
-          next();
-        });
-        const bq = UI.$('#vsBQ', app); if (bq) bq.addEventListener('input', () => { VS.q = bq.value; BLIM = 60; fill(); });
+        BG.fill = fill;
+        const need = () => ALL_YEARS.filter(y => inPlay(cfg, y) && y !== 2013 && !C.loaded(y) && (BG.skip || []).indexOf(y) < 0);
+        const note = UI.$('#vsLoadN', app);
+        if (B.era && need().length && !BG.run) {
+          BG.run = true;
+          const total = need().length; let k = 0;
+          const step = () => {
+            const left = need();
+            if (!left.length || !/^#\/challenge\/vs/.test(location.hash)) { BG.run = false; const n2 = UI.$('#vsLoadN'); if (n2 && !left.length) n2.textContent = 'Every roster is loaded: anyone who ever played is on the board.'; return; }
+            const n2 = UI.$('#vsLoadN'); if (n2) n2.textContent = 'Loading every roster: ' + (total - left.length) + ' of ' + total + '. The board fills up as they arrive.';
+            C.load(left[0]).then(() => { if (BG.fill) BG.fill(); step(); }).catch(() => { BG.skip = (BG.skip || []).concat(left[0]); step(); });
+          };
+          step();
+        } else if (note && B.era) note.textContent = need().length ? 'Loading every roster...' : 'Every roster is loaded: anyone who ever played is on the board.';
         const L = UI.$('#vsBList', app);
         if (L) L.addEventListener('click', e => { const b = e.target.closest('[data-bpick]'); if (b) takeP(b.dataset.bpick); });
       }

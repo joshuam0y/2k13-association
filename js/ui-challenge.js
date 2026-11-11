@@ -551,8 +551,32 @@
       ${board}
       ${full ? leagueBoard(dr, teams) : recent.length ? `<section>${UI.header('OFF THE BOARD', recent.length + (recent.length === 1 ? ' player' : ' players') + ' drafted')}<ol class="ch-feed ch-offboard">${recent.map(x => { const e = dr.pool.find(q => q.key === x.key); const t = teamOf(teams, x.team); return `<li><span class="ch-feed-n">#${x.n}</span>${logo(t, 22)}<b>${esc(e.name)}</b><small class="muted">${esc(short(e.season))}${noR() ? '' : ' | ' + e.ovr}</small></li>`; }).join('')}</ol></section>` : ''}`;
     bindPick(app);
+    if (youUp && cfg.build !== 'wheel') autoLoadRosters(app);
     const toMe = UI.$('#chToMe');
     if (toMe) toMe.addEventListener('click', () => { C.simToUser(dr); saveCur(); drawDraft(app); });
+  }
+  // the open board: every season's full roster joins the pool in the background, so anyone who ever played can be drafted
+  const BGL = { run: false, skip: [] };
+  function autoLoadRosters(app) {
+    const left = () => C.poolSeasons().filter(y => !(CUR.dr.ext && CUR.dr.ext[y]) && (!CUR.cfg.seasons || CUR.cfg.seasons.indexOf(y) >= 0) && BGL.skip.indexOf(y) < 0);
+    if (BGL.run || !left().length) return;
+    BGL.run = true;
+    let n = 0;
+    const step = () => {
+      const y = left()[0];
+      if (y == null || !CUR || !CUR.dr || CUR.cfg.mode !== 'alltime' || !/^#\/challenge/.test(location.hash)) {
+        BGL.run = false;
+        if (y == null && CUR && CUR.dr && /^#\/challenge/.test(location.hash)) { const sy = window.scrollY; saveCur(); drawDraft(app); window.scrollTo(0, sy); }
+        return;
+      }
+      C.load(y).then(() => {
+        C.extendPool(CUR.dr, y);
+        const ae = document.activeElement;
+        if (++n % 8 === 0 && !(ae && ae.tagName === 'INPUT')) { const sy = window.scrollY; saveCur(); drawDraft(app); window.scrollTo(0, sy); }
+        step();
+      }).catch(() => { BGL.skip.push(y); step(); });
+    };
+    step();
   }
   function leagueBoard(dr, teams) {
     const rows = dr.order.map(a => {
