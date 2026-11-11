@@ -133,7 +133,7 @@
   const ovrTag = p => `<b class="ch-ovr ${UI.ovrClass(p.ovr)}">${esc(p.ovr)}</b>`;
   function playerRow(p, B, btn) {
     const t = B.teamFor(p.team, p.season);
-    return `<li class="ch-pl">${UI.faceImg(p, (t.colors || ['#444'])[0])}<span class="ch-pl-b"><b>${esc(p.name)}</b><small>${logo(t, 18)} ${esc(C.posLabel(p))}${B.era && p.season ? ' | ' + short(p.season) : p.age ? ' | ' + p.age : ''}</small></span>${B.cap ? UI.challengeCap.priceTag(p) : ''}${ovrTag(p)}${btn}</li>`;
+    return `<li class="ch-pl">${UI.faceImg(p, (t.colors || ['#444'])[0])}<span class="ch-pl-b"><b>${esc(p.name)}</b><small>${logo(t, 18)} ${esc(C.posLabel(p))}${UI.heightStr && UI.heightStr(p) ? ' | ' + UI.heightStr(p) : ''}${B.era && p.season ? ' | ' + short(p.season) : p.age ? ' | ' + p.age : ''}</small>${UI.gradesHtml ? UI.gradesHtml(p) : ''}</span>${B.cap ? UI.challengeCap.priceTag(p) : ''}${ovrTag(p)}${btn}</li>`;
   }
 
   // ---------- bracket logic (pure, no DOM) ----------

@@ -617,3 +617,13 @@
 
 .vs-sortv { font-family: var(--display); font-size: 13px; letter-spacing: .06em; color: var(--gold2, var(--gold)); background: rgba(255, 255, 255, .07); padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
 #vsBSort { background: var(--bg3); border: 1px solid var(--line2); color: var(--text); padding: 8px 10px; font: inherit; font-size: 15px; min-height: 38px; }
+
+/* height and letter grades on the draft boards */
+.ch-grades { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
+.ch-grades .gr { font-style: normal; font-family: var(--display); font-size: 11px; letter-spacing: .04em; padding: 1px 5px; border-radius: 3px; background: rgba(255, 255, 255, .07); color: var(--text2, #ccc); white-space: nowrap; }
+.ch-grades .gr u { text-decoration: none; color: var(--muted); margin-right: 3px; font-size: 9px; letter-spacing: .1em; }
+.ch-grades .gr-a { color: #6fcf88; }
+.ch-grades .gr-b { color: #7aa8e8; }
+.ch-grades .gr-c { color: #e0c36a; }
+.ch-grades .gr-d, .ch-grades .gr-f { color: #e88a8a; }
+.tn-noR .ch-grades { display: none; }

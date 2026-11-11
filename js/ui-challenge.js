@@ -271,10 +271,22 @@
     }
     return `<div class="ch-slots">${out.join('')}</div>`;
   }
+  // height and letter grades for the draft boards: shooting, finishing, playmaking, rebounding, defense, athleticism
+  const heightStr = p => (p && p.ht >= 60 && p.ht <= 95 ? Math.floor(p.ht / 12) + "'" + (p.ht % 12) + '"' : '');
+  const letter = v => (v >= 94 ? 'A+' : v >= 88 ? 'A' : v >= 83 ? 'A-' : v >= 78 ? 'B+' : v >= 73 ? 'B' : v >= 68 ? 'B-' : v >= 63 ? 'C+' : v >= 58 ? 'C' : v >= 53 ? 'C-' : v >= 45 ? 'D' : 'F');
+  const GRADES = [['SHT', ['three', 'mid', 'ft']], ['FIN', ['layup', 'dunk', 'close']], ['PLY', ['pass', 'handle']], ['REB', ['oreb', 'dreb']], ['DEF', ['perD', 'intD', 'steal', 'block']], ['ATH', ['speed', 'vert', 'strength']]];
+  function gradesHtml(p) {
+    if (!p || !p.attrs) return '';
+    return '<span class="ch-grades">' + GRADES.map(([k, a]) => {
+      const v = a.reduce((s, x) => s + (p.attrs[x] || 0), 0) / a.length, g = letter(v);
+      return '<i class="gr gr-' + g[0].toLowerCase() + '" title="' + k + ' ' + Math.round(v) + '"><u>' + k + '</u>' + g + '</i>';
+    }).join('') + '</span>';
+  }
+  UI.heightStr = heightStr; UI.gradesHtml = gradesHtml;
   function playerRow(p, teams, btn) {
     const from = p.from || p.team;
     const t = p.season && p.season !== 2013 && C.eraTeam(p.season, from) || teamOf(teams, from);
-    return `<li class="ch-pl">${face(p, (t.colors || ['#444'])[0])}<span class="ch-pl-b"><b>${esc(p.name)}</b><small>${logo(t, 18)} ${esc(String(p.pos || '').replace(/-/g, '/'))}${p.age ? ' | ' + p.age : ''}${p.label ? ' | ' + esc(p.label) : ''}</small></span>
+    return `<li class="ch-pl">${face(p, (t.colors || ['#444'])[0])}<span class="ch-pl-b"><b>${esc(p.name)}</b><small>${logo(t, 18)} ${esc(String(p.pos || '').replace(/-/g, '/'))}${heightStr(p) ? ' | ' + heightStr(p) : ''}${p.age ? ' | ' + p.age : ''}${p.label ? ' | ' + esc(p.label) : ''}</small>${noR() ? '' : gradesHtml(p)}</span>
       ${CUR && CUR.cfg && CUR.cfg.cap ? priceTag(p) : ''}${ovrSpan(p.ovr)}${btn || ''}</li>`;
   }
 
