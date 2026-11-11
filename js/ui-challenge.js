@@ -762,7 +762,7 @@
       const rows = b[side].box.filter(x => x.min > 0).sort((x, y) => (y.starter ? 1 : 0) - (x.starter ? 1 : 0) || y.min - x.min);
       return `<h3 class="ch-bx-h">${logo(t, 26)}<span>${esc(b[side].abbr === me ? tName(r.team) : tName(t))}</span><b>${b[side].pts}</b></h3>
         <div class="tscroll"><table class="stats ch-bx"><thead><tr><th class="l">PLAYER</th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>FG</th><th>3P</th><th>FT</th><th>TO</th><th>+/-</th></tr></thead><tbody>${rows.map(x =>
-          `<tr${x.starter ? ' class="ch-st"' : ''}><td class="l">${esc(nm(x.id))}</td><td>${Math.round(x.min || 0)}</td><td><b>${x.pts || 0}</b></td><td>${(x.oreb || 0) + (x.dreb || 0)}</td><td>${x.ast || 0}</td><td>${x.stl || 0}</td><td>${x.blk || 0}</td><td>${x.fgm || 0}-${x.fga || 0}</td><td>${x.tpm || 0}-${x.tpa || 0}</td><td>${x.ftm || 0}-${x.fta || 0}</td><td>${x.tov || 0}</td><td>${pm(x.pm)}</td></tr>`).join('')}</tbody></table></div>`;
+          `<tr${x.starter ? ' class="ch-st"' : ''}><td class="l">${esc(nm(x.id))}${r.mode === 'alltime' && (rp.names[x.id] || {}).season ? ' <small class="muted">' + esc(short((rp.names[x.id] || {}).season)) + '</small>' : ''}</td><td>${Math.round(x.min || 0)}</td><td><b>${x.pts || 0}</b></td><td>${(x.oreb || 0) + (x.dreb || 0)}</td><td>${x.ast || 0}</td><td>${x.stl || 0}</td><td>${x.blk || 0}</td><td>${x.fgm || 0}-${x.fga || 0}</td><td>${x.tpm || 0}-${x.tpa || 0}</td><td>${x.ftm || 0}-${x.fta || 0}</td><td>${x.tov || 0}</td><td>${pm(x.pm)}</td></tr>`).join('')}</tbody></table></div>`;
     };
     const q = Array.isArray(b.quarters) ? b.quarters : [];
     const qh = q.map((x, i) => `<th>${i < 4 ? 'Q' + (i + 1) : 'OT' + (i - 3)}</th>`).join('');
