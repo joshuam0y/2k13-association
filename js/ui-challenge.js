@@ -854,6 +854,7 @@
   function shareCode(r) {
     const c = r.cfg, o = { v: 1, m: c.mode === 'alltime' ? 'a' : 'y', y: c.year, b: c.build === 'wheel' ? 'w' : 'f', t: c.team, n: c.name || '', s: c.seed,
       i: c.injuries === false ? 0 : 1, e: c.era || 2013, w: r.w, l: r.l };
+    if (c.dupes) o.u = 1;
     if (c.mode === 'alltime') { const ix = {}; C.allTimePool().forEach((e, k) => { ix[e.key] = k; }); o.d = (r.draft || []).map(x => ix[x.key]); }
     else o.p = c.picks;
     return b64(JSON.stringify(o));
@@ -862,7 +863,7 @@
     let o;
     try { o = JSON.parse(unb64(code)); } catch (e) { app.innerHTML = UI.empty('LINK NOT READABLE', 'This challenge link is broken or cut off.', '<div class="row-btns"><a class="btn" href="#/challenge">DRAFT CHALLENGE</a></div>'); return; }
     const cfg = { mode: o.m === 'a' ? 'alltime' : 'year', year: +o.y || 2013, build: o.b === 'w' ? 'wheel' : 'free', team: o.t, name: o.n || '', seed: +o.s,
-      injuries: o.i !== 0, era: +o.e || 2013, picks: o.p || [] };
+      injuries: o.i !== 0, era: +o.e || 2013, dupes: o.u ? 1 : 0, picks: o.p || [] };
     ensureData(cfg, app, () => {
       try {
         let dr = null;
