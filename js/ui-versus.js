@@ -476,7 +476,7 @@
       app.querySelectorAll('[data-timer]').forEach(b => b.addEventListener('click', () => { VS.opts.timer = +b.dataset.timer; redraw(); }));
       app.querySelectorAll('[data-side]').forEach(b => b.addEventListener('click', () => { VS.teams[+b.dataset.side] = b.dataset.team; redraw(); }));
       app.querySelectorAll('[data-tname]').forEach(inp => inp.addEventListener('change', () => { VS.tnames[+inp.dataset.tname] = inp.value.trim().slice(0, 24); push(); }));
-      app.querySelectorAll('[data-name]').forEach(inp => inp.addEventListener('change', () => { VS.names[+inp.dataset.name] = inp.value.trim().slice(0, 20); if (me() === +inp.dataset.name && VS.names[+inp.dataset.name]) UI.profile.set(VS.names[+inp.dataset.name]); if (NET.role === 'guest') send({ t: 'hello', name: VS.names[me()] || '' }); else { uniqNames(); push(); redraw(); } }));
+      app.querySelectorAll('[data-name]').forEach(inp => inp.addEventListener('change', () => { VS.names[+inp.dataset.name] = inp.value.trim().slice(0, 20); if (NET.role === 'guest') send({ t: 'hello', name: VS.names[me()] || '' }); else { uniqNames(); push(); redraw(); } }));
       UI.profile.wire(app, () => {
         if (!UI.profile.signedIn() && NET.role) { hangUp(); route(); return; }
         if (UI.profile.signedIn() && PEND) { const c = PEND; PEND = null; join(c); route(); return; }
