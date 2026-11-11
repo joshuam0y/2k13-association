@@ -612,3 +612,5 @@
 @media (max-width: 559px) { .in-many .in-box { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 6px; } .in-many .in-grp { flex: none; } .in-many .in-c { padding: 2px 8px; } .in-many .in-hs { width: 24px; height: 24px; } .in-many .in-n { flex-direction: row; align-items: baseline; gap: 6px; } .in-many .in-n b { font-size: 12.5px; } }
 @media (min-width: 720px) { .in-many .in-c { min-height: 0; } .in-many .in-hs { width: 34px; height: 34px; } .in-many .in-n b { font-size: 15px; } }
 @media (max-height: 560px) { .in-many .in-hs { display: none; } }
+
+.vs-tbl tr.vs-bench-row td { font-family: var(--display); font-size: 10px; letter-spacing: .16em; color: var(--gold); padding-top: 8px; border-top: 1px dashed rgba(255, 255, 255, .22); }
