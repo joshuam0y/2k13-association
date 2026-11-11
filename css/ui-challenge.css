@@ -637,3 +637,19 @@
 .pf-card { width: min(92vw, 380px); background: var(--bg2); border: 1px solid var(--line2); border-top: 3px solid var(--gold); padding: 16px; display: grid; gap: 10px; }
 .pf-card-k { font-family: var(--display); letter-spacing: .2em; color: var(--gold); font-size: 13px; }
 .pf-card .bad { color: #e88a8a; }
+
+/* accounts and friends (js/ui-profile.js) */
+.pf-card { max-height: 92vh; overflow-y: auto; }
+.pf-tabs { padding: 0 0 4px; position: static; background: none; }
+.pf-msg { min-height: 1.2em; color: var(--text2); font-size: 13px; }
+.pf-msg.bad { color: #e88a8a; }
+.pf-add { display: flex; gap: 8px; }
+.pf-add input { flex: 1; min-width: 0; background: var(--bg3); border: 1px solid var(--line2); color: var(--text); padding: 8px 10px; font: inherit; min-height: 38px; }
+.pf-friends ul { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 4px; }
+.pf-friends li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--bg3); border: 1px solid var(--line); }
+.pf-friends li b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--display); letter-spacing: .04em; }
+.pf-h { font-family: var(--display); font-size: 12px; letter-spacing: .18em; color: var(--gold); margin: 8px 0 4px; }
+.pf-dot { width: 9px; height: 9px; border-radius: 50%; background: #555; flex: none; }
+.pf-dot.on { background: #4ade80; box-shadow: 0 0 6px #4ade80; }
+.pf-on { color: #4ade80; letter-spacing: .1em; }
+.pf-invite { position: fixed; left: 50%; transform: translateX(-50%); top: calc(12px + env(safe-area-inset-top)); z-index: 10001; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; max-width: 94vw; padding: 10px 14px; background: var(--bg2); border: 1px solid var(--gold); box-shadow: 0 8px 30px rgba(0, 0, 0, .6); }

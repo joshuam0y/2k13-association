@@ -28,6 +28,7 @@
   let APP = null, OFF = 0, SIG = '', LAST = { page: '', mine: '' }, PEND = '', TICK = null, ON = false;
   const ANIM = {};
   const per = t => 5 + ((t || TN()).cfg && +(t || TN()).cfg.bench > 0 ? +(t || TN()).cfg.bench : 0);   // picks each: five, plus the bench (8-man)
+  (UI.rooms = UI.rooms || {}).tn = () => (NET.role && NET.code ? NET.code : '');   // for friend invites
   const mySeat = () => ((TN() || {}).seats || []).indexOf(CID);
   const flat = () => [].concat.apply([], TN().picks);
   const cleanName = (v, i) => String(v || '').trim().slice(0, 20) || 'PLAYER ' + (i + 1);

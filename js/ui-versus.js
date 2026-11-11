@@ -52,6 +52,7 @@
     if (NET.role === 'guest') send({ t: 'hello', name: UI.profile.name() });
     else { VS.names[i] = UI.profile.name(); uniqNames(); push(); if (VS.page === 'setup' && APP) setup(APP); }
   });
+  (UI.rooms = UI.rooms || {}).vs = () => (NET.role && NET.code ? NET.code : '');   // for friend invites
   const who = i => VS.names[i] || ('PLAYER ' + (i + 1));
   // ---------- the rivalry: every finished series between the same two names, kept on this phone ----------
   const RKEY = 'a13-vs-rivals';
