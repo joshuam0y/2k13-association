@@ -474,6 +474,7 @@
   }
 
   // ---------- the draft: a spin for every pick ----------
+  let BLIM = 60;   // how many of the open board's players are listed
   const ANIM = {};   // spins already animated on this phone
   function ovrTag(p, blind) { return blind ? '' : `<b class="ch-ovr ${UI.ovrClass(p.ovr)}">${esc(p.ovr)}</b>`; }
   // the draft board: one season's league, or every season (era spin: the all-time pool, keys id@season,
@@ -593,13 +594,16 @@
             .sort((a, b) => (blind ? a.name.localeCompare(b.name) : b.ovr - a.ovr));
           const L = UI.$('#vsBList', app), N = UI.$('#vsBN', app);
           if (!L) return;
-          L.innerHTML = all.slice(0, 60).map(p => playerRow(p, B, mine ? UI.challengeCap.btn(cfg.cap, five, p, `<button type="button" class="btn btn-small btn-gold" data-bpick="${esc(p.id)}">TAKE</button>`) : '', blind)).join('');
-          N.textContent = all.length ? (all.length > 60 ? 'Showing 60 of ' + all.length + '. Search or filter for more.' : all.length + ' left.') : 'Nobody matches.';
+          L.innerHTML = all.slice(0, BLIM).map(p => playerRow(p, B, mine ? UI.challengeCap.btn(cfg.cap, five, p, `<button type="button" class="btn btn-small btn-gold" data-bpick="${esc(p.id)}">TAKE</button>`) : '', blind)).join('');
+          N.innerHTML = all.length ? (all.length > BLIM ? 'Showing ' + BLIM + ' of ' + all.length + '. <button type="button" class="btn btn-small" id="vsMore">SHOW 60 MORE</button> <button type="button" class="btn btn-small" id="vsMoreAll">SHOW ALL</button>' : all.length + ' left.') : 'Nobody matches.';
+          const mo = UI.$('#vsMore', app), ma = UI.$('#vsMoreAll', app);
+          if (mo) mo.addEventListener('click', () => { BLIM += 60; fill(); });
+          if (ma) ma.addEventListener('click', () => { BLIM = 1e6; fill(); });
         };
         fill();
-        app.querySelectorAll('[data-bpos]').forEach(b => b.addEventListener('click', () => { VS.pos = b.dataset.bpos; draft(app); }));
-        const bs = UI.$('#vsBSeason', app); if (bs) bs.addEventListener('change', () => { VS.season = bs.value; draft(app); });
-        const bq = UI.$('#vsBQ', app); if (bq) bq.addEventListener('input', () => { VS.q = bq.value; fill(); });
+        app.querySelectorAll('[data-bpos]').forEach(b => b.addEventListener('click', () => { VS.pos = b.dataset.bpos; BLIM = 60; draft(app); }));
+        const bs = UI.$('#vsBSeason', app); if (bs) bs.addEventListener('change', () => { VS.season = bs.value; BLIM = 60; draft(app); });
+        const bq = UI.$('#vsBQ', app); if (bq) bq.addEventListener('input', () => { VS.q = bq.value; BLIM = 60; fill(); });
         const L = UI.$('#vsBList', app);
         if (L) L.addEventListener('click', e => { const b = e.target.closest('[data-bpick]'); if (b) takeP(b.dataset.bpick); });
       }
