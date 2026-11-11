@@ -404,6 +404,7 @@
   }
 
   // ---------- setup ----------
+  let KEEP = null;   // scroll position to restore after the next setup draw
   function setup(app) {
     stopTick();
     loadThen(app, VS.year, () => {
@@ -455,7 +456,8 @@
         </div>`;
       UI.centerChips(app);
       bindNet(app);
-      const redraw = () => { push(); setup(app); };
+      const redraw = () => { KEEP = window.scrollY; push(); setup(app); };
+      if (KEEP != null) { const y = KEEP; KEEP = null; window.scrollTo(0, y); requestAnimationFrame(() => window.scrollTo(0, y)); }   // a setup choice keeps your place, even when it had to load a season first
       app.querySelectorAll('[data-net]').forEach(b => b.addEventListener('click', () => {
         const v = b.dataset.net;
         if (v !== 'local' && !UI.profile.signedIn()) { UI.toast('Sign in to play online. Your name is your account.', 'error'); const bar = UI.$('.pf-bar', app); if (bar) bar.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
