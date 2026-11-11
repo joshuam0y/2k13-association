@@ -204,7 +204,7 @@
           <div class="ts-start-k tn-hk">HUMAN PLAYERS</div>
           <div class="ch-chips">${chips(Array.from({ length: n }, (_, i) => [i + 1, String(i + 1)]), hum(), 'hum')}</div>
           <small class="muted">${hum() < n ? (n - hum()) + ' AI team' + (n - hum() > 1 ? 's' : '') + ' fill the rest of the bracket and draft on their own.' : 'Everyone is human. Pick fewer to add AI teams.'}</small>
-          <div class="tn-names">${names.slice(0, hum()).map((v, i) => `<label class="field"><span>PLAYER ${i + 1}</span><input data-name="${i}" maxlength="20" placeholder="Player ${i + 1}" value="${esc(v)}" autocomplete="off"></label>`).join('')}</div>
+          <div class="tn-names">${names.slice(0, hum()).map((v, i) => `<label class="field"><span>PLAYER ${i + 1}</span><input data-name="${i}" name="p${i}-${Date.now()}" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="20" placeholder="Player ${i + 1}" value="${esc(v)}" autocomplete="off"></label>`).join('')}</div>
           <div class="ch-go"><button type="button" class="btn btn-small" id="tnResetNames">RESET NAMES</button></div></div>
         <div class="ch-step"><div class="ch-step-k">2 | THE SEASON</div>
           <div class="row-btns vs-seas-all"><button type="button" class="btn btn-small${!TN.skip.length ? ' on' : ''}" data-seas="all">ALL</button><button type="button" class="btn btn-small" data-seas="none">CLEAR</button>
