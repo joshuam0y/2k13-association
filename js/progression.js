@@ -73,6 +73,11 @@
     return ws ? s / ws : null;
   }
 
+  // A hard clamp at 99 piled every attribute of a 97+ player onto 99 (Giannis was 99 in everything, shooting too).
+  // Above SOFT_CAP the scaled value bends toward 99 and only nearly reaches it, so a star's weak spots stay lower.
+  var SOFT_CAP = 88;
+  function softCap(v) { return v <= SOFT_CAP ? v : SOFT_CAP + (ATTR_MAX - SOFT_CAP) * (1 - Math.exp(-(v - SOFT_CAP) / (ATTR_MAX - SOFT_CAP))); }
+
   // Scales a player's attributes so the position-weighted overall moves by the same amount
   // as the overall, then sets p.ovr. The player's own offset (ovr minus weighted mean) is kept,
   // so the 2K13 calibration of each player survives every change.
@@ -98,7 +103,7 @@
       var a = {};
       ATTR_KEYS.forEach(function (k) {
         var v = base[k] * (1 + (kf - 1) * tilts[k]);
-        v = clamp(v, ATTR_MIN, ATTR_MAX);
+        v = softCap(clamp(v, ATTR_MIN, 400));
         a[k] = round ? Math.round(v) : v;
       });
       return a;
