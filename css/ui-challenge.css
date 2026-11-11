@@ -614,3 +614,6 @@
 @media (max-height: 560px) { .in-many .in-hs { display: none; } }
 
 .vs-tbl tr.vs-bench-row td { font-family: var(--display); font-size: 10px; letter-spacing: .16em; color: var(--gold); padding-top: 8px; border-top: 1px dashed rgba(255, 255, 255, .22); }
+
+.vs-sortv { font-family: var(--display); font-size: 13px; letter-spacing: .06em; color: var(--gold2, var(--gold)); background: rgba(255, 255, 255, .07); padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
+#vsBSort { background: var(--bg3); border: 1px solid var(--line2); color: var(--text); padding: 8px 10px; font: inherit; font-size: 15px; min-height: 38px; }

@@ -496,7 +496,7 @@
         VS.year = ch.length === 1 ? ch[0] : 0;
         VS.cfg = { mode: 'versus', year: VS.year, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null, bestOf: VS.opts.bestOf, blind: !VS.opts.cap && !!VS.opts.blind, cap: +VS.opts.cap || 0, bench: VS.opts.cap ? 0 : (+VS.opts.bench || 0), board: VS.opts.board ? 1 : 0, dupes: ch.length > 1 && VS.opts.dupes ? 1 : 0, timer: +VS.opts.timer || 0, era: +VS.opts.era || 2013, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
           sides: [0, 1].map(i => ({ team: VS.teams[i], name: (VS.tnames[i] || '').trim() || (VS.names[i] ? VS.names[i] + "'s " + tOf(teams, VS.teams[i]).name : ''), picks: [] })) };
-        VS.spin = null; VS.spun = []; VS.respins = [1, 1]; VS.shown = 0; VS.pos = ''; VS.q = ''; VS.season = '';
+        VS.spin = null; VS.spun = []; VS.respins = [1, 1]; VS.shown = 0; VS.pos = ''; VS.q = ''; VS.season = ''; VS.sort = '';
         VS.turn = turnFor(VS.cfg, 0, 'spin');
         go('draft');
       });
@@ -505,7 +505,14 @@
 
   // ---------- the draft: a spin for every pick ----------
   let BLIM = 60;
-  const BG = { run: false, fill: null };   // the open board loads every season's roster in the background, one after another   // how many of the open board's players are listed
+  const BG = { run: false, fill: null };
+  // how the open board can be ordered: [key, label, value of a player or null]; attribute sorts need the ratings, so a blind draft only gets A-Z
+  const A_ = (...k) => p => (p.attrs ? k.reduce((s, x) => s + (p.attrs[x] || 0), 0) / k.length : -1);
+  const SORTS = [['ovr', 'BEST OVERALL', p => p.ovr], ['low', 'WORST OVERALL', p => -p.ovr], ['az', 'A TO Z', null],
+    ['three', '3-POINT SHOOTING', A_('three')], ['mid', 'MID-RANGE', A_('mid')], ['fin', 'FINISHING AT THE RIM', A_('layup', 'dunk')], ['post', 'POST GAME', A_('post')], ['ft', 'FREE THROWS', A_('ft')],
+    ['handle', 'BALL HANDLING', A_('handle')], ['pass', 'PASSING', A_('pass')], ['reb', 'REBOUNDING', A_('oreb', 'dreb')], ['perD', 'PERIMETER DEFENSE', A_('perD')], ['intD', 'INTERIOR DEFENSE', A_('intD')],
+    ['steal', 'STEALS', A_('steal')], ['block', 'BLOCKS', A_('block')], ['speed', 'SPEED', A_('speed')], ['vert', 'VERTICAL', A_('vert')], ['str', 'STRENGTH', A_('strength')], ['iq', 'BASKETBALL IQ', A_('oiq', 'diq')],
+    ['ppg', 'POINTS PER GAME', p => (p.stats && p.stats.pts != null ? p.stats.pts : -1)], ['rpg', 'REBOUNDS PER GAME', p => (p.stats && p.stats.reb != null ? p.stats.reb : -1)], ['apg', 'ASSISTS PER GAME', p => (p.stats && p.stats.ast != null ? p.stats.ast : -1)]];   // the open board loads every season's roster in the background, one after another   // how many of the open board's players are listed
   const ANIM = {};   // spins already animated on this phone
   function ovrTag(p, blind) { return blind ? '' : `<b class="ch-ovr ${UI.ovrClass(p.ovr)}">${esc(p.ovr)}</b>`; }
   // the draft board: one season's league, or every season (era spin: the all-time pool, keys id@season,
@@ -584,6 +591,7 @@
         body = `<div class="vs-clock">ON THE CLOCK: <b>${esc(who(on))}</b> <span class="muted">(pick ${taken.length + 1} of ${2 * C.vsPer(cfg)})</span></div>
           <div class="ch-filters">${[''].concat(POS).map(x => `<button type="button" class="ch-chip sm${(VS.pos || '') === x ? ' on' : ''}" data-bpos="${x}">${x || 'ALL'}</button>`).join('')}
             ${B.era ? `<select id="vsBSeason" aria-label="Season"><option value="">ALL SEASONS</option>${ALL_YEARS.filter(y => inPlay(cfg, y)).map(y => `<option value="${y}"${+VS.season === y ? ' selected' : ''}>${esc(lbl(y))}</option>`).join('')}</select>` : ''}
+            <select id="vsBSort" aria-label="Sort players">${SORTS.filter(x => !blind || x[0] === 'az').map(x => `<option value="${x[0]}"${(VS.sort || (blind ? 'az' : 'ovr')) === x[0] ? ' selected' : ''}>${x[1]}</option>`).join('')}</select>
             <input id="vsBQ" placeholder="Search players" value="${esc(VS.q || '')}" autocomplete="off">
             </div>
           <p class="muted ch-small" id="vsLoadN"></p>
@@ -626,10 +634,13 @@
           const q = (VS.q || '').trim().toLowerCase();
           if (B.era) { const nb = board(cfg); if (nb.players.length !== B.players.length) { B.players = nb.players; Object.assign(B.byId, nb.byId); } }   // rosters that finished loading
           const all = B.players.concat(B.extra || []).filter(p => !tkn.has(B.base(p)) && (!VS.pos || C.primaryPos(p.pos) === VS.pos) && (!VS.season || p.season === +VS.season) && (!q || p.name.toLowerCase().indexOf(q) >= 0))
-            .sort((a, b) => (blind ? a.name.localeCompare(b.name) : b.ovr - a.ovr));
+;
+          const so = SORTS.find(x => x[0] === (blind ? 'az' : (VS.sort || 'ovr'))) || SORTS[0];
+          if (so[2]) all.sort((a, b) => so[2](b) - so[2](a) || b.ovr - a.ovr); else all.sort((a, b) => a.name.localeCompare(b.name));
+          const shown = p => (blind || !so[2] || so[0] === 'ovr' || so[0] === 'low' ? '' : '<span class="vs-sortv">' + esc(String(Math.round(so[2](p) * 10) / 10)) + '</span>');
           const L = UI.$('#vsBList', app), N = UI.$('#vsBN', app);
           if (!L) return;
-          L.innerHTML = all.slice(0, BLIM).map(p => playerRow(p, B, mine ? UI.challengeCap.btn(cfg.cap, five, p, `<button type="button" class="btn btn-small btn-gold" data-bpick="${esc(p.id)}">TAKE</button>`) : '', blind)).join('');
+          L.innerHTML = all.slice(0, BLIM).map(p => playerRow(p, B, shown(p) + (mine ? UI.challengeCap.btn(cfg.cap, five, p, `<button type="button" class="btn btn-small btn-gold" data-bpick="${esc(p.id)}">TAKE</button>`) : ''), blind)).join('');
           N.innerHTML = all.length ? (all.length > BLIM ? 'Showing ' + BLIM + ' of ' + all.length + '. <button type="button" class="btn btn-small" id="vsMore">SHOW 60 MORE</button> <button type="button" class="btn btn-small" id="vsMoreAll">SHOW ALL</button>' : all.length + ' left.') : 'Nobody matches.';
           const mo = UI.$('#vsMore', app), ma = UI.$('#vsMoreAll', app);
           if (mo) mo.addEventListener('click', () => { BLIM += 60; fill(); });
@@ -658,6 +669,8 @@
           };
           step();
         } else if (note && B.era) note.textContent = need().length ? 'Loading every roster...' : 'Every roster is loaded: anyone who ever played is on the board.';
+        const bso = UI.$('#vsBSort', app); if (bso) bso.addEventListener('change', () => { VS.sort = bso.value; BLIM = 60; fill(); });
+        const bq = UI.$('#vsBQ', app); if (bq) bq.addEventListener('input', () => { VS.q = bq.value; BLIM = 60; fill(); });
         const L = UI.$('#vsBList', app);
         if (L) L.addEventListener('click', e => { const b = e.target.closest('[data-bpick]'); if (b) takeP(b.dataset.bpick); });
       }
