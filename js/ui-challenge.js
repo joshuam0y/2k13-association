@@ -817,9 +817,9 @@
     const list = [];
     groups.forEach((g, gi) => (g.players || []).forEach(p => list.push({ g: gi, p })));
     if (!list.length) { done(); return; }
-    const per = list.length > 5 ? 240 : 480, lead = 250, total = lead + per * list.length + 450;
+    const many = list.length > 5, per = many ? 260 : 480, lead = 250, total = lead + per * list.length + (many ? 3200 : 450);   // two full rosters: they stay up longer
     const el = document.createElement('div');
-    el.className = 'in-wrap';
+    el.className = 'in-wrap' + (groups.length > 1 && list.length > 10 ? ' in-many' : '');
     el.setAttribute('role', 'dialog');
     el.setAttribute('aria-label', 'Starters introduction. Tap to skip.');
     let k = 0;

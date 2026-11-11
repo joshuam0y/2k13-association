@@ -598,3 +598,17 @@
 .t20-yr b.g { color: var(--gold2, var(--gold)); }
 .t20-yr b.a { color: #6fcf88; }
 .t20-yr b.b { color: #7aa8e8; }
+
+/* the rosters intro with eight a side: everything fits the screen (two columns on wide ones, tighter rows on phones) */
+.in-wrap.in-many { align-items: center; }
+.in-many .in-box { width: min(96vw, 960px); max-height: 100vh; max-height: 100dvh; padding: 8px 0; flex-direction: row; gap: 10px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
+.in-many .in-grp { flex: 1 1 220px; min-width: 0; gap: 3px; }
+.in-many .in-list { gap: 3px; }
+.in-many .in-c { min-height: 0; padding: 3px 8px; gap: 8px; }
+.in-many .in-hs { width: 28px; height: 28px; }
+.in-many .in-n b { font-size: 13px; }
+.in-many .in-n small { font-size: 10px; }
+.in-many .in-skip { flex: 0 0 100%; margin: 0; }
+@media (max-width: 559px) { .in-many .in-box { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 6px; } .in-many .in-grp { flex: none; } .in-many .in-c { padding: 2px 8px; } .in-many .in-hs { width: 24px; height: 24px; } .in-many .in-n { flex-direction: row; align-items: baseline; gap: 6px; } .in-many .in-n b { font-size: 12.5px; } }
+@media (min-width: 720px) { .in-many .in-c { min-height: 0; } .in-many .in-hs { width: 34px; height: 34px; } .in-many .in-n b { font-size: 15px; } }
+@media (max-height: 560px) { .in-many .in-hs { display: none; } }
