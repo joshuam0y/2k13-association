@@ -513,6 +513,7 @@
     ['handle', 'BALL HANDLING', A_('handle')], ['pass', 'PASSING', A_('pass')], ['reb', 'REBOUNDING', A_('oreb', 'dreb')], ['perD', 'PERIMETER DEFENSE', A_('perD')], ['intD', 'INTERIOR DEFENSE', A_('intD')],
     ['steal', 'STEALS', A_('steal')], ['block', 'BLOCKS', A_('block')], ['speed', 'SPEED', A_('speed')], ['vert', 'VERTICAL', A_('vert')], ['str', 'STRENGTH', A_('strength')], ['iq', 'BASKETBALL IQ', A_('oiq', 'diq')],
     ['ppg', 'POINTS PER GAME', p => (p.stats && p.stats.pts != null ? p.stats.pts : -1)], ['rpg', 'REBOUNDS PER GAME', p => (p.stats && p.stats.reb != null ? p.stats.reb : -1)], ['apg', 'ASSISTS PER GAME', p => (p.stats && p.stats.ast != null ? p.stats.ast : -1)]];   // the open board loads every season's roster in the background, one after another   // how many of the open board's players are listed
+  UI.boardSorts = SORTS;   // the tournament's open board uses the same sorts
   const ANIM = {};   // spins already animated on this phone
   function ovrTag(p, blind) { return blind ? '' : `<b class="ch-ovr ${UI.ovrClass(p.ovr)}">${esc(p.ovr)}</b>`; }
   // the draft board: one season's league, or every season (era spin: the all-time pool, keys id@season,
