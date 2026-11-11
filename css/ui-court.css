@@ -214,6 +214,19 @@ body.ct-full-on { overflow: hidden; }
 .ct-feed small { flex: none; min-width: 64px; color: var(--muted); letter-spacing: .06em; }
 .ct-feed li.sub { color: var(--gold2); }
 .ct-full .ct-pnl { flex: none; }
-.ct-pnl.ct-pnl-over { position: absolute; left: 0; right: 0; bottom: 0; top: calc(44px + env(safe-area-inset-top)); z-index: 6; overflow-y: auto; background: rgba(5, 5, 7, .97); }
+.ct-pnl.ct-pnl-over { position: absolute; inset: 0; z-index: 8; overflow-y: auto; background: #050507; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+.ct-pnl.ct-pnl-over .ct-ptabs { padding-top: calc(8px + env(safe-area-inset-top)); }
 .ct-pnl.ct-pnl-over .ct-pbody { max-height: none; }
 @media (max-width: 560px) { .ct-pbody { grid-template-columns: minmax(0, 1fr); } .ct-sub { font-size: 11px; } }
+.ct-ptabs { position: sticky; top: 0; z-index: 2; background: #08080a; padding-bottom: 8px; align-items: center; }
+.ct-pscore { margin-left: auto; font-family: var(--display); letter-spacing: .08em; font-size: 13px; color: var(--text2); white-space: nowrap; }
+.ct-pclose { flex: none; min-height: 36px; padding: 0 14px; background: var(--gold); color: #111; border: 0; font-family: var(--display); font-weight: 700; letter-spacing: .12em; font-size: 13px; cursor: pointer; }
+.ct-pclose:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.ct-pbody { display: block; }
+.ct-bxw { overflow-x: auto; margin-bottom: 14px; -webkit-overflow-scrolling: touch; }
+.ct-bx { min-width: 520px; }
+.ct-bx td, .ct-bx th { padding: 3px 5px; white-space: nowrap; }
+.ct-bx td small { color: var(--muted); font-size: 10px; margin-left: 4px; }
+.ct-bx .l { max-width: 170px; min-width: 120px; position: sticky; left: 0; background: #08080a; }
+.ct-bx tr.tot td { font-family: var(--display); letter-spacing: .06em; color: var(--text2); border-top: 1px solid var(--line2); }
+@media (min-width: 900px) { .ct-pnl:not(.ct-pnl-over) .ct-pbody { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; } .ct-bx { min-width: 0; } }

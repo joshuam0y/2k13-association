@@ -814,7 +814,7 @@
         const tr = x => `<td>${x.pts}</td><td>${(x.oreb || 0) + (x.dreb || 0)}</td><td>${x.ast}</td><td>${x.stl}</td><td>${x.blk}</td><td>${x.tov}</td><td>${ms(x.fgm, x.fga)}</td><td>${ms(x.tpm, x.tpa)}</td><td>${ms(x.ftm, x.fta)}</td>`;
         return `<div class="vs-res" style="--c1:${esc((S[i].team.colors || ['#333'])[0])}"><div class="vs-side-h">${logo(S[i].team, 26)}<div><small>${esc(who(i))}</small><b>${esc(nm(i))} ${side.pts}</b></div></div>
           <div class="vs-tbl-w"><table class="vs-tbl"><thead><tr><th class="l">PLAYER</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>FG</th><th>3P</th><th>FT</th><th>+/-</th></tr></thead>
-          <tbody>${rows.map(x => `<tr><td class="l">${esc(x.name)}</td>${tr(x)}<td>${x.pm > 0 ? '+' : ''}${x.pm || 0}</td></tr>`).join('')}</tbody>
+          <tbody>${rows.map(x => `<tr><td class="l">${esc(x.name)}${PL[x.id] && PL[x.id].season && !cfg.year ? ' <small class="muted">' + esc(short(PL[x.id].season)) + '</small>' : ''}</td>${tr(x)}<td>${x.pm > 0 ? '+' : ''}${x.pm || 0}</td></tr>`).join('')}</tbody>
           <tfoot><tr><td class="l">TOTALS</td>${tr({ pts: sum('pts'), oreb: sum('oreb'), dreb: sum('dreb'), ast: sum('ast'), stl: sum('stl'), blk: sum('blk'), tov: sum('tov'), fgm: sum('fgm'), fga: sum('fga'), tpm: sum('tpm'), tpa: sum('tpa'), ftm: sum('ftm'), fta: sum('fta') })}<td></td></tr></tfoot></table></div></div>`;
       };
       const R = done ? recordSeries(r, cfg) : null;

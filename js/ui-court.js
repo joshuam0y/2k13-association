@@ -193,7 +193,8 @@
       const p = playerOf ? playerOf(r.id) : null;
       const name = r.name || (p && p.name) || r.id;
       const pos = String((p && p.pos) || 'SF').toUpperCase().split(/[-\/ ,]/)[0];
-      info[keyOf(side, i)] = { id: r.id, name, pos, ini: initials(name), last: lastName(name), side };
+      const sn = p && p.season ? Number(p.season) : 0;
+      info[keyOf(side, i)] = { id: r.id, name, pos, ini: initials(name), last: lastName(name), side, yr: sn ? "'" + String(sn - 1).slice(2) + "-'" + String(sn).slice(2) : '' };
     }));
     const start = clamp(opts.start | 0, 0, evs.length);
     const st = {
@@ -228,7 +229,7 @@
           ${window.SFX ? `<button type="button" class="btn btn-small ct-sfx${window.SFX.on ? ' on' : ''}" aria-label="Sound effects">${window.SFX.on ? 'SOUND ON' : 'SOUND OFF'}</button>` : ''}
         </div>
         <div class="ct-floor-list" aria-label="On the floor"></div>
-        <div class="ct-pnl" hidden><div class="ct-ptabs"><button type="button" class="ct-ptab on" data-tab="box">BOX SCORE</button><button type="button" class="ct-ptab" data-tab="feed">PLAYS</button></div><div class="ct-pbody"></div></div>
+        <div class="ct-pnl" hidden><div class="ct-ptabs"><button type="button" class="ct-ptab on" data-tab="box">BOX SCORE</button><button type="button" class="ct-ptab" data-tab="feed">PLAYS</button><span class="ct-pscore"></span><button type="button" class="ct-pclose" aria-label="Close the box score">CLOSE &#10005;</button></div><div class="ct-pbody"></div></div>
       </div>`;
     const $ = sel => el.querySelector(sel);
     // full screen watch mode: the score, the court, the play, the controls and the five-a-side chips on one screen, no scrolling
@@ -386,6 +387,7 @@
     function pnlDraw() {
       const box = $('.ct-pnl'), body = $('.ct-pbody');
       if (!box || box.hidden || !body) return;
+      const ps = $('.ct-pscore'); if (ps) ps.textContent = abbr.away + ' ' + st.as + ' - ' + st.hs + ' ' + abbr.home + '   ' + st.per;
       if (st.tab === 'feed') {
         const out = [];
         for (let j = st.done - 1; j >= 0 && out.length < 40; j--) {
@@ -396,14 +398,40 @@
         body.innerHTML = out.length ? '<ol class="ct-feed">' + out.join('') + '</ol>' : '<p class="muted">Tip-off coming up.</p>';
         return;
       }
-      const L = linesAt(tl, st.done);
+      const L = boxAt(st.done), f1 = v => (Math.round(v * 10) / 10).toFixed(0);
       body.innerHTML = SIDES.slice().reverse().map(side => {
-        const rows = Object.keys(info).filter(k => info[k].side === side).map(k => {
-          const l = L[k] || { pts: 0, reb: 0, ast: 0 }, on = st.on[side].indexOf(k) >= 0;
-          return `<tr class="${on ? 'on' : ''}"><td class="l">${on ? '<i></i>' : ''}${esc(info[k].name)}</td><td>${l.pts}</td><td>${l.reb}</td><td>${l.ast}</td></tr>`;
+        const keys = Object.keys(info).filter(k => info[k].side === side);
+        const T = { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pf: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0 };
+        const rows = keys.map(k => {
+          const l = L[k] || {}, on = st.on[side].indexOf(k) >= 0, g = n => l[n] || 0;
+          Object.keys(T).forEach(n => { T[n] += g(n); });
+          return `<tr class="${on ? 'on' : ''}"><td class="l">${on ? '<i></i>' : ''}${esc(info[k].name)}${info[k].yr ? ' <small>' + esc(info[k].yr) + '</small>' : ''}</td><td>${f1(g('min'))}</td><td>${g('pts')}</td><td>${g('reb')}</td><td>${g('ast')}</td><td>${g('stl')}</td><td>${g('blk')}</td><td>${g('tov')}</td><td>${g('pf')}</td><td>${g('fgm')}-${g('fga')}</td><td>${g('tpm')}-${g('tpa')}</td><td>${g('ftm')}-${g('fta')}</td><td>${g('pm') > 0 ? '+' : ''}${g('pm')}</td></tr>`;
         }).join('');
-        return `<table class="ct-bx"><thead><tr><th class="l">${esc(abbr[side])} ${side === 'home' ? st.hs : st.as}</th><th>PTS</th><th>REB</th><th>AST</th></tr></thead><tbody>${rows}</tbody></table>`;
+        const tot = `<tr class="tot"><td class="l">TEAM</td><td></td><td>${T.pts}</td><td>${T.reb}</td><td>${T.ast}</td><td>${T.stl}</td><td>${T.blk}</td><td>${T.tov}</td><td>${T.pf}</td><td>${T.fgm}-${T.fga}</td><td>${T.tpm}-${T.tpa}</td><td>${T.ftm}-${T.fta}</td><td></td></tr>`;
+        return `<div class="ct-bxw"><table class="ct-bx"><thead><tr><th class="l">${esc(abbr[side])} ${side === 'home' ? st.hs : st.as}</th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>PF</th><th>FG</th><th>3P</th><th>FT</th><th>+/-</th></tr></thead><tbody>${rows}${tot}</tbody></table></div>`;
       }).join('');
+    }
+    // a full box line for everyone as of the first n plays: minutes and plus-minus from who was on the floor, the rest from who did what
+    function boxAt(n) {
+      const out = {};
+      const row = k => out[k] || (out[k] = { min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pf: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, pm: 0 });
+      let prevT = 0;
+      for (let i = 0; i < Math.min(n, evs.length); i++) {
+        const ev = evs[i], dt = Math.max(0, ev.t - prevT);
+        prevT = ev.t;
+        if (dt) SIDES.forEach(sd => ev.on[sd].forEach(k => { row(k).min += dt / 60; }));
+        const three = ev.shot === 'three';
+        if (ev.k === 'make' && ev.a) { const r = row(ev.a); r.fgm++; r.fga++; if (three) { r.tpm++; r.tpa++; } if (ev.b) row(ev.b).ast++; if (ev.c) row(ev.c).pf++; }
+        else if (ev.k === 'miss' && ev.a) { const r = row(ev.a); r.fga++; if (three) r.tpa++; if (ev.b) row(ev.b).blk++; }
+        else if (ev.k === 'sfoul') { if (ev.b) row(ev.b).pf++; }
+        else if (ev.k === 'ft' && ev.a) { const r = row(ev.a); r.ftm += ev.made || 0; r.fta += ev.att || 0; }
+        else if ((ev.k === 'oreb' || ev.k === 'dreb') && ev.a) row(ev.a).reb++;
+        else if (ev.k === 'tov' && ev.a) { row(ev.a).tov++; if (ev.b && ev.tov === 'steal') row(ev.b).stl++; }
+        else if ((ev.k === 'pf' || ev.k === 'foulout') && ev.a) row(ev.a).pf++;
+        ev.stats.forEach(([key, stat, v]) => { if (stat === 'pts') row(key).pts += v; else if (stat === 'reb' && (ev.k !== 'oreb' && ev.k !== 'dreb')) row(key).reb += v; });
+        if (ev.pts && ev.side) { SIDES.forEach(sd => ev.on[sd].forEach(k => { row(k).pm += sd === ev.side ? ev.pts : -ev.pts; })); }
+      }
+      return out;
     }
     function pnlShow(open) {
       const box = $('.ct-pnl'); if (!box) return;
@@ -903,6 +931,9 @@
     el.querySelectorAll('.ct-spd').forEach(b => b.addEventListener('click', () => { st.speed = Number(b.getAttribute('data-speed')) || 1; syncControls(); told('speed', st.speed); }));
     $('.ct-skip').addEventListener('click', () => { skipQuarter(); told('skip'); });
     $('.ct-pb').addEventListener('click', () => pnlShow(!st.pnl));
+    $('.ct-pclose').addEventListener('click', () => pnlShow(false));
+    const onKey = e => { if (e.key === 'Escape' && st.pnl && full) { e.preventDefault(); pnlShow(false); } };
+    document.addEventListener('keydown', onKey);
     el.querySelectorAll('.ct-ptab').forEach(b => b.addEventListener('click', () => { st.tab = b.getAttribute('data-tab'); el.querySelectorAll('.ct-ptab').forEach(x => x.classList.toggle('on', x === b)); pnlDraw(); }));
     const sfxB = $('.ct-sfx');
     if (sfxB) sfxB.addEventListener('click', () => { window.SFX.set(!window.SFX.on); sfxB.classList.toggle('on', window.SFX.on); sfxB.textContent = window.SFX.on ? 'SOUND ON' : 'SOUND OFF'; });
@@ -917,6 +948,7 @@
 
     function destroy() {
       st.dead = true;
+      document.removeEventListener('keydown', onKey);
       document.body.classList.remove('ct-full-on');
       if (st.raf) cancelAnimationFrame(st.raf);
       st.raf = 0;
