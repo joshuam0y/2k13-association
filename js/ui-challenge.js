@@ -162,6 +162,7 @@
             <label class="field"><span>TEAM NAME (OPTIONAL)</span><input id="chName" maxlength="32" placeholder="${esc(s.team ? tName(teamOf(teams, s.team)) : 'Keep the real name')}" value="${esc(s.name || '')}"></label>
             ${isAll ? '' : `<div class="field"><span>INJURIES (OTHER TEAMS)</span><div class="ch-seg ch-seg-sm"><button type="button" class="ch-seg-b${s.injuries ? ' on' : ''}" data-inj="1"><b>ON</b></button><button type="button" class="ch-seg-b${!s.injuries ? ' on' : ''}" data-inj="0"><b>OFF</b></button></div><small class="ch-hint">${s.injuries ? 'Rival teams lose players to injuries as the season goes on.' : 'Every rival team is healthy all year.'}</small></div>`}
             <div class="field"><span>RATINGS</span><div class="ch-seg ch-seg-sm"><button type="button" class="ch-seg-b${s.ratings !== false || s.cap ? ' on' : ''}" data-rat="1"><b>ON</b></button><button type="button" class="ch-seg-b${s.ratings === false && !s.cap ? ' on' : ''}" data-rat="0"${s.cap ? ' disabled title="The salary cap prices give the ratings away"' : ''}><b>OFF</b></button></div><small class="ch-hint">${s.ratings === false && !s.cap ? 'Overalls and fit grades stay hidden until the season is played.' : 'Overalls and fit grades show while you draft.'}</small></div>
+            ${isAll ? `<div class="field"><span>SAME PLAYER TWICE</span><div class="ch-seg ch-seg-sm"><button type="button" class="ch-seg-b${!s.dupes ? ' on' : ''}" data-dupes="0"><b>NO DUPLICATES</b></button><button type="button" class="ch-seg-b${s.dupes ? ' on' : ''}" data-dupes="1"><b>DUPLICATES ON</b></button></div><small class="ch-hint">${s.dupes ? 'The same player can be drafted from different seasons, by you or any team. Only that exact season is gone once taken.' : 'A player is gone for good once taken, whatever the season.'}</small></div>` : ''}
             <div class="field"><span>SALARY CAP</span><div class="ch-seg ch-seg-sm">${CAPS.map(v => `<button type="button" class="ch-seg-b${(s.cap || 0) === v ? ' on' : ''}" data-cap="${v}"><b>${v ? '$' + v + 'M' : 'OFF'}</b></button>`).join('')}</div><small class="ch-hint">${s.cap ? 'Every player has a price from his rating. Your five must fit under $' + s.cap + 'M.' : 'No cap: take anyone.'}</small></div>
           </div>
         </div>
@@ -189,6 +190,7 @@
     app.querySelectorAll('[data-era]').forEach(b => b.addEventListener('click', () => { SETUP.era = +b.dataset.era; redraw(); }));
     app.querySelectorAll('[data-build]').forEach(b => b.addEventListener('click', () => { SETUP.build = b.dataset.build; redraw(); }));
     app.querySelectorAll('[data-inj]').forEach(b => b.addEventListener('click', () => { SETUP.injuries = b.dataset.inj === '1'; redraw(); }));
+    app.querySelectorAll('[data-dupes]').forEach(b => b.addEventListener('click', () => { SETUP.dupes = +b.dataset.dupes; redraw(); }));
     app.querySelectorAll('[data-cap]').forEach(b => b.addEventListener('click', () => { SETUP.cap = +b.dataset.cap; redraw(); }));
     app.querySelectorAll('[data-rat]').forEach(b => b.addEventListener('click', () => { SETUP.ratings = b.dataset.rat === '1'; redraw(); }));
     app.querySelectorAll('[data-team]').forEach(b => b.addEventListener('click', () => { SETUP.team = b.dataset.team; redraw(); }));
@@ -198,7 +200,7 @@
     UI.$('#chStart').addEventListener('click', () => {
       if (!SETUP.team) return;
       const cfg = { mode: SETUP.mode, year: isAll ? 2013 : SETUP.year, build: SETUP.build, team: SETUP.team, name: (SETUP.name || '').trim(),
-        injuries: SETUP.injuries, era: SETUP.era || 2013, cap: +SETUP.cap || 0, seasons: isAll && (SETUP.skip || []).length ? C.SEASONS.map(x => x.year).filter(y => SETUP.skip.indexOf(y) < 0) : null, noRatings: SETUP.ratings === false && !SETUP.cap, seed: Math.floor(Math.random() * 2147483646) + 1, picks: [] };
+        injuries: SETUP.injuries, era: SETUP.era || 2013, cap: +SETUP.cap || 0, seasons: isAll && (SETUP.skip || []).length ? C.SEASONS.map(x => x.year).filter(y => SETUP.skip.indexOf(y) < 0) : null, noRatings: SETUP.ratings === false && !SETUP.cap, dupes: isAll && SETUP.dupes ? 1 : 0, seed: Math.floor(Math.random() * 2147483646) + 1, picks: [] };
       ensureData(cfg, app, () => {
         try {
           CUR = { cfg, used: [], respins: 1, spin: null, dr: isAll ? C.newDraft(cfg) : null };
@@ -941,8 +943,8 @@
     // every pick goes back on the team that made it (replaying by the clock put a pick on the wrong team whenever an earlier one was missing)
     (r.draft || []).forEach((x, i) => {
       const e = dr.pool.find(q => q.key === x.key);
-      if (!e || dr.taken[e.base]) return;
-      dr.taken[e.base] = true;
+      if (!e || dr.taken[C.takenKey(dr, e)]) return;
+      dr.taken[C.takenKey(dr, e)] = true;
       dr.picks.push({ n: x.n || i + 1, round: x.round || Math.floor(i / dr.order.length) + 1, team: x.team, key: x.key });
     });
     dr.cfg = cfg;

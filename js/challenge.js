@@ -395,7 +395,9 @@
     return { n: n, round: r + 1, pick: k + 1, team: r % 2 === 0 ? dr.order[k] : dr.order[N - 1 - k] };
   }
   function onClock(dr) { return dr.picks.length >= dr.order.length * ROUNDS ? null : draftSlot(dr, dr.picks.length); }
-  function available(dr) { return dr.pool.filter(function (e) { return !dr.taken[e.base]; }); }
+  // the key a pick takes off the board: the player, or (duplicates on) just that season of the player
+  function takenKey(dr, e) { return dr.cfg && dr.cfg.dupes ? (e.key || e.id) : e.base; }
+  function available(dr) { return dr.pool.filter(function (e) { return !dr.taken[takenKey(dr, e)]; }); }
   function teamPicks(dr, abbr) { return dr.picks.filter(function (x) { return x.team === abbr; }).map(function (x) { return entry(dr, x.key); }); }
   function entry(dr, key) { for (var i = 0; i < dr.pool.length; i++) if (dr.pool[i].key === key) return dr.pool[i]; return null; }
   // ---------- salary cap (cfg.cap, $ millions; 0 = off) ----------
@@ -419,9 +421,9 @@
   function draftPick(dr, key) {
     var c = onClock(dr), e = entry(dr, key);
     if (!c) return { ok: false, reason: 'The draft is over.' };
-    if (!e || dr.taken[e.base]) return { ok: false, reason: 'That player is already taken.' };
+    if (!e || dr.taken[takenKey(dr, e)]) return { ok: false, reason: 'That player is already taken.' };
     if (dr.cfg.cap && !capFits(dr.cfg.cap, teamPicks(dr, c.team), e)) return { ok: false, reason: 'That contract does not fit under the cap.' };
-    dr.taken[e.base] = true;
+    dr.taken[takenKey(dr, e)] = true;
     dr.picks.push({ n: c.n + 1, round: c.round, team: c.team, key: key });
     return { ok: true, slot: c, entry: e };
   }
@@ -832,7 +834,7 @@
     SEASONS: SEASONS, ROUNDS: ROUNDS, seasonInfo: seasonInfo, seasonData: seasonData, loaded: loaded, load: load, loadAll: loadAll,
     allTimePool: allTimePool, poolSeasons: poolSeasons, eraTeam: eraTeam, buildYear: buildYear, buildAllTime: buildAllTime, newDraft: newDraft, onClock: onClock,
     draftSlot: draftSlot, draftPick: draftPick, aiPick: aiPick, simToUser: simToUser, autoDraft: autoDraft, available: available,
-    teamPicks: teamPicks, lineupFit: lineupFit, posLabel: posLabel, secondPos: secondPos, SLOTS: SLOTS, vsOnClock: vsOnClock, vsPer: vsPer, playVersus: playVersus, VS_ORDER: VS_ORDER, spin: spin, extendPool: extendPool, franchise: franchise, spinRoster: spinRoster, matchups: matchups, start: start, step: step, runAll: runAll,
+    teamPicks: teamPicks, lineupFit: lineupFit, posLabel: posLabel, secondPos: secondPos, SLOTS: SLOTS, vsOnClock: vsOnClock, vsPer: vsPer, playVersus: playVersus, VS_ORDER: VS_ORDER, spin: spin, takenKey: takenKey, extendPool: extendPool, franchise: franchise, spinRoster: spinRoster, matchups: matchups, start: start, step: step, runAll: runAll,
     progress: progress, summary: summary, play: play, perGame: perGame, groupOf: groupOf, primaryPos: primaryPos, rng: mulberry32
   };
   W.CHALLENGE = API;

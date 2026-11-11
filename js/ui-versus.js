@@ -14,7 +14,7 @@
     get() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; } },
     set(v) { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) { /* private mode */ } }
   };
-  const FRESH = () => ({ year: 2008, teams: ['BOS', 'LAL'], names: ['', ''], opts: { bestOf: 5, blind: false, timer: 24, bench: 0, board: 0 }, cfg: null, shown: 0, page: 'setup', spin: null, spun: [], respins: [1, 1], turn: null, pos: '', q: '', epoch: 0, hostSide: 0 });
+  const FRESH = () => ({ year: 2008, teams: ['BOS', 'LAL'], names: ['', ''], opts: { bestOf: 5, blind: false, timer: 24, bench: 0, board: 0, dupes: 0 }, cfg: null, shown: 0, page: 'setup', spin: null, spun: [], respins: [1, 1], turn: null, pos: '', q: '', epoch: 0, hostSide: 0 });
   let VS = Object.assign(FRESH(), ls.get() || {});
   if (!VS.cfg || VS.page === 'setup') VS.names = ['', ''];   // a new game starts as Player 1 and Player 2 again
   VS.opts = Object.assign({ bestOf: 5, blind: false, timer: 24, era: 2013, bench: 0 }, VS.opts || {});
@@ -413,6 +413,8 @@
               ${chosen().length === 1 ? '' : `<div><span class="ts-start-k">GAME RULES</span><div class="ch-chips">${ERAS.map(([v, l]) => `<button type="button" class="ch-chip${(VS.opts.era || 2013) === v ? ' on' : ''}" data-era="${v}"${dis(boss)}>${l}</button>`).join('')}</div></div>`}
               <div><span class="ts-start-k">BLIND DRAFT</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.blind ? ' on' : ''}" data-blind="0"${dis(boss)}>OFF</button><button type="button" class="ch-chip${VS.opts.blind ? ' on' : ''}" data-blind="1"${dis(boss)}>ON</button></div>
                 <small class="muted">${VS.opts.cap ? 'Off with a salary cap: the prices give the ratings away.' : VS.opts.blind ? 'No ratings and no fit grades until the series is over: pick on what you know.' : 'Ratings and fit grades show while you draft.'}</small></div>
+              ${chosen().length === 1 ? '' : `<div><span class="ts-start-k">SAME PLAYER TWICE</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.dupes ? ' on' : ''}" data-dupes="0"${dis(boss)}>NO DUPLICATES</button><button type="button" class="ch-chip${VS.opts.dupes ? ' on' : ''}" data-dupes="1"${dis(boss)}>DUPLICATES ON</button></div>
+                <small class="muted">${VS.opts.dupes ? 'The same player can be drafted from different seasons, so you can stack every Giannis. Only that exact season is gone once taken.' : 'A player is gone for good once taken, whatever the season.'}</small></div>`}
               <div><span class="ts-start-k">DRAFT STYLE</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.board ? ' on' : ''}" data-board="0"${dis(boss)}>THE WHEEL</button><button type="button" class="ch-chip${VS.opts.board ? ' on' : ''}" data-board="1"${dis(boss)}>OPEN BOARD</button></div>
                 <small class="muted">${VS.opts.board ? 'No wheel: take turns picking anyone left from the whole board. Drafted players come off it.' : 'Every pick comes from the team the wheel lands on.'}</small></div>
               <div><span class="ts-start-k">BENCH</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.bench ? ' on' : ''}" data-bench="0"${dis(boss)}>JUST THE FIVE</button><button type="button" class="ch-chip${VS.opts.bench ? ' on' : ''}" data-bench="3"${dis(boss)}>8-MAN: +3 BENCH</button></div>
@@ -448,6 +450,7 @@
       app.querySelectorAll('[data-bo]').forEach(b => b.addEventListener('click', () => { VS.opts.bestOf = +b.dataset.bo; redraw(); }));
       app.querySelectorAll('[data-era]').forEach(b => b.addEventListener('click', () => { VS.opts.era = +b.dataset.era; redraw(); }));
       app.querySelectorAll('[data-cap]').forEach(b => b.addEventListener('click', () => { VS.opts.cap = +b.dataset.cap; if (VS.opts.cap) { VS.opts.blind = false; VS.opts.bench = 0; } redraw(); }));
+      app.querySelectorAll('[data-dupes]').forEach(b => b.addEventListener('click', () => { VS.opts.dupes = +b.dataset.dupes; redraw(); }));
       app.querySelectorAll('[data-board]').forEach(b => b.addEventListener('click', () => { VS.opts.board = +b.dataset.board; redraw(); }));
       app.querySelectorAll('[data-bench]').forEach(b => b.addEventListener('click', () => { VS.opts.bench = +b.dataset.bench; if (VS.opts.bench) VS.opts.cap = 0; redraw(); }));
       app.querySelectorAll('[data-blind]').forEach(b => b.addEventListener('click', () => { VS.opts.blind = b.dataset.blind === '1'; redraw(); }));
@@ -464,7 +467,7 @@
         const ch = chosen();
         if (!ch.length) { UI.toast('Switch on at least one season', 'error'); return; }
         VS.year = ch.length === 1 ? ch[0] : 0;
-        VS.cfg = { mode: 'versus', year: VS.year, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null, bestOf: VS.opts.bestOf, blind: !VS.opts.cap && !!VS.opts.blind, cap: +VS.opts.cap || 0, bench: VS.opts.cap ? 0 : (+VS.opts.bench || 0), board: VS.opts.board ? 1 : 0, timer: +VS.opts.timer || 0, era: +VS.opts.era || 2013, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
+        VS.cfg = { mode: 'versus', year: VS.year, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null, bestOf: VS.opts.bestOf, blind: !VS.opts.cap && !!VS.opts.blind, cap: +VS.opts.cap || 0, bench: VS.opts.cap ? 0 : (+VS.opts.bench || 0), board: VS.opts.board ? 1 : 0, dupes: ch.length > 1 && VS.opts.dupes ? 1 : 0, timer: +VS.opts.timer || 0, era: +VS.opts.era || 2013, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
           sides: [0, 1].map(i => ({ team: VS.teams[i], name: VS.names[i] ? VS.names[i] + "'s " + tOf(teams, VS.teams[i]).name : '', picks: [] })) };
         VS.spin = null; VS.spun = []; VS.respins = [1, 1]; VS.shown = 0; VS.pos = ''; VS.q = ''; VS.season = '';
         VS.turn = turnFor(VS.cfg, 0, 'spin');
@@ -490,7 +493,7 @@
       if (sd) sd.players.forEach(q => { const k = q.id + '@' + y; if (byId[k]) return; const e = Object.assign({}, q, { id: k, key: k, base: q.id, from: q.team, season: y }); byId[k] = e; players.push(e); });
     });
     if (!era) d.free.forEach(p => { byId[p.id] = p; });
-    const base = p => (era ? p.base : p.id);
+    const base = p => (era ? (cfg.dupes ? p.id : p.base) : p.id);   // duplicates on: the same player from another season is a different pick
     return { era, teams, byId, players, base, cap: +cfg.cap || 0,
       takenSet: ids => new Set(ids.map(id => (byId[id] ? base(byId[id]) : id))),
       teamFor: (abbr, year) => (era && C.eraTeam(year, abbr)) || tOf(teams, abbr),
@@ -551,8 +554,10 @@
         const five = cfg.sides[on].picks.map(id => byId[id]).filter(Boolean);
         body = `<div class="vs-clock">ON THE CLOCK: <b>${esc(who(on))}</b> <span class="muted">(pick ${taken.length + 1} of ${2 * C.vsPer(cfg)})</span></div>
           <div class="ch-filters">${[''].concat(POS).map(x => `<button type="button" class="ch-chip sm${(VS.pos || '') === x ? ' on' : ''}" data-bpos="${x}">${x || 'ALL'}</button>`).join('')}
-            ${B.era ? `<select id="vsBSeason" aria-label="Season"><option value="">ALL SEASONS</option>${ALL_YEARS.filter(y => inPlay(cfg, y) && B.players.some(p => p.season === y)).map(y => `<option value="${y}"${+VS.season === y ? ' selected' : ''}>${esc(lbl(y))}</option>`).join('')}</select>` : ''}
-            <input id="vsBQ" placeholder="Search players" value="${esc(VS.q || '')}" autocomplete="off"></div>
+            ${B.era ? `<select id="vsBSeason" aria-label="Season"><option value="">ALL SEASONS</option>${ALL_YEARS.filter(y => inPlay(cfg, y)).map(y => `<option value="${y}"${+VS.season === y ? ' selected' : ''}>${esc(lbl(y))}</option>`).join('')}</select>` : ''}
+            <input id="vsBQ" placeholder="Search players" value="${esc(VS.q || '')}" autocomplete="off">
+            ${B.era && ALL_YEARS.some(y => inPlay(cfg, y) && y !== 2013 && !C.loaded(y)) ? '<button type="button" class="btn btn-small" id="vsLoadAll">LOAD EVERY ROSTER</button>' : ''}</div>
+          <p class="muted ch-small" id="vsLoadN">${B.era ? 'The board lists the stars of every season. Pick a season, or load every roster, to draft anyone who ever played.' : ''}</p>
           ${cfg.cap ? UI.challengeCap.bar(cfg.cap, five) : ''}
           ${mine ? '' : `<p class="muted">${esc(who(on))} is picking. Everyone taken is already off the board.</p>`}
           <p class="muted ch-small" id="vsBN"></p><ul class="ch-list" id="vsBList"></ul>`;
@@ -602,7 +607,20 @@
         };
         fill();
         app.querySelectorAll('[data-bpos]').forEach(b => b.addEventListener('click', () => { VS.pos = b.dataset.bpos; BLIM = 60; draft(app); }));
-        const bs = UI.$('#vsBSeason', app); if (bs) bs.addEventListener('change', () => { VS.season = bs.value; BLIM = 60; draft(app); });
+        const bs = UI.$('#vsBSeason', app);
+        if (bs) bs.addEventListener('change', () => {
+          VS.season = bs.value; BLIM = 60;
+          const y = +bs.value;
+          if (y && y !== 2013 && !C.loaded(y)) { UI.$('#vsLoadN', app).textContent = 'Loading the ' + lbl(y) + ' rosters...'; C.load(y).then(() => draft(app)).catch(() => { UI.toast('That roster did not load.', 'error'); draft(app); }); return; }
+          draft(app);
+        });
+        const la = UI.$('#vsLoadAll', app);
+        if (la) la.addEventListener('click', () => {
+          const need = ALL_YEARS.filter(y => inPlay(cfg, y) && y !== 2013 && !C.loaded(y)); let k = 0;
+          la.disabled = true;
+          const next = () => { if (k >= need.length) { draft(app); return; } UI.$('#vsLoadN', app).textContent = 'Loading every roster: ' + k + ' of ' + need.length + '...'; C.load(need[k++]).then(next).catch(next); };
+          next();
+        });
         const bq = UI.$('#vsBQ', app); if (bq) bq.addEventListener('input', () => { VS.q = bq.value; BLIM = 60; fill(); });
         const L = UI.$('#vsBList', app);
         if (L) L.addEventListener('click', e => { const b = e.target.closest('[data-bpick]'); if (b) takeP(b.dataset.bpick); });
