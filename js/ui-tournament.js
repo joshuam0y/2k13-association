@@ -291,7 +291,8 @@
       ${cfg.cap ? UI.challengeCap.bar(cfg.cap, five) : ''}
       <p class="muted ch-small" id="vsLoadN"></p><p class="muted ch-small" id="vsBN"></p><ul class="ch-list" id="vsBList"></ul>`;
   }
-  function boardBind(app, cfg, B, five, takeP) {
+  function boardBind(app, cfg, B, five, takeP, canTake) {
+    if (canTake === undefined) canTake = true;
     const S = UI.boardSorts || [], blind = noRt(), tkn = B.takenSet(flat());
     const fill = () => {
       if (B.era) { const nb = board(cfg); if (nb.players.length !== B.players.length) { B.players = nb.players; Object.assign(B.byId, nb.byId); } }
@@ -302,7 +303,7 @@
       const shown = p => (blind || !so || !so[2] || so[0] === 'ovr' || so[0] === 'low' ? '' : '<span class="vs-sortv">' + esc(String(Math.round(so[2](p) * 10) / 10)) + '</span>');
       const L = UI.$('#vsBList', app), N = UI.$('#vsBN', app);
       if (!L) return;
-      L.innerHTML = all.slice(0, TV.lim).map(p => playerRow(p, B, shown(p) + UI.challengeCap.btn(cfg.cap, five, p, `<button type="button" class="btn btn-small btn-gold" data-bpick="${esc(p.id)}">TAKE</button>`))).join('');
+      L.innerHTML = all.slice(0, TV.lim).map(p => playerRow(p, B, shown(p) + (canTake ? UI.challengeCap.btn(cfg.cap, five, p, `<button type="button" class="btn btn-small btn-gold" data-bpick="${esc(p.id)}">TAKE</button>`) : ''))).join('');
       N.innerHTML = all.length ? (all.length > TV.lim ? 'Showing ' + TV.lim + ' of ' + all.length + '. <button type="button" class="btn btn-small" id="vsMore">SHOW 60 MORE</button> <button type="button" class="btn btn-small" id="vsMoreAll">SHOW ALL</button>' : all.length + ' left.') : 'Nobody matches.';
       const mo = UI.$('#vsMore', app), ma = UI.$('#vsMoreAll', app);
       if (mo) mo.addEventListener('click', () => { TV.lim += 60; fill(); });
@@ -663,7 +664,7 @@
   }
 
   // what the online tournament drives: the same bracket, match and champion screens on every phone
-  window.TOURNAMENT.api = { hook: HOOK, get: () => TN, render, save, ensure, board, rosterOf, spinFor, aiChoose, ovrTag, startBracket, teamOf, tName, logo, lblC, short, lbl,
+  window.TOURNAMENT.api = { hook: HOOK, get: () => TN, render, save, ensure, board, boardHtml, boardBind, TV, BGT, rosterOf, spinFor, aiChoose, ovrTag, startBracket, teamOf, tName, logo, lblC, short, lbl,
     ALL_YEARS, decOf, shuffle, CPU_NAMES, clearRuns: RUNS_CLEAR, nm, f1,
     nm2: nm, mount(app) { APP = app; render(); },
     swap(obj) { TN = Object.assign(FRESH(), obj || ls.get() || {}); TN.opts = Object.assign({ timer: 24, cap: 0, bestOf: 1, seeding: 'random', ratings: true }, TN.opts || {}); RUNS_CLEAR(); WATCH = 0; AUTO = false; dropCourt(); },
