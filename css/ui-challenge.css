@@ -581,3 +581,20 @@
 
 /* all-time draft: the full list of who is taken scrolls inside its own box */
 .ch-offboard { max-height: 320px; overflow-y: auto; padding-right: 2px; }
+
+/* Top 20 By Season (js/ui-top20.js) */
+.t20-nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 16px; }
+.t20-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.t20-yr { background: var(--bg2); border: 1px solid var(--line); border-top: 3px solid var(--gold); padding: 10px 12px; min-width: 0; }
+.t20-yr h3 { font-family: var(--display); font-size: 22px; letter-spacing: .06em; margin: 0 0 8px; }
+.t20-yr h3 small { font: 400 12px var(--body, inherit); color: var(--muted); letter-spacing: 0; }
+.t20-yr ol { list-style: none; margin: 0; padding: 0; counter-reset: r; }
+.t20-yr li { display: grid; grid-template-columns: 22px minmax(0, 1fr) 34px 28px; gap: 6px; align-items: baseline; font-size: 14px; padding: 2px 0; border-bottom: 1px solid var(--line); counter-increment: r; }
+.t20-yr li:last-child { border: 0; }
+.t20-yr li::before { content: counter(r); color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.t20-yr .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t20-yr .t { color: var(--muted); font-size: 12px; letter-spacing: .04em; }
+.t20-yr b { font-family: var(--display); font-size: 15px; text-align: right; font-variant-numeric: tabular-nums; }
+.t20-yr b.g { color: var(--gold2, var(--gold)); }
+.t20-yr b.a { color: #6fcf88; }
+.t20-yr b.b { color: #7aa8e8; }
