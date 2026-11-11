@@ -627,3 +627,13 @@
 .ch-grades .gr-c { color: #e0c36a; }
 .ch-grades .gr-d, .ch-grades .gr-f { color: #e88a8a; }
 .tn-noR .ch-grades { display: none; }
+
+/* account chip in the top bar and its panel (js/ui-profile.js) */
+.pf-chip { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; line-height: 1.1; min-height: 38px; padding: 4px 12px; margin-left: auto; margin-right: 8px; background: var(--bg3); border: 1px solid var(--line2); color: var(--text); cursor: pointer; border-radius: 3px; }
+.pf-chip small { font-size: 9px; letter-spacing: .14em; color: var(--muted); }
+.pf-chip b { font-family: var(--display); letter-spacing: .06em; font-size: 15px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-chip:hover { border-color: var(--gold); }
+.pf-panel { position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .7); padding: 16px; }
+.pf-card { width: min(92vw, 380px); background: var(--bg2); border: 1px solid var(--line2); border-top: 3px solid var(--gold); padding: 16px; display: grid; gap: 10px; }
+.pf-card-k { font-family: var(--display); letter-spacing: .2em; color: var(--gold); font-size: 13px; }
+.pf-card .bad { color: #e88a8a; }

@@ -125,6 +125,12 @@
       if (role === 'guest') setTimeout(() => { if (NET.code === code && NET.status === 'connecting') { NET.err = 'No answer from room ' + code + ' yet. Check the code, and that the host still has the room open. Still trying...'; refreshNet(); } }, 20000);
     }).catch(e => { NET.status = 'error'; NET.err = e.message || 'The connection failed.'; refreshNet(); });
   }
+  window.addEventListener('a13-profile', () => {   // a username change from the top bar, mid room
+    const t = TN(); if (!t || !NET.role || !NET.client) return;
+    const n = UI.profile.name(); if (!n) return;
+    if (NET.role === 'host') { const i = mySeat(); if (i >= 0 && t.page === 'lobby' && !t.names.some((x, j) => j !== i && String(x).toLowerCase() === n.toLowerCase())) { t.names[i] = n; A.save(); push(); changed(); } }
+    else send({ t: 'hello', name: n });
+  });
   const hello = () => send({ t: 'hello', name: lsName.get() || '' });
   const CODE_CH = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const newCode = () => Array.from({ length: 5 }, () => CODE_CH[Math.floor(Math.random() * CODE_CH.length)]).join('');
@@ -155,6 +161,7 @@
     NET.peerSeen = Date.now();
     if (NET.status !== 'connected') { NET.status = 'connected'; NET.err = ''; lsRoom.set({ code: NET.code, at: Date.now() }); refreshNet(); }
     if (m.t === 'ping' && m.hn) OFF = m.hn - Date.now();
+    else if (m.t === 'dupe' && m.to === CID) { NET.status = 'error'; NET.err = 'Someone in this room already has your username. Change it with the account button at the top, then join again.'; refreshNet(); }
     else if (m.t === 'full' && m.to === CID) { NET.status = 'error'; NET.err = 'That room is full, or the draft already started. Ask the host.'; refreshNet(); }
     else if (m.t === 'state' && m.s) { if ((m.s.epoch || 0) >= (TN().epoch || 0)) onState(m.s); }
   }
@@ -185,6 +192,7 @@
     let i = t.seats.indexOf(m.cid);
     if (i < 0) {
       if (t.page !== 'lobby' || t.seats.length >= t.n) { send({ t: 'full', to: m.cid }); return; }
+      if (m.name && t.names.slice(0, t.seats.length).some(n => String(n).toLowerCase() === String(m.name).trim().toLowerCase())) { send({ t: 'dupe', to: m.cid }); return; }   // two people cannot share a username in a room
       t.seats.push(m.cid); i = t.seats.length - 1; t.names[i] = cleanName(m.name, i); t.live[i] = true;
     } else if (t.page === 'lobby' && m.name) t.names[i] = cleanName(m.name, i);
     A.save(); changed();

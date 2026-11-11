@@ -46,6 +46,12 @@
     VS.names[joiner] = (b.slice(0, 18) + ' 2');
     return true;
   }
+  window.addEventListener('a13-profile', () => {   // a username change from the top bar while in a room
+    if (!NET.role || !UI.profile.name()) return;
+    const i = me(); if (i === null) return;
+    if (NET.role === 'guest') send({ t: 'hello', name: UI.profile.name() });
+    else { VS.names[i] = UI.profile.name(); uniqNames(); push(); if (VS.page === 'setup' && APP) setup(APP); }
+  });
   const who = i => VS.names[i] || ('PLAYER ' + (i + 1));
   // ---------- the rivalry: every finished series between the same two names, kept on this phone ----------
   const RKEY = 'a13-vs-rivals';
