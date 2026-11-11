@@ -14,9 +14,9 @@
     get() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; } },
     set(v) { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) { /* private mode */ } }
   };
-  const FRESH = () => ({ year: 2008, teams: ['BOS', 'LAL'], names: ['', ''], opts: { bestOf: 5, blind: false, timer: 24, bench: 0, board: 0, dupes: 0 }, cfg: null, shown: 0, page: 'setup', spin: null, spun: [], respins: [1, 1], turn: null, pos: '', q: '', epoch: 0, hostSide: 0 });
+  const FRESH = () => ({ year: 2008, teams: ['BOS', 'LAL'], names: ['', ''], tnames: ['', ''], opts: { bestOf: 5, blind: false, timer: 24, bench: 0, board: 0, dupes: 0 }, cfg: null, shown: 0, page: 'setup', spin: null, spun: [], respins: [1, 1], turn: null, pos: '', q: '', epoch: 0, hostSide: 0 });
   let VS = Object.assign(FRESH(), ls.get() || {});
-  if (!VS.cfg || VS.page === 'setup') VS.names = ['', ''];   // a new game starts as Player 1 and Player 2 again
+  if (!VS.cfg || VS.page === 'setup') { VS.names = ['', '']; VS.tnames = ['', '']; }   // a new game starts as Player 1 and Player 2 again
   VS.opts = Object.assign({ bestOf: 5, blind: false, timer: 24, era: 2013, bench: 0 }, VS.opts || {});
   if (VS.opts.timer) VS.opts.timer = 24;   // the pick clock is a shot clock: 24 seconds or off
   // the seasons in play: every season but the ones switched off (VS.skip). One season left is a one-season
@@ -37,7 +37,7 @@
   const logo = (t, n) => UI.logoFor(t || { abbr: '?' }, n);
   const tOf = (teams, a) => teams.find(t => t.abbr === a) || { abbr: a, city: a, name: '', colors: ['#333', '#777'] };
   const tName = t => ((t.city || '') + ' ' + (t.name || '')).trim();
-  const myName = () => (me() !== null && VS.names[me()]) || UI.profile.name() || '';   // signed in: that is your name in the room
+  const myName = () => (online() ? UI.profile.name() : '') || (me() !== null && VS.names[me()]) || '';   // signed in: that is your name in the room
   // two people cannot share a name: the one who joined (or the second seat on one phone) gets a 2
   function uniqNames() {
     const a = String(VS.names[0] || '').trim(), b = String(VS.names[1] || '').trim();
@@ -110,7 +110,7 @@
       <p class="muted">Series won. Games: ${esc(a)} ${R.games[a] || 0}, ${esc(b)} ${R.games[b] || 0}.${sw ? ' Sweeps: ' + esc(sw) + '.' : ''} ${esc(streak)}</p>
       <div class="vs-rival-log">${R.log.slice(0, 8).map(x => `<span class="${x.w === a ? 'a' : 'b'}">${esc(x.w.split(' ')[0])} ${esc(x.s)}<small>${esc(x.y ? short(x.y) : 'ALL')}</small></span>`).join('')}</div></section>`;
   }
-  const SHARED = ['year', 'skip', 'teams', 'names', 'opts', 'cfg', 'shown', 'watch', 'page', 'spin', 'spun', 'respins', 'turn', 'epoch', 'hostSide'];
+  const SHARED = ['year', 'skip', 'teams', 'names', 'tnames', 'opts', 'cfg', 'shown', 'watch', 'page', 'spin', 'spun', 'respins', 'turn', 'epoch', 'hostSide'];
   let APP = null;   // the page element the versus screens draw into
 
   // ---------- online (an encrypted relay) ----------
@@ -406,14 +406,14 @@
       const boss = NET.role !== 'guest';   // the host (or the one phone) sets the season and the rules
       const dis = c => (c ? '' : ' disabled');
       const grid = i => `<div class="ch-teams">${teams.map(t => `<button type="button" class="ch-team${VS.teams[i] === t.abbr ? ' on' : ''}" data-side="${i}" data-team="${esc(t.abbr)}"${VS.teams[1 - i] === t.abbr || !canAct(i) ? ' disabled' : ''} style="--c1:${esc(t.colors[0])}">${logo(t, 30)}<span>${esc(t.name)}</span></button>`).join('')}</div>`;
-      if (me() !== null && !VS.names[me()] && UI.profile.name()) { VS.names[me()] = UI.profile.name(); if (NET.role === 'guest') send({ t: 'hello', name: VS.names[me()] }); else if (uniqNames()) push(); }
+      if (me() !== null && UI.profile.name() && VS.names[me()] !== UI.profile.name()) { VS.names[me()] = UI.profile.name(); if (NET.role === 'guest') send({ t: 'hello', name: VS.names[me()] }); else { uniqNames(); push(); } }   // online, your name is your account
       const ready = !online() || linked();
       app.innerHTML = `
         <section class="ch-hero"><div class="ch-hero-k">DRAFT CHALLENGE | TWO PLAYERS</div><h1 class="ch-hero-t">YOU VS ME.</h1>
           <p class="ch-hero-p">Take turns spinning the wheel and taking one player from the team it lands on, until you both have five (or switch the wheel off and draft from an open board). Then a series: nobody comes off the bench, all five play 48 minutes, so positions and fit matter.</p></section>
         ${netBar()}
         <div class="ch-setup">
-          ${NET.role ? UI.profile.bar() : ''}
+          ${UI.profile.bar()}${PEND ? `<p class="muted">Sign in to join room <b>${esc(PEND)}</b>.</p>` : ''}
           <div class="ch-step"><div class="ch-step-k">1 | HOW YOU PLAY</div>
             <div class="ch-seg vs-seg3"><button type="button" class="ch-seg-b${!online() ? ' on' : ''}" data-net="local"><b>SAME PHONE</b><small>Pass it back and forth</small></button>
               <button type="button" class="ch-seg-b${NET.role === 'host' ? ' on' : ''}" data-net="host"><b>HOST ONLINE</b><small>Get a room code for your friend</small></button>
@@ -439,7 +439,8 @@
               <div><span class="ts-start-k">SALARY CAP</span><div class="ch-chips">${UI.challengeCap.CAPS.map(v => `<button type="button" class="ch-chip${(VS.opts.cap || 0) === v ? ' on' : ''}" data-cap="${v}"${dis(boss)}>${v ? '$' + v + 'M' : 'OFF'}</button>`).join('')}</div>
                 <small class="muted">${VS.opts.cap ? 'Every player has a price from his rating (a 99 is $45M, the minimum $1M). Both fives must fit under $' + VS.opts.cap + 'M.' : 'No cap: take anyone.'}</small></div></div></div>
           ${[0, 1].map(i => `<div class="ch-step"><div class="ch-step-k">${i + 4} | PLAYER ${i + 1}${me() === i ? ' (YOU)' : ''}</div>
-            <label class="field"><span>NAME</span><input data-name="${i}" name="p${i}-${Date.now()}" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="20" placeholder="Player ${i + 1}" value="${esc(VS.names[i] || '')}"${dis(canAct(i))}></label>${grid(i)}</div>`).join('')}
+            <label class="field"><span>NAME</span><input data-name="${i}" name="p${i}-${Date.now()}" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="20" placeholder="Player ${i + 1}" value="${esc(VS.names[i] || '')}"${online() ? ' readonly' : dis(canAct(i))}></label>
+            <label class="field"><span>TEAM NAME</span><input data-tname="${i}" name="t${i}-${Date.now()}" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="24" placeholder="${esc(tName(tOf(teams, VS.teams[i])))}" value="${esc(VS.tnames[i] || '')}"${dis(canAct(i))}></label>${grid(i)}</div>`).join('')}
           <div class="ch-go"><button type="button" class="btn btn-small" id="vsResetNames">RESET NAMES</button></div>
           ${rivalBox(rivalry(), true)}
           <div class="ch-go">${boss ? `<button type="button" class="btn btn-gold btn-big" id="vsStart"${ready ? '' : ' disabled'}>${ready ? 'START THE DRAFT' : 'WAITING FOR PLAYER 2'}</button>` : '<p class="muted">Your friend starts the draft when you are both set.</p>'}
@@ -450,6 +451,7 @@
       const redraw = () => { push(); setup(app); };
       app.querySelectorAll('[data-net]').forEach(b => b.addEventListener('click', () => {
         const v = b.dataset.net;
+        if (v !== 'local' && !UI.profile.signedIn()) { UI.toast('Sign in to play online. Your name is your account.', 'error'); const bar = UI.$('.pf-bar', app); if (bar) bar.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
         if (v === 'local') hangUp();
         else if (v === 'host' && NET.role !== 'host') host();
         else if (v === 'join' && NET.role !== 'guest') { hangUp(); Object.assign(NET, { role: 'guest', code: '', status: 'code', err: '' }); }
@@ -473,10 +475,17 @@
       app.querySelectorAll('[data-blind]').forEach(b => b.addEventListener('click', () => { VS.opts.blind = b.dataset.blind === '1'; redraw(); }));
       app.querySelectorAll('[data-timer]').forEach(b => b.addEventListener('click', () => { VS.opts.timer = +b.dataset.timer; redraw(); }));
       app.querySelectorAll('[data-side]').forEach(b => b.addEventListener('click', () => { VS.teams[+b.dataset.side] = b.dataset.team; redraw(); }));
+      app.querySelectorAll('[data-tname]').forEach(inp => inp.addEventListener('change', () => { VS.tnames[+inp.dataset.tname] = inp.value.trim().slice(0, 24); push(); }));
       app.querySelectorAll('[data-name]').forEach(inp => inp.addEventListener('change', () => { VS.names[+inp.dataset.name] = inp.value.trim().slice(0, 20); if (me() === +inp.dataset.name && VS.names[+inp.dataset.name]) UI.profile.set(VS.names[+inp.dataset.name]); if (NET.role === 'guest') send({ t: 'hello', name: VS.names[me()] || '' }); else { uniqNames(); push(); redraw(); } }));
-      UI.profile.wire(app, () => { const i = me(); if (i !== null) VS.names[i] = UI.profile.name(); if (NET.role === 'guest') send({ t: 'hello', name: VS.names[i] || '' }); else { uniqNames(); push(); } redraw(); });
+      UI.profile.wire(app, () => {
+        if (!UI.profile.signedIn() && NET.role) { hangUp(); route(); return; }
+        if (UI.profile.signedIn() && PEND) { const c = PEND; PEND = null; join(c); route(); return; }
+        const i = me(); if (i !== null) VS.names[i] = UI.profile.name();
+        if (NET.role === 'guest') send({ t: 'hello', name: VS.names[i] || '' }); else { uniqNames(); push(); }
+        redraw();
+      });
       const rn = UI.$('#vsResetNames', app);
-      if (rn) rn.addEventListener('click', () => { [0, 1].forEach(i => { if (canAct(i)) VS.names[i] = ''; }); push(); redraw(); });
+      if (rn) rn.addEventListener('click', () => { [0, 1].forEach(i => { if (canAct(i)) { if (!online()) VS.names[i] = ''; VS.tnames[i] = ''; } }); push(); redraw(); });
       const bk = UI.$('#vsBack', app); if (bk) bk.addEventListener('click', () => go(C.vsOnClock(VS.cfg) >= 0 ? 'draft' : 'series'));
       const st = UI.$('#vsStart', app);
       if (st) st.addEventListener('click', () => {
@@ -486,7 +495,7 @@
         if (!ch.length) { UI.toast('Switch on at least one season', 'error'); return; }
         VS.year = ch.length === 1 ? ch[0] : 0;
         VS.cfg = { mode: 'versus', year: VS.year, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null, bestOf: VS.opts.bestOf, blind: !VS.opts.cap && !!VS.opts.blind, cap: +VS.opts.cap || 0, bench: VS.opts.cap ? 0 : (+VS.opts.bench || 0), board: VS.opts.board ? 1 : 0, dupes: ch.length > 1 && VS.opts.dupes ? 1 : 0, timer: +VS.opts.timer || 0, era: +VS.opts.era || 2013, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
-          sides: [0, 1].map(i => ({ team: VS.teams[i], name: VS.names[i] ? VS.names[i] + "'s " + tOf(teams, VS.teams[i]).name : '', picks: [] })) };
+          sides: [0, 1].map(i => ({ team: VS.teams[i], name: (VS.tnames[i] || '').trim() || (VS.names[i] ? VS.names[i] + "'s " + tOf(teams, VS.teams[i]).name : ''), picks: [] })) };
         VS.spin = null; VS.spun = []; VS.respins = [1, 1]; VS.shown = 0; VS.pos = ''; VS.q = ''; VS.season = '';
         VS.turn = turnFor(VS.cfg, 0, 'spin');
         go('draft');
@@ -735,6 +744,7 @@
   // a watch party runs on the host's clock: the host tells the other phone where the game is every moment, and that phone
   // catches up if it is behind and waits if it is ahead, so both see the same play, box score and subs, on any device
   let SYNCT = null, SYNC_SEEN = 0;
+  let PEND = null;   // a room code from a join link, waiting for the sign in
   function stopSync() { if (SYNCT) { clearInterval(SYNCT); SYNCT = null; } }
   function startSync(n) {
     stopSync();
@@ -860,7 +870,7 @@
         if (!window.confirm('Reset the record between ' + who(0) + ' and ' + who(1) + ' on this phone?')) return;
         const all = rivals.all(), k = pairKey(), ids = all[k] ? all[k].ids : []; all[k] = { ids }; rivals.save(all); series(app);   // keeps the ids so this series does not count again
       });
-      if ($('#vsNew')) $('#vsNew').addEventListener('click', () => { VS.cfg = null; VS.shown = 0; VS.watch = null; VS.names = ['', '']; go('setup'); });
+      if ($('#vsNew')) $('#vsNew').addEventListener('click', () => { VS.cfg = null; VS.shown = 0; VS.watch = null; VS.names = ['', '']; VS.tnames = ['', '']; go('setup'); });
       if (want && WATCH !== want) watch(want);   // the other phone pressed WATCH
     });
   }
@@ -878,13 +888,14 @@
     APP = app;
     if (part[1] === 'join' && part[2]) {
       VS.page = 'setup';
-      if (!(NET.role === 'guest' && NET.code === part[2].toUpperCase())) join(part[2]);
+      if (!UI.profile.signedIn()) PEND = part[2].toUpperCase();
+      else if (!(NET.role === 'guest' && NET.code === part[2].toUpperCase())) join(part[2]);
       if (location.hash !== '#/challenge/vs') { history.replaceState(null, '', '#/challenge/vs'); }
       return setup(app);
     }
     const page = part[1] === 'draft' ? 'draft' : part[1] === 'result' ? 'series' : 'setup';
     if (page !== 'setup' && !VS.cfg) { VS.page = 'setup'; return setup(app); }
-    if (page === 'setup' && !VS.cfg && !NET.role) VS.names = ['', ''];
+    if (page === 'setup' && !VS.cfg && !NET.role) { VS.names = ['', '']; VS.tnames = ['', '']; }
     VS.page = page;
     if (page === 'draft') return draft(app);
     if (page === 'series') return series(app);
