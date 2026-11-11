@@ -200,7 +200,7 @@
       cur: start, done: start, ev: null, beats: [], beat: null, bt: 0, evDur: 0, evT: 0, tPrev: start ? evs[start - 1].t : 0,
       on: { home: [], away: [] }, pos: {}, alpha: {}, ball: { x: 47, y: 25, z: 0 }, holder: null, ph: null,
       off: null, set: false, form: null, hs: 0, as: 0, per: 'Q1', clock: '12:00', shownT: 0,
-      playing: opts.autoplay !== false, speed: 1, ended: false, tags: [], sel: null, mode: null, camY: 0, raf: 0, last: 0, dead: false
+      playing: opts.autoplay !== false, speed: 1, tab: 'box', pnl: null, holdAt: null, ended: false, tags: [], sel: null, mode: null, camY: 0, raf: 0, last: 0, dead: false
     };
     if (start > 0) { const p = evs[start - 1]; st.hs = p.hs; st.as = p.as; st.per = p.per; st.shownT = p.t; }
 
@@ -214,6 +214,7 @@
         <div class="ct-stage">
           <svg class="ct-svg" role="img" aria-label="Court view of the game" preserveAspectRatio="xMidYMid meet"></svg>
           <div class="ct-banner" hidden></div>
+          <div class="ct-sub" hidden></div>
         </div>
         <div class="ct-card"></div>
         <div class="ct-line"><span class="ct-lt"></span><span class="ct-lx">Tip-off coming up</span></div>
@@ -221,11 +222,13 @@
           <button type="button" class="btn btn-small ct-play" aria-label="Pause">PAUSE</button>
           ${[1, 2, 4].map(s => `<button type="button" class="btn btn-small ct-spd${s === 1 ? ' on' : ''}" data-speed="${s}">${s}X</button>`).join('')}
           <button type="button" class="btn btn-small ct-skip" aria-label="Skip to the end of the quarter">SKIP QTR</button>
+          <button type="button" class="btn btn-small ct-pb" aria-label="Box score and plays">BOX / PLAYS</button>
           <button type="button" class="btn btn-small ct-fs" aria-label="Full screen">FULL SCREEN</button>
           ${window.MUSICBAR ? '<button type="button" class="btn btn-small ct-mus" aria-label="Music bar"></button>' : ''}
           ${window.SFX ? `<button type="button" class="btn btn-small ct-sfx${window.SFX.on ? ' on' : ''}" aria-label="Sound effects">${window.SFX.on ? 'SOUND ON' : 'SOUND OFF'}</button>` : ''}
         </div>
         <div class="ct-floor-list" aria-label="On the floor"></div>
+        <div class="ct-pnl" hidden><div class="ct-ptabs"><button type="button" class="ct-ptab on" data-tab="box">BOX SCORE</button><button type="button" class="ct-ptab" data-tab="feed">PLAYS</button></div><div class="ct-pbody"></div></div>
       </div>`;
     const $ = sel => el.querySelector(sel);
     // full screen watch mode: the score, the court, the play, the controls and the five-a-side chips on one screen, no scrolling
@@ -238,6 +241,7 @@
       document.body.classList.toggle('ct-full-on', full);
       const fb = $('.ct-fs'); if (fb) fb.textContent = full ? 'EXIT FULL SCREEN' : 'FULL SCREEN';
       fitH();
+      pnlShow(!full);   // the box score sits under the court on the page, and opens over it in full screen when asked for
     };
     // the height you can really see (phone browsers with a toolbar: 100vh is taller than the screen, the bottom would be cut off)
     const fitH = () => { const h = full ? Math.round((window.visualViewport && window.visualViewport.height) || window.innerHeight) : 0; wrapEl.style.height = h ? h + 'px' : ''; };
@@ -359,6 +363,53 @@
       $('.ct-lt').innerHTML = `<span class="ct-lc">${esc(ev.per)} ${esc(ev.clock)}</span>${ev.team ? logoOf(ev.team, 20) : ''}`;
       $('.ct-lx').textContent = ev.body || ev.text;
       $('.ct-line').classList.toggle('made', ev.pts > 0);
+    }
+    // who came in for whom at event j (the lineup before it against the lineup it plays with)
+    function subText(j) {
+      const prev = j > 0 ? evs[j - 1] : null, cur = evs[j];
+      if (!prev || !cur) return '';
+      const parts = [];
+      SIDES.forEach(side => {
+        const ins = cur.on[side].filter(k => prev.on[side].indexOf(k) < 0), outs = prev.on[side].filter(k => cur.on[side].indexOf(k) < 0);
+        if (ins.length) parts.push(abbr[side] + ': ' + ins.map(k => info[k].last).join(', ') + ' in for ' + outs.map(k => info[k].last).join(', '));
+      });
+      return parts.join('   |   ');
+    }
+    function announceSub(j) {
+      const t = subText(j), b = $('.ct-sub');
+      if (!t || !b) return;
+      b.textContent = 'SUBSTITUTION  ' + t; b.hidden = false;
+      clearTimeout(st.subT);
+      st.subT = setTimeout(() => { b.hidden = true; }, 5000);
+    }
+    // the live box score and the play feed, as far as the game has got
+    function pnlDraw() {
+      const box = $('.ct-pnl'), body = $('.ct-pbody');
+      if (!box || box.hidden || !body) return;
+      if (st.tab === 'feed') {
+        const out = [];
+        for (let j = st.done - 1; j >= 0 && out.length < 40; j--) {
+          out.push(`<li><small>${esc(evs[j].per)} ${esc(evs[j].clock)}</small>${esc(evs[j].body || evs[j].text)}</li>`);
+          const sb = subText(j);
+          if (sb) out.push(`<li class="sub"><small>SUB</small>${esc(sb)}</li>`);
+        }
+        body.innerHTML = out.length ? '<ol class="ct-feed">' + out.join('') + '</ol>' : '<p class="muted">Tip-off coming up.</p>';
+        return;
+      }
+      const L = linesAt(tl, st.done);
+      body.innerHTML = SIDES.slice().reverse().map(side => {
+        const rows = Object.keys(info).filter(k => info[k].side === side).map(k => {
+          const l = L[k] || { pts: 0, reb: 0, ast: 0 }, on = st.on[side].indexOf(k) >= 0;
+          return `<tr class="${on ? 'on' : ''}"><td class="l">${on ? '<i></i>' : ''}${esc(info[k].name)}</td><td>${l.pts}</td><td>${l.reb}</td><td>${l.ast}</td></tr>`;
+        }).join('');
+        return `<table class="ct-bx"><thead><tr><th class="l">${esc(abbr[side])} ${side === 'home' ? st.hs : st.as}</th><th>PTS</th><th>REB</th><th>AST</th></tr></thead><tbody>${rows}</tbody></table>`;
+      }).join('');
+    }
+    function pnlShow(open) {
+      const box = $('.ct-pnl'); if (!box) return;
+      st.pnl = open; box.hidden = !open;
+      box.classList.toggle('ct-pnl-over', full);
+      pnlDraw();
     }
     function banner(text) {
       const b = $('.ct-banner');
@@ -513,6 +564,7 @@
         chips();
         if (prevHolder && fade[prevHolder] === 0) st.holder = st.ph;
         ins.forEach(k => tag(k, 'IN', 'sub', 1100));
+        announceSub(ev.i);
       } });
     }
 
@@ -707,7 +759,7 @@
       }
       const ev = evs[Math.min(i, evs.length - 1)];
       if (few) sound(ev);
-      drawScore(); drawLine(ev);
+      drawScore(); drawLine(ev); pnlDraw();
       if (st.sel) card();
     }
     function nextEvent() {
@@ -777,6 +829,7 @@
       let guard = 0;
       while (ms > 0 && guard++ < 50) {
         if (!st.beat) {
+          if (!st.beats.length && st.holdAt != null && st.cur >= st.holdAt && st.cur < evs.length) return;   // a watch party: wait for the leader
           if (!st.beats.length && !nextEvent()) return;
           if (!st.beats.length) continue;
           beginBeat(st.beats.shift());
@@ -811,6 +864,10 @@
       let k = j;
       while (k < evs.length && evs[k].k !== 'end' && evs[k].k !== 'final') k++;
       if (k >= evs.length) k = evs.length - 1;
+      jumpTo(k);
+    }
+    // plays every event before k at once and sets the floor for event k (a skip, or catching up with the leader)
+    function jumpTo(k) {
       if (k > 0) fire(k - 1);
       st.beats = []; st.beat = null; st.flight = false;
       st.cur = k;
@@ -845,6 +902,8 @@
     $('.ct-play').addEventListener('click', () => { st.playing = !st.playing; syncControls(); wake(); told(st.playing ? 'play' : 'pause'); });
     el.querySelectorAll('.ct-spd').forEach(b => b.addEventListener('click', () => { st.speed = Number(b.getAttribute('data-speed')) || 1; syncControls(); told('speed', st.speed); }));
     $('.ct-skip').addEventListener('click', () => { skipQuarter(); told('skip'); });
+    $('.ct-pb').addEventListener('click', () => pnlShow(!st.pnl));
+    el.querySelectorAll('.ct-ptab').forEach(b => b.addEventListener('click', () => { st.tab = b.getAttribute('data-tab'); el.querySelectorAll('.ct-ptab').forEach(x => x.classList.toggle('on', x === b)); pnlDraw(); }));
     const sfxB = $('.ct-sfx');
     if (sfxB) sfxB.addEventListener('click', () => { window.SFX.set(!window.SFX.on); sfxB.classList.toggle('on', window.SFX.on); sfxB.textContent = window.SFX.on ? 'SOUND ON' : 'SOUND OFF'; });
 
@@ -900,6 +959,9 @@
       pause() { st.playing = false; syncControls(); },
       setSpeed(s) { st.speed = s; syncControls(); },
       skipQuarter,
+      seek(i) { i = clamp(i | 0, 0, evs.length - 1); if (st.ended || i <= st.cur) return; jumpTo(i); },   // catch up to event i
+      hold(i) { st.holdAt = i == null ? null : i; wake(); },                                              // never run ahead of event i
+      state: () => ({ cur: st.cur, done: st.done, playing: st.playing, speed: st.speed, ended: st.ended }),
       done: () => st.done,
       timeline: tl
     };

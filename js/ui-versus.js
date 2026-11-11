@@ -185,6 +185,15 @@
     if (m.t === 'court' && courtCtl && WATCH === m.n) {   // the other phone tapped pause, play, a speed or skip
       if (m.k === 'speed') courtCtl.setSpeed(+m.v || 1); else if (m.k === 'play') courtCtl.play(); else if (m.k === 'pause') courtCtl.pause(); else if (m.k === 'skip') courtCtl.skipQuarter();
     }
+    if (m.t === 'csync' && courtCtl && WATCH === m.n && NET.role === 'guest') {   // the host's clock: catch up, wait, or follow its pause and speed
+      const s = courtCtl.state();
+      SYNC_SEEN = Date.now();
+      if (m.cur - s.cur > 3) courtCtl.seek(m.cur);
+      courtCtl.hold(m.cur + 3);
+      if (m.speed && s.speed !== m.speed) courtCtl.setSpeed(m.speed);
+      if (m.playing && !s.playing) courtCtl.play(); else if (!m.playing && s.playing) courtCtl.pause();
+      setTimeout(() => { if (courtCtl && Date.now() - SYNC_SEEN > 5000) courtCtl.hold(null); }, 5200);   // the host went quiet: carry on alone
+    }
     if (m.t === 'typing') { CHAT.typingUntil = Date.now() + 3500; CHAT.typingName = String(m.name || '').slice(0, 20); showTyping(); setTimeout(showTyping, 3600); }
     if (m.t === 'chat' && m.text) { CHAT.typingUntil = 0; addChat({ name: String(m.name || '').slice(0, 20), text: String(m.text).slice(0, 300), mine: false }); }
   }
@@ -714,7 +723,20 @@
     if (!RUN || RUN.key !== key) RUN = { key, r: C.playVersus(cfg, { pbp: true }) };
     return RUN.r;
   }
-  function dropCourt() { if (courtCtl) { try { courtCtl.destroy(); } catch (e) { /* gone */ } courtCtl = null; } }
+  // a watch party runs on the host's clock: the host tells the other phone where the game is every moment, and that phone
+  // catches up if it is behind and waits if it is ahead, so both see the same play, box score and subs, on any device
+  let SYNCT = null, SYNC_SEEN = 0;
+  function stopSync() { if (SYNCT) { clearInterval(SYNCT); SYNCT = null; } }
+  function startSync(n) {
+    stopSync();
+    if (!linked() || NET.role !== 'host') return;
+    SYNCT = setInterval(() => {
+      if (!courtCtl || WATCH !== n || !linked()) { stopSync(); return; }
+      const s = courtCtl.state();
+      send({ t: 'csync', n, cur: s.cur, playing: s.playing, speed: s.speed });
+    }, 1000);
+  }
+  function dropCourt() { stopSync(); if (courtCtl) { try { courtCtl.destroy(); } catch (e) { /* gone */ } courtCtl = null; } }
   const f1 = v => v == null ? '-' : (+v).toFixed(1);   // per game: 8.0, not 8
   function series(app) {
     stopTick();
@@ -785,6 +807,7 @@
         courtCtl = window.COURT.mount(el, { game: g.res, start: 0, autoplay: true, team: a => S[idx(a)].team, player: id => PL[id] || null,
           logo: (a, size) => logo(S[idx(a)].team, size), onEnd: () => { if (WATCH === n && n > (VS.shown || 0)) reveal(n); },
           onControl: (k, v) => { if (linked()) send({ t: 'court', n, k, v }); } });
+        if (courtCtl) startSync(n);
         if (courtCtl && UI.extras && typeof UI.extras.onLeave === 'function') UI.extras.onLeave(dropCourt);
         el.scrollIntoView({ block: 'start', behavior: 'smooth' });
       };
