@@ -140,8 +140,13 @@
     el = document.createElement('div');
     el.id = 'pfPanel'; el.className = 'pf-panel'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Your account');
     document.body.appendChild(el);
-    const close = () => el.remove();
-    el.addEventListener('click', e => { if (e.target === el) close(); });
+    const onKey = e => { if (e.key === 'Escape') close(); };
+    const close = () => { document.removeEventListener('keydown', onKey); el.remove(); };
+    document.addEventListener('keydown', onKey);
+    // only a click that starts and ends on the dark backdrop closes it: dragging to select text and letting go outside must not
+    let down = null;
+    el.addEventListener('pointerdown', e => { down = e.target; });
+    el.addEventListener('click', e => { if (e.target === el && down === el) close(); down = null; });
     const say = (t, bad) => { const m = el.querySelector('#pfMsg'); if (m) { m.textContent = t; m.className = 'pf-msg' + (bad ? ' bad' : ''); } };
     const busy = (b, on) => { if (b) b.disabled = !!on; };
     const card = html => { el.innerHTML = `<div class="pf-card">${html}<small class="pf-msg" id="pfMsg"></small></div>`; };
