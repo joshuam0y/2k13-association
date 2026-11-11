@@ -15,7 +15,7 @@
   const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081'];
   const SPIN_MS = 4700;
   const ERAS = [[2013, 'MODERN'], [2003, '2000S'], [1993, '1990S'], [1985, '1980S'], [1975, '1970S'], [1965, '1960S'], [1955, '1950S']];   // the rules a mixed-seasons game plays by: pace, the three-point line (none before 1979-80), shooting
-  const SHARED = ['page', 'n', 'humans', 'names', 'ai', 'seats', 'live', 'opts', 'skip', 'cfg', 'teams', 'picks', 'seeds', 'rounds', 'cur', 'champ', 'rating', 'watch', 'spins', 'respins', 'spun', 'clk', 'hnow', 'epoch', 'hostCid'];
+  const SHARED = ['page', 'n', 'humans', 'names', 'ai', 'seats', 'live', 'opts', 'skip', 'cfg', 'teams', 'picks', 'seeds', 'rounds', 'cur', 'champ', 'rating', 'watch', 'spins', 'respins', 'spun', 'clk', 'lock', 'hnow', 'epoch', 'hostCid'];
   const store = k => ({
     get() { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } },
     set(v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode */ } },
@@ -212,7 +212,7 @@
     }
     return -1;
   }
-  function mySig() { const t = TN(), w = mySeat(), on = t.cfg && t.cfg.turns ? onClockSeat(t) : w; return JSON.stringify([t.picks[w], t.spins[w], t.respins[w], t.clk[w], on, t.picks[on], t.spins[on], t.clk[on]]); }
+  function mySig() { const t = TN(), w = mySeat(), on = t.cfg && t.cfg.turns ? onClockSeat(t) : w; return JSON.stringify([t.lock, t.picks[w], t.spins[w], t.respins[w], t.clk[w], on, t.picks[on], t.spins[on], t.clk[on]]); }
   const onPage = () => /#\/challenge\/tournament\/online/.test(location.hash);
   function changed() {
     const t = TN(), mine = mySig();
@@ -250,13 +250,15 @@
     if (s) { t.spins[seat] = s; t.spun.push(s.key); setClk(seat, 'pick'); }
   }
   function humansDone() { const t = TN(); return t.seats.every((_, i) => t.picks[i].length >= per(t)); }
+  // 8-man: after the last pick each player sets and locks their starters; the bracket waits for everyone (the host can start anyway)
+  function lockedAll() { const t = TN(); return !(t.cfg && t.cfg.bench) || t.seats.every((_, i) => t.lock && t.lock[i]); }
   function fill(seat) {
     const t = TN(), cfg = t.cfg, B = A.board(cfg);
     let tries = 0; t.who = seat;
     while (t.picks[seat].length < per(t) && tries++ < 80) {
       const five = t.picks[seat].map(id => B.byId[id]).filter(Boolean);
       if (cfg.board) {
-        const tk = B.takenSet(flat()), cands = B.players.filter(p => !tk.has(B.base(p))).sort((a, b) => b.ovr - a.ovr).slice(0, 300);
+        const tk = B.takenSet(flat()), cands = B.players.filter(p => !tk.has(B.base(p)) && (!cfg.cap || C.capFits(cfg.cap, five, p))).sort((a, b) => b.ovr - a.ovr).slice(0, 300);
         const bp = A.aiChoose(cfg.cap, five, cands);
         if (bp) t.picks[seat].push(bp.id);
         continue;
@@ -264,14 +266,14 @@
       const s = A.spinFor(cfg, B, flat(), null);
       if (s) t.spun.push(s.key);
       let pick = s && A.aiChoose(cfg.cap, five, A.rosterOf(B, s.key, flat()));
-      if (!pick && tries > 40) pick = A.aiChoose(cfg.cap, five, B.players.filter(p => !B.takenSet(flat()).has(B.base(p))).slice(0, 400));
+      if (!pick && tries > 40) pick = A.aiChoose(cfg.cap, five, B.players.concat(B.extra || []).filter(p => !B.takenSet(flat()).has(B.base(p))).sort((x, y) => (cfg.cap ? C.price(x) - C.price(y) : 0)).slice(0, 400))   // under a cap the cheapest players are the ones that still fit;
       if (pick) t.picks[seat].push(pick.id);
     }
     t.spins[seat] = null; t.clk[seat] = null;
   }
   function afterChange() {
     const t = TN();
-    if (t.page === 'draft' && humansDone()) {
+    if (t.page === 'draft' && humansDone() && lockedAll()) {
       for (let i = t.seats.length; i < t.n; i++) fill(i);
       A.startBracket(A.board(t.cfg));
       LAST = { page: t.page, mine: mySig() };
@@ -286,9 +288,17 @@
   }
   function hostAct(seat, a) {
     const t = TN(), cfg = t.cfg;
+    if (a && a.k === 'lock') {   // 8-man: starters are set
+      if (t.page === 'draft' && cfg && cfg.bench && seat >= 0 && seat < t.seats.length && t.picks[seat].length >= per(t)) { t.lock = t.lock || []; t.lock[seat] = true; afterChange(); push(); }
+      return;
+    }
+    if (a && a.k === 'force') {   // the host starts the bracket without waiting for a slow player
+      if (t.page === 'draft' && cfg && cfg.bench && t.seats[seat] === t.hostCid && humansDone()) { t.lock = t.seats.map(() => true); afterChange(); push(); }
+      return;
+    }
     if (a && a.k === 'swap') {   // 8-man: trade a starter and a bench player
       const pk = t.picks[seat], i = +a.i, j = +a.j;
-      if (t.page === 'draft' && cfg && cfg.bench && seat >= 0 && seat < t.seats.length && i !== j && pk[i] != null && pk[j] != null) { const x = pk[i]; pk[i] = pk[j]; pk[j] = x; A.save(); push(); changed(); }
+      if (t.page === 'draft' && cfg && cfg.bench && seat >= 0 && seat < t.seats.length && !(t.lock && t.lock[seat]) && i !== j && pk[i] != null && pk[j] != null) { const x = pk[i]; pk[i] = pk[j]; pk[j] = x; A.save(); push(); changed(); }
       return;
     }
     if (t.page !== 'draft' || !cfg || seat < 0 || seat >= t.seats.length || t.picks[seat].length >= per(t)) return;
@@ -481,8 +491,8 @@
               <small class="muted">${o.dupes ? 'The same player can be drafted from different seasons. Only that exact season is gone once taken.' : 'A player is gone for good once taken, whatever the season.'}</small></div>`}
             <div><span class="ts-start-k">DRAFT STYLE</span><div class="ch-chips">${chips([[0, 'THE WHEEL'], [1, 'OPEN BOARD']], o.board ? 1 : 0, 'board')}</div>
               <small class="muted">${o.board ? 'No wheel: pick anyone left on the board. Every season you picked loads in on each phone.' : 'Every pick comes from the team the wheel lands on.'}</small></div>
-            <div><span class="ts-start-k">BENCH</span><div class="ch-chips">${chips([[0, 'JUST THE FIVE'], [3, '8-MAN: +3 BENCH']], o.bench && !o.cap ? 3 : 0, 'bench', v => v === 3 && o.cap)}</div>
-              <small class="muted">${o.cap ? 'Not with a salary cap.' : o.bench ? 'Everyone drafts eight. The first five start, the last three come off the bench.' : 'Five players each, all 48 minutes.'}</small></div>
+            <div><span class="ts-start-k">BENCH</span><div class="ch-chips">${chips([[0, 'JUST THE FIVE'], [3, '8-MAN: +3 BENCH']], o.bench ? 3 : 0, 'bench')}</div>
+              <small class="muted">${o.bench ? 'Everyone drafts eight. The first five start, the last three come off the bench.' + (o.cap ? ' The cap grows to $' + C.capFor(o.cap, o.bench) + 'M to cover all eight.' : '') : 'Five players each, all 48 minutes.'}</small></div>
             <div><span class="ts-start-k">SEEDING</span><div class="ch-chips">${chips([['random', 'RANDOM'], ['rating', 'BY TEAM RATING']], o.seeding, 'seed')}</div></div>
             <div><span class="ts-start-k">SHOT CLOCK</span><div class="ch-chips">${chips([[24, '24 SEC'], [0, 'OFF']], o.timer ? 24 : 0, 'timer')}</div></div>
             <div><span class="ts-start-k">RATINGS</span><div class="ch-chips">${[[true, 'ON'], [false, 'OFF']].map(([v, l]) => `<button type="button" class="ch-chip${(o.ratings !== false) === v ? ' on' : ''}" data-rate="${v}"${ds}>${l}</button>`).join('')}</div></div>
@@ -509,7 +519,7 @@
     app.querySelectorAll('[data-seed]').forEach(b => b.addEventListener('click', () => edit(() => { o.seeding = b.dataset.seed; })));
     app.querySelectorAll('[data-timer]').forEach(b => b.addEventListener('click', () => edit(() => { o.timer = +b.dataset.timer; })));
     app.querySelectorAll('[data-rate]').forEach(b => b.addEventListener('click', () => edit(() => { o.ratings = b.dataset.rate === 'true'; })));
-    app.querySelectorAll('[data-cap]').forEach(b => b.addEventListener('click', () => edit(() => { o.cap = +b.dataset.cap; if (o.cap) o.bench = 0; })));
+    app.querySelectorAll('[data-cap]').forEach(b => b.addEventListener('click', () => edit(() => { o.cap = +b.dataset.cap; })));
     app.querySelectorAll('[data-dupes]').forEach(b => b.addEventListener('click', () => edit(() => { o.dupes = +b.dataset.dupes; })));
     app.querySelectorAll('[data-board]').forEach(b => b.addEventListener('click', () => edit(() => { o.board = +b.dataset.board; })));
     app.querySelectorAll('[data-bench]').forEach(b => b.addEventListener('click', () => edit(() => { o.bench = +b.dataset.bench; })));
@@ -518,7 +528,7 @@
       const c = A.ALL_YEARS.filter(y => t.skip.indexOf(y) < 0);
       if (!c.length) { UI.toast('Switch on at least one season', 'error'); return; }
       const year = c.length === 1 ? c[0] : 0;
-      const cfg = { mode: 'versus', year, seasons: c.length > 1 && c.length < A.ALL_YEARS.length ? c : null, bestOf: o.bestOf, blind: false, cap: +o.cap || 0, timer: o.timer ? 24 : 0, turns: (o.order || 'turns') === 'turns', era: +o.era || 2013, injuries: false, board: o.board ? 1 : 0, dupes: year === 0 && o.dupes ? 1 : 0, bench: o.cap ? 0 : (+o.bench || 0), seed: Math.floor(Math.random() * 2147483646) + 1 };
+      const cfg = { mode: 'versus', year, seasons: c.length > 1 && c.length < A.ALL_YEARS.length ? c : null, bestOf: o.bestOf, blind: false, cap: C.capFor(+o.cap || 0, o.bench), timer: o.timer ? 24 : 0, turns: (o.order || 'turns') === 'turns', era: +o.era || 2013, injuries: false, board: o.board ? 1 : 0, dupes: year === 0 && o.dupes ? 1 : 0, bench: +o.bench || 0, seed: Math.floor(Math.random() * 2147483646) + 1 };
       A.ensure(app, cfg, () => {
         const d = C.seasonData(year || 2013), hn = t.seats.length, bots = A.shuffle(A.CPU_NAMES.slice());
         t.cfg = cfg;
@@ -527,7 +537,7 @@
         t.teams = A.shuffle(d.teams.map(x => x.abbr)).slice(0, t.n);
         t.picks = t.names.map(() => []); t.respins = t.names.map(() => 1); t.spins = t.names.map(() => null); t.spun = [];
         t.clk = t.names.map(() => null); if (cfg.turns) setClk(onClockSeat(t), 'spin'); else t.seats.forEach((_, i) => setClk(i, 'spin'));
-        t.rounds = []; t.seeds = []; t.cur = null; t.champ = -1; t.watch = null; t.page = 'draft';
+        t.rounds = []; t.seeds = []; t.cur = null; t.champ = -1; t.watch = null; t.lock = t.names.map(() => false); t.page = 'draft';
         A.clearRuns(); A.save(); LAST = { page: '', mine: '' }; A.render(); LAST = { page: 'draft', mine: mySig() };
       });
     });
@@ -570,7 +580,13 @@
       const onName = on >= 0 ? esc(t.names[on]) : '';
       const meta = `${esc(A.lblC(cfg))} | ${t.n} TEAMS | BEST OF ${t.opts.bestOf}${cfg.timer ? ' | ' + cfg.timer + ' SEC CLOCK' : ''}${cfg.cap ? ' | $' + cfg.cap + 'M CAP' : ''}`;
       let body = '';
-      if (cfg.turns && on < 0) body = '<div class="ch-ready"><div><b>THE DRAFT IS DONE.</b><span class="muted"> The bracket is coming up.</span></div></div>';
+      const lockBox = () => {
+        const mine = t.lock && t.lock[w], doneAll = humansDone(), host = NET.role === 'host';
+        if (!mine) return '<div class="ch-ready"><div><b>YOUR ' + per(t) + ' ARE IN.</b><span class="muted"> Tap a starter, then a bench player, to swap who starts. The first five start.</span></div><button type="button" class="btn btn-gold btn-big" id="tnLock">LOCK IN MY LINEUP</button></div>';
+        return '<div class="ch-ready"><div><b>LINEUP LOCKED.</b><span class="muted"> The bracket starts when everyone has locked in.</span></div>' + (host && doneAll ? '<button type="button" class="btn" id="tnForce">START ANYWAY</button>' : '') + '</div>';
+      };
+      if (cfg.bench && k >= per(t) && (cfg.turns ? on < 0 : true)) body = lockBox();
+      else if (cfg.turns && on < 0) body = '<div class="ch-ready"><div><b>THE DRAFT IS DONE.</b><span class="muted"> The bracket is coming up.</span></div></div>';
       else if (k >= per(t) && !cfg.turns) body = '<div class="ch-ready"><div><b>YOU ARE LOCKED IN.</b><span class="muted"> The bracket starts when everyone is done.</span></div></div>';
       else if (cfg.board) body = A.boardHtml(cfg, B, cfg.turns && on >= 0 ? t.picks[on].map(id => byId[id]).filter(Boolean) : five) + (mineTurn || !cfg.turns ? '' : `<p class="muted">${onName} is picking.</p>`);
       else if (!spin || !ANIM[spin.n]) {
@@ -596,11 +612,13 @@
         <div id="tnNet">${netBar()}</div>
         <div id="tnProg">${progHtml()}</div>
         <div class="vs-side tn-me" style="--c1:${esc(tm.colors[0])}"><div class="vs-side-h">${A.logo(tm, 36)}<div><small>${esc(t.names[w])} | YOU</small><b>${esc(A.tName(tm))}</b>${cfg.cap ? ' <small class="vs-pay">' + UI.challengeCap.money(C.capState(cfg.cap, five).spent) + ' of $' + cfg.cap + 'M</small>' : ''}</div></div>
-          ${UI.swapOl(per(t), i => (five[i] ? esc(five[i].name) + ' <small class="muted">' + esc(C.posLabel(five[i])) + (B.era && five[i].season ? ' ' + A.short(five[i].season) : '') + '</small> <b class="ch-ovr ' + UI.ovrClass(five[i].ovr) + '">' + esc(five[i].ovr) + '</b>' : '<span class="muted">-</span>'), SW, !!cfg.bench && five.length > 5)}</div>
+          ${UI.swapOl(per(t), i => (five[i] ? esc(five[i].name) + ' <small class="muted">' + esc(C.posLabel(five[i])) + (B.era && five[i].season ? ' ' + A.short(five[i].season) : '') + '</small> <b class="ch-ovr ' + UI.ovrClass(five[i].ovr) + '">' + esc(five[i].ovr) + '</b>' : '<span class="muted">-</span>'), SW, !!cfg.bench && five.length > 5 && !(t.lock && t.lock[w]))}</div>
         ${on >= 0 ? `<div class="vs-clock">${cfg.turns ? (mineTurn ? 'YOU ARE ON THE CLOCK' : 'ON THE CLOCK: <b>' + onName + '</b>') + ' | ' : ''}PICK <b>${onK + 1}</b> OF ${per(t)}</div>` : ''}
         ${clk ? `<div class="vs-timer" id="vsTimer"><i style="--w:100%"></i><span>${cfg.timer}</span></div>` : ''}
         ${body}${fit}`;
       refreshNet(); bindProg(UI.$('#tnProg', app));
+      const lk = UI.$('#tnLock', app); if (lk) lk.addEventListener('click', () => { SW = null; act({ k: 'lock' }); });
+      const fc = UI.$('#tnForce', app); if (fc) fc.addEventListener('click', () => act({ k: 'force' }));
       UI.swapBind(app, i => {
         if (SW == null) SW = i;
         else if (SW === i) SW = null;

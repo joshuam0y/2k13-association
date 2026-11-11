@@ -359,6 +359,7 @@
   // ---------- all-time draft ----------
   // dr = { cfg, order: [abbr x30], picks: [{ n, round, team, key }], taken: { base: true }, pool: [entries] }
   function newDraft(cfg) {
+    setCapSlots(5);
     var base = seasonData(2013);
     if (!base) throw new Error('League data not loaded');
     var rng = mulberry32((cfg.seed ^ 0x51ED270B) >>> 0);
@@ -405,6 +406,9 @@
   // $19M, a 70 about $3M, the minimum is $1M. The five must fit under the cap, so a pick may not leave less
   // than the minimum for each spot still open.
   var CAP_MIN = 1, CAP_SLOTS = 5;
+  // how many players the cap covers: five, or eight in an 8-man draft (set when a draft board is built; the cap itself scales with it, see capFor)
+  function setCapSlots(n) { CAP_SLOTS = +n > 5 ? +n : 5; }
+  function capFor(cap, bench) { return cap && +bench > 0 ? Math.round(cap * (5 + +bench) / 5) : (+cap || 0); }
   function price(p) {
     var x = clamp(((p.baseOvr || p.ovr || 60) - 60) / 39, 0, 1);
     return Math.max(CAP_MIN, Math.round((1 + 44 * Math.pow(x, 1.9)) * 10) / 10);
@@ -669,6 +673,7 @@
   }
   // ---------- the season ----------
   function start(ch) {
+    setCapSlots(5);
     var E = W.ENGINE;
     if (!E) throw new Error('Game engine not loaded');
     var rng = mulberry32((ch.cfg.seed ^ 0x6C8E9CF5) >>> 0);
@@ -830,7 +835,7 @@
   }
 
   var API = {
-    price: price, capState: capState, capFits: capFits, CAP_MIN: CAP_MIN,
+    setCapSlots: setCapSlots, capFor: capFor, price: price, capState: capState, capFits: capFits, CAP_MIN: CAP_MIN,
     SEASONS: SEASONS, ROUNDS: ROUNDS, seasonInfo: seasonInfo, seasonData: seasonData, loaded: loaded, load: load, loadAll: loadAll,
     allTimePool: allTimePool, poolSeasons: poolSeasons, eraTeam: eraTeam, buildYear: buildYear, buildAllTime: buildAllTime, newDraft: newDraft, onClock: onClock,
     draftSlot: draftSlot, draftPick: draftPick, aiPick: aiPick, simToUser: simToUser, autoDraft: autoDraft, available: available,

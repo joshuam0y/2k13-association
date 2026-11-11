@@ -99,6 +99,7 @@
 
   // the draft board: one season's league, or the all-time pool (keys id@season, nobody twice)
   function board(cfg) {
+    C.setCapSlots(5 + (+cfg.bench || 0));
     const era = !cfg.year, d = C.seasonData(era ? 2013 : cfg.year), teams = d.teams, byId = {};
     const players = era ? C.allTimePool().filter(e => inPlay(cfg, e.season)).map(e => Object.assign({}, e, { id: e.key, team: e.from })) : d.players.slice();
     players.forEach(p => { byId[p.id] = p; });
@@ -226,8 +227,8 @@
               <small class="muted">${o.dupes ? 'The same player can be drafted from different seasons. Only that exact season is gone once taken.' : 'A player is gone for good once taken, whatever the season.'}</small></div>`}
             <div><span class="ts-start-k">DRAFT STYLE</span><div class="ch-chips"><button type="button" class="ch-chip${!o.board ? ' on' : ''}" data-board="0">THE WHEEL</button><button type="button" class="ch-chip${o.board ? ' on' : ''}" data-board="1">OPEN BOARD</button></div>
               <small class="muted">${o.board ? 'No wheel: take turns picking anyone left on the board. Every season you picked loads in, so anyone who ever played can go.' : 'Every pick comes from the team the wheel lands on.'}</small></div>
-            <div><span class="ts-start-k">BENCH</span><div class="ch-chips"><button type="button" class="ch-chip${!o.bench || o.cap ? ' on' : ''}" data-bench="0">JUST THE FIVE</button><button type="button" class="ch-chip${o.bench && !o.cap ? ' on' : ''}" data-bench="3"${o.cap ? ' disabled' : ''}>8-MAN: +3 BENCH</button></div>
-              <small class="muted">${o.bench && !o.cap ? 'Everyone drafts eight. The first five start, the last three come off the bench.' : o.cap ? 'Not with a salary cap.' : 'Five players each, all 48 minutes.'}</small></div>
+            <div><span class="ts-start-k">BENCH</span><div class="ch-chips"><button type="button" class="ch-chip${!o.bench ? ' on' : ''}" data-bench="0">JUST THE FIVE</button><button type="button" class="ch-chip${o.bench ? ' on' : ''}" data-bench="3">8-MAN: +3 BENCH</button></div>
+              <small class="muted">${o.bench ? 'Everyone drafts eight. The first five start, the last three come off the bench.' + (o.cap ? ' The cap grows to $' + C.capFor(o.cap, o.bench) + 'M to cover all eight.' : '') : 'Five players each, all 48 minutes.'}</small></div>
             <div><span class="ts-start-k">SALARY CAP</span><div class="ch-chips">${UI.challengeCap.CAPS.map(v => `<button type="button" class="ch-chip${(o.cap || 0) === v ? ' on' : ''}" data-cap="${v}">${v ? '$' + v + 'M' : 'OFF'}</button>`).join('')}</div></div>
           </div></div>
         <div class="ch-go"><button type="button" class="btn btn-gold btn-big" id="tnStart">START THE DRAFT</button><a class="btn" href="#/challenge/tournament/online">PLAY ONLINE</a><a class="btn" href="#/home">HOME</a></div>
@@ -251,7 +252,7 @@
     app.querySelectorAll('[data-seed]').forEach(b => b.addEventListener('click', () => { o.seeding = b.dataset.seed; redraw(); }));
     app.querySelectorAll('[data-timer]').forEach(b => b.addEventListener('click', () => { o.timer = +b.dataset.timer; redraw(); }));
     app.querySelectorAll('[data-rate]').forEach(b => b.addEventListener('click', () => { o.ratings = b.dataset.rate === 'true'; redraw(); }));
-    app.querySelectorAll('[data-cap]').forEach(b => b.addEventListener('click', () => { o.cap = +b.dataset.cap; if (o.cap) o.bench = 0; redraw(); }));
+    app.querySelectorAll('[data-cap]').forEach(b => b.addEventListener('click', () => { o.cap = +b.dataset.cap; redraw(); }));
     app.querySelectorAll('[data-dupes]').forEach(b => b.addEventListener('click', () => { o.dupes = +b.dataset.dupes; redraw(); }));
     app.querySelectorAll('[data-board]').forEach(b => b.addEventListener('click', () => { o.board = +b.dataset.board; redraw(); }));
     app.querySelectorAll('[data-bench]').forEach(b => b.addEventListener('click', () => { o.bench = +b.dataset.bench; redraw(); }));
@@ -260,7 +261,7 @@
       const c = chosen();
       if (!c.length) { UI.toast('Switch on at least one season', 'error'); return; }
       const year = c.length === 1 ? c[0] : 0;
-      const cfg = { mode: 'versus', year, seasons: c.length > 1 && c.length < ALL_YEARS.length ? c : null, bestOf: o.bestOf, blind: false, cap: +o.cap || 0, timer: o.timer ? 24 : 0, era: +o.era || 2013, injuries: false, board: o.board ? 1 : 0, dupes: year === 0 && o.dupes ? 1 : 0, bench: o.cap ? 0 : (+o.bench || 0), seed: Math.floor(Math.random() * 2147483646) + 1 };
+      const cfg = { mode: 'versus', year, seasons: c.length > 1 && c.length < ALL_YEARS.length ? c : null, bestOf: o.bestOf, blind: false, cap: C.capFor(+o.cap || 0, o.bench), timer: o.timer ? 24 : 0, era: +o.era || 2013, injuries: false, board: o.board ? 1 : 0, dupes: year === 0 && o.dupes ? 1 : 0, bench: +o.bench || 0, seed: Math.floor(Math.random() * 2147483646) + 1 };
       ensure(app, cfg, () => {
         const d = C.seasonData(year || 2013);
         TN.cfg = cfg;
@@ -485,7 +486,7 @@
       while (TN.picks[i].length < per() && tries++ < 80) {
         const five = TN.picks[i].map(id => B.byId[id]).filter(Boolean);
         if (cfg.board) {
-          const tk = B.takenSet(flat()), cands = B.players.filter(p => !tk.has(B.base(p))).sort((a, b) => b.ovr - a.ovr).slice(0, 300);
+          const tk = B.takenSet(flat()), cands = B.players.filter(p => !tk.has(B.base(p)) && (!cfg.cap || C.capFits(cfg.cap, five, p))).sort((a, b) => b.ovr - a.ovr).slice(0, 300);
           const bp = aiChoose(cfg.cap, five, cands);
           if (bp) TN.picks[i].push(bp.id);
           continue;
@@ -493,7 +494,7 @@
         const s = spinFor(cfg, B, flat(), null);
         if (s) TN.spun.push(s.key);
         let pick = s && aiChoose(cfg.cap, five, rosterOf(B, s.key, flat()));
-        if (!pick && tries > 40) pick = aiChoose(cfg.cap, five, B.players.filter(p => !B.takenSet(flat()).has(B.base(p))).slice(0, 400));
+        if (!pick && tries > 40) pick = aiChoose(cfg.cap, five, B.players.concat(B.extra || []).filter(p => !B.takenSet(flat()).has(B.base(p))).sort((x, y) => (cfg.cap ? C.price(x) - C.price(y) : 0)).slice(0, 400))   // under a cap the cheapest players are the ones that still fit;
         if (pick) TN.picks[i].push(pick.id);
       }
     }

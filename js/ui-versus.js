@@ -443,9 +443,9 @@
               <div><span class="ts-start-k">DRAFT STYLE</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.board ? ' on' : ''}" data-board="0"${dis(boss)}>THE WHEEL</button><button type="button" class="ch-chip${VS.opts.board ? ' on' : ''}" data-board="1"${dis(boss)}>OPEN BOARD</button></div>
                 <small class="muted">${VS.opts.board ? 'No wheel: take turns picking anyone left from the whole board. Drafted players come off it.' : 'Every pick comes from the team the wheel lands on.'}</small></div>
               <div><span class="ts-start-k">BENCH</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.bench ? ' on' : ''}" data-bench="0"${dis(boss)}>JUST THE FIVE</button><button type="button" class="ch-chip${VS.opts.bench ? ' on' : ''}" data-bench="3"${dis(boss)}>8-MAN: +3 BENCH</button></div>
-                <small class="muted">${VS.opts.bench ? 'Everyone drafts eight. The first five start, the last three come off the bench (not with a salary cap).' : 'Five players each, all 48 minutes.'}</small></div>
+                <small class="muted">${VS.opts.bench ? 'Everyone drafts eight. The first five start, the last three come off the bench (with a salary cap the cap grows to cover all eight).' : 'Five players each, all 48 minutes.'}</small></div>
               <div><span class="ts-start-k">SALARY CAP</span><div class="ch-chips">${UI.challengeCap.CAPS.map(v => `<button type="button" class="ch-chip${(VS.opts.cap || 0) === v ? ' on' : ''}" data-cap="${v}"${dis(boss)}>${v ? '$' + v + 'M' : 'OFF'}</button>`).join('')}</div>
-                <small class="muted">${VS.opts.cap ? 'Every player has a price from his rating (a 99 is $45M, the minimum $1M). Both fives must fit under $' + VS.opts.cap + 'M.' : 'No cap: take anyone.'}</small></div></div></div>
+                <small class="muted">${VS.opts.cap ? 'Every player has a price from his rating (a 99 is $45M, the minimum $1M). Both rosters must fit under $' + C.capFor(VS.opts.cap, VS.opts.bench) + 'M.' : 'No cap: take anyone.'}</small></div></div></div>
           ${[0, 1].map(i => `<div class="ch-step"><div class="ch-step-k">${i + 4} | PLAYER ${i + 1}${me() === i ? ' (YOU)' : ''}</div>
             <label class="field"><span>NAME</span><input data-name="${i}" name="p${i}-${Date.now()}" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="20" placeholder="Player ${i + 1}" value="${esc(VS.names[i] || '')}"${online() ? ' readonly' : dis(canAct(i))}></label>
             <label class="field"><span>TEAM NAME</span><input data-tname="${i}" name="t${i}-${Date.now()}" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="24" placeholder="${esc(tName(tOf(teams, VS.teams[i])))}" value="${esc(VS.tnames[i] || '')}"${dis(canAct(i))}></label>${grid(i)}</div>`).join('')}
@@ -477,10 +477,10 @@
       app.querySelectorAll('[data-seas]').forEach(b => b.addEventListener('click', () => { VS.skip = b.dataset.seas === 'all' ? [] : ALL_YEARS.slice(); setYear(); redraw(); }));
       app.querySelectorAll('[data-bo]').forEach(b => b.addEventListener('click', () => { VS.opts.bestOf = +b.dataset.bo; redraw(); }));
       app.querySelectorAll('[data-era]').forEach(b => b.addEventListener('click', () => { VS.opts.era = +b.dataset.era; redraw(); }));
-      app.querySelectorAll('[data-cap]').forEach(b => b.addEventListener('click', () => { VS.opts.cap = +b.dataset.cap; if (VS.opts.cap) { VS.opts.blind = false; VS.opts.bench = 0; } redraw(); }));
+      app.querySelectorAll('[data-cap]').forEach(b => b.addEventListener('click', () => { VS.opts.cap = +b.dataset.cap; if (VS.opts.cap) VS.opts.blind = false; redraw(); }));
       app.querySelectorAll('[data-dupes]').forEach(b => b.addEventListener('click', () => { VS.opts.dupes = +b.dataset.dupes; redraw(); }));
       app.querySelectorAll('[data-board]').forEach(b => b.addEventListener('click', () => { VS.opts.board = +b.dataset.board; redraw(); }));
-      app.querySelectorAll('[data-bench]').forEach(b => b.addEventListener('click', () => { VS.opts.bench = +b.dataset.bench; if (VS.opts.bench) VS.opts.cap = 0; redraw(); }));
+      app.querySelectorAll('[data-bench]').forEach(b => b.addEventListener('click', () => { VS.opts.bench = +b.dataset.bench; redraw(); }));
       app.querySelectorAll('[data-blind]').forEach(b => b.addEventListener('click', () => { VS.opts.blind = b.dataset.blind === '1'; redraw(); }));
       app.querySelectorAll('[data-timer]').forEach(b => b.addEventListener('click', () => { VS.opts.timer = +b.dataset.timer; redraw(); }));
       app.querySelectorAll('[data-side]').forEach(b => b.addEventListener('click', () => { VS.teams[+b.dataset.side] = b.dataset.team; redraw(); }));
@@ -503,7 +503,7 @@
         const ch = chosen();
         if (!ch.length) { UI.toast('Switch on at least one season', 'error'); return; }
         VS.year = ch.length === 1 ? ch[0] : 0;
-        VS.cfg = { mode: 'versus', year: VS.year, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null, bestOf: VS.opts.bestOf, blind: !VS.opts.cap && !!VS.opts.blind, cap: +VS.opts.cap || 0, bench: VS.opts.cap ? 0 : (+VS.opts.bench || 0), board: VS.opts.board ? 1 : 0, dupes: ch.length > 1 && VS.opts.dupes ? 1 : 0, timer: +VS.opts.timer || 0, era: +VS.opts.era || 2013, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
+        VS.cfg = { mode: 'versus', year: VS.year, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null, bestOf: VS.opts.bestOf, blind: !VS.opts.cap && !!VS.opts.blind, cap: C.capFor(+VS.opts.cap || 0, VS.opts.bench), bench: +VS.opts.bench || 0, board: VS.opts.board ? 1 : 0, dupes: ch.length > 1 && VS.opts.dupes ? 1 : 0, timer: +VS.opts.timer || 0, era: +VS.opts.era || 2013, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
           sides: [0, 1].map(i => ({ team: VS.teams[i], name: (VS.tnames[i] || '').trim() || (VS.names[i] ? VS.names[i] + "'s " + tOf(teams, VS.teams[i]).name : ''), picks: [] })) };
         VS.spin = null; VS.spun = []; VS.respins = [1, 1]; VS.shown = 0; VS.pos = ''; VS.q = ''; VS.season = ''; VS.sort = '';
         VS.turn = turnFor(VS.cfg, 0, 'spin');
@@ -529,6 +529,7 @@
   // the draft board: one season's league, or every season (era spin: the all-time pool, keys id@season,
   // nobody twice even from different seasons). A spin lands on a group: season:team.
   function board(cfg) {
+    C.setCapSlots(C.vsPer(cfg));
     const era = !cfg.year, d = C.seasonData(era ? 2013 : cfg.year), teams = d.teams, byId = {};
     const players = era ? C.allTimePool().filter(e => inPlay(cfg, e.season)).map(e => Object.assign({}, e, { id: e.key, team: e.from })) : d.players.slice();
     players.forEach(p => { byId[p.id] = p; });

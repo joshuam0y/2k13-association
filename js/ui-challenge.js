@@ -23,7 +23,7 @@
   let SETUP = Object.assign({ mode: 'year', year: 2013, build: 'free', team: '', name: '', injuries: true, era: 2013, cap: 0, ratings: true }, ls.get(KEY_SETUP) || {});
   let CUR = null;        // { cfg, used: [], respins, spin, dr }
   let RUN = null;        // the season being simmed { ch, fast, paused }
-  let VIEW = { pos: '', q: '', team: '', season: '', letter: '' };
+  let VIEW = { pos: '', q: '', team: '', season: '', letter: '', sort: 'az', bud: '', lim: 60 };
   let ODDS = null;       // run it back 10 times
 
   // ---------- small helpers ----------
@@ -266,6 +266,24 @@
     const bar = `<div class="ch-letters ch-swipe">${letters.map(l => `<button type="button" class="ch-chip sm${l === VIEW.letter ? ' on' : ''}" data-letter="${l}">${l}</button>`).join('')}</div>`;
     return { rows: sorted.filter(p => letter(p) === VIEW.letter), bar };
   }
+  // sort menu and budget filter on the solo boards. A to Z (the default) keeps the letter bar; any other sort is one ranked list with a show-more button.
+  function sortBar(cfg) {
+    const S = (UI.boardSorts || []).filter(x => !cfg.noRatings || x[0] === 'az').filter(x => x[3] !== 'cap' || cfg.cap);
+    return `<select id="chSort" aria-label="Sort players">${S.map(x => `<option value="${x[0]}"${(VIEW.sort || 'az') === x[0] ? ' selected' : ''}>${x[1]}</option>`).join('')}</select>${cfg.cap ? UI.challengeCap.budgetSel('chBud', VIEW.bud) : ''}`;
+  }
+  function listView(list, narrowed, cfg, mine) {
+    if (cfg.cap && VIEW.bud) list = list.filter(p => UI.challengeCap.budgetOk(VIEW.bud, cfg.cap, mine, p));
+    const so = cfg.noRatings || !VIEW.sort || VIEW.sort === 'az' ? null : (UI.boardSorts || []).find(x => x[0] === VIEW.sort && (x[3] !== 'cap' || cfg.cap));
+    if (!so || !so[2]) {
+      const L = byLetter(list, narrowed || !!VIEW.bud); L.n = list.length;
+      if (VIEW.bud && L.rows.length > (VIEW.lim || 60)) { const k = VIEW.lim || 60; L.more = `<p class="muted ch-small">Showing ${k} of ${L.rows.length}. <button type="button" class="btn btn-small" data-more="60">SHOW 60 MORE</button> <button type="button" class="btn btn-small" data-more="all">SHOW ALL</button></p>`; L.rows = L.rows.slice(0, k); }
+      return L;
+    }
+    const rows = list.slice().sort((a, b) => so[2](b) - so[2](a) || b.ovr - a.ovr);
+    const shown = rows.slice(0, VIEW.lim || 60);
+    const more = rows.length > shown.length ? `<p class="muted ch-small">Showing ${shown.length} of ${rows.length}. <button type="button" class="btn btn-small" data-more="60">SHOW 60 MORE</button> <button type="button" class="btn btn-small" data-more="all">SHOW ALL</button></p>` : '';
+    return { rows: shown, bar: '', more, n: rows.length };
+  }
   function slotsHtml(list, teams, removable) {
     const out = [];
     for (let i = 0; i < 5; i++) {
@@ -312,8 +330,8 @@
       const list = d.players.filter(p => cfg.picks.indexOf(p.id) < 0 && (!VIEW.pos || C.primaryPos(p.pos) === VIEW.pos) && (!VIEW.team || p.team === VIEW.team) && (!q || p.name.toLowerCase().indexOf(q) >= 0));
       body = `<div class="ch-filters">${[''].concat(POS).map(x => `<button type="button" class="ch-chip sm${VIEW.pos === x ? ' on' : ''}" data-pos="${x}">${x || 'ALL'}</button>`).join('')}
           <select id="chTeamF" aria-label="Team"><option value="">ALL TEAMS</option>${teams.slice().sort((a, b) => tName(a).localeCompare(tName(b))).map(t => `<option value="${esc(t.abbr)}"${VIEW.team === t.abbr ? ' selected' : ''}>${esc(tName(t))}</option>`).join('')}</select>
-          <input id="chQ" placeholder="Search players" value="${esc(VIEW.q)}" autocomplete="off"></div>
-        ${(() => { const L = byLetter(list, !!(q || VIEW.team)); return L.bar + `<ul class="ch-list">${L.rows.map(p => playerRow(p, teams, capBtn(cfg.cap, mine, p, `<button type="button" class="btn btn-small btn-gold" data-add="${esc(p.id)}">ADD</button>`))).join('')}</ul>`; })()}
+          ${sortBar(cfg)}<input id="chQ" placeholder="Search players" value="${esc(VIEW.q)}" autocomplete="off"></div>
+        ${(() => { const L = listView(list, !!(q || VIEW.team), cfg, mine); list.length = L.n; return L.bar + `<ul class="ch-list">${L.rows.map(p => playerRow(p, teams, capBtn(cfg.cap, mine, p, `<button type="button" class="btn btn-small btn-gold" data-add="${esc(p.id)}">ADD</button>`))).join('')}</ul>${L.more || ''}`; })()}
         ${list.length ? '' : '<p class="muted">Nobody matches.</p>'}`;
     }
     app.innerHTML = `
@@ -475,6 +493,9 @@
     app.querySelectorAll('[data-pos]').forEach(b => b.addEventListener('click', () => { VIEW.pos = b.dataset.pos; redraw(); }));
     app.querySelectorAll('[data-letter]').forEach(b => b.addEventListener('click', () => { VIEW.letter = b.dataset.letter; redraw(); }));
     UI.centerChips(app);
+    const so = UI.$('#chSort'); if (so) so.addEventListener('change', () => { VIEW.sort = so.value; VIEW.lim = 60; redraw(); });
+    const sb = UI.$('#chBud'); if (sb) sb.addEventListener('change', () => { VIEW.bud = sb.value; VIEW.lim = 60; redraw(); });
+    app.querySelectorAll('[data-more]').forEach(b => b.addEventListener('click', () => { VIEW.lim = b.dataset.more === 'all' ? 1e6 : (VIEW.lim || 60) + 60; redraw(); }));
     const tf = UI.$('#chTeamF');
     if (tf) tf.addEventListener('change', () => { VIEW.team = tf.value; redraw(); });
     const sf = UI.$('#chSeasonF');
@@ -556,8 +577,8 @@
       const list = C.available(dr).filter(e => (!VIEW.pos || C.primaryPos(e.pos) === VIEW.pos) && (!VIEW.season || e.season === +VIEW.season) && (!q || e.name.toLowerCase().indexOf(q) >= 0));
       board = `<div class="ch-filters">${[''].concat(POS).map(x => `<button type="button" class="ch-chip sm${VIEW.pos === x ? ' on' : ''}" data-pos="${x}">${x || 'ALL'}</button>`).join('')}
           <select id="chSeasonF" aria-label="Season"><option value="">ALL SEASONS</option>${C.SEASONS.filter(s => C.poolSeasons().indexOf(s.year) >= 0 && (!cfg.seasons || cfg.seasons.indexOf(s.year) >= 0)).map(s => `<option value="${s.year}"${+VIEW.season === s.year ? ' selected' : ''}>${esc(s.label)}</option>`).join('')}</select>
-          <input id="chQ" placeholder="Search players" value="${esc(VIEW.q)}" autocomplete="off"></div>
-        ${(() => { const L = byLetter(list, !!q); return L.bar + `<ul class="ch-list">${L.rows.map(e => playerRow(e, teams, capBtn(cfg.cap, mine, e, `<button type="button" class="btn btn-small btn-gold" data-take="${esc(e.key)}">DRAFT</button>`))).join('')}</ul>`; })()}
+          ${sortBar(cfg)}<input id="chQ" placeholder="Search players" value="${esc(VIEW.q)}" autocomplete="off"></div>
+        ${(() => { const L = listView(list, !!q, cfg, mine); list.length = L.n; return L.bar + `<ul class="ch-list">${L.rows.map(e => playerRow(e, teams, capBtn(cfg.cap, mine, e, `<button type="button" class="btn btn-small btn-gold" data-take="${esc(e.key)}">DRAFT</button>`))).join('')}</ul>${L.more || ''}`; })()}
         ${list.length ? '' : '<p class="muted">Nobody matches.</p>'}`;
     }
     const recent = dr.picks.slice().reverse();   // every pick so far, newest first: who is off the board
