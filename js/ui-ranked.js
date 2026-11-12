@@ -503,7 +503,7 @@
         const cand = [];
         const all = (rows || []).filter(r => r.ranked && r.era === era && r.host_name !== me);
         for (const r of all) { if (!(await playedBefore(r.host_name))) cand.push(r); }   // new opponents first
-        if (!cand.length && Date.now() - F.start > 20000) all.forEach(r => cand.push(r));   // nobody new for 20 seconds: you both searched, so a rematch is fine
+        if (!cand.length) all.forEach(r => cand.push(r));   // nobody new is searching: you both searched, so a rematch is fine
         if (F.rating == null) { try { F.rating = (await ratingNow(era)).rating; } catch (e) { F.rating = 1200; } }
         cand.sort((a, b) => Math.abs((a.rating || 1200) - F.rating) - Math.abs((b.rating || 1200) - F.rating));   // whoever is online, the closest rating first
         if (!st.role) {
