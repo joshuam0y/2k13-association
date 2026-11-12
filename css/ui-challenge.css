@@ -1103,3 +1103,4 @@ a.pr-i:hover { border-color: var(--gold); }
 
 .rk-theme.lock { opacity: .75; border-style: dashed; }
 .rk-theme.lock b { letter-spacing: .3em; }
+.rk-pop-n { font-size: 64px !important; color: var(--gold); line-height: 1; }

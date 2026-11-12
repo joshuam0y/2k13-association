@@ -604,7 +604,17 @@
         <div id="rkSub" class="rkn"><span class="muted">Sending your score...</span></div>
         <div class="ch-go">${isPr ? `<a class="btn btn-gold" href="#/daily/practice/${esc(prKey)}/${Date.now()}">PLAY AGAIN</a><a class="btn" href="#/daily/practice">ARCHIVE</a>` : `<a class="btn btn-gold" href="#/daily">SEE THE BOARD</a>${pct == null ? '' : '<button type="button" class="btn" id="dlShare">SHARE YOUR SCORE</button>'}`}</div>`;
       const dsh = UI.$('#dlShare', app);
-      if (dsh) dsh.addEventListener('click', async () => { dsh.disabled = true; const r = await shareCard({ k: 'DAILY #' + dayNo(day), title: 'OF A PERFECT FIVE', color: '#d4af37', big: pct.toFixed(1) + '%', sub: TH.title, name: UI.profile.account() || '' }, 'My Starting Five daily auction: ' + pct.toFixed(1) + '% of a perfect five.'); dsh.disabled = false; if (r === 'saved') UI.toast('Saved the picture. The link is copied.'); });
+      const doShare = async btn => { btn.disabled = true; const r = await shareCard({ k: 'DAILY #' + dayNo(day), title: 'OF A PERFECT FIVE', color: '#d4af37', big: pct.toFixed(1) + '%', sub: TH.title, name: UI.profile.account() || '' }, 'My Starting Five daily auction: ' + pct.toFixed(1) + '% of a perfect five.'); btn.disabled = false; if (r === 'saved') UI.toast('Saved the picture. The link is copied.'); };
+      if (dsh) dsh.addEventListener('click', () => doShare(dsh));
+      if (!isPr && pct != null) {   // the result pops up with the share button every time this screen opens
+        const ov = document.createElement('div'); ov.className = 'rk-tour';
+        ov.innerHTML = `<div class="rk-tour-b"><small>DAILY #${dayNo(day)} | ${esc(TH.title)}</small><h2 class="rk-pop-n">${pct.toFixed(1)}%</h2><p>OF A PERFECT FIVE | LINEUP SCORE ${score.toFixed(1)}</p><div class="rk-tour-go"><button type="button" class="btn btn-gold btn-big" id="popShare">SHARE YOUR SCORE</button><button type="button" class="btn" id="popClose">CLOSE</button></div></div>`;
+        document.body.appendChild(ov);
+        const shut = () => { ov.remove(); window.removeEventListener('hashchange', shut); };
+        window.addEventListener('hashchange', shut);
+        ov.querySelector('#popClose').addEventListener('click', shut);
+        ov.querySelector('#popShare').addEventListener('click', () => doShare(ov.querySelector('#popShare')));
+      }
       const paintStreak = () => { const sk = UI.$('#rkStreak', app), n = streakNow(); if (sk && n.n) sk.innerHTML = '<b>' + n.n + '</b> DAY DAILY STREAK' + (n.best > n.n ? ' | BEST ' + n.best : ''); };
       paintStreak();
       const sub = UI.$('#rkSub', app);
