@@ -75,7 +75,7 @@
         <div class="mm-ver muted" id="mmVer"></div>
       </section>`;
     // the version is the service worker cache the page is running from, so an old cached copy shows up here
-    try { if (window.caches) caches.keys().then(ks => { const v = ks.filter(k => /^2k13-v\d+$/.test(k)).map(k => +k.slice(6)).sort((a, b) => b - a)[0]; const el = document.getElementById('mmVer'); if (el && v) el.textContent = 'VERSION ' + v; }).catch(() => {}); } catch (e) { /* no cache API */ }
+    try { if (window.caches) caches.keys().then(ks => { const v = ks.filter(k => /^2k13-v\d+$/.test(k)).map(k => +k.slice(6)).sort((a, b) => b - a)[0]; const el = document.getElementById('mmVer'); if (el && v) el.textContent = 'VERSION ' + (v / 100).toFixed(2); }).catch(() => {}); } catch (e) { /* no cache API */ }
   };
 
   // ---------- shared helpers: positions, best lineup, needs, payroll, player search ----------
