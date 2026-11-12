@@ -433,6 +433,7 @@
         const played = done && done.fin;
         body.innerHTML = `${TH ? `<div class="rk-theme"><small>TODAY | ${esc(TH.kind)}</small><b>${esc(TH.title)}</b><span class="muted">${esc(TH.tag)}</span></div>` : ''}<p class="muted rk-sub">Same ten players for everyone. $20, you vs the house. One try a day.</p>
           <p class="rk-streak">${streakNow().n ? '<b>' + streakNow().n + '</b> DAY DAILY STREAK' + (streakNow().done ? ' | TODAY DONE' : ' | PLAY TODAY TO KEEP IT') : 'START A DAILY STREAK: PLAY ONE A DAY'}</p>
+          <div class="rk-theme lock"><small>TOMORROW</small><b>???</b><span class="muted">Opens in ${(() => { const n = new Date(), ms = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + 1) - n.getTime(), hh = Math.floor(ms / 3600000), mm = Math.floor(ms / 60000) % 60; return hh + 'H ' + mm + 'M'; })()}</span></div>
           <div class="ch-go">${UI.profile.signedIn() ? `<a class="btn btn-gold btn-big" href="#/ranked/daily/ALL">${played ? 'SEE TODAY\'S RESULT' : done ? 'FINISH TODAY\'S AUCTION' : 'PLAY TODAY\'S AUCTION'}</a>` : ''}<a class="btn" href="#/ranked/practice">PRACTICE ARCHIVE</a></div>` +
           (rows.length ? table(perf > 0 ? ['#', 'PLAYER', 'SCORE', 'OF PERFECT'] : ['#', 'PLAYER', 'SCORE'], rows.map((r, i) => [i + 1, nameCell(r, me), '<b>' + Number(r.score).toFixed(1) + '</b>'].concat(perf > 0 ? [pctOf(r.score)] : []))) : '<p class="muted">No scores yet today' + esc(scope) + '.</p>');
       }
@@ -921,6 +922,7 @@
   }
   UI.ranked.tour = openTour;
   UI.ranked.theme = dailyTheme; UI.ranked.themeInfo = dailyThemeInfo;
+  UI.ranked.dailyToday = () => Object.assign({ info: dailyThemeInfo(today()) }, streakNow());
   UI.ranked.themeCatalog = themeCatalog; UI.ranked.themeLocked = themeLocked; UI.ranked.themeBuild = key => buildTheme(themeCatalog().find(t => t.key === key));   // for the theme list and checks
 
   // ---------- nudges: a friend or other players searching for a ranked match ----------

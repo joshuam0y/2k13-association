@@ -1100,3 +1100,6 @@
 a.pr-i:hover { border-color: var(--gold); }
 
 .vs-theme { width: 100%; padding: 10px; background: var(--bg2); border: 1px solid var(--line2); color: var(--text); font-family: var(--display); letter-spacing: .06em; }
+
+.rk-theme.lock { opacity: .75; border-style: dashed; }
+.rk-theme.lock b { letter-spacing: .3em; }
