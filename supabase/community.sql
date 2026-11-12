@@ -39,10 +39,12 @@ create table if not exists public.rivalries (
 );
 create table if not exists public.ratings (
   user_id uuid not null, era text not null,
-  rating int not null default 1200, games int not null default 0, wins int not null default 0, losses int not null default 0,
+  rating int not null default 1200, peak int not null default 1200, games int not null default 0, wins int not null default 0, losses int not null default 0,
   updated_at timestamptz not null default now(),
   primary key (user_id, era)
 );
+alter table public.ratings add column if not exists peak int not null default 1200;   -- the highest rating reached: it decides which rank icons are unlocked
+update public.ratings set peak = greatest(peak, rating);
 create table if not exists public.daily_scores (
   day date not null, era text not null, user_id uuid not null,
   score numeric not null, lineup jsonb, created_at timestamptz not null default now(),
@@ -111,8 +113,8 @@ begin
     ea := 1 / (1 + power(10, (rb - ra) / 400.0));
     sa := case when r1.my_wins > r1.opp_wins then 1 else 0 end;
     na := round(ra + k * (sa - ea)); nb := round(rb + k * ((1 - sa) - (1 - ea)));
-    update public.ratings set rating = na, games = games + 1, wins = wins + sa::int, losses = losses + (1 - sa)::int, updated_at = now() where user_id = r1.reporter and era = r1.era;
-    update public.ratings set rating = nb, games = games + 1, wins = wins + (1 - sa)::int, losses = losses + sa::int, updated_at = now() where user_id = r2.reporter and era = r1.era;
+    update public.ratings set rating = na, peak = greatest(peak, na), games = games + 1, wins = wins + sa::int, losses = losses + (1 - sa)::int, updated_at = now() where user_id = r1.reporter and era = r1.era;
+    update public.ratings set rating = nb, peak = greatest(peak, nb), games = games + 1, wins = wins + (1 - sa)::int, losses = losses + sa::int, updated_at = now() where user_id = r2.reporter and era = r1.era;
     update public.series set d1 = na - ra, d2 = nb - rb where key = p_key;
   end if;
   -- each player's best lineup so far

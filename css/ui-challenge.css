@@ -1081,3 +1081,9 @@
 .rk-tour-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line2); }
 .rk-tour-dots i.on { background: var(--gold); }
 .rk-tour-go { display: flex; gap: 10px; justify-content: center; }
+
+.pf-av.rank { background: var(--bg2); border: 1px solid var(--gold-dim); }
+.pf-pick.lock { opacity: .3; cursor: not-allowed; }
+.pf-pick.wide { grid-column: span 2; grid-auto-flow: column; gap: 6px; }
+.pf-pick small { font-family: var(--display); letter-spacing: .1em; font-size: 10px; color: var(--muted); }
+.ch-step.rk-det summary { margin-bottom: 10px; }

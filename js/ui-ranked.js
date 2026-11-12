@@ -66,7 +66,12 @@
   const tierIcon = (r, size) => '<span class="tier-ic">' + iconSvg(tierOf(r), size || 20) + '</span>';
   const tierBadge = r => { const t = tierOf(r); return `<span class="tier" style="--tc:${t.color}">${iconSvg(t, 16)}${esc(t.name)}</span>`; };
   // a profile picture is a team logo the player picked, or the first letter of the name
-  const avatarHtml = (abbr, name, size) => abbr ? `<span class="pf-av logo" style="--sz:${size}px">${UI.logo(abbr, size)}</span>` : `<span class="pf-av" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.5)}px">${esc(String(name || '?').slice(0, 1).toUpperCase())}</span>`;
+  // a profile picture is a rank icon (your current rank by default, or any rank you have reached) or a team logo
+  const avatarHtml = (val, name, size, rating) => {
+    if (val && val.indexOf('rank:') !== 0) return `<span class="pf-av logo" style="--sz:${size}px">${UI.logo(val, size)}</span>`;
+    const k = val ? val.slice(5) : 'auto', t = k === 'auto' ? tierOf(rating || 1200) : (TIERS.find(x => x.name === k) || tierOf(1200));
+    return `<span class="pf-av rank" style="width:${size}px;height:${size}px" title="${esc(t.name)}">${iconSvg(t, Math.round(size * 0.82))}</span>`;
+  };
 
   // ---------- seasons: no end date yet (the game has not launched), so the ladder just keeps going. When a season ends, supabase/community.sql has reset_season() to pull ratings back toward 1200. ----------
   const SEASON = { n: 1, name: 'SEASON 1', ends: null };
@@ -277,7 +282,7 @@
     if (!d) return `<div class="lb-card${mine ? ' me' : ''}"><div class="lb-av">${esc(String(name).slice(0, 1).toUpperCase())}</div><b class="lb-n">${esc(name)}</b><small class="lb-sub">${mine ? 'YOU' : 'OPPONENT'}</small><small class="muted">${slow ? 'COULD NOT LOAD THE STATS.' : 'NO PROFILE NUMBERS YET'}</small>${slow ? '<button type="button" class="btn btn-small" data-lbretry="1">TRY AGAIN</button>' : ''}</div>`;
     const r = (d.ratings || []).find(x => x.era === era), m = d.most && d.most[0];
     RATINGS[String(name).toLowerCase()] = r ? r.rating : 1200;
-    return `<div class="lb-card${mine ? ' me' : ''}">${avatarHtml(d.avatar, d.username || name, 56)}<b class="lb-n">${esc(d.username || name)}</b>
+    return `<div class="lb-card${mine ? ' me' : ''}">${avatarHtml(d.avatar, d.username || name, 56, r ? r.rating : 1200)}<b class="lb-n">${esc(d.username || name)}</b>
       <small class="lb-sub">${mine ? 'YOU' : 'OPPONENT'}${d.region ? ' | ' + esc(regionName(d.region)) : ''}</small>
       <div class="lb-elo"><small>${esc(eraName(era))} RATING</small>${tierIcon(r ? r.rating : 1200, 44)}<b>${r ? r.rating : 1200}</b>${tierBadge(r ? r.rating : 1200)}<small>${r && r.of ? '#' + r.rank + ' of ' + r.of : 'NOT RANKED YET'}</small></div>
       <div class="lb-st"><span><b>${r ? r.wins + '-' + r.losses : '0-0'}</b><small>RANKED</small></span><span><b>${(d.wins || 0) + '-' + (d.losses || 0)}</b><small>ALL SERIES</small></span><span><b>${d.friends || 0}</b><small>FRIENDS</small></span></div>
@@ -592,7 +597,8 @@
       const row = await myRow();
       let ser = await c.from('series').select('key,p1,p2,w1,w2,d1,d2,era,style,ranked,created_at').order('created_at', { ascending: false }).limit(300);
       if (ser.error) ser = await c.from('series').select('p1,p2,w1,w2,era,style,ranked,created_at').order('created_at', { ascending: false }).limit(300);   // before the rating change columns exist
-      const rat = await c.from('ratings').select('era,rating,games,wins,losses').eq('user_id', id);
+      let rat = await c.from('ratings').select('era,rating,peak,games,wins,losses').eq('user_id', id);
+      if (rat.error) rat = await c.from('ratings').select('era,rating,games,wins,losses').eq('user_id', id);   // before the peak column exists
       const riv = await c.from('rivalries').select('a,b,a_wins,b_wins,last_at');
       const rep = await c.from('series_reports').select('key,lineup').order('created_at', { ascending: false }).limit(500);   // your own reports: the lineups you drafted
       const missing = [ser, rat, riv].find(x => x.error);
@@ -607,18 +613,22 @@
       const names = {};
       if (oppIds.length) { const p = await c.from('profiles').select('id,username').in('id', oppIds); (p.data || []).forEach(x => { names[x.id] = x.username; }); }
       const rivals = (riv.data || []).map(r => ({ name: names[r.a === id ? r.b : r.a] || '?', me: r.a === id ? r.a_wins : r.b_wins, them: r.a === id ? r.b_wins : r.a_wins, at: r.last_at })).sort((x, y) => (y.me + y.them) - (x.me + x.them));
+      const curRating = Math.max(1200, ...(rat.data || []).map(r => r.rating)), peakRating = Math.max(curRating, ...(rat.data || []).map(r => r.peak || 0));
       let avatar = null;
       try { const av = await c.from('profiles').select('avatar').eq('id', id).maybeSingle(); avatar = av.data && av.data.avatar || null; } catch (e) { /* the column arrives with the SQL */ }
       const bl = row.best_lineup, tally = {};
       (rep.data || []).forEach(x => { const l = x.lineup; if (!l || !Array.isArray(l.names)) return; l.names.forEach((n, k) => { const se = l.seasons && l.seasons[k] || 0, key = n + '|' + se; tally[key] = (tally[key] || 0) + 1; }); });
       const most = Object.keys(tally).map(k => { const [n, se] = k.split('|'); return { n, se: +se, c: tally[k] }; }).sort((x, y) => y.c - x.c || x.n.localeCompare(y.n)).slice(0, 5);
       const yr = se => (se ? "'" + String(se - 1).slice(2) + "-'" + String(se).slice(2) : '');
-      app.innerHTML = `<div class="pf-head">${avatarHtml(avatar, row.username || UI.profile.account(), 72)}<section class="ch-hero"><div class="ch-hero-k">PROFILE</div><h1 class="ch-hero-t">${esc(row.username || UI.profile.account()).toUpperCase()}</h1>
+      app.innerHTML = `<div class="pf-head">${avatarHtml(avatar, row.username || UI.profile.account(), 72, curRating)}<section class="ch-hero"><div class="ch-hero-k">PROFILE</div><h1 class="ch-hero-t">${esc(row.username || UI.profile.account()).toUpperCase()}</h1>
           <p class="ch-hero-p">${games.length ? W + '-' + L + ' in Head to Head series' + (streak > 1 ? ', ' + streak + ' ' + (games[0].won ? 'wins' : 'losses') + ' in a row' : '') + '.' : 'No series on your account yet. Play a friend in Head to Head while you are both signed in.'}</p></section></div>
         <div class="rk-cards"><div class="rk-card"><small>RECORD</small><b>${W}-${L}</b></div><div class="rk-card"><small>FAVORITE ERA</small><b>${fav ? esc(eraName(fav)) : '-'}</b></div><div class="rk-card pl"><small>MOST USED PLAYER</small>${most[0] ? `<b>${esc(most[0].n)}</b><span>${esc(yr(most[0].se) || 'ANY SEASON')} | ${most[0].c}x</span>` : '<b>-</b>'}</div></div>
         <details class="ch-step rk-det"><summary>CHANGE PROFILE PICTURE</summary>
+          <div class="ch-step-k">RANK ICONS</div>
+          <div class="pf-picks"><button type="button" class="pf-pick wide${!avatar || avatar === 'rank:auto' ? ' on' : ''}" data-av="rank:auto">${iconSvg(tierOf(curRating), 38)}<small>MY RANK</small></button>${TIERS.map(t => { const lock = t.floor > peakRating; return `<button type="button" class="pf-pick${avatar === 'rank:' + t.name ? ' on' : ''}${lock ? ' lock' : ''}" data-av="rank:${esc(t.name)}"${lock ? ' disabled' : ''} title="${esc(t.name)}${lock ? ' (reach ' + t.floor + ' to unlock)' : ''}">${iconSvg(t, 38)}</button>`; }).join('')}</div>
+          <div class="ch-step-k">TEAM LOGOS</div>
           <div class="pf-picks">${UI.teams().map(t => `<button type="button" class="pf-pick${avatar === t.abbr ? ' on' : ''}" data-av="${esc(t.abbr)}" title="${esc(UI.teamName(t.abbr))}">${UI.logo(t.abbr, 38)}</button>`).join('')}</div>
-          <div class="ch-go"><button type="button" class="btn btn-small" id="avClear"${avatar ? '' : ' disabled'}>USE MY INITIAL</button><span class="pf-msg" id="avMsg"></span></div></details>
+          <span class="pf-msg" id="avMsg"></span></details>
         <div class="ch-step"><div class="ch-step-k">ABOUT YOU</div>
           <label class="field"><span>REGION (FOR THE REGION BOARDS)</span><select id="meRegion">${regionOpts(row.region)}</select></label>
           <label class="field"><span>FAVORITE ERA</span><select id="meFav"><option value="">${auto ? 'THE ERA I PLAY MOST (' + esc(eraName(auto)) + ')' : 'THE ERA I PLAY MOST'}</option>${eraOpts(row.fav_era || '___')}</select></label>
@@ -640,7 +650,6 @@
         mePage(app);
       };
       app.querySelectorAll('[data-av]').forEach(b => b.addEventListener('click', () => setAv(b.dataset.av)));
-      const ac = UI.$('#avClear', app); if (ac) ac.addEventListener('click', () => setAv(null));
       const save = UI.$('#meSave', app), msg = UI.$('#meMsg', app);
       save.addEventListener('click', async () => {
         save.disabled = true; msg.textContent = 'Saving...';
@@ -725,7 +734,7 @@
       const fav = d.fav_era || d.auto_era, bl = d.best_lineup, yr = se => (se ? "'" + String(se - 1).slice(2) + "-'" + String(se).slice(2) : '');
       const total = d.wins + d.losses, signed = UI.profile.signedIn();
       const fr = !signed ? '' : d.friend === 'friends' ? '<span class="vs-fr ok">&#10003; YOU ARE FRIENDS</span>' : d.friend === 'sent' ? '<span class="muted">REQUEST SENT</span>' : `<button type="button" class="btn btn-gold" id="uAdd">${d.friend === 'incoming' ? 'ACCEPT FRIEND REQUEST' : 'ADD AS FRIEND'}</button>`;
-      app.innerHTML = `<div class="pf-head">${avatarHtml(d.avatar, d.username, 72)}<section class="ch-hero"><div class="ch-hero-k">PROFILE${d.region ? ' | ' + esc(regionName(d.region).toUpperCase()) : ''}</div><h1 class="ch-hero-t">${esc(d.username).toUpperCase()}</h1>
+      app.innerHTML = `<div class="pf-head">${avatarHtml(d.avatar, d.username, 72, Math.max(1200, ...(d.ratings || []).map(r => r.rating)))}<section class="ch-hero"><div class="ch-hero-k">PROFILE${d.region ? ' | ' + esc(regionName(d.region).toUpperCase()) : ''}</div><h1 class="ch-hero-t">${esc(d.username).toUpperCase()}</h1>
           <p class="ch-hero-p">${total ? d.wins + '-' + d.losses + ' in Head to Head series.' : 'No series on this account yet.'}</p></section></div>
         ${fr ? `<div class="ch-go u-act">${fr}</div>` : ''}
         ${signed && !d.self ? `<details class="rk-det rk-report"><summary>REPORT THIS PLAYER</summary><div class="rk-report-b"><select id="rpWhy"><option>OFFENSIVE NAME OR PICTURE</option><option>CHEATING OR WIN TRADING</option><option>HARASSMENT</option><option>OTHER</option></select><button type="button" class="btn btn-small" id="rpSend">SEND REPORT</button><span class="pf-msg" id="rpMsg"></span></div></details>` : ''}
