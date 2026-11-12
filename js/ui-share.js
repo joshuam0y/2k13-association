@@ -157,15 +157,15 @@
   // Shares a result the way phones do best: the picture plus the text and link in the share sheet (Messages,
   // Instagram, WhatsApp...), else the text and link, else copied to the clipboard.
   UI.shareResult = async function (spec, text, url, name) {
+    const all = text + '\n' + url;
+    try { navigator.clipboard.writeText(all).then(() => UI.toast('Copied. Paste it anywhere.'), () => {}); } catch (e) { /* no clipboard */ }   // copied first, inside the tap
     let blob = null;
     try { blob = await UI.resultCard(spec); } catch (e) { blob = null; }
     const file = blob ? new File([blob], (name || 'result') + '.png', { type: 'image/png' }) : null;
     if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], text: text + ' ' + url }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+      try { await navigator.share({ files: [file], text: all }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
     }
-    if (navigator.share) { try { await navigator.share({ title: 'Starting Five', text, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
-    const all = text + ' ' + url;
-    try { await navigator.clipboard.writeText(all); UI.toast('Copied. Paste it in a text to your friends.'); } catch (e) { UI.toast(all); }
+    if (navigator.share) { try { await navigator.share({ title: 'Starting Five', text: all }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
     if (blob && !(navigator.canShare)) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (name || 'result') + '.png'; document.body.appendChild(a); a.click(); a.remove(); }
   };
   UI.shareIcon = '<svg class="share-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';

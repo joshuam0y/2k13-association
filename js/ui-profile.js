@@ -283,7 +283,7 @@
         card(`<div class="pf-card-k">RESET YOUR PASSWORD</div><p class="muted">Type the email you signed up with and we will send you a link to choose a new password.</p>${emailF}<div class="row-btns"><button type="button" class="btn btn-gold" id="pfGo">EMAIL ME A LINK</button>${back}${closeBtn}</div>`);
       } else {
         card(`${tabs}${emailF}${tab === 'up' ? field('pfName', 'USERNAME (3 TO 16 LETTERS, NUMBERS, _ OR -)', 'text', 'maxlength="16"') : ''}${pw('pfPass', 'PASSWORD' + (tab === 'up' ? ' (AT LEAST 8 CHARACTERS)' : ''), tab === 'up' ? 'new-password' : 'current-password')}
-          <div class="row-btns"><button type="button" class="btn btn-gold" id="pfGo">${tab === 'up' ? 'CREATE ACCOUNT' : 'SIGN IN'}</button>${tab === 'in' ? '<button type="button" class="btn btn-small" data-t="forgot">FORGOT PASSWORD</button>' : ''}${closeBtn}</div><div id="pfExtra"></div>`);
+          <div class="row-btns"><button type="button" class="btn btn-gold" id="pfGo">${tab === 'up' ? 'CREATE ACCOUNT' : 'SIGN IN'}</button>${tab === 'in' ? '<button type="button" class="btn btn-small" data-t="forgot">FORGOT PASSWORD</button>' : ''}${closeBtn}</div><div id="pfExtra"></div><p class="muted pf-legal">By continuing you agree to the <a href="#/terms">Terms</a> and <a href="#/privacy">Privacy</a>.</p>`);
         wireShow();
       }
       wireClose();

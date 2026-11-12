@@ -63,7 +63,9 @@
     more.className = 'navmore';
     more.innerHTML = `<summary>Menu</summary><div class="navmore-list" role="menu">${groups.map(([title, items]) =>
       `<div class="nm-group" data-grp="${esc(title)}"><div class="nm-k">${esc(title)}</div>${items.map(([r, l]) =>
-        `<a href="#/${esc(r)}" data-nav="${esc(r.split('/')[0])}">${esc(l)}</a>`).join('')}</div>`).join('')}</div>`;
+        `<a href="#/${esc(r)}" data-nav="${esc(r.split('/')[0])}">${esc(l)}</a>`).join('')}</div>`).join('')}${window.SFX ? `<div class="nm-group"><div class="nm-k">SOUND</div><a href="#" id="nmSfx" role="menuitem">Sound effects: ${window.SFX.on ? 'on' : 'off'}</a></div>` : ''}</div>`;
+    const nmSfx = more.querySelector('#nmSfx');
+    if (nmSfx) nmSfx.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); window.SFX.set(!window.SFX.on); nmSfx.textContent = 'Sound effects: ' + (window.SFX.on ? 'on' : 'off'); });
     nav.appendChild(more);
     const place = () => {
       const bar = document.querySelector('.topbar'), list = more.querySelector('.navmore-list');
