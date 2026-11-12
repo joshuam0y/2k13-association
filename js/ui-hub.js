@@ -74,8 +74,24 @@
         <nav class="mm-foot" aria-label="About and legal">${UI.infoLinks ? UI.infoLinks() : ''}</nav>
         <div class="mm-ver muted" id="mmVer"></div>
       </section>`;
-    // the version is the service worker cache the page is running from, so an old cached copy shows up here
-    try { if (window.caches) caches.keys().then(ks => { const v = ks.filter(k => /^2k13-v\d+$/.test(k)).map(k => +k.slice(6)).sort((a, b) => b - a)[0]; const el = document.getElementById('mmVer'); if (el && v) el.textContent = 'VERSION ' + (v / 100).toFixed(2); }).catch(() => {}); } catch (e) { /* no cache API */ }
+    // the version: the cache this copy runs from against the newest one on the server; when they differ, one tap clears the old copy
+    (async () => {
+      const el = document.getElementById('mmVer'); if (!el) return;
+      const f = n => (n / 100).toFixed(2);
+      let run = 0, live = 0;
+      try { run = (await caches.keys()).filter(k => /^2k13-v\d+$/.test(k)).map(k => +k.slice(6)).sort((a, b) => b - a)[0] || 0; } catch (e) { /* no cache API */ }
+      try { const t = await (await fetch('sw.js', { cache: 'no-store' })).text(); live = +((t.match(/CACHE = '2k13-v(\d+)'/) || [])[1]) || 0; } catch (e) { /* offline */ }
+      if (!run && !live) return;
+      el.innerHTML = run && live && run < live
+        ? 'VERSION ' + f(run) + ' | NEWEST ' + f(live) + ' <button type="button" class="btn btn-small btn-gold" id="mmUpd">UPDATE NOW</button>'
+        : 'VERSION ' + f(run || live);
+      const b = document.getElementById('mmUpd');
+      if (b) b.addEventListener('click', async () => {
+        b.disabled = true; b.textContent = 'UPDATING...';
+        try { const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r => r.unregister())); (await caches.keys()).forEach(k => caches.delete(k)); } catch (e) { /* reload anyway */ }
+        location.reload();
+      });
+    })();
   };
 
   // ---------- shared helpers: positions, best lineup, needs, payroll, player search ----------
