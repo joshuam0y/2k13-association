@@ -21,10 +21,10 @@
   // ---------- navigation ----------
   // The top bar (index.html) holds seven links: Home, Season, Rosters, Free Agency, Standings, Stats, League.
   // Every page is also in the grouped Menu (MENU below).
-  const CORE = ['about', 'faq', 'contact', 'privacy', 'terms', 'disclaimer', 'home', 'new', 'continue', 'teams', 'team', 'player', 'season', 'game', 'standings', 'leaders', 'stats', 'league', 'playoffs', 'saves', 'soundtrack'];
+  const CORE = ['about', 'faq', 'contact', 'privacy', 'terms', 'disclaimer', 'home', 'new', 'continue', 'teams', 'team', 'player', 'season', 'game', 'standings', 'leaders', 'stats', 'league', 'playoffs', 'saves'];
   const MORE = [
     ['trade', 'Trades'], ['manage', 'Rotation'], ['draft', 'Draft'], ['league', 'League'], ['playoffs', 'Playoffs'],
-    ['live', 'Watch Live'], ['saves', 'Saves'], ['challenge', 'Draft Challenge'], ['fantasy', 'Fantasy Draft'], ['commish', 'Commissioner'], ['soundtrack', 'Soundtrack']
+    ['live', 'Watch Live'], ['saves', 'Saves'], ['challenge', 'Draft Challenge'], ['fantasy', 'Fantasy Draft'], ['commish', 'Commissioner']
   ];
   // Aliases and pages reached another way; never listed on their own.
   const SKIP = ['trades', 'myteam', 'gm', 'fa', 'freeagency', 'commissioner', 'news', 'awards', 'history', 'classes'];
@@ -47,7 +47,7 @@
     ['LEAGUE', [['league', 'League Home'], ['news', 'News'], ['news/transactions', 'Transactions'], ['awards', 'Awards'], ['awardshow', 'Awards Show'],
       ['history', 'History'], ['records', 'Records'], ['retirements', 'Retirements'], ['classes', 'Draft Classes'], ['teams', 'All Teams']]],
     ['MODES', [['new', 'New League'], ['challenge', 'Season Mode'], ['challenge/vs', 'Head to Head'], ['challenge/tournament', 'Tournament'], ['challenge/tournament/online', 'Online Tournament'], ['ranked', 'Ranked'], ['fantasy', 'Fantasy Draft']]],
-    ['GAME', [['saves', 'Saves'], ['settings', 'Settings'], ['commish', 'Commissioner'], ['soundtrack', 'Soundtrack']]],
+    ['GAME', [['saves', 'Saves'], ['settings', 'Settings'], ['commish', 'Commissioner']]],
     ['INFO', [['about', 'About'], ['faq', 'FAQ'], ['contact', 'Contact'], ['privacy', 'Privacy'], ['terms', 'Terms'], ['disclaimer', 'Disclaimer']]]
   ];
   function buildExtraNav() {
@@ -189,7 +189,7 @@
     if (page !== 'continue' && typeof (UI.pages || {})[page] !== 'function') page = 'home';
     const navKey = NAV[page] || page;
     // the top links belong to the Association; the home screen, Season Mode, Head to Head and the info pages are bare
-    document.body.classList.toggle('no-assoc-nav', ['home', 'challenge', 'new', 'saves', 'soundtrack', 'continue', 'ranked', 'me', 'u'].concat(UI.INFO_ROUTES || []).includes(page));
+    document.body.classList.toggle('no-assoc-nav', ['home', 'challenge', 'new', 'saves', 'continue', 'ranked', 'me', 'u'].concat(UI.INFO_ROUTES || []).includes(page));
     UI.$$('#mainnav a').forEach(a => a.classList.toggle('on', a.getAttribute('data-nav') === navKey));
     const more = UI.$('#mainnav .navmore');
     if (more) more.classList.toggle('on', !UI.$(`#mainnav > a[data-nav="${navKey}"]`) && !!more.querySelector(`a[data-nav="${navKey}"]`));
@@ -201,7 +201,7 @@
       if (c.left < n.left || c.right > n.right) nav.scrollLeft += c.left - n.left - 12;
     }
 
-    if (!UI.state.league && page !== 'soundtrack' && !(UI.INFO_ROUTES || []).includes(page)) { app.innerHTML = UI.notBuilt('data'); return; }
+    if (!UI.state.league && !(UI.INFO_ROUTES || []).includes(page)) { app.innerHTML = UI.notBuilt('data'); return; }
     if (page === 'continue') { continueLatest(); return; }
     let decoded = arg;
     try { decoded = decodeURIComponent(arg); } catch (e) { /* keep raw */ }
@@ -239,7 +239,6 @@
     UI.state.L = window.LEAGUE && typeof window.LEAGUE.newLeague === 'function' ? window.LEAGUE : null;
     setBanner();
     buildExtraNav();
-    try { UI.music.init(); } catch (e) { console.warn('Soundtrack bar failed', e); }
     if (UI.state.league && UI.canPlay()) {
       const slot = UI.saves.activeSlot();
       if (slot && UI.saves.list().some(x => x.slot === slot && x.meta)) {

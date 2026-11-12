@@ -50,7 +50,6 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div class="ev-modal" id="eventModal" hidden></div>
 
-  <footer class="musicbar" id="musicbar" aria-label="Soundtrack"></footer>
 
   <!-- Data and engine first, then the optional league modules, then the orchestrator, then the UI.
        A module file that does not exist yet only causes a 404; every use is guarded. -->
@@ -105,12 +104,10 @@
     // ?stub=1 swaps in a tiny fake league and engine for development.
     if (/[?&]stub=1\b/.test(location.search)) document.write('<script src="js/dev-stub.js"><\/script>');
   </script>
-  <script src="js/soundtrack.js"></script>
   <script src="js/sfx.js"></script>
   <script src="data/team-logos.js"></script>
   <script src="js/ui-core.js"></script>
   <script src="js/ui-saves.js"></script>
-  <script src="js/ui-music.js"></script>
   <script src="js/ui-hub.js"></script>
   <script src="js/ui-season.js"></script>
   <script src="js/ui-sim.js"></script>

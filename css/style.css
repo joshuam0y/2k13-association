@@ -16,7 +16,7 @@
   --loss: #d0605c;
   --display: 'Oswald', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif;
   --body: 'Barlow', 'Helvetica Neue', Arial, sans-serif;
-  --bar-h: 54px;
+  --bar-h: 0px;
   --top-h: 60px;
   --gutter: 32px;
   color-scheme: dark;
@@ -512,15 +512,6 @@ table.stats, table.stand { width: 100%; border-collapse: collapse; font-size: 15
 .slot-more-list { position: absolute; right: 0; top: calc(100% + 4px); z-index: 10; display: flex; flex-direction: column; gap: 4px; padding: 6px; min-width: 150px; background: #050505; border: 1px solid var(--gold-dim); box-shadow: 0 12px 30px rgba(0, 0, 0, .8); }
 .rename { display: flex; gap: 6px; max-width: 360px; }
 
-/* ---------- soundtrack page ---------- */
-.tracklist { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; }
-.tracklist li { display: flex; align-items: center; gap: 14px; padding: 10px 14px; background: var(--bg2); border: 1px solid var(--line); min-width: 0; }
-.tl-n { font-family: var(--display); font-weight: 700; color: var(--gold); font-size: 20px; width: 28px; flex: none; }
-.tl-t { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.25; }
-.tl-t b { font-weight: 600; overflow-wrap: anywhere; }
-.tl-t small { color: var(--muted); }
-.tl-na { font-size: 11px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; flex: none; }
-
 /* ---------- draft classes ---------- */
 .year-tabs a { padding: 7px 11px; }
 .classes .cl-name { display: inline-flex; align-items: center; gap: 10px; }
@@ -540,50 +531,6 @@ table.stats, table.stand { width: 100%; border-collapse: collapse; font-size: 15
 .news p { margin: 2px 0 0; color: var(--text2); font-size: 14px; }
 .news li > div { min-width: 0; overflow-wrap: anywhere; }
 .nw-d { flex: none; width: 56px; color: var(--muted); font-family: var(--display); font-size: 12px; letter-spacing: .06em; padding-top: 2px; }
-
-/* ---------- music bar ---------- */
-.musicbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; }
-.mb-row {
-  display: flex; align-items: center; gap: 14px; height: var(--bar-h); padding: 0 var(--gutter);
-  background: #000; border-top: 1px solid #3a2f0e;
-}
-.mb-eq { display: flex; align-items: flex-end; gap: 3px; height: 20px; width: 22px; flex: none; }
-.mb-eq i { display: block; width: 3px; height: 5px; background: var(--gold); }
-.mb-eq.on i { animation: eq .9s ease-in-out infinite; }
-.mb-eq.on i:nth-child(2) { animation-delay: -.3s; }
-.mb-eq.on i:nth-child(3) { animation-delay: -.6s; }
-.mb-eq.on i:nth-child(4) { animation-delay: -.15s; }
-@keyframes eq { 0%, 100% { height: 4px; } 50% { height: 20px; } }
-.mb-now { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; white-space: nowrap; overflow: hidden; }
-.mb-label { font-family: var(--display); font-size: 12px; letter-spacing: .2em; color: var(--gold); flex: none; }
-.mb-song { overflow: hidden; text-overflow: ellipsis; font-size: 14px; color: var(--text2); min-width: 0; }
-.mb-controls { display: flex; gap: 4px; flex: none; }
-.mb-btn { width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 1px solid transparent; border-radius: 50%; cursor: pointer; color: #fff; }
-.mb-btn svg { width: 20px; height: 20px; fill: currentColor; }
-.mb-btn:hover:not(:disabled), .mb-btn.active { border-color: var(--gold-dim); color: var(--gold2); }
-.mb-btn:disabled { opacity: .3; cursor: not-allowed; }
-.mb-panel {
-  position: absolute; right: 16px; bottom: calc(var(--bar-h) + 8px); width: min(560px, calc(100vw - 32px));
-  max-height: min(70vh, 560px); display: flex; flex-direction: column;
-  background: #050505; border: 1px solid #3a2f0e; box-shadow: 0 16px 50px rgba(0, 0, 0, .8);
-  transition: opacity .15s, transform .15s;
-}
-.mb-panel.closed { visibility: hidden; opacity: 0; transform: translateY(8px); pointer-events: none; }
-.mb-panel-head { padding: 12px 16px; border-bottom: 1px solid var(--line); font-family: var(--display); letter-spacing: .16em; font-size: 13px; color: var(--gold); }
-.mb-panel-head em { display: block; font-style: normal; font-family: var(--body); letter-spacing: 0; color: var(--text2); font-size: 13px; margin-top: 4px; }
-.mb-panel-body { overflow-y: auto; padding: 8px; }
-.mb-video { display: flex; justify-content: center; padding: 6px 0 10px; }
-.mb-video[hidden] { display: none; }
-.mb-video iframe { display: block; border: 0; }
-.mb-tracks { list-style: none; margin: 0; padding: 0; }
-.mb-tracks button { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 10px; width: 100%; text-align: left; padding: 7px 8px; background: none; border: 0; cursor: pointer; font-size: 13px; align-items: baseline; }
-.mb-tracks button:hover:not(:disabled) { background: var(--bg3); }
-.mb-tracks button:disabled { cursor: default; }
-.mb-tracks .tn { color: var(--gold); font-family: var(--display); }
-.mb-tracks .tt { color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mb-tracks .ta { color: var(--muted); white-space: nowrap; max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
-.mb-tracks .noid .tt { color: var(--text2); }
-.mb-tracks .cur .tt { color: var(--gold2); font-weight: 600; }
 
 /* ---------- overlays ---------- */
 .sim-overlay { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .82); }
@@ -703,9 +650,6 @@ table.stats, table.stand { width: 100%; border-collapse: collapse; font-size: 15
   .stats th, .stand th, .stats td, .stand td { padding: 9px 8px; }
   .bracket { grid-template-columns: minmax(0, 1fr); }
   .champ { flex-direction: column; align-items: flex-start; gap: 12px; padding: 18px; }
-  .mb-label { display: none; }
-  .mb-btn { width: 34px; height: 34px; }
-  .mb-panel { right: 8px; width: calc(100vw - 16px); }
   .gl-day { width: 46px; }
   .ev-trade { grid-template-columns: minmax(0, 1fr); }
   .ev-head { font-size: 15px; }
@@ -847,7 +791,6 @@ table.classes th.th-s.on { box-shadow: inset 0 -2px 0 var(--gold); }
 @media (max-width: 560px) { table.classes .th-sort { padding: 10px 8px; } }
 /* ---------- the music bar never hides page content or popup buttons ---------- */
 html { scroll-padding-bottom: calc(var(--mb-h, var(--bar-h)) + 12px); }
-.mb-panel { bottom: calc(var(--mb-h, var(--bar-h)) + 8px); max-height: min(70vh, calc(100vh - var(--mb-h, var(--bar-h)) - 120px), 560px); }
 @media (max-width: 900px) {
   .navmore-list { max-height: min(70vh, calc(100vh - 120px - var(--mb-h, var(--bar-h)))); }
 }
@@ -964,11 +907,6 @@ body.no-assoc-nav .mainnav > a { display: none; }
 body.no-assoc-nav .nm-group[data-grp="MY TEAM"], body.no-assoc-nav .nm-group[data-grp="SEASON"], body.no-assoc-nav .nm-group[data-grp="LEAGUE"], body.no-assoc-nav .nm-group[data-grp="MORE"],
 body.no-assoc-nav .navmore-list a[data-nav="settings"], body.no-assoc-nav .navmore-list a[data-nav="commish"] { display: none; }
 
-/* the music bar can be hidden entirely (js/ui-music.js); a small note button brings it back */
-body.mb-off .musicbar { display: none; }
-.mb-pill { position: fixed; right: 10px; bottom: 10px; z-index: 41; width: 40px; height: 40px; border-radius: 50%; background: #000; color: var(--gold); border: 1px solid var(--gold-dim); font-size: 18px; cursor: pointer; }
-.mb-pill[hidden] { display: none; }
-body.ct-full-on .mb-pill { display: none; }
 
 /* the arrow next to a rating (UI.mv): up or down since last season */
 .mv { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; font-style: normal; font-family: var(--display); font-weight: 600; font-size: 11px; line-height: 1; vertical-align: middle; }
@@ -994,3 +932,5 @@ body.ct-full-on .mb-pill { display: none; }
 .ts-tag.tier-retooling { border-color: #6d6d78; color: var(--muted); }
 
 .mm-ver { text-align: center; font-size: 11px; letter-spacing: .18em; margin: 6px 0 14px; font-family: var(--display); }
+
+.mm-sfx { display: flex; justify-content: center; margin: 4px 0 14px; }

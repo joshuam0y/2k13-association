@@ -225,7 +225,6 @@
           <button type="button" class="btn btn-small ct-skip" aria-label="Skip to the end of the quarter">SKIP QTR</button>
           <button type="button" class="btn btn-small ct-pb" aria-label="Box score and plays">BOX / PLAYS</button>
           <button type="button" class="btn btn-small ct-fs" aria-label="Full screen">FULL SCREEN</button>
-          ${window.MUSICBAR ? '<button type="button" class="btn btn-small ct-mus" aria-label="Music bar"></button>' : ''}
           ${window.SFX ? `<button type="button" class="btn btn-small ct-sfx${window.SFX.on ? ' on' : ''}" aria-label="Sound effects">${window.SFX.on ? 'SOUND ON' : 'SOUND OFF'}</button>` : ''}
         </div>
         <div class="ct-floor-list" aria-label="On the floor"></div>
@@ -248,7 +247,6 @@
     const fitH = () => { const h = full ? Math.round((window.visualViewport && window.visualViewport.height) || window.innerHeight) : 0; wrapEl.style.height = h ? h + 'px' : ''; };
     window.addEventListener('resize', fitH);
     if (window.visualViewport) window.visualViewport.addEventListener('resize', fitH);
-    const syncMus = () => { const b = $('.ct-mus'); if (b && window.MUSICBAR) b.textContent = window.MUSICBAR.hidden() ? 'SHOW MUSIC' : 'HIDE MUSIC'; };
     const svg = $('.ct-svg');
     const NS = 'http://www.w3.org/2000/svg';
     const mk = (tag, attrs, parent) => {
@@ -944,7 +942,6 @@
     }
     window.addEventListener('resize', onResize);
     $('.ct-fs').addEventListener('click', () => { full = !full; try { localStorage.setItem(FSKEY, full ? '1' : '0'); } catch (e) { /* private mode */ } applyFull(); build(); wake(); });
-    const musB = $('.ct-mus'); if (musB) musB.addEventListener('click', () => { window.MUSICBAR.setHidden(!window.MUSICBAR.hidden()); syncMus(); });
 
     function destroy() {
       st.dead = true;
@@ -977,7 +974,7 @@
       SIDES.forEach(side => ordered(st.on[side]).forEach((key, i) => { st.pos[key] = at(side, 'Q1', 47 + 8 + rnd(0, 3), [11, 19, 25, 31, 39][i]); }));
     }
     if (start >= evs.length) { st.ended = true; st.per = evs[evs.length - 1].per; }
-    applyFull(); syncMus(); card();
+    applyFull();  card();
     build();
     drawScore();
     chips();

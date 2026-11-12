@@ -279,7 +279,6 @@
         <h3>MORE</h3>
         <dl class="gd-dl">
           <dt>CONTINUE / LOAD</dt><dd>Pick up an Association league where you left off.</dd>
-          <dt>SOUNDTRACK</dt><dd>Music while you play.</dd>
           <dt>MENU</dt><dd>About, FAQ, Contact and the legal pages.</dd>
         </dl>
         <p class="muted">Open the ? on any mode for its own rules.</p>`;

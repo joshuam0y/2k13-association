@@ -1,5 +1,5 @@
 // Hub pages: main menu, new league team picker, rosters, team roster, player card, league menu,
-// draft classes and soundtrack. Also the shared menu tiles and icons (UI.icon, UI.tile).
+// draft classes. Also the shared menu tiles and icons (UI.icon, UI.tile).
 (function () {
   'use strict';
   const UI = window.UI;
@@ -26,7 +26,6 @@
     draft: 'M2 9l10-5 10 5-10 5zM6 11v5c3 2 9 2 12 0v-5M22 9v6',
     league: 'M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 14v4M8 21h8M9 18h6',
     load: 'M3 6h6l2 2h10v11H3z',
-    music: 'M9 18V5l11-2v13M9 18a3 3 0 1 1-6 0a3 3 0 0 1 6 0zM20 16a3 3 0 1 1-6 0a3 3 0 0 1 6 0z',
     news: 'M4 5h13v14H6a2 2 0 0 1-2-2zM17 9h3v8a2 2 0 0 1-2 2M7 9h7M7 13h7M7 16h4',
     awards: 'M12 14a5 5 0 1 0 0-10a5 5 0 0 0 0 10zM8.5 13L7 21l5-3 5 3-1.5-8',
     history: 'M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18zM12 7v5l3 3',
@@ -46,7 +45,7 @@
   };
 
   // ---------- Main menu ----------
-  // Five choices only: play a new Association, continue the last one, the Draft Challenge, load a save, soundtrack.
+  // Five choices only: play a new Association, continue the last one, the Draft Challenge, load a save.
   P.home = function (app) {
     const latest = UI.saves.latest();
     const engineOk = UI.canPlay();
@@ -69,11 +68,12 @@
           ${UI.tile('#/challenge/tournament', 'draft', 'TOURNAMENT', { cls: 'mt-tn', disabled: !engineOk, sub: '4 OR 8 FRIENDS, ONE PHONE, ONE BRACKET' })}
           ${UI.tile('#/challenge/tournament/online', 'draft', 'ONLINE TOURNAMENT', { cls: 'mt-tn', disabled: !engineOk, sub: 'EVERYONE ON THEIR OWN PHONE' })}
           ${UI.tile('#/saves', 'load', 'LOAD', { cls: 'mt-half' })}
-          ${UI.tile('#/soundtrack', 'music', 'SOUNDTRACK', { cls: 'mt-half' })}
         </div>
         <nav class="mm-foot" aria-label="About and legal">${UI.infoLinks ? UI.infoLinks() : ''}</nav>
         <div class="mm-ver muted" id="mmVer"></div>
+        ${window.SFX ? `<div class="mm-sfx"><button type="button" class="btn btn-small" id="mmSfx">SOUND EFFECTS: ${window.SFX.on ? 'ON' : 'OFF'}</button></div>` : ''}
       </section>`;
+    const sfxB = UI.$('#mmSfx', app); if (sfxB) sfxB.addEventListener('click', () => { window.SFX.set(!window.SFX.on); sfxB.textContent = 'SOUND EFFECTS: ' + (window.SFX.on ? 'ON' : 'OFF'); });
     // the version: the cache this copy runs from against the newest one on the server; when they differ, one tap clears the old copy
     (async () => {
       const el = document.getElementById('mmVer'); if (!el) return;
@@ -852,13 +852,4 @@
     });
   };
 
-  // ---------- Soundtrack ----------
-  P.soundtrack = function (app) {
-    const list = Array.isArray(window.SOUNDTRACK) ? window.SOUNDTRACK : [];
-    const ids = UI.music && UI.music.hasIds();
-    app.innerHTML = `${UI.header('SOUNDTRACK', 'The official NBA 2K13 soundtrack.')}
-      ${ids ? '' : '<div class="note">These songs cannot play yet.</div>'}
-      <ol class="tracklist">${list.map((s, i) => `<li><span class="tl-n">${String(i + 1).padStart(2, '0')}</span><span class="tl-t"><b>${esc(s.title)}</b><small>${esc(s.artist)}</small></span>${s.yt ? `<button type="button" class="btn btn-small" data-play="${i}">PLAY</button>` : '<span class="tl-na">Soon</span>'}</li>`).join('')}</ol>`;
-    app.querySelectorAll('[data-play]').forEach(b => b.addEventListener('click', () => UI.music.playTrack(Number(b.getAttribute('data-play')))));
-  };
 })();
