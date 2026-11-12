@@ -540,7 +540,7 @@
     return `<div><span class="ts-start-k">RANKED AND OPEN GAMES</span><div class="ch-chips"><a class="ch-chip" href="#/ranked">RANKED LADDER AND FIND A MATCH</a>
         ${VS.opts.ranked && VS.opts.auction ? '<span class="ch-chip on">RANKED GAME</span>' : ''}
         ${NET.role === 'host' ? `<button type="button" class="ch-chip${VS.opts.pub ? ' on' : ''}" data-rk="pub"${dis}>${VS.opts.pub ? 'OPEN GAME: LISTED' : 'OPEN GAME: PRIVATE'}</button>` : ''}</div>
-      <small class="muted">${guestPeer ? 'The other player is a guest, so this game is casual.' : VS.opts.ranked && VS.opts.auction ? 'Ranked has one set of rules: best of 7, a blind draft, a 24 second shot clock, no duplicates, just the five. An auction with a hidden pool of ten mixed players, $20 each, $1 to open, raises of $1 or more. It moves your ladder rating for this era.' : 'This is a casual game and does not touch the ladder. To play ranked, use the Ranked tile on the main menu.'} ${VS.opts.pub ? 'Anyone can find this room under Ranked, Open games, until your friend joins.' : ''}</small></div>`;
+      <small class="muted">${guestPeer ? 'The other player is a guest, so this game is casual.' : VS.opts.ranked && VS.opts.auction ? 'Ranked has one set of rules: best of 7, a blind draft, a 24 second shot clock, no duplicates, just the five. An auction with a hidden pool of ten mixed players, $20 each, $1 to open, raises of $1 or more. It moves your ladder rating for this era.' : 'This is a casual game and does not touch the ladder. To play ranked, use the Ranked tile on the main menu.'} ${VS.opts.pub ? 'Anyone can find this room under Ranked, Casual rooms, until someone joins.' : ''}</small></div>`;
   }
   function syncLobby() {
     if (!UI.ranked) return;

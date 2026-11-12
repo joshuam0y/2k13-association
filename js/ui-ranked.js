@@ -227,7 +227,8 @@
   // ---------- #/ranked ----------
   const RK = { open: ls.get('a13-rk-open', 'all'), era: ls.get('a13-rk-era', 'ALL'), mine: !!ls.get('a13-rk-mine', false), tab: ls.get('a13-rk-tab', 'ladder') };
   let REFRESH = null;
-  function stopRefresh() { if (REFRESH) { clearInterval(REFRESH); REFRESH = null; } }
+  let CNT = null;
+  function stopRefresh() { if (REFRESH) { clearInterval(REFRESH); REFRESH = null; } if (CNT) { clearInterval(CNT); CNT = null; } }
   function rankedPage(app) {
     stopRefresh();
     const signed = UI.profile.signedIn();
@@ -236,23 +237,29 @@
       ${signed ? '' : signInBox('PLAY RANKED')}
       <div class="rk-ctl"><label class="field"><span>ERA</span><select id="rkEra">${eraOpts(RK.era)}</select></label>
         <div class="ch-chips rk-scope"><button type="button" class="ch-chip${!RK.mine ? ' on' : ''}" data-scope="0">GLOBAL</button><button type="button" class="ch-chip${RK.mine ? ' on' : ''}" data-scope="1">MY REGION</button></div></div>
-      <section class="rk-how"><div class="rk-how-t"><b>PLAY A RANKED MATCH</b><span class="muted">No code, no friend needed. Uses the era picked above, and you are paired with whoever else is looking.</span></div>
-        <div class="rk-find"><button type="button" class="btn btn-gold btn-big" id="rkFind"${signed ? '' : ' disabled'}>FIND A MATCH: ${esc(eraName(RK.era).toUpperCase())}</button></div>
+      <section class="rk-how"><div class="rk-how-t"><b>PLAY A RANKED MATCH</b><span class="muted">No code, no friend needed. You are paired with whoever is online and searching, the closest rating first. All-time pool.</span><span class="rk-cnt" id="rkCnt"></span></div>
+        <div class="rk-find"><button type="button" class="btn btn-gold btn-big" id="rkFind"${signed ? '' : ' disabled'}>FIND A MATCH</button></div>
         <details class="rk-det"><summary>HOW RANKED WORKS</summary><ol>
           <li>You and one other signed-in player bid on a hidden pool of ten players from that era, a mix of stars and role players. It is a blind draft: no ratings until the series is over. You each get $20, bidding opens at $1 and goes up by $1 or more. Whoever passes lets the other have the player. Each of you ends with five, and every pick has a 24 second shot clock.</li>
           <li>Your five play a best-of-7 series, all five on the floor for 48 minutes. No duplicates: a player is gone once taken.</li>
           <li>The winner climbs that era's ladder and the loser drops (everyone starts at 1200; beating a higher rated player is worth more).</li>
           <li>The result only counts when both phones report the same score, so nobody can fake a win.</li>
           <li>Want to play a friend instead? Use Head to Head: it is casual and never touches the ladder.</li></ol></details></section>
-      <div class="ch-chips rk-tabs"><button type="button" class="ch-chip${RK.tab === 'ladder' ? ' on' : ''}" data-tab="ladder">LADDER</button><button type="button" class="ch-chip${RK.tab === 'daily' ? ' on' : ''}" data-tab="daily">DAILY AUCTION</button><button type="button" class="ch-chip${RK.tab === 'games' ? ' on' : ''}" data-tab="games">OPEN GAMES</button></div>
+      <div class="ch-chips rk-tabs"><button type="button" class="ch-chip${RK.tab === 'ladder' ? ' on' : ''}" data-tab="ladder">LADDER</button><button type="button" class="ch-chip${RK.tab === 'daily' ? ' on' : ''}" data-tab="daily">DAILY AUCTION</button><button type="button" class="ch-chip${RK.tab === 'games' ? ' on' : ''}" data-tab="games">CASUAL ROOMS</button></div>
       <div id="rkBody" class="rk-body"><p class="muted">Loading...</p></div>
       <div class="ch-go"><a class="btn" href="#/me">MY PROFILE</a><a class="btn" href="#/challenge/vs">HEAD TO HEAD</a></div>`;
     UI.profile.wire(app, () => rankedPage(app));
-    const fb = UI.$('#rkFind', app); if (fb) fb.addEventListener('click', () => { location.hash = '#/ranked/find/' + encodeURIComponent(RK.era); });
+    const fb = UI.$('#rkFind', app); if (fb) fb.addEventListener('click', () => { location.hash = '#/ranked/find/' + 'ALL'; });
     const era = UI.$('#rkEra', app); era.addEventListener('change', () => { RK.era = era.value; ls.set('a13-rk-era', RK.era); rankedPage(app); });
     app.querySelectorAll('[data-scope]').forEach(b => b.addEventListener('click', () => { RK.mine = b.dataset.scope === '1'; ls.set('a13-rk-mine', RK.mine); rankedPage(app); }));
     app.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => { RK.tab = b.dataset.tab; ls.set('a13-rk-tab', RK.tab); rankedPage(app); }));
     fill(app);
+    const counts = async () => {   // how many are online in each mode
+      const el = UI.$('#rkCnt', app);
+      if (!el || !/^#\/ranked$/.test(location.hash)) { if (CNT) { clearInterval(CNT); CNT = null; } return; }
+      try { const d = await UI.profile.rpc('online_counts'); el.textContent = d ? 'ONLINE NOW: ' + d.searching + ' SEARCHING FOR RANKED | ' + d.ranked + ' IN RANKED GAMES | ' + d.casual + ' CASUAL ROOMS OPEN' : ''; } catch (e) { /* the SQL is not run yet */ }
+    };
+    counts(); CNT = setInterval(counts, 10000);
   }
   const wl = (w, l) => w + '-' + l;
   async function fill(app) {
@@ -279,11 +286,8 @@
       } else {
         const all = await UI.profile.rpc('lobby_list');
         const mine = UI.profile.account(), signed = UI.profile.signedIn();
-        const rows = (all || []).filter(r => RK.open === 'all' || (RK.open === 'ranked') === !!r.ranked);
-        const chip = (v, l) => `<button type="button" class="ch-chip${RK.open === v ? ' on' : ''}" data-open="${v}">${l}</button>`;
-        body.innerHTML = `<p class="muted rk-sub">Rooms waiting for a second player right now. Ranked rooms need an account on both sides; casual rooms are open to guests too. The list updates every few seconds.</p>
-          <div class="ch-chips rk-scope">${chip('all', 'ALL')}${chip('ranked', 'RANKED')}${chip('casual', 'CASUAL')}</div>` + (rows.length ? table(['HOST', 'ERA', 'STYLE', ''], rows.map(r => [UI.userLink(r.host_name), esc(eraName(r.era)), esc(String(r.style).toUpperCase()) + (r.ranked ? ' <span class="rk-tag">RANKED</span>' : ' <span class="rk-tag dim">CASUAL</span>'), r.host_name === mine ? '<span class="muted">YOU</span>' : r.ranked && !signed ? '<span class="muted">SIGN IN</span>' : `<a class="btn btn-small btn-gold" href="#/challenge/vs/join/${esc(r.code)}">JOIN</a>`]), true) : '<p class="muted">No ' + (RK.open === 'all' ? '' : RK.open + ' ') + 'open games right now. ' + (RK.open === 'ranked' ? 'Tap Find a match above and you will be listed here while you wait.' : 'Host one from Head to Head and tick "Open game" to list it here.') + '</p>');
-        body.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => { RK.open = b.dataset.open; ls.set('a13-rk-open', RK.open); fill(app); }));
+        const rows = (all || []).filter(r => !r.ranked);   // ranked is only the ladder: waiting ranked searchers are never listed
+        body.innerHTML = `<p class="muted rk-sub">Casual rooms waiting for a second player right now. They never touch the ladder and guests can join. The list updates every few seconds.</p>` + (rows.length ? table(['HOST', 'ERA', 'STYLE', ''], rows.map(r => [UI.userLink(r.host_name), esc(eraName(r.era)), esc(String(r.style).toUpperCase()), r.host_name === mine ? '<span class="muted">YOU</span>' : `<a class="btn btn-small btn-gold" href="#/challenge/vs/join/${esc(r.code)}">JOIN</a>`]), true) : '<p class="muted">No casual rooms open right now. Host one from Head to Head and tick "Open game" to list it here.</p>');
         if (!REFRESH) REFRESH = setInterval(() => { if (!/^#\/ranked/.test(location.hash) || RK.tab !== 'games') { stopRefresh(); return; } fill(app); }, 10000);
       }
     } catch (e) { body.innerHTML = '<p class="rk-err">' + esc(failMsg(e)) + '</p>'; }
@@ -474,7 +478,7 @@
       <div class="ch-go"><button type="button" class="btn" id="fgCancel">CANCEL</button></div>`;
     const me = UI.profile.account(), st0 = UI.vsQuick.status();
     if (st0.role) UI.vsQuick.leave();
-    const F = FIND = { era, joinedAt: 0, t: null, busy: false };
+    const F = FIND = { era, joinedAt: 0, t: null, busy: false, rating: null };
     const say = (t, p) => { const a = UI.$('#fgT', app), b = UI.$('#fgP', app); if (a) a.textContent = t; if (b && p) b.textContent = p; };
     UI.$('#fgCancel', app).addEventListener('click', () => { stopFind(); UI.vsQuick.leave(); location.hash = '#/ranked'; });
     const tick = async () => {
@@ -484,9 +488,12 @@
       try {
         const st = UI.vsQuick.status();
         if (st.status === 'connected') { stopFind(); location.hash = UI.vsQuick.target(); return; }
+        UI.profile.rpc('queue_ping').catch(() => {});   // counts you as searching
         const rows = await UI.profile.rpc('lobby_list');
         const cand = [];
         for (const r of (rows || []).filter(r => r.ranked && r.era === era && r.host_name !== me)) { if (!(await playedBefore(r.host_name))) cand.push(r); }   // each ranked matchup counts once
+        if (F.rating == null) { try { F.rating = (await ratingNow(era)).rating; } catch (e) { F.rating = 1200; } }
+        cand.sort((a, b) => Math.abs((a.rating || 1200) - F.rating) - Math.abs((b.rating || 1200) - F.rating));   // whoever is online, the closest rating first
         if (!st.role) {
           if (cand[0]) { UI.vsQuick.join(cand[0].code, era); F.joinedAt = Date.now(); say('OPPONENT FOUND.', 'Connecting to ' + cand[0].host_name + '...'); }
           else { UI.vsQuick.host(era); say('WAITING FOR AN OPPONENT.', 'You are listed for a ranked ' + eraName(era) + ' match. This screen pairs you the moment someone else looks.'); }
@@ -517,7 +524,7 @@
       const fr = !signed ? '' : d.friend === 'friends' ? '<span class="vs-fr ok">&#10003; FRIENDS</span>' : d.friend === 'sent' ? '<span class="muted">REQUEST SENT</span>' : `<button type="button" class="btn btn-gold" id="uAdd">${d.friend === 'incoming' ? 'ACCEPT FRIEND REQUEST' : 'ADD AS FRIEND'}</button>`;
       app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PROFILE${d.region ? ' | ' + esc(regionName(d.region).toUpperCase()) : ''}</div><h1 class="ch-hero-t">${esc(d.username).toUpperCase()}</h1>
           <p class="ch-hero-p">${total ? d.wins + '-' + d.losses + ' in Head to Head series.' : 'No series on this account yet.'}</p></section>
-        <div class="ch-go u-act">${fr}${signed ? `<a class="btn" href="#/ranked/find/${esc(fav || RK.era)}">PLAY RANKED</a>` : ''}</div>
+        <div class="ch-go u-act">${fr}${signed ? `<a class="btn" href="#/ranked/find/ALL">PLAY RANKED</a>` : ''}</div>
         <div class="rk-cards"><div class="rk-card"><small>RECORD</small><b>${d.wins}-${d.losses}</b></div><div class="rk-card"><small>FAVORITE ERA</small><b>${fav ? esc(eraName(fav)) : '-'}</b></div><div class="rk-card pl"><small>MOST USED PLAYER</small>${d.most && d.most[0] ? `<b>${esc(d.most[0].name)}</b><span>${esc(yr(d.most[0].season) || 'ANY SEASON')} | ${d.most[0].count}x</span>` : '<b>-</b>'}</div></div>
         <div class="rk-cards two"><div class="rk-card"><small>FRIENDS</small><b>${d.friends || 0}</b></div><div class="rk-card"><small>MUTUAL FRIENDS</small><b>${signed ? d.mutual_count || 0 : '-'}</b></div></div>
         ${d.mutual && d.mutual.length ? `<div class="ch-step"><div class="ch-step-k">FRIENDS YOU SHARE</div><p class="rk-lineup">${d.mutual.map(n => `<span>${UI.userLink(n)}</span>`).join('')}</p></div>` : ''}

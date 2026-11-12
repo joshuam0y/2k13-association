@@ -178,9 +178,12 @@ begin
 end $$;
 create or replace function public.lobby_down(p_code text) returns void
 language sql security definer set search_path = public as $$ delete from public.lobbies where code = upper(p_code) and host = auth.uid() $$;
-create or replace function public.lobby_list() returns table (code text, host_name text, era text, style text, ranked boolean)
+drop function if exists public.lobby_list();
+create or replace function public.lobby_list() returns table (code text, host_name text, era text, style text, ranked boolean, rating int)
 language sql security definer set search_path = public as $$
-  select code, host_name, era, style, ranked from public.lobbies where updated_at > now() - interval '90 seconds' order by updated_at desc limit 30
+  select l.code, l.host_name, l.era, l.style, l.ranked, coalesce(r.rating, 1200)
+  from public.lobbies l left join public.ratings r on r.user_id = l.host and r.era = l.era
+  where l.updated_at > now() - interval '90 seconds' order by l.updated_at desc limit 30
 $$;
 
 grant execute on function public.report_series(text, text, int, int, text, text, boolean, int, jsonb, numeric) to authenticated;
@@ -321,3 +324,21 @@ begin
   return true;
 end $$;
 grant execute on function public.concede_series(text) to authenticated;
+
+-- ---------- who is online in each mode ----------
+create or replace function public.queue_ping() returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then return; end if;
+  insert into public.ranked_presence (key, uid, seen_at) values ('queue', auth.uid(), now())
+    on conflict (key, uid) do update set seen_at = now();
+end $$;
+grant execute on function public.queue_ping() to authenticated;
+create or replace function public.online_counts() returns jsonb
+language sql security definer set search_path = public as $$
+  select jsonb_build_object(
+    'searching', (select count(*) from public.ranked_presence where key = 'queue' and seen_at > now() - interval '20 seconds'),
+    'ranked', (select count(distinct uid) from public.ranked_presence where key <> 'queue' and seen_at > now() - interval '40 seconds'),
+    'casual', (select count(*) from public.lobbies where not ranked and updated_at > now() - interval '90 seconds'))
+$$;
+grant execute on function public.online_counts() to authenticated, anon;
