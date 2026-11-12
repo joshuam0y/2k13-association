@@ -121,6 +121,10 @@
     [...days].sort().forEach(k => { run = prev && dayBefore(k) === prev ? run + 1 : 1; best = Math.max(best, run); prev = k; });
     return { n, done, best: Math.max(best, n) };
   }
+  // the daily record on a profile: how many played, the average and best percentage of a perfect five, and the streaks
+  const dailyBlock = dd => !dd || !dd.played ? '' : `<div class="ch-step"><div class="ch-step-k">DAILY AUCTION</div>
+      <div class="rk-cards"><div class="rk-card"><small>PLAYED</small><b>${dd.played}</b></div><div class="rk-card"><small>AVERAGE</small><b>${dd.avg_pct != null ? dd.avg_pct + '%' : '-'}</b></div><div class="rk-card"><small>BEST</small><b>${dd.best_pct != null ? dd.best_pct + '%' : '-'}</b></div></div>
+      <div class="rk-cards two"><div class="rk-card"><small>STREAK</small><b>${dd.streak || 0}</b></div><div class="rk-card"><small>BEST STREAK</small><b>${dd.best_streak || 0}</b></div></div></div>`;
   const regionName = r => { const x = REGIONS.find(y => y[0] === r); return x ? x[1].trim() : (r || ''); };
   const NOT_SET_UP = 'The ranked boards are not switched on yet. The site owner needs to run supabase/community.sql once in the Supabase SQL editor.';
   const failMsg = e => { const m = String((e && e.message) || e); return /does not exist|schema cache|Could not find|relation .* does not exist|PGRST20/i.test(m) ? NOT_SET_UP : m; };
@@ -609,7 +613,7 @@
       }
       const cur = ls.get(key, {});
       if (cur.sent) { sub.innerHTML = `<b>SCORE SENT.</b> <span class="muted">One try a day for each era.</span>`; return; }
-      UI.profile.rpc('submit_daily', { p_day: day, p_era: era, p_score: score, p_lineup: { names: five.map(p => p.name), seasons: five.map(p => p.season || null), score, era } })
+      UI.profile.rpc('submit_daily', { p_day: day, p_era: era, p_score: score, p_lineup: { names: five.map(p => p.name), seasons: five.map(p => p.season || null), score, era }, p_pct: pct == null ? null : Math.round(pct * 100) / 100 })
         .then(ok => { streakBump(day); paintStreak(); ls.set(key, Object.assign(cur, { st, fin: true, sent: true, score })); sub.innerHTML = ok ? '<b>SCORE SENT.</b> <span class="muted">You are on today\'s board.</span>' : '<b>ALREADY ON THE BOARD.</b> <span class="muted">One score a day for each era.</span>'; })
         .catch(e => { sub.innerHTML = '<span class="rk-err">' + esc(failMsg(e)) + '</span>'; });
       return;
@@ -695,6 +699,8 @@
       if (oppIds.length) { const p = await c.from('profiles').select('id,username').in('id', oppIds); (p.data || []).forEach(x => { names[x.id] = x.username; }); }
       const rivals = (riv.data || []).map(r => ({ name: names[r.a === id ? r.b : r.a] || '?', me: r.a === id ? r.a_wins : r.b_wins, them: r.a === id ? r.b_wins : r.a_wins, at: r.last_at })).sort((x, y) => (y.me + y.them) - (x.me + x.them));
       const curRating = Math.max(1200, ...(rat.data || []).map(r => r.rating)), peakRating = Math.max(curRating, ...(rat.data || []).map(r => r.peak || 0));
+      let myDaily = null;
+      try { const pp = await UI.profile.rpc('public_profile', { p_name: row.username || UI.profile.account() }); myDaily = pp && pp.daily; } catch (e) { /* before the latest SQL */ }
       let avatar = null;
       try { const av = await c.from('profiles').select('avatar').eq('id', id).maybeSingle(); avatar = av.data && av.data.avatar || null; } catch (e) { /* the column arrives with the SQL */ }
       const bl = row.best_lineup, tally = {};
@@ -716,6 +722,7 @@
           <small class="muted">Region is only what you pick. Nothing reads your location.</small>
           <div class="ch-go"><button type="button" class="btn btn-gold" id="meSave">SAVE</button><span class="pf-msg" id="meMsg"></span></div></div>
         ${most.length ? `<div class="ch-step"><div class="ch-step-k">MOST DRAFTED</div>${table(['PLAYER', 'SEASON', 'TIMES'], most.map(m => [esc(m.n), esc(yr(m.se) || 'ANY'), '<b>' + m.c + '</b>']), true)}</div>` : ''}
+        ${dailyBlock(myDaily)}
         ${rat.data && rat.data.length ? `<div class="ch-step"><div class="ch-step-k">YOUR LADDER RATINGS</div>${table(['ERA', 'RATING', 'W-L'], rat.data.slice().sort((x, y) => y.rating - x.rating).map(r => [esc(eraName(r.era)), '<b>' + r.rating + '</b> ' + tierBadge(r.rating), wl(r.wins, r.losses)]), true)}</div>` : ''}
         ${(ser.data || []).length ? `<div class="ch-step"><div class="ch-step-k">MATCH HISTORY</div><div class="hist-l">${(ser.data || []).slice(0, 15).map(x => {
           const mine = x.p1 === id, mw = mine ? x.w1 : x.w2, tw = mine ? x.w2 : x.w1, won = mw > tw, dd = mine ? x.d1 : x.d2, who = names[mine ? x.p2 : x.p1] || '?';
@@ -823,6 +830,7 @@
         <div class="rk-cards two"><div class="rk-card"><small>FRIENDS</small><b>${d.friends || 0}</b></div><div class="rk-card"><small>MUTUAL FRIENDS</small><b>${signed ? d.mutual_count || 0 : '-'}</b></div></div>
         ${d.mutual && d.mutual.length ? `<div class="ch-step"><div class="ch-step-k">FRIENDS YOU SHARE</div><p class="rk-lineup">${d.mutual.map(n => `<span>${UI.userLink(n)}</span>`).join('')}</p></div>` : ''}
         ${d.vs ? `<div class="ch-step"><div class="ch-step-k">YOU VS ${esc(d.username.toUpperCase())}</div><p class="rk-vs"><b>${d.vs.me}</b><span>-</span><b>${d.vs.them}</b></p><small class="muted">${d.vs.me > d.vs.them ? 'You lead the rivalry.' : d.vs.me < d.vs.them ? 'They lead the rivalry.' : 'Tied.'} One series counts for each draft.</small></div>` : ''}
+        ${dailyBlock(d.daily)}
         ${d.ratings && d.ratings.length ? `<div class="ch-step"><div class="ch-step-k">LADDER RATINGS</div>${table(['ERA', 'RATING', 'RANK', 'W-L'], d.ratings.map(r => [esc(eraName(r.era)), '<b>' + r.rating + '</b> ' + tierBadge(r.rating), '#' + r.rank + (r.of ? ' of ' + r.of : ''), wl(r.wins, r.losses)]), true)}</div>` : ''}
         ${d.most && d.most.length ? `<div class="ch-step"><div class="ch-step-k">MOST DRAFTED</div>${table(['PLAYER', 'SEASON', 'TIMES'], d.most.map(m => [esc(m.name), esc(yr(m.season) || 'ANY'), '<b>' + m.count + '</b>']), true)}</div>` : ''}
         <div class="ch-go"><a class="btn" href="#/ranked">RANKED</a><a class="btn" href="#/me">MY PROFILE</a></div>`;

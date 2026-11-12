@@ -50,6 +50,7 @@ create table if not exists public.daily_scores (
   score numeric not null, lineup jsonb, created_at timestamptz not null default now(),
   primary key (day, era, user_id)
 );
+alter table public.daily_scores add column if not exists pct numeric;   -- the score as a percentage of a perfect five that day (shown on profiles)
 create table if not exists public.lobbies (
   code text primary key, host uuid not null, host_name text not null,
   era text not null, style text not null, ranked boolean not null default false,
@@ -161,13 +162,15 @@ language sql security definer set search_path = public as $$
 $$;
 
 -- one daily score a player, era and day; the day has to be today (UTC) give or take one
-create or replace function public.submit_daily(p_day date, p_era text, p_score numeric, p_lineup jsonb) returns boolean
+drop function if exists public.submit_daily(date, text, numeric, jsonb);
+create or replace function public.submit_daily(p_day date, p_era text, p_score numeric, p_lineup jsonb, p_pct numeric default null) returns boolean
 language plpgsql security definer set search_path = public as $$
 declare me uuid := auth.uid(); n int;
 begin
   if me is null or p_score is null or p_score < 0 or p_score > 130 then return false; end if;
+  if p_pct is not null and (p_pct < 0 or p_pct > 100) then p_pct := null; end if;
   if abs(p_day - (now() at time zone 'utc')::date) > 1 then return false; end if;
-  insert into public.daily_scores (day, era, user_id, score, lineup) values (p_day, p_era, me, p_score, p_lineup) on conflict do nothing;
+  insert into public.daily_scores (day, era, user_id, score, lineup, pct) values (p_day, p_era, me, p_score, p_lineup, p_pct) on conflict do nothing;
   get diagnostics n = row_count;
   return n > 0;
 end $$;
@@ -195,7 +198,7 @@ language sql security definer set search_path = public as $$
 $$;
 
 grant execute on function public.report_series(text, text, int, int, text, text, boolean, int, jsonb, numeric) to authenticated;
-grant execute on function public.submit_daily(date, text, numeric, jsonb) to authenticated;
+grant execute on function public.submit_daily(date, text, numeric, jsonb, numeric) to authenticated;
 grant execute on function public.lobby_up(text, text, text, boolean) to authenticated;
 grant execute on function public.lobby_down(text) to authenticated;
 grant execute on function public.lobby_list() to authenticated, anon;
@@ -241,7 +244,7 @@ revoke execute on function public.settle_abandoned() from public, anon, authenti
 -- ---------- viewing another player's profile: only totals, never their private rows ----------
 create or replace function public.public_profile(p_name text) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare prof public.profiles; me uuid := auth.uid(); w int; t int; auto text; rat jsonb; most jsonb; vs jsonb; fr text; ua uuid; ub uuid; nf int; nm int := 0; mut jsonb := '[]'::jsonb;
+declare prof public.profiles; me uuid := auth.uid(); w int; t int; auto text; rat jsonb; most jsonb; vs jsonb; fr text; ua uuid; ub uuid; nf int; nm int := 0; mut jsonb := '[]'::jsonb; dp jsonb; bs int; cs int;
 begin
   perform public.settle_abandoned();
   select * into prof from public.profiles where lower(username) = lower(p_name);
@@ -270,7 +273,13 @@ begin
       intersect
       select case when requester = me then addressee else requester end from public.friendships where status = 'accepted' and (requester = me or addressee = me));
   end if;
-  return jsonb_build_object('username', prof.username, 'avatar', prof.avatar, 'region', prof.region, 'fav_era', prof.fav_era, 'auto_era', auto, 'best_score', prof.best_score, 'best_lineup', prof.best_lineup,
+  -- the daily auction: how many, the percentages, and the streaks (days in a row)
+  select jsonb_build_object('played', count(*), 'avg_pct', round(avg(pct), 1), 'best_pct', round(max(pct), 1), 'avg_score', round(avg(score), 1), 'best_score', max(score)) into dp from public.daily_scores where user_id = prof.id;
+  with d as (select distinct day from public.daily_scores where user_id = prof.id), g as (select day, day - (row_number() over (order by day))::int as grp from d)
+    select coalesce(max(c), 0) into bs from (select count(*) c from g group by grp) x;
+  with d as (select distinct day from public.daily_scores where user_id = prof.id), g as (select day, day - (row_number() over (order by day))::int as grp from d)
+    select coalesce(count(*), 0) into cs from g where grp = (select grp from g where day >= current_date - 1 order by day desc limit 1);
+  return jsonb_build_object('daily', dp || jsonb_build_object('best_streak', bs, 'streak', cs), 'username', prof.username, 'avatar', prof.avatar, 'region', prof.region, 'fav_era', prof.fav_era, 'auto_era', auto, 'best_score', prof.best_score, 'best_lineup', prof.best_lineup,
     'wins', w, 'losses', t - w, 'ratings', rat, 'most', most, 'vs', vs, 'friend', fr, 'self', me = prof.id, 'friends', nf, 'mutual', mut, 'mutual_count', nm);
 end $$;
 grant execute on function public.public_profile(text) to authenticated, anon;
