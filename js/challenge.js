@@ -325,6 +325,79 @@
     if (action === 'pass') { aucSell(st, st.holder, st.price); aucNext(st); return true; }
     return false;
   }
+
+  // ---------- auction for a bracket: three to eight teams bid on every player ----------
+  // The bidding goes round the table. A player opens at the start price held by the team whose turn it is to open (that rotates). Each team still
+  // in it either raises (any amount from one raise above the price up to its top bid) or passes, which drops it out for this player. When one team is left
+  // it gets him at its price. A team has to keep the start price for each spot it still has to fill. A full team stops bidding; when only one team
+  // still has spots, the rest of the pool goes to it free.
+  function aucNMax(st, t) { return st.o.budget - st.spent[t] - Math.max(0, st.per - st.won[t].length - 1) * st.o.start; }
+  function aucNFull(st, t) { return st.won[t].length >= st.per; }
+  function aucNCanRaise(st, t) { return !st.done && !aucNFull(st, t) && st.active[t] && st.price + st.o.raise <= aucNMax(st, t); }
+  function aucNToAct(st, from) {   // the next team still in it after `from`, other than the one holding the bid
+    for (var k = 1; k < st.n; k++) { var t = (from + k) % st.n; if (st.active[t] && t !== st.holder) return t; }
+    return -1;
+  }
+  function aucNSell(st, t, price, auto) {
+    var id = st.ids[st.i];
+    st.won[t].push(id); st.spent[t] += price; st.log.push({ id: id, side: t, price: price, auto: auto ? 'free' : undefined });
+  }
+  function aucNNext(st) {
+    for (;;) {
+      st.i++;
+      var open = [], k;
+      for (k = 0; k < st.n; k++) if (!aucNFull(st, k)) open.push(k);
+      if (st.i >= st.ids.length || !open.length) { st.done = true; st.turn = -1; st.holder = -1; return st; }
+      if (open.length === 1) { aucNSell(st, open[0], 0, true); continue; }   // one team left with spots: the rest are its, free
+      st.active = []; for (k = 0; k < st.n; k++) st.active[k] = open.indexOf(k) >= 0;
+      st.holder = open[(st.i + st.first) % open.length]; st.price = st.o.start;
+      st.turn = aucNToAct(st, st.holder);
+      return st;
+    }
+  }
+  function auctionNStart(cfg, n, players) {
+    var o = aucOpts(cfg.auction), per = vsPer(cfg), size = Math.max(o.pool || 0, n * per), rng = mulberry32(((cfg.seed || 1) ^ 0xA0C7A1) >>> 0);
+    var sorted = players.slice().sort(function (a, b) { return b.ovr - a.ovr || (a.id < b.id ? -1 : 1); });
+    var top = o.quality === 'stars' ? Math.max(size, 60 * Math.ceil(n / 2)) : o.quality === 'mixed' ? Math.max(size, 200 * Math.ceil(n / 2)) : sorted.length;
+    var pool = shuffle(sorted.slice(0, top), rng).slice(0, size);
+    var st = { o: o, per: per, n: n, first: cfg.first ? cfg.first % n : 0, ids: pool.map(function (p) { return p.id; }), i: -1, price: o.start, holder: 0, turn: 0, active: [], spent: [], won: [], log: [], done: false };
+    for (var k = 0; k < n; k++) { st.spent.push(0); st.won.push([]); }
+    return aucNNext(st);
+  }
+  // team t raises (to: the bid) or passes; false when it is not its turn or the move is not allowed
+  function auctionNAct(st, t, action, to) {
+    if (!st || st.done || st.turn !== t) return false;
+    if (action === 'raise') {
+      if (!aucNCanRaise(st, t)) return false;
+      to = to == null ? st.price + st.o.raise : Math.floor(+to);
+      if (!(to >= st.price + st.o.raise) || to > aucNMax(st, t)) return false;
+      st.price = to; st.holder = t; st.turn = aucNToAct(st, t);
+      if (st.turn < 0) { aucNSell(st, t, st.price); aucNNext(st); }   // nobody else is still in it
+      return true;
+    }
+    if (action === 'pass') {
+      st.active[t] = false;
+      var nx = aucNToAct(st, t);
+      if (nx < 0) { aucNSell(st, st.holder, st.price); aucNNext(st); } else st.turn = nx;
+      return true;
+    }
+    return false;
+  }
+  // what an AI team does on its turn: bid up to what the player is worth to it (his rating against the rest of the pool, its money per open spot)
+  function aucNAI(st, t, byId, rng) {
+    if (!aucNCanRaise(st, t)) return { a: 'pass' };
+    var rest = st.ids.slice(st.i).map(function (id) { return byId[id].ovr; }), hi = Math.max.apply(null, rest), lo = Math.min.apply(null, rest);
+    var p = byId[st.ids[st.i]], w = Math.pow(Math.max(0, p.ovr - lo) / Math.max(1, hi - lo), 1.4);
+    var left = st.per - st.won[t].length, avg = (st.o.budget - st.spent[t]) / Math.max(1, left);
+    var target = st.o.start + Math.round(avg * (0.35 + 1.5 * w) - st.o.start + (rng() - 0.5) * 1.6);
+    return st.price + st.o.raise <= target ? { a: 'raise', to: Math.min(aucNMax(st, t), st.price + st.o.raise) } : { a: 'pass' };
+  }
+  // runs the AI teams until it is a human's turn (isHuman(t)) or the auction ends
+  function auctionNRunAI(st, byId, rng, isHuman) {
+    var g = 0;
+    while (!st.done && !isHuman(st.turn) && g++ < 5000) { var m = aucNAI(st, st.turn, byId, rng); auctionNAct(st, st.turn, m.a, m.to); }
+    return st;
+  }
   // Versus: no season. The two fives meet in a series (cfg.bestOf 3, 5 or 7; home court on a coin flip:
   // 1-1-1, 2-2-1 or 2-2-1-1-1), each playing all 48 minutes, nobody on the bench. Fit and positions count
   // like everywhere else. opts.pbp keeps every game's play-by-play (res) for the court view.
@@ -897,7 +970,7 @@
     SEASONS: SEASONS, ROUNDS: ROUNDS, seasonInfo: seasonInfo, seasonData: seasonData, loaded: loaded, load: load, loadAll: loadAll,
     allTimePool: allTimePool, poolSeasons: poolSeasons, eraTeam: eraTeam, buildYear: buildYear, buildAllTime: buildAllTime, newDraft: newDraft, onClock: onClock,
     draftSlot: draftSlot, draftPick: draftPick, aiPick: aiPick, simToUser: simToUser, autoDraft: autoDraft, available: available,
-    teamPicks: teamPicks, lineupFit: lineupFit, posLabel: posLabel, secondPos: secondPos, SLOTS: SLOTS, vsOnClock: vsOnClock, vsPer: vsPer, auctionStart: auctionStart, auctionAct: auctionAct, aucOpts: aucOpts, aucMax: aucMax, aucCanRaise: aucCanRaise, playVersus: playVersus, VS_ORDER: VS_ORDER, spin: spin, takenKey: takenKey, extendPool: extendPool, franchise: franchise, spinRoster: spinRoster, matchups: matchups, start: start, step: step, runAll: runAll,
+    teamPicks: teamPicks, lineupFit: lineupFit, posLabel: posLabel, secondPos: secondPos, SLOTS: SLOTS, vsOnClock: vsOnClock, vsPer: vsPer, auctionStart: auctionStart, auctionAct: auctionAct, auctionNStart: auctionNStart, auctionNAct: auctionNAct, auctionNRunAI: auctionNRunAI, aucNMax: aucNMax, aucNCanRaise: aucNCanRaise, aucNAI: aucNAI, aucOpts: aucOpts, aucMax: aucMax, aucCanRaise: aucCanRaise, playVersus: playVersus, VS_ORDER: VS_ORDER, spin: spin, takenKey: takenKey, extendPool: extendPool, franchise: franchise, spinRoster: spinRoster, matchups: matchups, start: start, step: step, runAll: runAll,
     progress: progress, summary: summary, play: play, perGame: perGame, groupOf: groupOf, primaryPos: primaryPos, rng: mulberry32
   };
   W.CHALLENGE = API;
