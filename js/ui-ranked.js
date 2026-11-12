@@ -596,14 +596,14 @@
     let saved = ls.get(key, null), st;
     if (!saved && !pr && acctSfx()) {   // a game played as a guest today moves to the account that signs in first
       const gk = 'a13-rk-d-' + day + '-T', g = ls.get(gk, null);
-      if (g && g.st) { saved = Object.assign({}, g, { sent: false }); ls.set(key, saved); try { localStorage.removeItem(gk); } catch (e) { /* private mode */ } }
+      if (g && g.st && g.g) { saved = Object.assign({}, g, { sent: false }); ls.set(key, saved); try { localStorage.removeItem(gk); } catch (e) { /* private mode */ } }
     }
     if (saved && saved.st) st = saved.st;
     else { st = C.auctionStart(cfg, pool); }
     const rng = mulberry(hash(day + era + 'house'));
     const house = () => { let n = 0; while (!st.done && st.turn === 1 && n++ < 50) C.auctionAct(st, 1, houseMove(st, byId, rng)); };
     house();
-    const save = fin => ls.set(key, { st, fin: !!fin, score: saved && saved.score });
+    const save = fin => ls.set(key, { st, fin: !!fin, score: saved && saved.score, g: !acctSfx() });
     save(st.done);
     draw(app, era, day, st, byId, key, house, save);
   }
