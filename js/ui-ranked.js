@@ -48,7 +48,23 @@
     const cur = TIERS[k], nxt = TIERS[k + 1] || null;
     return Object.assign({}, cur, { idx: k, next: nxt, pct: nxt ? Math.round(100 * (r - cur.floor) / (nxt.floor - cur.floor)) : 100 });
   }
-  const tierBadge = r => { const t = tierOf(r); return `<span class="tier" style="--tc:${t.color}">${esc(t.name)}</span>`; };
+
+  // ---------- rank icons: a shield for Bronze to Gold, a gem for Platinum and Diamond, a star for Master, a ringed star for Grandmaster and a crown for Legend; pips show the division ----------
+  let ICN = 0;
+  const mix = (hex, to, k) => { const n = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)), a = n(hex), b = n(to); return '#' + a.map((v, i) => Math.round(v + (b[i] - v) * k).toString(16).padStart(2, '0')).join(''); };
+  function iconSvg(t, size) {
+    const id = 'ti' + (++ICN), c = t.color, hi = mix(c, '#ffffff', 0.45), lo = mix(c, '#000000', 0.45);
+    const shape = t.base === 'BRONZE' || t.base === 'SILVER' || t.base === 'GOLD' ? '<path d="M32 4 L56 12 V32 C56 46 46 56 32 61 C18 56 8 46 8 32 V12 Z"/><path d="M32 12 L49 18 V32 C49 42 42 49 32 53 C22 49 15 42 15 32 V18 Z" fill="none" stroke="#000" stroke-opacity=".28" stroke-width="2"/>'
+      : t.base === 'PLATINUM' || t.base === 'DIAMOND' ? '<path d="M32 4 L58 24 L32 60 L6 24 Z"/><path d="M6 24 H58 M32 4 L22 24 L32 60 L42 24 Z" fill="none" stroke="#000" stroke-opacity=".28" stroke-width="2"/>'
+      : t.base === 'MASTER' ? '<path d="M32 3 L40 24 L62 25 L45 39 L51 61 L32 49 L13 61 L19 39 L2 25 L24 24 Z"/>'
+      : t.base === 'GRANDMASTER' ? '<circle cx="32" cy="32" r="29" fill="none" stroke="url(#' + id + ')" stroke-width="4"/><path d="M32 9 L38 26 L56 27 L42 38 L47 55 L32 45 L17 55 L22 38 L8 27 L26 26 Z"/>'
+      : '<path d="M5 50 L9 18 L23 33 L32 10 L41 33 L55 18 L59 50 Z"/><rect x="5" y="52" width="54" height="6"/>';
+    const div = t.name.endsWith(' III') ? 1 : t.name.endsWith(' II') ? 2 : t.name.endsWith(' I') ? 3 : 0;
+    const pips = div ? Array.from({ length: div }, (_, i) => '<circle cx="' + (32 + (i - (div - 1) / 2) * 9) + '" cy="36" r="3.2" fill="#fff" stroke="#000" stroke-opacity=".35"/>').join('') : '';
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="' + size + '" height="' + size + '" aria-hidden="true"><defs><linearGradient id="' + id + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + hi + '"/><stop offset=".55" stop-color="' + c + '"/><stop offset="1" stop-color="' + lo + '"/></linearGradient></defs><g fill="url(#' + id + ')" stroke="' + lo + '" stroke-width="1.5" stroke-linejoin="round">' + shape + '</g>' + pips + '</svg>';
+  }
+  const tierIcon = (r, size) => '<span class="tier-ic">' + iconSvg(tierOf(r), size || 20) + '</span>';
+  const tierBadge = r => { const t = tierOf(r); return `<span class="tier" style="--tc:${t.color}">${iconSvg(t, 16)}${esc(t.name)}</span>`; };
   // a profile picture is a team logo the player picked, or the first letter of the name
   const avatarHtml = (abbr, name, size) => abbr ? `<span class="pf-av logo" style="--sz:${size}px">${UI.logo(abbr, size)}</span>` : `<span class="pf-av" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.5)}px">${esc(String(name || '?').slice(0, 1).toUpperCase())}</span>`;
 
@@ -66,14 +82,17 @@
     g.textAlign = 'center';
     g.fillStyle = '#d4af37'; g.font = '700 56px ' + F; g.fillText('STARTING FIVE', 540, 140);
     g.fillStyle = '#9a9a9a'; g.font = '500 40px ' + F; g.fillText(o.k || '', 540, 240);
-    g.fillStyle = col; g.font = '700 118px ' + F; g.fillText(o.title || '', 540, 520);
-    g.fillStyle = '#ffffff'; g.font = '700 230px ' + F; g.fillText(o.big || '', 540, 810);
-    g.fillStyle = '#bdbdbd'; g.font = '500 48px ' + F; g.fillText(o.sub || '', 540, 905);
+    const dy = o.iconImg ? 90 : 0;
+    if (o.iconImg) g.drawImage(o.iconImg, 430, 270, 220, 220);
+    g.fillStyle = col; g.font = '700 118px ' + F; g.fillText(o.title || '', 540, 520 + dy);
+    g.fillStyle = '#ffffff'; g.font = '700 230px ' + F; g.fillText(o.big || '', 540, 810 + dy);
+    g.fillStyle = '#bdbdbd'; g.font = '500 48px ' + F; g.fillText(o.sub || '', 540, 905 + dy);
     g.fillStyle = '#ffffff'; g.font = '700 64px ' + F; g.fillText(String(o.name || '').toUpperCase(), 540, 1070);
     g.fillStyle = '#7a7a7a'; g.font = '500 36px ' + F; g.fillText(location.host + location.pathname.replace(/index\.html$/, ''), 540, 1250);
     return c;
   }
   async function shareCard(o, text) {
+    if (o.tier) { try { o.iconImg = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(iconSvg(o.tier, 220)); }); } catch (e) { /* the card goes without the icon */ } }
     const c = cardCanvas(o), blob = await new Promise(r => c.toBlob(r, 'image/png')), file = new File([blob], 'starting-five.png', { type: 'image/png' });
     try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text, url: location.origin + location.pathname }); return 'shared'; } } catch (e) { if (e && e.name === 'AbortError') return 'cancelled'; }
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'starting-five.png'; document.body.appendChild(a); a.click(); a.remove();
@@ -180,7 +199,7 @@
         <section class="rk-elo ${won ? 'up' : 'down'}"><small>RATING</small>
           <div class="rk-elo-n"><span class="rk-elo-from">${b.rating}</span><span class="rk-elo-arrow">${won ? '&#9650;' : '&#9660;'}</span><b id="rkEloNow">${b.rating}</b></div>
           <div class="rk-elo-d">${d > 0 ? '+' : ''}${d}</div>
-          <div class="rk-tier">${tierBadge(now.rating)}${ta.next ? `<div class="rk-bar"><i style="--w:${ta.pct}%"></i></div><small class="muted">${ta.next.floor - now.rating} POINTS TO ${esc(ta.next.name)}</small>` : '<small class="muted">THE TOP RANK</small>'}</div>
+          <div class="rk-tier">${tierIcon(now.rating, 96)}${tierBadge(now.rating)}${ta.next ? `<div class="rk-bar"><i style="--w:${ta.pct}%"></i></div><small class="muted">${ta.next.floor - now.rating} POINTS TO ${esc(ta.next.name)}</small>` : '<small class="muted">THE TOP RANK</small>'}</div>
           ${ta.idx !== tb.idx ? `<div class="rk-promo ${ta.idx > tb.idx ? 'up' : 'down'}">${ta.idx > tb.idx ? 'RANK UNLOCKED: ' : 'DROPPED TO '}${esc(ta.name)}</div>` : ''}
           <button type="button" class="btn btn-small${ta.idx > tb.idx ? ' btn-gold' : ''}" id="rkShare">${ta.idx > tb.idx ? 'SHARE YOUR NEW RANK' : 'SHARE THIS RESULT'}</button>
           <div class="rk-elo-meta"><span>${now.wins}-${now.losses} ranked this era</span>${rk ? `<span>${rk}</span>` : ''}${b.rank && now.rank !== b.rank ? `<span>${now.rank < b.rank ? 'UP' : 'DOWN'} ${Math.abs(b.rank - now.rank)} PLACE${Math.abs(b.rank - now.rank) > 1 ? 'S' : ''}</span>` : ''}</div></section>${acts}`;
@@ -188,8 +207,8 @@
       const shareBtn = UI.$('#rkShare', app);
       if (shareBtn) shareBtn.addEventListener('click', async () => {
         const up = ta.idx > tb.idx, me0 = UI.profile.account() || '';
-        const o = up ? { k: 'RANK UNLOCKED', title: ta.name, color: ta.color, big: String(now.rating), sub: 'RATING | ' + eraName(last.era).toUpperCase(), name: me0 }
-          : { k: (won ? 'RANKED WIN' : 'RANKED RESULT') + ' | VS ' + String(last.opp || '').toUpperCase(), title: ta.name, color: ta.color, big: (d > 0 ? '+' : '') + d, sub: 'NOW ' + now.rating + ' RATING', name: me0 };
+        const o = up ? { tier: ta, k: 'RANK UNLOCKED', title: ta.name, color: ta.color, big: String(now.rating), sub: 'RATING | ' + eraName(last.era).toUpperCase(), name: me0 }
+          : { tier: ta, k: (won ? 'RANKED WIN' : 'RANKED RESULT') + ' | VS ' + String(last.opp || '').toUpperCase(), title: ta.name, color: ta.color, big: (d > 0 ? '+' : '') + d, sub: 'NOW ' + now.rating + ' RATING', name: me0 };
         shareBtn.disabled = true;
         const r = await shareCard(o, up ? 'I just reached ' + ta.name + ' in Starting Five.' : 'My Starting Five ranked result: ' + (d > 0 ? '+' : '') + d + ' rating.');
         shareBtn.disabled = false; if (r === 'saved') UI.toast('Saved the picture. The link is copied.');
@@ -255,7 +274,7 @@
     RATINGS[String(name).toLowerCase()] = r ? r.rating : 1200;
     return `<div class="lb-card${mine ? ' me' : ''}">${avatarHtml(d.avatar, d.username || name, 56)}<b class="lb-n">${esc(d.username || name)}</b>
       <small class="lb-sub">${mine ? 'YOU' : 'OPPONENT'}${d.region ? ' | ' + esc(regionName(d.region)) : ''}</small>
-      <div class="lb-elo"><small>${esc(eraName(era))} RATING</small><b>${r ? r.rating : 1200}</b>${tierBadge(r ? r.rating : 1200)}<small>${r && r.of ? '#' + r.rank + ' of ' + r.of : 'NOT RANKED YET'}</small></div>
+      <div class="lb-elo"><small>${esc(eraName(era))} RATING</small>${tierIcon(r ? r.rating : 1200, 44)}<b>${r ? r.rating : 1200}</b>${tierBadge(r ? r.rating : 1200)}<small>${r && r.of ? '#' + r.rank + ' of ' + r.of : 'NOT RANKED YET'}</small></div>
       <div class="lb-st"><span><b>${r ? r.wins + '-' + r.losses : '0-0'}</b><small>RANKED</small></span><span><b>${(d.wins || 0) + '-' + (d.losses || 0)}</b><small>ALL SERIES</small></span><span><b>${d.friends || 0}</b><small>FRIENDS</small></span></div>
       ${m ? `<div class="lb-most"><small>MOST USED PLAYER</small><b>${esc(m.name)}</b><small>${esc(seasonTag(m.season))}</small></div>` : ''}
       ${!mine && d.vs ? `<div class="lb-h2h">YOU ${d.vs.me} - ${d.vs.them} THEM</div>` : ''}</div>`;
@@ -299,7 +318,7 @@
   };
 
   UI.userLink = (name, tab) => `<a class="u-link" href="#/u/${encodeURIComponent(name)}"${tab ? ' target="_blank" rel="noopener"' : ''}>${esc(name)}</a>`;   // a name you can click to see that player's profile
-  UI.ranked = { ratingOf: n => RATINGS[String(n).toLowerCase()], streak: streakNow, tierOf, tierBadge, avatarHtml, eraOf, lineupScore, report, started, forfeit, concede, noteForfeit, playedBefore, lobbyCard, prefetch, lobbyStart, lobbyStop, ERAS, eraName, regionName, REGIONS };
+  UI.ranked = { tierIcon, ratingOf: n => RATINGS[String(n).toLowerCase()], streak: streakNow, tierOf, tierBadge, avatarHtml, eraOf, lineupScore, report, started, forfeit, concede, noteForfeit, playedBefore, lobbyCard, prefetch, lobbyStart, lobbyStop, ERAS, eraName, regionName, REGIONS };
 
   // ---------- helpers for the pages ----------
   const eraOpts = cur => ERAS.map(e => `<option value="${e}"${e === cur ? ' selected' : ''}>${esc(eraName(e))}</option>`).join('');
@@ -330,6 +349,7 @@
       <section class="rk-how"><div class="rk-how-t"><b>PLAY A RANKED MATCH</b><span class="muted">No code, no friend needed. You are paired with whoever is online and searching, the closest rating first. All-time pool.</span><span class="rk-cnt" id="rkCnt"></span></div>
         <div class="rk-find"><button type="button" class="btn btn-gold btn-big" id="rkFind"${signed ? '' : ' disabled'}>FIND A MATCH</button></div>
         <div class="rk-notify" id="rkNotify"></div>
+        <button type="button" class="btn btn-small" id="rkTourBtn">TAKE THE TOUR</button>
         <details class="rk-det"><summary>HOW RANKED WORKS</summary><ol>
           <li>You and one other signed-in player bid on a hidden pool of ten players from that era, a mix of stars and role players. It is a blind draft: no ratings until the series is over. You each get $20, bidding opens at $1 and goes up by $1 or more. Whoever passes lets the other have the player. Each of you ends with five, and every pick has a 24 second shot clock.</li>
           <li>Your five play a best-of-7 series, all five on the floor for 48 minutes. No duplicates: a player is gone once taken.</li>
@@ -338,7 +358,7 @@
           <li>Want to play a friend instead? Use Head to Head: it is casual and never touches the ladder.</li></ol></details></section>
       <details class="rk-det rk-ranks"><summary>THE RANKS</summary>
         <p class="muted">Everyone starts at 1200, which is the bottom of Silver. Win and you climb; lose enough and you drop into Bronze. Each rank up to Diamond has three divisions (III is the lowest, I the highest). ${esc(seasonLine())}: when a season ends, ratings are pulled back toward 1200 and a new one starts.</p>
-        <div class="rk-rk">${TIERS.map((t, i) => `<span class="rk-rk-i"><span class="tier" style="--tc:${t.color}">${esc(t.name)}</span><small>${t.floor ? t.floor + (TIERS[i + 1] ? ' TO ' + (TIERS[i + 1].floor - 1) : ' AND UP') : 'UNDER ' + TIERS[i + 1].floor}</small></span>`).join('')}</div></details>
+        <div class="rk-rk">${TIERS.map((t, i) => `<span class="rk-rk-i"><span class="tier" style="--tc:${t.color}">${iconSvg(t, 16)}${esc(t.name)}</span><small>${t.floor ? t.floor + (TIERS[i + 1] ? ' TO ' + (TIERS[i + 1].floor - 1) : ' AND UP') : 'UNDER ' + TIERS[i + 1].floor}</small></span>`).join('')}</div></details>
       <div class="ch-chips rk-tabs"><button type="button" class="ch-chip${RK.tab === 'ladder' ? ' on' : ''}" data-tab="ladder">LADDER</button><button type="button" class="ch-chip${RK.tab === 'daily' ? ' on' : ''}" data-tab="daily">DAILY AUCTION</button></div>
       <div id="rkBody" class="rk-body"><p class="muted">Loading...</p></div>
       <div class="ch-go"><a class="btn" href="#/me">MY PROFILE</a><a class="btn" href="#/challenge/vs">HEAD TO HEAD</a></div>`;
@@ -354,6 +374,8 @@
       try { const d = await UI.profile.rpc('online_counts'); el.textContent = d ? 'ONLINE NOW: ' + d.searching + ' SEARCHING FOR RANKED | ' + d.ranked + ' IN RANKED GAMES | ' + d.casual + ' CASUAL ROOMS OPEN' : ''; } catch (e) { /* the SQL is not run yet */ }
     };
     counts(); CNT = setInterval(counts, 10000);
+    const tb = UI.$('#rkTourBtn', app); if (tb) tb.addEventListener('click', () => openTour());
+    if (signed) { let seen = false; try { seen = localStorage.getItem(TOURKEY) === '1'; } catch (e) { seen = true; } if (!seen) setTimeout(() => { if (/^#\/ranked$/.test(location.hash)) openTour(); }, 700); }
     const nt = UI.$('#rkNotify', app);
     if (nt && 'Notification' in window) {
       const paintN = () => {
@@ -369,7 +391,7 @@
     const mine = UI.$('#rkMine', app);
     if (mine) ratingNow('ALL').then(r => {   // your rank, how far to the next one, and your streak
       const t = tierOf(r.rating), sk = streakNow();
-      mine.innerHTML = `<div class="rk-mine-t">${tierBadge(r.rating)}<b>${r.rating}</b><small>${r.games ? r.wins + '-' + r.losses + ' RANKED' : 'NO RANKED GAMES YET'}${r.of ? ' | #' + r.rank + ' OF ' + r.of : ''}</small></div>
+      mine.innerHTML = `<div class="rk-mine-t">${tierIcon(r.rating, 56)}${tierBadge(r.rating)}<b>${r.rating}</b><small>${r.games ? r.wins + '-' + r.losses + ' RANKED' : 'NO RANKED GAMES YET'}${r.of ? ' | #' + r.rank + ' OF ' + r.of : ''}</small></div>
         ${t.next ? `<div class="rk-bar wide"><i style="--w:${t.pct}%"></i></div><small class="muted">${t.next.floor - r.rating} POINTS TO ${esc(t.next.name)}</small>` : '<small class="muted">THE TOP RANK</small>'}
         <small class="muted rk-mine-s">DAILY STREAK ${sk.n}${sk.done ? ' | TODAY DONE' : ' | TODAY NOT PLAYED'}</small>`;
     }).catch(() => { mine.remove(); });
@@ -744,6 +766,53 @@
     el.innerHTML = '<span>' + (i.lobby ? 'RANKED MATCH FOUND. GET BACK IN <b>' : 'RANKED GAME IN PROGRESS. GET BACK IN <b>') + Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0') + (i.lobby ? '</b> OR YOU LOSE YOUR SPOT.</span>' : '</b> OR YOU FORFEIT.</span>') + '<button type="button" class="btn btn-small btn-gold" id="rkRejoinBtn">REJOIN NOW</button>';
     const b = el.querySelector('#rkRejoinBtn'); if (b) b.addEventListener('click', () => { UI.vsQuick.rejoin(); el.remove(); });
   }, 1000);
+
+
+
+
+  // ---------- offline notice: a red banner on every page while the connection is down ----------
+  (function () {
+    const set = on => {
+      let el = document.getElementById('rkOffline');
+      document.body.classList.toggle('is-offline', on);
+      if (on && !el) { el = document.createElement('div'); el.id = 'rkOffline'; el.className = 'rk-offline'; el.innerHTML = '<b>YOU ARE OFFLINE.</b> Ranked and online games need a connection. It reconnects on its own when you are back.'; document.body.appendChild(el); }
+      else if (!on && el) { el.remove(); if (UI.toast) UI.toast('Back online.'); }
+    };
+    window.addEventListener('offline', () => set(true));
+    window.addEventListener('online', () => set(false));
+    if (navigator.onLine === false) set(true);
+  })();
+
+  // ---------- the first-time tour of ranked ----------
+  const TOURKEY = 'a13-rk-tour';
+  const TOUR = [
+    ['FIND A MATCH', 'Tap Find a match on the Ranked page. You are paired with whoever else is searching, the closest rating first. The search widens a little every ten seconds, and you can see how many others are looking.'],
+    ['THE LOBBY', 'You and your opponent get cards with rating, rank, record, friends and most used player, plus your win chance. Take a look, then press Ready. Nothing starts until you both do, and leaving here costs nothing.'],
+    ['THE AUCTION', 'Ten hidden players, $20 each, five spots each. Bidding opens at $1 and every raise is at least $1. You have 24 seconds per player. Pass and your opponent gets the player for the current price. Keep $1 back for every spot you still need.'],
+    ['THE SERIES', 'Your five play a best of 7 with no bench. Either of you can ask to watch or sim the next game and the other taps to agree. Both phones report the result, and it only counts when they match.'],
+    ['RANKS', 'Everyone starts at 1200, the bottom of Silver. Win to climb: Bronze, Silver, Gold, Platinum, Diamond (three divisions each), then Master, Grandmaster and Legend. You can drop too. Open THE RANKS for every range.'],
+    ['IF YOU DROP', 'Lose your connection and the game pauses. A banner on every page shows a Rejoin button and a 90 second countdown. Miss it and your opponent wins by forfeit. The Forfeit button ends a game at once.']
+  ];
+  function openTour(done) {
+    let i = 0, el = document.getElementById('rkTour');
+    if (el) el.remove();
+    el = document.createElement('div'); el.id = 'rkTour'; el.className = 'rk-tour'; document.body.appendChild(el);
+    const close = () => { try { localStorage.setItem(TOURKEY, '1'); } catch (e) { /* private mode */ } el.remove(); if (done) done(); };
+    const draw = () => {
+      const [t, p] = TOUR[i], last = i === TOUR.length - 1;
+      el.innerHTML = `<div class="rk-tour-b"><small>RANKED TOUR | ${i + 1} OF ${TOUR.length}</small>
+        ${i === 4 ? `<div class="rk-tour-ic">${[0, 3, 6, 9, 12, 13, 14, 15, 16, 17].map(k => iconSvg(TIERS[k] || TIERS[TIERS.length - 1], 36)).join('')}</div>` : ''}
+        <h2>${esc(t)}</h2><p>${esc(p)}</p>
+        <div class="rk-tour-dots">${TOUR.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div>
+        <div class="rk-tour-go">${i ? '<button type="button" class="btn" id="tBack">BACK</button>' : '<button type="button" class="btn" id="tSkip">SKIP</button>'}<button type="button" class="btn btn-gold btn-big" id="tNext">${last ? 'GOT IT' : 'NEXT'}</button></div></div>`;
+      const nx = el.querySelector('#tNext'), bk = el.querySelector('#tBack'), sk = el.querySelector('#tSkip');
+      nx.addEventListener('click', () => { if (last) close(); else { i++; draw(); } });
+      if (bk) bk.addEventListener('click', () => { i--; draw(); });
+      if (sk) sk.addEventListener('click', close);
+    };
+    draw();
+  }
+  UI.ranked.tour = openTour;
 
   // ---------- nudges: a friend or other players searching for a ranked match ----------
   const NOTE = 'a13-rk-notify';
