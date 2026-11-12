@@ -98,14 +98,16 @@
     g.fillStyle = '#7a7a7a'; g.font = '500 36px ' + F; g.fillText(location.host + location.pathname.replace(/index\.html$/, ''), 540, 1250);
     return c;
   }
+  // sharing is just the text and link, copied (no picture)
   async function shareCard(o, text) {
-    const link = location.origin + location.pathname, all = text + '\n' + link;
-    try { if (navigator.clipboard) navigator.clipboard.writeText(all).then(() => UI.toast('Copied. Paste it anywhere.'), () => {}); } catch (e) { /* no clipboard */ }   // copied first, inside the tap
-    if (o.tier) { try { o.iconImg = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(iconSvg(o.tier, 220)); }); } catch (e) { /* the card goes without the icon */ } }
-    const c = cardCanvas(o), blob = await new Promise(r => c.toBlob(r, 'image/png')), file = new File([blob], 'starting-five.png', { type: 'image/png' });
-    try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text: all }); return 'shared'; } } catch (e) { if (e && e.name === 'AbortError') return 'cancelled'; }
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'starting-five.png'; document.body.appendChild(a); a.click(); a.remove();
-    return 'saved';
+    const all = text + '\n' + location.origin + location.pathname;
+    try { await navigator.clipboard.writeText(all); UI.toast('Copied. Paste it anywhere.'); }
+    catch (e) {
+      const t = document.createElement('textarea'); t.value = all; t.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(t); t.select();
+      let ok = false; try { ok = document.execCommand('copy'); } catch (x) { /* no copy */ } t.remove();
+      UI.toast(ok ? 'Copied. Paste it anywhere.' : all);
+    }
+    return 'copied';
   }
 
   // ---------- the daily streak: counted from the daily auctions you finished on this device (so earlier plays count too) ----------
@@ -228,7 +230,7 @@
           : { tier: ta, k: (won ? 'RANKED WIN' : 'RANKED RESULT') + ' | VS ' + String(last.opp || '').toUpperCase(), title: ta.name, color: ta.color, big: (d > 0 ? '+' : '') + d, sub: 'NOW ' + now.rating + ' RATING', name: me0 };
         shareBtn.disabled = true;
         const r = await shareCard(o, 'Starting Five Ranked \u{1F3C0}\n' + (up ? 'Reached ' + ta.name + ' | ' + now.rating : ta.name + ' | ' + now.rating + ' (' + (d > 0 ? '+' : '') + d + ')'));
-        shareBtn.disabled = false; if (r === 'saved') UI.toast('Saved the picture. The text is copied.');
+        shareBtn.disabled = false; 
       });
       const el = UI.$('#rkEloNow', app), t0 = Date.now(), from = b.rating, to = now.rating;
       const step = () => { if (!el.isConnected) return; const k = Math.min(1, (Date.now() - t0) / 1400); el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(step); };
@@ -605,7 +607,7 @@
         <div id="rkSub" class="rkn"><span class="muted">Sending your score...</span></div>
         <div class="ch-go">${isPr ? `<a class="btn btn-gold" href="#/daily/practice/${esc(prKey)}/${Date.now()}">PLAY AGAIN</a><a class="btn" href="#/daily/practice">ARCHIVE</a>` : `<a class="btn btn-gold" href="#/daily">SEE THE BOARD</a>${pct == null ? '' : '<button type="button" class="btn" id="dlShare">SHARE YOUR SCORE</button>'}`}</div>`;
       const dsh = UI.$('#dlShare', app);
-      const doShare = async btn => { btn.disabled = true; const r = await shareCard({ k: 'DAILY #' + dayNo(day), title: 'OF A PERFECT FIVE', color: '#d4af37', big: pct.toFixed(1) + '%', sub: TH.title, name: UI.profile.account() || '' }, 'Starting Five Daily #' + dayNo(day) + ' \u{1F3C0}\n' + five.map(p => { const o = p.baseOvr != null ? p.baseOvr : (p.ovr || 0); return o >= 90 ? '\u{1F7EA}' : o >= 80 ? '\u{1F7E6}' : o >= 70 ? '\u{1F7E9}' : o >= 60 ? '\u{1F7E8}' : '\u{1F7E5}'; }).join('') + '\n' + pct.toFixed(1) + '% of a perfect five'); btn.disabled = false; if (r === 'saved') UI.toast('Saved the picture. The text is copied.'); };
+      const doShare = async btn => { btn.disabled = true; const r = await shareCard({ k: 'DAILY #' + dayNo(day), title: 'OF A PERFECT FIVE', color: '#d4af37', big: pct.toFixed(1) + '%', sub: TH.title, name: UI.profile.account() || '' }, 'Starting Five Daily #' + dayNo(day) + ' \u{1F3C0}\n' + five.map(p => { const o = p.baseOvr != null ? p.baseOvr : (p.ovr || 0); return o >= 90 ? '\u{1F7EA}' : o >= 80 ? '\u{1F7E6}' : o >= 70 ? '\u{1F7E9}' : o >= 60 ? '\u{1F7E8}' : '\u{1F7E5}'; }).join('') + '\n' + pct.toFixed(1) + '% of a perfect five'); btn.disabled = false;  };
       if (dsh) dsh.addEventListener('click', () => doShare(dsh));
       if (!isPr && pct != null) {   // the result pops up with the share button every time this screen opens
         const ov = document.createElement('div'); ov.className = 'rk-tour';
