@@ -643,6 +643,8 @@
 .pf-tabs { padding: 0 0 4px; position: static; background: none; }
 .pf-msg { min-height: 1.2em; color: var(--text2); font-size: 13px; }
 .pf-msg.bad { color: #e88a8a; }
+.pf-pw { display: flex; gap: 6px; align-items: stretch; }
+.pf-pw input { flex: 1; min-width: 0; }
 .pf-add { display: flex; gap: 8px; }
 .pf-add input { flex: 1; min-width: 0; background: var(--bg3); border: 1px solid var(--line2); color: var(--text); padding: 8px 10px; font: inherit; min-height: 38px; }
 .pf-friends ul { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 4px; }

@@ -163,40 +163,96 @@
     const closeBtn = '<button type="button" class="btn" id="pfClose">CLOSE</button>';
     const wireClose = () => { const c = el.querySelector('#pfClose'); if (c) c.addEventListener('click', close); };
 
-    function auth(tab) {
-      tab = tab || 'in';
-      const tabs = `<div class="ct-ptabs pf-tabs"><button type="button" class="ct-ptab${tab === 'in' ? ' on' : ''}" data-t="in">SIGN IN</button><button type="button" class="ct-ptab${tab === 'up' ? ' on' : ''}" data-t="up">CREATE ACCOUNT</button></div>`;
-      if (tab === 'forgot') {
-        card(`<div class="pf-card-k">RESET YOUR PASSWORD</div>${field('pfEmail', 'EMAIL', 'email')}<div class="row-btns"><button type="button" class="btn btn-gold" id="pfGo">EMAIL ME A LINK</button><button type="button" class="btn" data-t="in">BACK</button>${closeBtn}</div>`);
-      } else {
-        card(`${tabs}${field('pfEmail', 'EMAIL', 'email')}${tab === 'up' ? field('pfName', 'USERNAME (3 TO 16 LETTERS, NUMBERS, _ OR -)', 'text', 'maxlength="16"') : ''}${field('pfPass', 'PASSWORD' + (tab === 'up' ? ' (AT LEAST 8 CHARACTERS)' : ''), 'password')}
-          <div class="row-btns"><button type="button" class="btn btn-gold" id="pfGo">${tab === 'up' ? 'CREATE ACCOUNT' : 'SIGN IN'}</button>${tab === 'in' ? '<button type="button" class="btn btn-small" data-t="forgot">FORGOT PASSWORD</button>' : ''}${closeBtn}</div>`);
-      }
+    // a password box with a SHOW button; ac is the autocomplete hint so password managers fill and save it
+    const pw = (id, label, ac) => `<label class="field"><span>${label}</span><span class="pf-pw"><input id="${id}" type="password" autocomplete="${ac}" autocapitalize="off" spellcheck="false"><button type="button" class="btn btn-small" data-show="${id}">SHOW</button></span></label>`;
+    const wireShow = () => el.querySelectorAll('[data-show]').forEach(b => b.addEventListener('click', () => { const i = el.querySelector('#' + b.dataset.show), on = i.type === 'password'; i.type = on ? 'text' : 'password'; b.textContent = on ? 'HIDE' : 'SHOW'; }));
+    const WEAK = /^(password|passw0rd|12345678|123456789|1234567890|qwertyui|qwerty123|iloveyou|11111111|00000000|abcd1234|basketball|nbanbanba)$/i;
+    const pwBad = v => !v || v.length < 8 ? 'The password needs at least 8 characters.' : WEAK.test(v) ? 'That password is too easy to guess. Pick something else.' : '';
+    // a button that counts down so nobody hammers the email limit
+    const cool = (btn, label, secs) => {
+      let n = secs; btn.disabled = true;
+      const t = setInterval(() => { if (!btn.isConnected) { clearInterval(t); return; } n--; if (n <= 0) { clearInterval(t); btn.disabled = false; btn.textContent = label; } else btn.textContent = label + ' (' + n + 's)'; }, 1000);
+      btn.textContent = label + ' (' + n + 's)';
+    };
+    const nice = e => { const m = String((e && e.message) || e);
+      return /Invalid login/i.test(m) ? 'Wrong email or password.' : /not confirmed/i.test(m) ? 'Confirm your email first: open the link we sent you.' : /already registered|already been registered/i.test(m) ? 'That email already has an account. Sign in instead.' : /rate limit|too many|security purposes/i.test(m) ? 'Too many emails sent for now. Wait a minute or two and try again.' : /fetch|network|failed to/i.test(m) ? 'Could not reach the account service. Check your connection.' : /same.*password|different from the old/i.test(m) ? 'Pick a password you have not used before.' : /reauth|recently/i.test(m) ? 'For safety, sign out, sign in again, then change your password.' : m; };
+    const back = '<button type="button" class="btn" data-t="in">BACK</button>';
+    // after sign up: the email is on its way. Resend, fix a typo, or just wait: confirming in any tab signs you in here.
+    function waiting(em, kind) {
+      card(`<div class="pf-card-k">CHECK YOUR EMAIL</div><p class="muted">We sent a link to <b>${esc(em)}</b>. Open it on this device and you are signed in. It can take a minute, and it may land in spam.</p>
+        <div class="row-btns"><button type="button" class="btn btn-gold" id="pfResend">RESEND EMAIL</button><button type="button" class="btn" data-t="up">WRONG EMAIL</button>${closeBtn}</div>`);
       wireClose();
       el.querySelectorAll('[data-t]').forEach(b => b.addEventListener('click', () => auth(b.dataset.t)));
+      const rs = el.querySelector('#pfResend');
+      cool(rs, 'RESEND EMAIL', 60);
+      rs.addEventListener('click', async () => {
+        try {
+          const c = await getClient();
+          const r = await c.auth.resend({ type: 'signup', email: em, options: { emailRedirectTo: location.origin + location.pathname } });
+          if (r.error) throw r.error;
+          say('Sent again to ' + em + '.'); cool(rs, 'RESEND EMAIL', 60);
+        } catch (e) { say(nice(e), true); rs.disabled = false; }
+      });
+      const done = () => { if (P.account() && el.isConnected && el.querySelector('#pfResend')) { window.removeEventListener('a13-profile', done); account(); } };
+      window.addEventListener('a13-profile', done);
+    }
+    function sentReset(em) {
+      card(`<div class="pf-card-k">CHECK YOUR EMAIL</div><p class="muted">If an account uses <b>${esc(em)}</b>, a reset link is on its way. Open it on this device, then choose a new password. The link works once and expires in about an hour. Check spam too.</p>
+        <div class="row-btns"><button type="button" class="btn btn-gold" id="pfResend">SEND AGAIN</button>${back}${closeBtn}</div>`);
+      wireClose();
+      el.querySelectorAll('[data-t]').forEach(b => b.addEventListener('click', () => auth(b.dataset.t)));
+      const rs = el.querySelector('#pfResend');
+      cool(rs, 'SEND AGAIN', 60);
+      rs.addEventListener('click', async () => {
+        try {
+          const c = await getClient();
+          const r = await c.auth.resetPasswordForEmail(em, { redirectTo: location.origin + location.pathname });
+          if (r.error) throw r.error;
+          say('Sent again.'); cool(rs, 'SEND AGAIN', 60);
+        } catch (e) { say(nice(e), true); rs.disabled = false; }
+      });
+    }
+
+    function auth(tab, keep) {
+      tab = tab || 'in'; keep = keep || {};
+      const tabs = `<div class="ct-ptabs pf-tabs"><button type="button" class="ct-ptab${tab === 'in' ? ' on' : ''}" data-t="in">SIGN IN</button><button type="button" class="ct-ptab${tab === 'up' ? ' on' : ''}" data-t="up">CREATE ACCOUNT</button></div>`;
+      const em0 = esc(keep.email || '');
+      const emailF = `<label class="field"><span>EMAIL</span><input id="pfEmail" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" value="${em0}"></label>`;
+      if (tab === 'forgot') {
+        card(`<div class="pf-card-k">RESET YOUR PASSWORD</div><p class="muted">Type the email you signed up with and we will send you a link to choose a new password.</p>${emailF}<div class="row-btns"><button type="button" class="btn btn-gold" id="pfGo">EMAIL ME A LINK</button>${back}${closeBtn}</div>`);
+      } else {
+        card(`${tabs}${emailF}${tab === 'up' ? field('pfName', 'USERNAME (3 TO 16 LETTERS, NUMBERS, _ OR -)', 'text', 'maxlength="16"') : ''}${pw('pfPass', 'PASSWORD' + (tab === 'up' ? ' (AT LEAST 8 CHARACTERS)' : ''), tab === 'up' ? 'new-password' : 'current-password')}
+          <div class="row-btns"><button type="button" class="btn btn-gold" id="pfGo">${tab === 'up' ? 'CREATE ACCOUNT' : 'SIGN IN'}</button>${tab === 'in' ? '<button type="button" class="btn btn-small" data-t="forgot">FORGOT PASSWORD</button>' : ''}${closeBtn}</div><div id="pfExtra"></div>`);
+        wireShow();
+      }
+      wireClose();
       const go = el.querySelector('#pfGo'), email = el.querySelector('#pfEmail'), pass = el.querySelector('#pfPass'), name = el.querySelector('#pfName');
-      if (email) email.focus();
+      el.querySelectorAll('[data-t]').forEach(b => b.addEventListener('click', () => auth(b.dataset.t, { email: email ? email.value.trim() : '' })));
+      if (keep.msg) say(keep.msg, keep.bad);
+      if (email) { if (email.value) { if (pass) pass.focus(); } else email.focus(); }
       const submit = async () => {
         const em = email.value.trim();
         if (!/^\S+@\S+\.\S+$/.test(em)) { say('Type a real email address.', true); return; }
+        if (name) { const err = P.check(name.value.trim()); if (err) { say(err, true); return; } }
+        if (pass) { const bad = tab === 'up' ? pwBad(pass.value) : (pass.value ? '' : 'Type your password.'); if (bad) { say(bad, true); return; } }
         busy(go, true); say('One moment...');
         try {
           const c = await getClient();
           if (tab === 'forgot') {
             const { error } = await c.auth.resetPasswordForEmail(em, { redirectTo: location.origin + location.pathname });
             if (error) throw error;
-            say('Check your email for the reset link.'); busy(go, false); return;
+            sentReset(em); return;
           }
-          if (!pass.value || pass.value.length < 8) { say('The password needs at least 8 characters.', true); busy(go, false); return; }
           if (tab === 'up') {
-            const un = name.value.trim(), err = P.check(un);
-            if (err) { say(err, true); busy(go, false); return; }
+            const un = name.value.trim();
             const ok = await c.rpc('username_available', { n: un });
             if (ok.error) throw ok.error;
             if (!ok.data) { say('That username is taken. Pick another.', true); busy(go, false); return; }
             const r = await c.auth.signUp({ email: em, password: pass.value, options: { data: { username: un }, emailRedirectTo: location.origin + location.pathname } });
             if (r.error) throw r.error;
-            if (!r.data.session) { say('Almost there: we emailed you a link. Open it, then sign in here.'); busy(go, false); return; }
+            // a confirmed email signing up again comes back as a fake user with no identities
+            if (r.data.user && Array.isArray(r.data.user.identities) && !r.data.user.identities.length) { auth('in', { email: em, msg: 'That email already has an account. Sign in, or tap Forgot password.', bad: true }); return; }
+            if (!r.data.session) { waiting(em); return; }
             USER = r.data.user; await syncProfile(); startSocial(); fire(); account(); return;
           }
           const r = await c.auth.signInWithPassword({ email: em, password: pass.value });
@@ -206,9 +262,9 @@
           if (!n) { say('Signed in, but this account has no username yet. Contact the site owner.', true); busy(go, false); return; }
           account();
         } catch (e) {
-          const m = String((e && e.message) || e);
-          say(/Invalid login/i.test(m) ? 'Wrong email or password.' : /not confirmed/i.test(m) ? 'Confirm your email first: open the link we sent you.' : /already registered|already been registered/i.test(m) ? 'That email already has an account. Sign in instead.' : /rate limit/i.test(m) ? 'Too many emails sent. Wait a few minutes and try again.' : m, true);
+          say(nice(e), true);
           busy(go, false);
+          if (tab === 'in' && /not confirmed/i.test(String((e && e.message) || e))) { const x = el.querySelector('#pfExtra'); if (x) { x.innerHTML = '<button type="button" class="btn btn-small" id="pfRe2">RESEND THE CONFIRMATION EMAIL</button>'; x.querySelector('#pfRe2').addEventListener('click', () => waiting(email.value.trim())); } }
         }
       };
       if (go) go.addEventListener('click', submit);
@@ -216,16 +272,21 @@
     }
 
     function recover() {
-      card(`<div class="pf-card-k">CHOOSE A NEW PASSWORD</div>${field('pfPass', 'NEW PASSWORD (AT LEAST 8 CHARACTERS)', 'password')}<div class="row-btns"><button type="button" class="btn btn-gold" id="pfGo">SAVE PASSWORD</button>${closeBtn}</div>`);
-      wireClose();
-      const go = el.querySelector('#pfGo'), pass = el.querySelector('#pfPass');
-      go.addEventListener('click', async () => {
-        if (pass.value.length < 8) { say('The password needs at least 8 characters.', true); return; }
-        busy(go, true);
+      card(`<div class="pf-card-k">CHOOSE A NEW PASSWORD</div>${pw('pfPass', 'NEW PASSWORD (AT LEAST 8 CHARACTERS)', 'new-password')}${pw('pfPass2', 'TYPE IT AGAIN', 'new-password')}<div class="row-btns"><button type="button" class="btn btn-gold" id="pfGo">SAVE PASSWORD</button>${closeBtn}</div>`);
+      wireClose(); wireShow();
+      const go = el.querySelector('#pfGo'), pass = el.querySelector('#pfPass'), p2 = el.querySelector('#pfPass2');
+      pass.focus();
+      const save = async () => {
+        const bad = pwBad(pass.value);
+        if (bad) { say(bad, true); return; }
+        if (pass.value !== p2.value) { say('The two passwords do not match.', true); return; }
+        busy(go, true); say('Saving...');
         const { error } = await sb.auth.updateUser({ password: pass.value });
-        if (error) { say(error.message, true); busy(go, false); return; }
-        say('Password saved.'); setTimeout(() => account(), 800);
-      });
+        if (error) { say(nice(error), true); busy(go, false); return; }
+        say('Password saved. You are signed in.'); setTimeout(() => account(), 900);
+      };
+      go.addEventListener('click', save);
+      el.querySelectorAll('input').forEach(i => i.addEventListener('keydown', e => { if (e.key === 'Enter') save(); }));
     }
 
     function account(tab) {
@@ -264,8 +325,16 @@
         return;
       }
       card(`${tabs}<div class="pf-card-k">YOUR USERNAME</div>${field('pfName', 'CHANGE IT ANY TIME', 'text', 'maxlength="16" value="' + esc(n) + '"')}<small class="muted">Signed in as ${esc(P.email())}. Letters, numbers, _ and - only. It has to be one nobody else has.</small>
-        <div class="row-btns"><button type="button" class="btn btn-gold" id="pfSave">SAVE USERNAME</button><button type="button" class="btn" id="pfOut">SIGN OUT</button>${closeBtn}</div>`);
-      wireClose();
+        <div class="row-btns"><button type="button" class="btn btn-gold" id="pfSave">SAVE USERNAME</button></div>
+        <div class="pf-card-k">CHANGE PASSWORD</div>${pw('pfNew', 'NEW PASSWORD (AT LEAST 8 CHARACTERS)', 'new-password')}<div class="row-btns"><button type="button" class="btn" id="pfPw">CHANGE PASSWORD</button><button type="button" class="btn" id="pfOut">SIGN OUT</button>${closeBtn}</div>`);
+      wireClose(); wireShow();
+      el.querySelector('#pfPw').addEventListener('click', async e => {
+        const nv = el.querySelector('#pfNew'), bad = pwBad(nv.value), b = e.currentTarget;
+        if (bad) { say(bad, true); return; }
+        busy(b, true); say('Saving...');
+        try { const c = await getClient(); const r = await c.auth.updateUser({ password: nv.value }); if (r.error) throw r.error; nv.value = ''; say('Password changed.'); } catch (x) { say(nice(x), true); }
+        busy(b, false);
+      });
       el.querySelectorAll('[data-t]').forEach(b => b.addEventListener('click', () => account(b.dataset.t)));
       const save = el.querySelector('#pfSave'), inp = el.querySelector('#pfName');
       const doSave = async () => {
@@ -289,6 +358,7 @@
     }
 
     if (view === 'recover') { getClient().then(recover); return; }
+    if (view === 'linkbad') { auth('forgot', { msg: 'That link expired or was already used. Enter your email for a fresh one. If you just created your account, try signing in first: it may already be confirmed.', bad: true }); return; }
     if (P.signedIn()) getClient().then(() => account(), () => account()); else auth('in');
   }
 
@@ -329,6 +399,12 @@
   }
   function boot() {
     chip();
+    // an email link that expired or was already used comes back as #error=...&error_code=otp_expired
+    const hh = location.hash.replace(/^#/, '');
+    if (/error_code=|error_description=/.test(hh)) {
+            history.replaceState(null, '', location.pathname + location.search + '#/home');
+      setTimeout(() => { openPanel('linkbad'); }, 300);
+    }
     // a saved session, or a link from an email (confirm, reset): connect now so it takes effect
     if (hasToken() || /type=(recovery|signup|magiclink)|access_token=/.test(location.hash)) getClient().catch(() => {});
   }
