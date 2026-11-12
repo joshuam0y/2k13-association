@@ -178,7 +178,7 @@
   function seen() {
     NET.peerSeen = Date.now();
     if (NET.status !== 'connected') {
-      NET.status = 'connected'; NET.err = ''; DC.at = 0; DC.claimed = false; dcTick();
+      NET.status = 'connected'; NET.err = ''; if (DC.at && rkOn(VS.cfg) && !RKDONE[rkKey(VS.cfg)]) DC.res = { on: true, me: false, them: false, until: Date.now() + 60000 }; DC.at = 0; DC.claimed = false; dcTick();
       if (NET.role === 'host') push(); else send({ t: NET.role === 'watch' ? 'watch' : 'hello', name: myName() });
       saveRoom(); syncLobby();
       route(); drawChat();
@@ -195,6 +195,9 @@
       }
       return;
     }
+    if (m.t === 'conceded' && VS.cfg && VS.cfg.ranked) { RKDONE[rkKey(VS.cfg)] = 1; if (UI.ranked) UI.ranked.noteForfeit('win'); UI.toast(who(1 - me()) + ' forfeited. You win.'); const el = document.getElementById('vsDc'); if (el) el.remove(); location.hash = '#/ranked/result'; return; }
+    if (m.t === 'rematch' && VS.cfg && VS.cfg.ranked && m.seed === VS.cfg.seed) { RM.seed = VS.cfg.seed; RM.them = true; maybeRematch(); route(); return; }
+    if (m.t === 'rresume') { if (!DC.res.on && rkOn(VS.cfg) && !RKDONE[rkKey(VS.cfg)]) DC.res = { on: true, me: false, them: false, until: Date.now() + 60000 }; DC.res.them = true; seen(); dcTick(); return; }
     if (m.t === 'ping') { seen(); return; }
     if (m.t === 'hello' && NET.role === 'host') {
       NET.peerAcct = !!m.acct;
@@ -203,9 +206,19 @@
         UI.toast((m.name ? String(m.name).slice(0, 16) : 'A guest') + ' is a guest, so they cannot play a ranked game. They were turned away.', 'error');
         return;
       }
+      if (VS.opts.ranked && VS.opts.auction && !VS.cfg && m.name && UI.ranked && UI.ranked.playedBefore) {   // each ranked matchup counts once
+        const nm = String(m.name).slice(0, 20);
+        UI.ranked.playedBefore(nm).then(pb => {
+          if (!pb || VS.cfg || NET.role !== 'host') return;
+          send({ t: 'rankedonly', why: 'played' });
+          NET.status = 'waiting'; NET.peerSeen = 0; VS.names[1 - NET.side] = ''; VS.ready = [false, false]; push(); route();
+          UI.toast(nm + ' is someone you already played in ranked. Each matchup counts once, so they were turned away.', 'error');
+        });
+      }
       if (m.name) VS.names[1 - NET.side] = String(m.name).slice(0, 20); uniqNames(); seen(); push(); route(); return;
     }
     if (m.t === 'ready' && NET.role === 'host') { VS.ready = (VS.ready || [false, false]).slice(); VS.ready[+m.i === 0 ? 0 : 1] = !!m.v; seen(); push(); route(); return; }
+    if (m.t === 'rankedonly' && NET.role === 'guest' && m.why === 'played') { UI.toast('You already played that player in ranked. Each ranked matchup counts once, so pick another opponent.', 'error'); QUICK = 0; hangUp(); route(); return; }
     if (m.t === 'rankedonly' && NET.role === 'guest') { UI.toast('That room is ranked, so both players need an account. Sign in to join it.', 'error'); hangUp(); route(); return; }
     if (m.t === 'state' && m.s && (m.s.epoch || 0) >= (VS.epoch || 0)) {
       const prevEp = VS.epoch;
@@ -308,10 +321,12 @@
   const joinLink = () => location.origin + location.pathname + '#/challenge/vs/join/' + NET.code;
   const watchLink = () => location.origin + location.pathname + '#/challenge/vs/watch/' + NET.code;
   // ---------- ranked: the series is logged when the auction starts; a player who stays gone past the grace time forfeits ----------
-  const RKDONE = {}, DC = { at: 0, claimed: false }, GRACE = 90000;
+  const RKDONE = {}, DC = { at: 0, claimed: false, res: { on: false, me: false, them: false, until: 0 } }, GRACE = 90000;
   const rkKey = cfg => NET.code + ':' + cfg.seed;
   const rkOn = cfg => !!(cfg && cfg.ranked && online() && me() !== null && me() >= 0 && UI.ranked && UI.profile.signedIn() && NET.code);
   function rkStart(cfg) { if (rkOn(cfg)) UI.ranked.started({ key: rkKey(cfg), opp: who(1 - me()), era: UI.ranked.eraOf(cfg), style: 'auction', ranked: true, bestOf: cfg.bestOf || 7 }); }
+  const resOn = () => !!(DC.res.on && rkOn(VS.cfg) && NET.status === 'connected' && !RKDONE[rkKey(VS.cfg)]);
+  const paused = () => dcOn() || resOn();   // the shot clock waits while a player is gone or has just come back
   const dcOn = () => !!(rkOn(VS.cfg) && NET.status === 'lost' && DC.at && !RKDONE[rkKey(VS.cfg)]);
   async function claimForfeit() {
     DC.claimed = true;
@@ -322,6 +337,14 @@
   }
   function dcTick() {
     let el = document.getElementById('vsDc');
+    if (resOn()) {   // back after a drop: both press ready before the game goes on
+      if ((DC.res.me && DC.res.them) || Date.now() > DC.res.until) { DC.res.on = false; if (el) el.remove(); return; }
+      if (!el) { el = document.createElement('div'); el.id = 'vsDc'; el.className = 'vs-dc'; document.body.appendChild(el); }
+      const other = who(1 - me());
+      el.innerHTML = `<div class="vs-dc-box"><small>RANKED GAME PAUSED</small><h2>WELCOME BACK.</h2><p>Both players press ready and the game carries on where it stopped. ${esc(other)}: <b>${DC.res.them ? 'READY' : 'NOT YET'}</b>.</p><button type="button" class="btn btn-gold btn-big" id="vsRes"${DC.res.me ? ' disabled' : ''}>${DC.res.me ? 'WAITING...' : 'I AM READY'}</button></div>`;
+      const b = el.querySelector('#vsRes'); if (b) b.addEventListener('click', () => { DC.res.me = true; send({ t: 'rresume' }); dcTick(); });
+      return;
+    }
     if (!dcOn()) { if (el) el.remove(); return; }
     const left = Math.max(0, DC.at + GRACE - Date.now()), mm = Math.floor(left / 60000), ss = String(Math.floor(left / 1000) % 60).padStart(2, '0');
     const onl = !!(NET.client && NET.client.connected), other = who(1 - me());
@@ -348,6 +371,7 @@
       ${NET.role === 'host' && st === 'connected' ? `<button type="button" class="btn btn-small" id="vsHand">MAKE ${esc(who(1 - NET.side).toUpperCase())} HOST</button>` : ''}
       ${st === 'connected' && me() !== null && me() >= 0 && UI.profile.signedIn() ? '<span class="vs-fr" id="vsFriend"></span>' : ''}
       ${st === 'lost' || st === 'error' ? `<button type="button" class="btn btn-small" id="vsRetry">${NET.role === 'host' ? 'NEW ROOM' : 'TRY AGAIN'}</button>` : ''}
+      ${rkOn(VS.cfg) && !RKDONE[rkKey(VS.cfg)] ? '<button type="button" class="btn btn-small btn-danger" id="vsForfeit">FORFEIT</button>' : ''}
       <button type="button" class="btn btn-small" id="vsLeave">LEAVE</button></div>`;
   }
   // next to the other player: add as a friend, or that you already are
@@ -378,7 +402,11 @@
     const rt = UI.$('#vsRetry', app); if (rt) rt.addEventListener('click', () => (NET.role === 'host' ? host() : join(NET.code)));
     const cw = UI.$('#vsCopyWatch', app);
     if (cw) cw.addEventListener('click', async () => { try { await navigator.clipboard.writeText(watchLink()); UI.toast('Watch link copied. Anyone with it can watch.'); } catch (e) { UI.toast(watchLink()); } });
-    const lv = UI.$('#vsLeave', app); if (lv) lv.addEventListener('click', () => { forgetRoom(); hangUp(); route(); });
+    const lv = UI.$('#vsLeave', app); if (lv) lv.addEventListener('click', () => {
+      if (rkOn(VS.cfg) && !RKDONE[rkKey(VS.cfg)]) { if (confirm('Leaving a ranked game is a forfeit: you lose rating points and the other player wins. Leave anyway?')) concede().then(() => { forgetRoom(); hangUp(); }); return; }
+      forgetRoom(); hangUp(); route();
+    });
+    const ff = UI.$('#vsForfeit', app); if (ff) ff.addEventListener('click', () => { if (confirm('Forfeit this ranked game? You lose rating points and the other player wins.')) concede(); });
   }
 
   // ---------- trash talk: quick reactions that pop up on both phones (online) ----------
@@ -538,7 +566,6 @@
       const opened = k => (VS.det && VS.det[k] ? ' open' : '');
       const lockR = !!(VS.opts.ranked && VS.opts.auction && online());   // ranked has one set of rules: they cannot be changed, and the 24 second shot clock is always on
       if (me() !== null && me() >= 0 && UI.profile.name() && VS.names[me()] !== UI.profile.name()) { VS.names[me()] = UI.profile.name(); if (NET.role === 'guest') send({ t: 'hello', name: VS.names[me()] }); else { uniqNames(); push(); } }   // online, your name is your account
-      if (QUICK && NET.role === 'host' && linked() && !VS.cfg) VS.ready = [true, true];   // quick match: nobody has to press anything
       const ready = !online() || linked();
       app.innerHTML = `
         <section class="ch-hero"><div class="ch-hero-k">DRAFT CHALLENGE | TWO PLAYERS</div><h1 class="ch-hero-t">YOU VS ME.</h1>
@@ -607,9 +634,10 @@
         };
         tick();
       }));
+      if (lobbyOn()) lobbyDraw(app);   // a ranked game opens on the lobby, not on the setup page
       bindNet(app);
       syncLobby();
-      if (QUICK && NET.role === 'host' && linked() && !VS.cfg) setTimeout(() => { const b = UI.$('#vsStart'); if (QUICK && b && !b.disabled) b.click(); }, 900);
+      if (lobbyOn()) lobbyRun(app);
       const redraw = () => { KEEP = window.scrollY; push(); setup(app); };
       if (KEEP != null) { const y = KEEP; KEEP = null; window.scrollTo(0, y); requestAnimationFrame(() => window.scrollTo(0, y)); }   // a setup choice keeps your place, even when it had to load a season first
       app.querySelectorAll('[data-net]').forEach(b => b.addEventListener('click', () => {
@@ -694,10 +722,61 @@
     });
   }
 
+  // ---------- the ranked lobby: both players' cards, the rosters load, then both press ready ----------
+  const LB = { cards: {}, loaded: 0, loading: 0, cd: 0, t: null, err: '' };
+  const RM = { seed: 0, me: false, them: false };
+  const lobbyOn = () => !!(online() && linked() && !VS.cfg && VS.opts.ranked && VS.opts.auction && me() !== null && me() >= 0 && UI.ranked && UI.ranked.lobbyCard);
+  const lobbyEra = () => { const ch = chosen(); return UI.ranked.eraOf({ year: ch.length === 1 ? ch[0] : 0, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null }); };
+  function lobbyDraw(app) {
+    const era = lobbyEra(), i0 = me(), a = who(i0), b = who(1 - i0), rdy = VS.ready || [false, false];
+    const slot = (n, mine) => `<div class="lb-slot" data-lbn="${esc(n)}" data-mine="${mine ? 1 : 0}">${LB.cards[n] || `<div class="lb-card"><div class="lb-av">?</div><b class="lb-n">${esc(n)}</b><small class="muted">LOADING PROFILE...</small></div>`}</div>`;
+    app.innerHTML = `${netBar()}
+      <section class="ch-hero"><div class="ch-hero-k">RANKED | ${esc(UI.ranked.eraName(era))} | BEST OF 7</div><h1 class="ch-hero-t">MATCH FOUND.</h1><p class="ch-hero-p" id="lbMsg">Loading...</p></section>
+      <div class="lb-cards">${slot(a, 1)}<div class="lb-vs">VS</div>${slot(b, 0)}</div>
+      <div class="lb-ready"><button type="button" class="btn btn-gold btn-big" data-ready="${i0}">${rdy[i0] ? 'READY: TAP TO CANCEL' : 'I AM READY'}</button>
+        <span class="muted">${esc(b)}: <b>${rdy[1 - i0] ? 'READY' : 'NOT YET'}</b></span></div>
+      <p class="muted lb-note">An auction with a hidden pool of ten mixed players, $20 each, $1 to open, raises of $1 or more, a 24 second shot clock on every bid, then a best-of-7 series. Take a minute: nothing starts until you both press ready. Leaving before the auction costs nothing; leaving after it starts is a forfeit.</p>
+      <button type="button" id="vsStart" hidden></button>`;
+    [[a, 1], [b, 0]].forEach(([n, mine]) => {
+      if (LB.cards[n]) return;
+      UI.ranked.lobbyCard(n, era, mine).then(html => { LB.cards[n] = html; const el = app.querySelector('[data-lbn="' + String(n).replace(/"/g, '\\"') + '"]'); if (el) el.innerHTML = html; });
+    });
+    if (!LB.loaded && !LB.loading) {   // the rosters load now, so the auction does not have to
+      LB.loading = 1; LB.err = '';
+      const ch = chosen();
+      Promise.all([C.load('pool')].concat(ch.length <= 12 ? ch.map(y => C.load(y)) : [])).then(() => { LB.loaded = 1; LB.loading = 0; }).catch(e => { LB.err = 'The rosters did not load (' + (e && e.message ? e.message : 'network') + '). Trying again...'; LB.loading = 0; });
+    }
+  }
+  function lobbyRun(app) {
+    if (LB.t) clearInterval(LB.t);
+    LB.t = setInterval(() => {
+      const el = document.getElementById('lbMsg');
+      if (!el || !lobbyOn()) { clearInterval(LB.t); LB.t = null; LB.cd = 0; return; }
+      const r = VS.ready || [false, false], both = r[0] && r[1], i0 = me();
+      if (!LB.loaded) { el.textContent = LB.err || 'Loading the rosters. Stay on this screen...'; LB.cd = 0; return; }
+      if (!both) { el.textContent = r[i0] ? 'Waiting for ' + who(1 - i0) + ' to press ready.' : 'Look at each other, then press ready. Nothing starts until you both do.'; LB.cd = 0; return; }
+      if (!LB.cd) LB.cd = Date.now() + 4000;
+      const n = Math.ceil((LB.cd - Date.now()) / 1000);
+      el.textContent = 'Starting in ' + Math.max(n, 0) + '...';
+      if (n <= 0 && NET.role === 'host') { clearInterval(LB.t); LB.t = null; const b = UI.$('#vsStart'); if (b) b.click(); }
+    }, 250);
+  }
+  const rematchBtn = cfg => cfg && cfg.ranked && online() && linked() && me() !== null && me() >= 0 && RKDONE[rkKey(cfg)] !== 'x'
+    ? `<button type="button" class="btn" id="vsRematch"${RM.seed === cfg.seed && RM.me ? ' disabled' : ''}>${RM.seed === cfg.seed && RM.me ? 'REMATCH ASKED: WAITING FOR ' + esc(who(1 - me()).toUpperCase()) : RM.seed === cfg.seed && RM.them ? esc(who(1 - me()).toUpperCase()) + ' WANTS A REMATCH: ACCEPT' : 'ASK FOR A RANKED REMATCH'}</button>` : '';
+  function maybeRematch() { if (RM.me && RM.them && NET.role === 'host' && VS.cfg && RM.seed === VS.cfg.seed) { RM.me = RM.them = false; UI.vsQuick.rematch(); } }
+  async function concede() {
+    const cfg = VS.cfg, key = rkKey(cfg);
+    const ok = await UI.ranked.concede({ key, opp: who(1 - me()), era: UI.ranked.eraOf(cfg), bestOf: cfg.bestOf || 7 });
+    if (ok) { RKDONE[key] = 1; send({ t: 'conceded' }); const el = document.getElementById('vsDc'); if (el) el.remove(); location.hash = '#/ranked/result'; }
+    else UI.toast('Could not record the forfeit. Check your connection and try again.', 'error');
+  }
+
   // ---------- quick match: ranked with no code (the finder lives in js/ui-ranked.js) ----------
   let QUICK = 0;
   const decKeyY = y => ((y - 1) - (y - 1) % 10) + 's';
+  let QERA = 'ALL';
   function quickPresets(era) {
+    QERA = era;
     VS.skip = era === 'ALL' ? [] : ALL_YEARS.filter(y => decKeyY(y) !== era);
     const ch = chosen(); VS.year = ch.length === 1 ? ch[0] : 0;
     Object.assign(VS.opts, { auction: 1, board: 0, ranked: 1, pub: 1, aBudget: 20, aStart: 1, aRaise: 1, aPool: 10, aQ: 'mixed', aShow: 0, bench: 0, bestOf: 7, blind: true, cap: 0, bans: 0, timer: 24, dupes: 0 });
@@ -707,6 +786,7 @@
     host(era) { quickPresets(era); QUICK = 1; host(); },
     join(code, era) { quickPresets(era); QUICK = 1; join(code); },
     leave() { QUICK = 0; forgetRoom(); hangUp(); },
+    rematch() { quickPresets(QERA); QUICK = 1; LB.cards = {}; LB.cd = 0; go('setup'); },
     status() { return { role: NET.role, status: NET.status, code: NET.code }; },
     target() { return '#/challenge/vs' + (VS.page === 'draft' ? '/draft' : VS.page === 'series' ? '/result' : ''); }
   };
@@ -894,7 +974,7 @@
       TICK = setInterval(() => {
         const el = UI.$('#vsTimer', app);
         if (!el || VS.auc !== st) { stopTick(); return; }
-        if (dcOn()) st.until += 250;   // ranked and the other player is gone: the clock waits
+        if (paused()) st.until += 250;   // ranked and the other player is gone: the clock waits
         const lf = st.until - Date.now();
         el.querySelector('span').textContent = Math.max(0, Math.ceil(lf / 1000));
         el.querySelector('i').style.setProperty('--w', Math.max(0, Math.min(100, 100 * lf / total)) + '%');
@@ -1186,7 +1266,7 @@
       if (done && online() && me() !== null && me() >= 0 && UI.ranked && UI.profile.signedIn() && NET.code) {   // both signed-in players report: the database counts it when the two agree
         const i = me(), sc = UI.ranked.lineupScore(S[i].five);
         if (cfg.ranked) { const k = rkKey(cfg); RKDONE[k] = 1; let seenNav = false; try { seenNav = sessionStorage.getItem('a13-rk-nav-' + k); sessionStorage.setItem('a13-rk-nav-' + k, '1'); } catch (e) { /* private mode */ }
-          if (!seenNav) setTimeout(() => { if (location.hash.indexOf('#/challenge/vs') === 0) location.hash = '#/ranked/result'; }, 1500); }
+          if (!seenNav) setTimeout(() => { if (location.hash.indexOf('#/challenge/vs') === 0) location.hash = '#/ranked/result'; }, 4000); }
         UI.ranked.report({ key: NET.code + ':' + cfg.seed, opp: who(1 - i), myWins: r.wins[S[i].abbr] || 0, oppWins: r.wins[S[1 - i].abbr] || 0, era: UI.ranked.eraOf(cfg), style: cfg.auction ? 'auction' : cfg.board ? 'board' : 'wheel', ranked: !!cfg.ranked, bestOf: r.bestOf,
           lineup: { names: S[i].five.map(p => p.name), seasons: S[i].five.map(p => p.season || cfg.year || null), score: sc, era: UI.ranked.eraOf(cfg) }, score: sc });
       }
@@ -1200,7 +1280,7 @@
           <div class="vs-tbl-w"><table class="vs-tbl"><thead><tr><th class="l">PLAYER</th><th>SPOT</th><th>OVR</th><th>MPG</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>3PM</th><th>FG%</th><th>3P%</th><th>FT%</th></tr></thead><tbody>${(() => { const row = p => { const l = r.lines[p.id] || {}; return `<tr><td class="l">${esc(p.name)}${p.season && !cfg.year ? ' <small class="muted">' + esc(short(p.season)) + '</small>' : ''}</td><td>${esc(p.slot || '')}</td><td>${esc(p.ovr)}</td><td>${f1(l.mpg)}</td><td>${f1(l.pts)}</td><td>${f1(l.reb)}</td><td>${f1(l.ast)}</td><td>${f1(l.stl)}</td><td>${f1(l.blk)}</td><td>${f1(l.tov)}</td><td>${f1(l.tpm)}</td><td>${f1(l.fgp)}</td><td>${f1(l.tpp)}</td><td>${f1(l.ftp)}</td></tr>`; }; return sd.five.slice().sort((a, b) => C.SLOTS.indexOf(a.slot) - C.SLOTS.indexOf(b.slot)).map(row).join('') + (sd.bench && sd.bench.length ? '<tr class="vs-bench-row"><td class="l" colspan="14">BENCH</td></tr>' + sd.bench.map(row).join('') : ''); })()}</tbody></table></div></div>`).join('')}</div></section>` : '';
       const next = shown + 1;
       const acts = done
-        ? `<button type="button" class="btn btn-share" id="vsShare">${UI.shareIcon || ''}SEND THIS TO YOUR FRIENDS</button><button type="button" class="btn sl-copy" id="vsCopy">COPY LINK</button><button type="button" class="btn" id="vsNew">NEW MATCHUP</button>`
+        ? `<button type="button" class="btn btn-share" id="vsShare">${UI.shareIcon || ''}SEND THIS TO YOUR FRIENDS</button><button type="button" class="btn sl-copy" id="vsCopy">COPY LINK</button><button type="button" class="btn" id="vsNew">NEW MATCHUP</button>${rematchBtn(cfg)}`
         : WATCH ? `<button type="button" class="btn btn-gold" id="vsFinal">SKIP TO THE FINAL</button>`
         : `<button type="button" class="btn btn-gold btn-big" id="vsWatch">WATCH GAME ${next}</button><button type="button" class="btn" id="vsNext">SIM GAME ${next}</button><button type="button" class="btn" id="vsAll">SIM THE REST</button>`;
       app.innerHTML = `${head}${netBar()}${score}

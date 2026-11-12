@@ -52,7 +52,7 @@
   async function started(info) {
     if (!UI.profile.signedIn() || STARTED[info.key]) return;
     STARTED[info.key] = 1;
-    rememberBefore(info);
+    rememberBefore(info); faced(info.opp);
     try { await UI.profile.rpc('start_series', { p_key: info.key, p_opp: info.opp, p_era: info.era, p_style: info.style, p_ranked: !!info.ranked, p_best_of: info.bestOf }); }
     catch (e) { STARTED[info.key] = 0; console.warn('[ranked] could not log the start:', failMsg(e)); }
   }
@@ -96,7 +96,7 @@
     if (!last) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">RANKED</div><h1 class="ch-hero-t">NO RANKED RESULT YET.</h1></section><div class="ch-go"><a class="btn btn-gold" href="#/ranked">RANKED</a></div>`; return; }
     const back = UI.vsQuick && /^#\/challenge\/vs/.test(UI.vsQuick.target()) && UI.vsQuick.status().role ? `<a class="btn" href="${UI.vsQuick.target()}">BACK TO THE SERIES</a>` : '';
     const acts = `<div class="ch-go">${back}<a class="btn btn-gold" href="#/ranked">RANKED</a><a class="btn" href="#/me">MY PROFILE</a></div>`;
-    const wait = () => `<section class="ch-hero"><div class="ch-hero-k">RANKED | ${esc(eraName(last.era))} | VS ${esc(last.opp || '')}</div><h1 class="ch-hero-t">${last.forfeit === 'win' ? 'WIN BY FORFEIT.' : 'COUNTING THE RESULT.'}</h1>
+    const wait = () => `<section class="ch-hero"><div class="ch-hero-k">RANKED | ${esc(eraName(last.era))} | VS ${esc(last.opp || '')}</div><h1 class="ch-hero-t">${last.forfeit === 'win' ? 'WIN BY FORFEIT.' : last.forfeit === 'loss' ? 'YOU FORFEITED.' : 'COUNTING THE RESULT.'}</h1>
       <p class="ch-hero-p">${last.forfeit === 'win' ? 'Your opponent did not come back in time. Recording it...' : 'Waiting for both phones to report the same score. This updates on its own.'}</p></section>
       <div class="ch-load"><div class="ch-spin-ring"></div></div>${acts}`;
     app.innerHTML = wait();
@@ -116,7 +116,7 @@
     const show = now => {
       const b = last.before || { rating: 1200 }, d = now.rating - b.rating, won = d > 0 || (d === 0 && now.wins > (b.wins || 0));
       const rk = now.of ? `#${now.rank} of ${now.of} in ${esc(eraName(last.era))}` : '';
-      app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">RANKED | ${esc(eraName(last.era))} | VS ${esc(last.opp || '')}</div><h1 class="ch-hero-t">${last.forfeit === 'win' ? 'WIN BY FORFEIT.' : won ? 'YOU WON.' : 'YOU LOST.'}</h1></section>
+      app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">RANKED | ${esc(eraName(last.era))} | VS ${esc(last.opp || '')}</div><h1 class="ch-hero-t">${last.forfeit === 'win' ? 'WIN BY FORFEIT.' : last.forfeit === 'loss' ? 'YOU FORFEITED.' : won ? 'YOU WON.' : 'YOU LOST.'}</h1></section>
         <section class="rk-elo ${won ? 'up' : 'down'}"><small>RATING</small>
           <div class="rk-elo-n"><span class="rk-elo-from">${b.rating}</span><span class="rk-elo-arrow">${won ? '&#9650;' : '&#9660;'}</span><b id="rkEloNow">${b.rating}</b></div>
           <div class="rk-elo-d">${d > 0 ? '+' : ''}${d}</div>
@@ -127,6 +127,49 @@
       if (window.SFX) window.SFX.play(won ? 'chime' : 'buzzer');
     };
     tick();
+  }
+
+
+  // ---------- players you already met in ranked: each matchup counts once unless you both agree to a rematch ----------
+  const PB = {}, FACED = 'a13-rk-faced';
+  const facedGet = () => { try { return JSON.parse(localStorage.getItem(FACED) || '[]'); } catch (e) { return []; } };
+  function faced(name) { const k = String(name).toLowerCase(), l = facedGet(); if (l.indexOf(k) < 0) { l.push(k); try { localStorage.setItem(FACED, JSON.stringify(l.slice(-200))); } catch (e) { /* private mode */ } } PB[k] = true; }
+  async function playedBefore(name) {
+    const k = String(name || '').toLowerCase();
+    if (!k) return false;
+    if (facedGet().indexOf(k) >= 0 || PB[k]) return true;
+    try {
+      const c = await UI.profile.client(), id = UI.profile.userId();
+      if (!c || !id) return false;
+      const f = await c.from('profiles').select('id').ilike('username', k.replace(/[_%\\]/g, '\\$&')).maybeSingle();
+      if (!f.data) return false;
+      const r = await c.from('series').select('id').eq('ranked', true).or(`and(p1.eq.${id},p2.eq.${f.data.id}),and(p1.eq.${f.data.id},p2.eq.${id})`).limit(1);
+      if (r.data && r.data.length) { PB[k] = true; return true; }
+    } catch (e) { /* cannot check: let them play */ }
+    return false;
+  }
+  // you give up a ranked series: it counts as a loss for you and a win for the other player
+  async function concede(info) {
+    if (!UI.profile.signedIn()) return false;
+    try {
+      const ok = await UI.profile.rpc('concede_series', { p_key: info.key });
+      if (ok) { const cur = lastGet() || { key: info.key, era: info.era, opp: info.opp, bestOf: info.bestOf, before: { rating: 1200, games: 0 }, at: Date.now() }; cur.forfeit = 'loss'; lastSet(cur); }
+      return !!ok;
+    } catch (e) { console.warn('[ranked] could not record the forfeit:', failMsg(e)); return false; }
+  }
+  function noteForfeit(v) { const cur = lastGet(); if (cur) { cur.forfeit = v; lastSet(cur); } }
+  // the lobby card of one player: rating and place on this era's ladder, records, friends, most used player, your record against them
+  async function lobbyCard(name, era, mine) {
+    let d = null;
+    try { d = await UI.profile.rpc('public_profile', { p_name: name }); } catch (e) { /* shown without the numbers */ }
+    if (!d) return `<div class="lb-card${mine ? ' me' : ''}"><div class="lb-av">${esc(String(name).slice(0, 1).toUpperCase())}</div><b class="lb-n">${esc(name)}</b><small class="lb-sub">${mine ? 'YOU' : 'OPPONENT'}</small><small class="muted">NO PROFILE NUMBERS YET</small></div>`;
+    const r = (d.ratings || []).find(x => x.era === era), m = d.most && d.most[0];
+    return `<div class="lb-card${mine ? ' me' : ''}"><div class="lb-av">${esc(String(d.username || name).slice(0, 1).toUpperCase())}</div><b class="lb-n">${esc(d.username || name)}</b>
+      <small class="lb-sub">${mine ? 'YOU' : 'OPPONENT'}${d.region ? ' | ' + esc(regionName(d.region)) : ''}</small>
+      <div class="lb-elo"><small>${esc(eraName(era))} RATING</small><b>${r ? r.rating : 1200}</b><small>${r && r.of ? '#' + r.rank + ' of ' + r.of : 'NOT RANKED YET'}</small></div>
+      <div class="lb-st"><span><b>${r ? r.wins + '-' + r.losses : '0-0'}</b><small>RANKED</small></span><span><b>${(d.wins || 0) + '-' + (d.losses || 0)}</b><small>ALL SERIES</small></span><span><b>${d.friends || 0}</b><small>FRIENDS</small></span></div>
+      ${m ? `<div class="lb-most"><small>MOST USED PLAYER</small><b>${esc(m.name)}</b><small>${esc(yr(m.season) || '')}</small></div>` : ''}
+      ${!mine && d.vs ? `<div class="lb-h2h">YOU ${d.vs.me} - ${d.vs.them} THEM</div>` : ''}</div>`;
   }
 
   // ---------- an open game: listed while the room waits ----------
@@ -167,7 +210,7 @@
   };
 
   UI.userLink = (name, tab) => `<a class="u-link" href="#/u/${encodeURIComponent(name)}"${tab ? ' target="_blank" rel="noopener"' : ''}>${esc(name)}</a>`;   // a name you can click to see that player's profile
-  UI.ranked = { eraOf, lineupScore, report, started, forfeit, lobbyStart, lobbyStop, ERAS, eraName, regionName, REGIONS };
+  UI.ranked = { eraOf, lineupScore, report, started, forfeit, concede, noteForfeit, playedBefore, lobbyCard, lobbyStart, lobbyStop, ERAS, eraName, regionName, REGIONS };
 
   // ---------- helpers for the pages ----------
   const eraOpts = cur => ERAS.map(e => `<option value="${e}"${e === cur ? ' selected' : ''}>${esc(eraName(e))}</option>`).join('');
@@ -442,7 +485,8 @@
         const st = UI.vsQuick.status();
         if (st.status === 'connected') { stopFind(); location.hash = UI.vsQuick.target(); return; }
         const rows = await UI.profile.rpc('lobby_list');
-        const cand = (rows || []).filter(r => r.ranked && r.era === era && r.host_name !== me);
+        const cand = [];
+        for (const r of (rows || []).filter(r => r.ranked && r.era === era && r.host_name !== me)) { if (!(await playedBefore(r.host_name))) cand.push(r); }   // each ranked matchup counts once
         if (!st.role) {
           if (cand[0]) { UI.vsQuick.join(cand[0].code, era); F.joinedAt = Date.now(); say('OPPONENT FOUND.', 'Connecting to ' + cand[0].host_name + '...'); }
           else { UI.vsQuick.host(era); say('WAITING FOR AN OPPONENT.', 'You are listed for a ranked ' + eraName(era) + ' match. This screen pairs you the moment someone else looks.'); }

@@ -830,7 +830,7 @@
 .rv { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 18px 0 8px; max-width: 980px; margin: 0 auto; }
 .rv-k { font-family: var(--display); letter-spacing: .22em; font-size: 12px; color: var(--gold); }
 .rv h2 { font-family: var(--display); font-size: clamp(22px, 3.4vw, 38px); line-height: 1.05; margin: 0; text-wrap: balance; }
-.rv-grid { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin: 12px 0; }
+.rv-grid { width: 100%; display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin: 12px 0; }
 .rv-card { width: 168px; height: 222px; perspective: 900px; }
 .rv-in { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .6s cubic-bezier(.2, .7, .2, 1); }
 .rv-card.flip .rv-in { transform: rotateY(180deg); }
@@ -846,7 +846,16 @@
 .rv-to { margin-top: auto; align-self: stretch; display: flex; justify-content: space-between; align-items: baseline; gap: 6px; padding: 5px 8px; background: var(--gold); color: #000; }
 .rv-to i { font-style: normal; font-family: var(--display); letter-spacing: .08em; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rv-to em { font-style: normal; font-family: var(--display); font-size: 15px; flex: none; }
-@media (max-width: 560px) { .rv-card { width: 46%; height: 200px; } .rv-grid { gap: 10px; } }
+@media (max-width: 560px) {
+  .rv-grid { gap: 10px; padding: 0 4px; }
+  .rv-card { width: calc(50% - 6px); max-width: 190px; height: 248px; }
+  .rv-back span { font-size: 60px; }
+  .rv-back, .rv-front { padding: 10px 8px 8px; gap: 5px; justify-content: flex-start; }
+  .rv-front .auc-face { width: 76px; height: 76px; flex: none; }
+  .rv-n { font-size: 16px; min-height: 2.2em; display: flex; align-items: center; justify-content: center; }
+  .rv-front small { font-size: 11px; letter-spacing: .06em; }
+  .rv-to { margin-top: auto; padding: 6px 8px; }
+}
 @media (prefers-reduced-motion: reduce) { .rv-in { transition: none; } .rv-card.pop { animation: none; } }
 
 /* Head to Head setup: collapsible season and rules, a team carousel for each player, and a ready bar that stays on screen */
@@ -962,3 +971,23 @@
 .rk-elo.up .rk-elo-n b, .rk-elo.up .rk-elo-d, .rk-elo.up .rk-elo-arrow { color: #5fd38a; }
 .rk-elo.down .rk-elo-n b, .rk-elo.down .rk-elo-d, .rk-elo.down .rk-elo-arrow { color: #e5645a; }
 .rk-elo-meta { display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: center; color: var(--text2); font-size: 14px; }
+
+.lb-cards { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 12px; align-items: stretch; margin: 12px 0; }
+.lb-vs { align-self: center; font-family: var(--display); font-size: 28px; color: var(--gold); letter-spacing: .1em; }
+.lb-slot { display: grid; }
+.lb-card { display: grid; justify-items: center; align-content: start; gap: 8px; text-align: center; border: 1px solid var(--gold-dim); background: var(--bg2); padding: 16px 10px; min-width: 0; }
+.lb-card.me { border-color: var(--gold); }
+.lb-av { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--gold); color: #000; font-family: var(--display); font-size: 28px; }
+.lb-n { font-family: var(--display); font-size: 22px; letter-spacing: .04em; overflow-wrap: anywhere; }
+.lb-sub, .lb-elo small, .lb-st small, .lb-most small { font-size: 11px; letter-spacing: .14em; color: var(--muted); font-family: var(--display); }
+.lb-elo { display: grid; gap: 2px; }
+.lb-elo b { font-family: var(--display); font-size: 46px; line-height: 1; color: var(--gold2); }
+.lb-st { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; width: 100%; }
+.lb-st span { display: grid; gap: 2px; }
+.lb-st b { font-family: var(--display); font-size: 17px; }
+.lb-most { display: grid; gap: 2px; }
+.lb-most b { font-family: var(--display); font-size: 16px; }
+.lb-h2h { font-family: var(--display); letter-spacing: .1em; font-size: 13px; color: var(--gold2); }
+.lb-ready { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: center; margin: 14px 0; }
+.lb-note { text-align: center; max-width: 640px; margin: 8px auto; }
+@media (max-width: 560px) { .lb-cards { grid-template-columns: minmax(0, 1fr); } .lb-vs { font-size: 20px; text-align: center; } .lb-card { padding: 12px 10px; } .lb-elo b { font-size: 38px; } }
