@@ -550,9 +550,9 @@
   // the auction's options: pool size, money, opening price, raise, who is in the pool, whether it shows
   // a casual auction can draw from a theme (a team, a class, a style): strictly only that, never today's daily until tomorrow
   function themeRow(o, dis) {
-    const R = UI.ranked; if (!R || !R.themeCatalog) return '';
-    const cat = R.themeCatalog(), kinds = [...new Set(cat.map(t => t.kind))];
-    return `<div><span class="ts-start-k">THEME</span><select id="vsTheme" class="vs-theme"${dis}><option value="">NONE: THE USUAL POOL</option><option value="random"${o.aTheme === 'random' ? ' selected' : ''}>RANDOM THEME</option>${kinds.map(k => `<optgroup label="${esc(k)}">${cat.filter(t => t.kind === k && !R.themeLocked(t.key)).map(t => `<option value="${esc(t.key)}"${o.aTheme === t.key ? ' selected' : ''}>${esc(t.title)}</option>`).join('')}</optgroup>`).join('')}</select><small class="muted">${o.aTheme ? 'The pool is only that theme.' : 'Pick one and the pool is only that team, class or style.'}</small></div>`;
+    const R = UI.ranked; if (!R || !R.themePast) return '';
+    const past = R.themePast(), kinds = [...new Set(past.map(t => t.kind))];
+    return `<div><span class="ts-start-k">THEME</span><select id="vsTheme" class="vs-theme"${dis}><option value="">NONE: THE USUAL POOL</option>${past.length ? `<option value="random"${o.aTheme === 'random' ? ' selected' : ''}>RANDOM PAST THEME</option>${kinds.map(k => `<optgroup label="${esc(k)}">${past.filter(t => t.kind === k).map(t => `<option value="${esc(t.key)}"${o.aTheme === t.key ? ' selected' : ''}>${esc(t.title)}</option>`).join('')}</optgroup>`).join('')}` : ''}</select><small class="muted">${o.aTheme ? 'The pool is only that theme.' : past.length ? 'Past dailies only. Pick one and the pool is only that theme.' : 'Themes unlock the day after they run as the daily.'}</small></div>`;
   }
   function aucSetup(boss) {
     const o = VS.opts, per = 5 + (+o.bench > 0 ? +o.bench : 0), dis = boss ? '' : ' disabled';
@@ -766,7 +766,8 @@
       if (st) st.addEventListener('click', () => {
         const tk = VS.opts.auction && !VS.opts.ranked && VS.opts.aTheme;
         if (!tk) { THEMED = null; begin(); return; }
-        const cat = UI.ranked.themeCatalog().filter(t => !UI.ranked.themeLocked(t.key)), key = tk === 'random' ? cat[Math.floor(Math.random() * cat.length)].key : tk;
+        const cat = UI.ranked.themePast(), key = tk === 'random' ? (cat.length ? cat[Math.floor(Math.random() * cat.length)].key : '') : tk;
+        if (!key) { THEMED = null; begin(); return; }
         st.disabled = true; st.textContent = 'LOADING THEME...';
         UI.ranked.themeBuild(key).then(t => { THEMED = t; st.disabled = false; begin(); }).catch(e => { st.disabled = false; st.textContent = 'START THE DRAFT'; UI.toast('The theme did not load: ' + (e.message || e), 'error'); });
       });

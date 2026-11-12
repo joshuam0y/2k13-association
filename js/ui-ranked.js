@@ -488,7 +488,7 @@
   const labelOf = y => (y - 1) + '-' + String(y).slice(2);
   // every theme as plain data, so a day, the archive and the casual picker all name them the same way
   const mk = (kind, title, tag, spec) => ({ kind, title, tag, spec, key: Object.keys(spec).map(k => spec[k]).join(':') });
-  const T_CURRENT = a => mk('CURRENT TEAM', labelOf(2027) + ' ' + UI.teamName(a).toUpperCase(), "Today's roster", { t: 'season', abbr: a, year: 2027 });
+  const T_CURRENT = a => mk('CURRENT TEAM', labelOf(2027) + ' ' + UI.teamName(a).toUpperCase(), 'The current roster', { t: 'season', abbr: a, year: 2027 });
   const T_FAMOUS = f => mk('FAMOUS SEASON', labelOf(f[1]) + ' ' + (FRANCH[f[0]] || UI.teamName(f[0])).toUpperCase(), f[2], { t: 'season', abbr: f[0], year: f[1] });
   const T_FRANCH = a => mk('ALL-TIME FRANCHISE', 'THE BEST ' + FRANCH[a].toUpperCase() + ' EVER', 'Every season counts', { t: 'franchise', abbr: a });
   const T_DECADE = d => mk('ERA', 'THE ' + d.toUpperCase(), 'The best of one decade', { t: 'decade', d });
@@ -510,6 +510,13 @@
     if (kind === 6) return T_ROOKIE(ROOKIES[h % ROOKIES.length]);
     if (kind === 7) return T_U25();
     return T_RING();
+  }
+  // the first day of the daily: the archive and the casual picker only ever show themes from days that are over
+  const DAILY_START = '2026-11-12';
+  function themePast() {
+    const out = [], seen = new Set(), t0 = Date.parse(DAILY_START + 'T00:00:00Z'), t1 = Date.parse(today() + 'T00:00:00Z');
+    for (let t = t1 - 86400000; t >= t0; t -= 86400000) { const day = new Date(t).toISOString().slice(0, 10), info = dailyThemeInfo(day); if (!seen.has(info.key)) { seen.add(info.key); out.push(Object.assign({}, info, { day })); } }
+    return out;   // newest first
   }
   const themeLocked = key => dailyThemeInfo(today()).key === key;   // today's theme stays out of practice and the casual picker until tomorrow
   const THEME = {};
@@ -923,7 +930,7 @@
   UI.ranked.tour = openTour;
   UI.ranked.theme = dailyTheme; UI.ranked.themeInfo = dailyThemeInfo;
   UI.ranked.dailyToday = () => Object.assign({ info: dailyThemeInfo(today()) }, streakNow());
-  UI.ranked.themeCatalog = themeCatalog; UI.ranked.themeLocked = themeLocked; UI.ranked.themeBuild = key => buildTheme(themeCatalog().find(t => t.key === key));   // for the theme list and checks
+  UI.ranked.themePast = themePast; UI.ranked.themeCatalog = themeCatalog; UI.ranked.themeLocked = themeLocked; UI.ranked.themeBuild = key => buildTheme(themeCatalog().find(t => t.key === key));   // for the theme list and checks
 
   // ---------- nudges: a friend or other players searching for a ranked match ----------
   const NOTE = 'a13-rk-notify';
@@ -951,20 +958,20 @@
   // ---------- the practice archive: any theme, no board, no streak. Today's theme stays locked until tomorrow. ----------
   function practicePage(app) {
     stopRefresh();
-    const cat = themeCatalog(), kinds = [...new Set(cat.map(t => t.kind))], today0 = dailyThemeInfo(today());
-    const rnd = cat.filter(t => !themeLocked(t.key));
+    const past = themePast(), day0 = d => new Date(d + 'T12:00:00Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' }).toUpperCase();
     app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PRACTICE</div><h1 class="ch-hero-t">THE ARCHIVE.</h1>
-        <p class="ch-hero-p">Play any theme. No board, no streak. Today's theme opens tomorrow.</p></section>
-      <div class="ch-go"><a class="btn btn-gold btn-big" href="#/ranked/practice/${esc(rnd[Math.floor(Math.random() * rnd.length)].key)}/${Date.now()}">RANDOM THEME</a><a class="btn" href="#/ranked">BACK</a></div>
-      ${kinds.map(k => `<details class="rk-det"><summary>${esc(k)} (${cat.filter(t => t.kind === k).length})</summary><div class="pr-list">${cat.filter(t => t.kind === k).map(t => themeLocked(t.key)
-        ? `<span class="pr-i lock"><b>${esc(t.title)}</b><small>TODAY'S DAILY: OPENS TOMORROW</small></span>`
-        : `<a class="pr-i" href="#/ranked/practice/${esc(t.key)}/${Date.now()}"><b>${esc(t.title)}</b><small>${esc(t.tag)}</small></a>`).join('')}</div></details>`).join('')}`;
-    void today0;
+        <p class="ch-hero-p">Past dailies only. No board, no streak.</p></section>
+      <div class="ch-go">${past.length ? `<a class="btn btn-gold btn-big" href="#/ranked/practice/${esc(past[Math.floor(Math.random() * past.length)].key)}/${Date.now()}">RANDOM THEME</a>` : ''}<a class="btn" href="#/ranked">BACK</a></div>
+      <div class="pr-list">
+        <span class="pr-i lock"><b>TODAY: ???</b><small>OPENS TOMORROW</small></span>
+        ${past.map(t => `<a class="pr-i" href="#/ranked/practice/${esc(t.key)}/${Date.now()}"><b>${esc(t.title)}</b><small>${esc(t.kind)} | ${esc(day0(t.day))}${t.tag ? ' | ' + esc(t.tag) : ''}</small></a>`).join('')}
+      </div>
+      ${past.length ? '' : '<p class="muted">Nothing here yet. A theme shows up the day after it runs.</p>'}`;
   }
   function practicePlay(app, key, n) {
-    const info = themeCatalog().find(t => t.key === key);
+    const info = themePast().find(t => t.key === key) || (themeLocked(key) ? themeCatalog().find(t => t.key === key) : null);
     if (!info) { location.hash = '#/ranked/practice'; return; }
-    if (themeLocked(key)) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PRACTICE</div><h1 class="ch-hero-t">OPENS TOMORROW.</h1><p class="ch-hero-p">${esc(info.title)} is today's daily. Play it there, then practice it tomorrow.</p></section><div class="ch-go"><a class="btn btn-gold" href="#/ranked/daily/ALL">PLAY THE DAILY</a><a class="btn" href="#/ranked/practice">ARCHIVE</a></div>`; return; }
+    if (themeLocked(key)) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PRACTICE</div><h1 class="ch-hero-t">OPENS TOMORROW.</h1><p class="ch-hero-p">This is today's daily. Play it there, then practice it tomorrow.</p></section><div class="ch-go"><a class="btn btn-gold" href="#/ranked/daily/ALL">PLAY THE DAILY</a><a class="btn" href="#/ranked/practice">ARCHIVE</a></div>`; return; }
     if (!n) { location.hash = '#/ranked/practice/' + key + '/' + Date.now(); return; }
     return dailyPage(app, 'ALL', { info, n });
   }
