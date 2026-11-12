@@ -26,13 +26,14 @@
       if (b.champion === u) { result = 'NBA CHAMPIONS'; champ = true; }
       else {
         let lost = null, alive = false;
+        const off = 4 - (b.R || 4);   // the early leagues played fewer rounds
         b.rounds.forEach((round, r) => (round || []).forEach(x => {
           if (x.hi !== u && x.lo !== u) return;
           if (x.winner && x.winner !== u) lost = { r, opp: x.winner, w: x.hi === u ? x.hw : x.lw, l: x.hi === u ? x.lw : x.hw };
           else if (!x.winner) alive = { r };
         }));
-        if (lost) result = 'LOST IN ' + ROUND[Math.min(3, lost.r)] + ' TO THE ' + UI.team(lost.opp).name.toUpperCase() + ' ' + lost.w + '-' + lost.l;
-        else if (alive) result = 'ALIVE IN ' + ROUND[Math.min(3, alive.r)];
+        if (lost) result = 'LOST IN ' + ROUND[Math.min(3, lost.r + off)] + ' TO THE ' + UI.team(lost.opp).name.toUpperCase() + ' ' + lost.w + '-' + lost.l;
+        else if (alive) result = 'ALIVE IN ' + ROUND[Math.min(3, alive.r + off)];
         else if (b.champion) result = 'MISSED THE PLAYOFFS';
         else result = 'PLAYOFFS UNDER WAY';
       }

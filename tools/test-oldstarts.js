@@ -29,6 +29,11 @@ for (const y of list) {
       let g = 0, r;
       do { s.events.forEach(e => (e.resolved = true)); L.clearResolved(s); r = L.advance(s, 'endPlayoffs'); } while (r.stopped !== 'seasonOver' && ++g < 400);
       ok(!!s.season.champion, y + ' season ' + Y + ': a champion (' + s.season.champion + ') among ' + Object.keys(s.teams).length + ' teams, K ' + s.season.playoffK);
+      const po = s.season.playoffs, spec = s.season.playoffSpec;
+      ok(po && spec && po.rounds.every((rd, i) => rd.every(x => x.need === spec.wins[Math.min(i, spec.wins.length - 1)])), y + ' season ' + Y + ': every series is the length that year used (' + po.rounds.map(rd => rd[0].need).join('/') + '), ' + po.rounds.map(rd => rd.length).join('+') + ' series');
+      ok(po.rounds.length === po.R, y + ' season ' + Y + ': ' + po.R + ' rounds');
+      const dl = s.draft && s.draft.year === Y && s.draft.lottery && s.draft.lottery.era;
+      ok(!dl || dl === (Y < 1966 ? 'worst' : Y < 1985 ? 'flip' : Y < 1990 ? '1985' : dl), y + ' season ' + Y + ': the draft order rule is the era\'s (' + dl + ')');
       const games = Object.values(s.season.standings).map(x => x.w + x.l);
       ok(games.every(x => x === games[0]) || Math.max.apply(null, games) - Math.min.apply(null, games) <= 1, y + ' season ' + Y + ': everyone plays the same number of games (' + [...new Set(games)].join('/') + ')');
       let st = 0;

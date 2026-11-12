@@ -307,39 +307,8 @@
     return id;
   }
   function applyPlayoffResult(season, g, res) {
-    const b = season.playoffs;
-    const s = b && findSeries(b, g.series);
-    if (!s) return;
-    s.games.push(g.id);
-    if (res.winner === s.hi) s.hw++; else s.lw++;
-    if (s.hw === 4) s.winner = s.hi;
-    if (s.lw === 4) s.winner = s.lo;
-    const round = b.rounds[b.round - 1];
-    if (!round.every(x => x.winner)) return;
-    const R = Math.round(Math.log(season.playoffK || 8) / Math.LN2) + 1;
-    if (b.round === R || round.length === 1) {
-      b.champion = round[0].winner;
-      b.finalsMvp = finalsMvp(season, round[0]);
-      return;
-    }
-    const nextRound = [];
-    const startDay = b.cal + 1;
-    if (b.round === R - 1) {
-      const e = round.filter(x => x.conf === 'East')[0];
-      const w = round.filter(x => x.conf === 'West')[0];
-      nextRound.push(makeSeries(season, 'F', 'Finals', R, e.winner, seedOf(e, e.winner), w.winner, seedOf(w, w.winner), startDay));
-    } else {
-      ['East', 'West'].forEach((c, ci) => {
-        const list = round.filter(x => x.conf === c);
-        for (let i = 0; i + 1 < list.length; i += 2) {
-          const x = list[i], y = list[i + 1];
-          nextRound.push(makeSeries(season, c[0] + (b.round + 1) + '-' + (i / 2 + 1), c, b.round + 1,
-            x.winner, seedOf(x, x.winner), y.winner, seedOf(y, y.winner), startDay + ((i / 2 + ci) % 2)));
-        }
-      });
-    }
-    b.rounds.push(nextRound);
-    b.round++;
+    const E = window.ENGINE;
+    if (E && typeof E.applyPlayoffResult === 'function') return E.applyPlayoffResult(season, g, res);
   }
   function addDays(s, n) {
     const p = String(s).split('-');

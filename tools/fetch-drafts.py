@@ -16,13 +16,13 @@ def get(url):
     return None
 for y in years:
     if str(y) in cache: continue
-    body = get('https://www.basketball-reference.com/draft/NBA_%d.html' % y)
+    body = get('https://www.basketball-reference.com/draft/%s_%d.html' % ('BAA' if y <= 1949 else 'NBA', y))
     if not body: print('gave up', y, flush=True); continue
     i = body.find('id="stats"')
     seg = body[i:]
     rows = []
-    for tr in re.findall(r'<tr ?>(.*?)</tr>', seg, re.S):
-        pk = re.search(r'data-stat="pick_overall"[^>]*>(?:<a[^>]*>)?(\d+)', tr)
+    for tr in re.findall(r'<tr[^>]*>(.*?)</tr>', seg, re.S):
+        pk = re.search(r'data-stat="pick_overall"[^>]*>(?:<a[^>]*>)?(\d+)', tr) or re.search(r'data-stat="ranker"[^>]*>(\d+)', tr)   # the early drafts leave late picks without a number: use the order on the page
         if not pk: continue
         tm = re.search(r'data-stat="team_id"[^>]*>(?:<a[^>]*>)?([A-Z]{3})', tr)
         pl = re.search(r"data-stat=\"player\"[^>]*>(?:<a href='/players/[a-z]/([a-z]+[0-9]{2})\.html'>)?([^<]+)", tr)

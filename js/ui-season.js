@@ -70,9 +70,9 @@
   // Every playoff series by id, and the first day a Finals game is on the schedule.
   function finalsStart(s) {
     const b = s.playoffs;
-    if (!b || !Array.isArray(b.rounds) || b.rounds.length < 4) return null;
+    if (!b || !Array.isArray(b.rounds) || b.rounds.length < (b.R || 4)) return null;
     const ids = {};
-    (b.rounds[3] || []).forEach(x => { if (x && x.id) ids[x.id] = 1; });
+    (b.rounds[(b.R || 4) - 1] || []).forEach(x => { if (x && x.id) ids[x.id] = 1; });
     const d = (s.days || []).find(day => day.playoff && (day.games || []).some(g => ids[g.series]));
     return d ? d.date : null;
   }
@@ -1041,21 +1041,26 @@
       a: UI.abbrOf(s.hi || s.high || s.a), b: UI.abbrOf(s.lo || s.low || s.b),
       aSeed: s.hiSeed != null ? s.hiSeed : s.highSeed, bSeed: s.loSeed != null ? s.loSeed : s.lowSeed,
       aw: s.hw != null ? s.hw : s.wins ? s.wins[0] : null, bw: s.lw != null ? s.lw : s.wins ? s.wins[1] : null,
-      winner: UI.abbrOf(s.winner), conf: s.conf || null
+      winner: UI.abbrOf(s.winner), conf: s.conf || null, need: s.need || 4
     };
   }
   UI.normBracket = function (b) {
     if (!b || !Array.isArray(b.rounds)) return null;
-    const drawn = b.rounds.length;
-    const rounds = b.rounds.map((r, i) => {
+    // the early leagues played fewer rounds: empty rounds go in front, so the Finals is always the fourth
+    const R = b.R || 4, pad = 4 - R, drawn = pad + b.rounds.length;
+    const rounds = [];
+    for (let i = 0; i < pad; i++) rounds.push({ name: ROUND_NAMES[i], series: [] });
+    b.rounds.forEach((r, i) => {
       const list = Array.isArray(r) ? r : (r.series || []);
       const order = x => (x.conf === 'West' ? 0 : x.conf === 'East' ? 1 : 2);
-      return { name: (r && r.name) || ROUND_NAMES[i] || 'ROUND ' + (i + 1), series: list.map(normSeries).sort((x, y) => order(x) - order(y)) };
+      rounds.push({ name: (r && r.name) || ROUND_NAMES[pad + i] || 'ROUND ' + (pad + i + 1), series: list.map(normSeries).sort((x, y) => order(x) - order(y)) });
     });
     // Placeholders for rounds not drawn yet.
-    for (let i = rounds.length; i < 4; i++) rounds.push({ name: ROUND_NAMES[i], series: Array.from({ length: 8 >> i }, () => ({ a: null, b: null })) });
+    for (let i = rounds.length; i < 4; i++) rounds.push({ name: ROUND_NAMES[i], series: Array.from({ length: b.plan ? b.plan[i - pad] : 8 >> i }, () => ({ a: null, b: null })) });
+    // series a conference has in each round (0 for the padding), for the bracket slots
+    const wants = [0, 1, 2, 3].map(i => (i < pad ? 0 : b.plan ? Math.max(1, b.plan[i - pad] >> 1) : 4 >> i));
     const fm = b.finalsMvp && typeof b.finalsMvp === 'object' ? b.finalsMvp.id : b.finalsMvp;
-    return { rounds, drawn, champion: UI.abbrOf(b.champion), finalsMvp: fm || null };
+    return { rounds, drawn, pad, wants, byes: !!b.bye, champion: UI.abbrOf(b.champion), finalsMvp: fm || null };
   };
 
   // Seeds 1 to 8 per conference: from standings when a league is loaded, else by team overall.
@@ -1072,7 +1077,7 @@
     return br;
   }
 
-  const minLeft = x => (!x || !x.a || x.winner ? 0 : 4 - Math.max(Number(x.aw) || 0, Number(x.bw) || 0));
+  const minLeft = x => (!x || !x.a || x.winner ? 0 : (x.need || 4) - Math.max(Number(x.aw) || 0, Number(x.bw) || 0));
   const liveBracket = () => { const s = UI.state.season; return s && s.playoffs ? UI.normBracket(s.playoffs) : null; };
   const curRoundIdx = br => Math.max(0, Math.min(3, (br.drawn || 1) - 1));
   // The user's latest series in the bracket and its round index.
@@ -1088,10 +1093,10 @@
   }
   // Bracket slots per conference and round, with known winners carried into rounds not drawn yet.
   function confSlots(br, conf, ri) {
-    const want = 4 >> ri;
+    const want = br.wants ? br.wants[ri] : 4 >> ri;
     const real = br.rounds[ri].series.filter(x => x.conf === conf && x.a);
     if (real.length >= want || (ri === 0 && real.length)) return real;
-    if (ri === 0) return Array.from({ length: want }, () => ({ a: null, b: null }));
+    if (ri === 0 || ri === br.pad || br.byes) return Array.from({ length: want }, () => ({ a: null, b: null }));   // the first round, or a bracket where top seeds skip one: nothing to carry yet
     const prev = confSlots(br, conf, ri - 1);
     return Array.from({ length: want }, (_, j) => {
       const p = prev[2 * j], q = prev[2 * j + 1];
@@ -1133,14 +1138,15 @@
   }
   function bracket2k(br, sel) {
     const u = UI.userTeam();
-    const col = (conf, ri) => `<div class="pb-col pb-${conf === 'West' ? 'w' : 'e'}${ri + 1}"><div class="pb-h"><small>${conf === 'West' ? 'WEST' : 'EAST'}</small>${RD_SHORT[ri]}</div>
+    const col = (conf, ri) => ri < (br.pad || 0) ? '' : `<div class="pb-col pb-${conf === 'West' ? 'w' : 'e'}${ri + 1}"><div class="pb-h"><small>${conf === 'West' ? 'WEST' : 'EAST'}</small>${RD_SHORT[ri]}</div>
       <div class="pb-list">${confSlots(br, conf, ri).map(x => pbCard(x, u, sel)).join('')}</div></div>`;
     const champ = br.champion;
     const fin = `<div class="pb-col pb-f"><div class="pb-h pb-hf"><small>${br.projected ? 'PROJECTED' : esc(String(UI.state.season ? UI.state.season.year : UI.year()))}</small>NBA FINALS</div>
       <div class="pb-list">${pbCard(finalsSlot(br), u, sel)}
         <div class="pb-champ${champ ? '' : ' tbd'}"${champ ? ` style="--tc:${esc(UI.teamColor(champ))}"` : ''}>${champ ? UI.logo(champ, 64) : '<span class="pb-trophy" aria-hidden="true"></span>'}<b>${champ ? 'CHAMPIONS' : 'CHAMPION'}</b><span>${champ ? esc(UI.teamName(champ).toUpperCase()) : 'TBD'}</span></div>
       </div></div>`;
-    return `<div class="pb" role="region" aria-label="Playoff bracket">${col('West', 0)}${col('West', 1)}${col('West', 2)}${fin}${col('East', 2)}${col('East', 1)}${col('East', 0)}</div>`;
+    const nc = 3 - (br.pad || 0);
+    return `<div class="pb" role="region" aria-label="Playoff bracket"${br.pad ? ` style="grid-template-columns: repeat(${nc}, minmax(0, 1fr)) minmax(0, 1.12fr) repeat(${nc}, minmax(0, 1fr))"` : ''}>${col('West', 0)}${col('West', 1)}${col('West', 2)}${fin}${col('East', 2)}${col('East', 1)}${col('East', 0)}</div>`;
   }
 
   // ---------- Play-In Tournament (2020-21 on) ----------

@@ -1441,6 +1441,37 @@
     return { w: 0, l: 0, confW: 0, confL: 0, divW: 0, divL: 0, streak: 0, home: [0, 0], away: [0, 0], pf: 0, pa: 0, last10: [] };
   }
 
+  // How the playoffs ran each season (en.wikipedia.org/wiki/NBA_playoffs): teams a conference (K), how many top seeds skip the first
+  // round (bye), the first round pairs when they are not 1 v last, and the wins a series needs round by round.
+  // 1947-48 (three a division, with a cross-division format) and 1950 (three divisions) are approximated by their size.
+  function playoffSpecFor(year, teams) {
+    var spec;
+    if (year <= 1948) spec = { K: 3, bye: 1, wins: [2, 4, 4] };
+    else if (year <= 1950) spec = { K: 4, wins: [2, 2, 4] };
+    else if (year <= 1953) spec = { K: 4, wins: [2, 3, 4] };
+    else if (year === 1954) spec = { K: 3, bye: 1, wins: [2, 2, 4] };
+    else if (year <= 1957) spec = { K: 3, bye: 1, wins: [2, 3, 4] };
+    else if (year <= 1960) spec = { K: 3, bye: 1, wins: [2, 4, 4] };
+    else if (year <= 1966) spec = { K: 3, bye: 1, wins: [3, 4, 4] };
+    else if (year === 1967) spec = { K: 4, pairs: [[1, 3], [2, 4]], wins: [3, 4, 4] };
+    else if (year <= 1970) spec = { K: 4, pairs: [[1, 3], [2, 4]], wins: [4, 4, 4] };
+    else if (year <= 1974) spec = { K: 4, wins: [4, 4, 4] };
+    else if (year <= 1976) spec = { K: 5, bye: 3, wins: [2, 4, 4, 4] };
+    else if (year <= 1983) spec = { K: 6, bye: 2, wins: [2, 4, 4, 4] };
+    else if (year <= 2002) spec = { K: 8, wins: [3, 4, 4, 4] };
+    else spec = { K: 8, wins: [4, 4, 4, 4] };
+    var cs = {}; teams.forEach(function (t) { cs[t.conf] = (cs[t.conf] || 0) + 1; });
+    var small = Math.min.apply(null, Object.keys(cs).map(function (k) { return cs[k]; }).concat([99]));
+    if (small < spec.K + 1 && spec.K > 2) {   // a league too small for it: the size rule, the era's series lengths
+      var K = playoffTeams(teams);
+      spec = { K: K, wins: spec.wins.length >= (K <= 2 ? 2 : K <= 4 ? 3 : 4) ? spec.wins.slice(-(K <= 2 ? 2 : K <= 4 ? 3 : 4)) : [4, 4, 4, 4] };
+    }
+    spec.R = spec.K <= 2 ? 2 : spec.K <= 4 ? 3 : 4;
+    spec.plan = { 2: [2, 1], 3: spec.bye ? [2, 2, 1] : [4, 2, 1], 4: [4, 2, 1], 5: [2, 4, 2, 1], 6: [4, 4, 2, 1], 8: [8, 4, 2, 1] }[spec.K];
+    return spec;
+  }
+  function winsFor(spec, round) { var w = (spec && spec.wins) || [4, 4, 4, 4]; return w[Math.min(round - 1, w.length - 1)]; }
+
   // games each team played in the real seasons before the 82 game schedule (1967-68 on); the modern ones keep their own rules
   var OLD_GAMES = { 1947: 60, 1948: 48, 1949: 60, 1950: 68, 1951: 66, 1952: 66, 1953: 70, 1954: 72, 1955: 72, 1956: 72, 1957: 72, 1958: 72, 1959: 72, 1960: 75, 1961: 79, 1962: 80, 1963: 80, 1964: 80, 1965: 80, 1966: 80, 1967: 81 };
   function oldGames(year) { return OLD_GAMES[year] || 0; }
@@ -1465,6 +1496,7 @@
     // real dates and games when data/schedules.js has the season (opts.realSchedule === false to generate)
     var days = opts.realSchedule === false || opts.startDate || opts.endDate ? null : realSchedule(year, teams);
     var realSched = !!days;
+    var specOf = playoffSpecFor(year, teams);
     var G = opts.games || oldGames(year);
     if (!days) days = buildSchedule(teams, rng, start, end, G && G !== 82 ? anyMatchups(teams.map(function (t) { return t.abbr; }), rng, G) : null);
     var standings = {};
@@ -1492,7 +1524,8 @@
       order: [],
       norms: norms,
       realSchedule: realSched,
-      playoffK: playoffTeams(teams),
+      playoffK: specOf.K,
+      playoffSpec: specOf,
       seasonGames: G && G !== 82 ? G : undefined,
       // Play-In Tournament (2020-21 on): CBA.rules(year).playIn when the league passes rules, opts.playIn overrides
       playIn: opts.playIn != null ? !!opts.playIn : opts.rules && typeof opts.rules.playIn === 'boolean' ? opts.rules.playIn : year >= 2021,
@@ -1815,26 +1848,31 @@
     return top4.concat(rest).slice(0, n);
   }
 
-  function makeSeries(season, id, conf, round, a, aSeed, b, bSeed, startDay) {
+  function makeSeries(season, id, conf, round, a, aSeed, b, bSeed, startDay, need) {
     var hiFirst = rankTeams(season, [a, b])[0] === a;
     return {
       id: id, conf: conf, round: round,
       hi: hiFirst ? a : b, lo: hiFirst ? b : a,
       hiSeed: hiFirst ? aSeed : bSeed, loSeed: hiFirst ? bSeed : aSeed,
-      hw: 0, lw: 0, games: [], winner: null, next: startDay
+      hw: 0, lw: 0, games: [], winner: null, next: startDay, need: need || 4
     };
   }
 
   function buildBracket(season, seeds, startDate) {
-    var K = season.playoffK || 8;   // teams per conference: 8 (today), 4 or 2 for the small leagues of the old days
+    var spec = season.playoffSpec || { K: season.playoffK || 8, wins: [4, 4, 4, 4], plan: null };   // no spec: the Draft Challenge's own league sizes
+    var K = spec.K;   // teams per conference
     seeds = seeds || { East: conferenceSeeds(season, 'East', K), West: conferenceSeeds(season, 'West', K) };
-    var pairs = K === 2 ? [[1, 2]] : K === 4 ? [[1, 4], [2, 3]] : [[1, 8], [4, 5], [3, 6], [2, 7]];
+    var bye = spec.bye || 0, pairs = spec.pairs;
+    if (!pairs) {
+      if (bye) { pairs = []; for (var q = 0; q < Math.floor((K - bye) / 2); q++) pairs.push([bye + 1 + q, K - q]); }
+      else pairs = K === 2 ? [[1, 2]] : K === 4 ? [[1, 4], [2, 3]] : [[1, 8], [4, 5], [3, 6], [2, 7]];
+    }
     var round1 = [];
     ['East', 'West'].forEach(function (c, ci) {
       pairs.forEach(function (pr, i) {
         var a = seeds[c][pr[0] - 1], b = seeds[c][pr[1] - 1];
         if (!a || !b) return;
-        var s = makeSeries(season, c[0] + '1-' + (i + 1), c, 1, a, pr[0], b, pr[1], (i + ci) % 2);
+        var s = makeSeries(season, c[0] + '1-' + (i + 1), c, 1, a, pr[0], b, pr[1], (i + ci) % 2, winsFor(spec, 1));
         s.hi = a; s.lo = b; s.hiSeed = pr[0]; s.loSeed = pr[1]; // seed order decides home court in round 1
         round1.push(s);
       });
@@ -1843,11 +1881,29 @@
       seeds: seeds,
       rounds: [round1],
       round: 1,
+      R: spec.R || (K <= 2 ? 2 : K <= 4 ? 3 : 4),
+      bye: bye,
+      plan: spec.plan || null,
       champion: null,
       finalsMvp: null,
       startDate: startDate || addDays(lastRegularDate(season), 3),
       cal: 0
     };
+  }
+  // the second round when the top seeds skipped the first: each against the winner it meets, the rest as they were
+  function byeRound2(season, b, spec, startDay) {
+    var out = [], need = winsFor(spec, 2);
+    ['East', 'West'].forEach(function (c, ci) {
+      var seeds = b.seeds[c], r1 = b.rounds[0].filter(function (x) { return x.conf === c; });
+      var S = function (n) { return { a: seeds[n - 1], s: n }; };
+      var Wn = function (i) { var x = r1[i]; return { a: x && x.winner, s: x ? seedOf(x, x.winner) : null }; };
+      var refs = spec.K === 3 ? [[S(1), Wn(0)]] : spec.K === 5 ? [[S(1), Wn(0)], [S(2), S(3)]] : [[S(1), Wn(1)], [S(2), Wn(0)]];
+      refs.forEach(function (pr, i) {
+        if (!pr[0].a || !pr[1].a) return;
+        out.push(makeSeries(season, c[0] + '2-' + (i + 1), c, 2, pr[0].a, pr[0].s, pr[1].a, pr[1].s, startDay + ((i + ci) % 2), need));
+      });
+    });
+    return out;
   }
 
   function lastRegularDate(season) {
@@ -2027,7 +2083,7 @@
       round.forEach(function (s) {
         if (s.winner || s.next > b.cal) return;
         var gn = s.hw + s.lw + 1;
-        var hiHome = gn === 1 || gn === 2 || gn === 5 || gn === 7;
+        var hiHome = s.need === 2 ? (gn === 1 || gn === 3) : (gn === 1 || gn === 2 || gn === 5 || gn === 7);
         var id = 'p' + s.id + '-' + gn;
         games.push({ id: id, home: hiHome ? s.hi : s.lo, away: hiHome ? s.lo : s.hi, played: false, hs: null, as: null, series: s.id, gameNum: gn });
         s.next = b.cal + 2;
@@ -2053,11 +2109,13 @@
     if (!s) return;
     s.games.push(g.id);
     if (res.winner === s.hi) s.hw++; else s.lw++;
-    if (s.hw === 4) s.winner = s.hi;
-    if (s.lw === 4) s.winner = s.lo;
+    var need = s.need || 4;
+    if (s.hw >= need) s.winner = s.hi;
+    if (s.lw >= need) s.winner = s.lo;
     var round = b.rounds[b.round - 1];
     if (!round.every(function (x) { return x.winner; })) return;
-    var R = Math.round(Math.log(season.playoffK || 8) / Math.LN2) + 1;   // rounds: 4 with 8 a conference, 3 with 4, 2 with 2
+    var spec = season.playoffSpec;
+    var R = b.R || Math.round(Math.log(season.playoffK || 8) / Math.LN2) + 1;   // rounds: 4 with 8 a conference, 3 with 4, 2 with 2
     if (b.round === R || round.length === 1) {
       b.champion = round[0].winner;
       b.finalsMvp = finalsMvp(season, round[0]);
@@ -2069,14 +2127,16 @@
     if (b.round === R - 1) {
       var e = round.filter(function (x) { return x.conf === 'East'; })[0];
       var w = round.filter(function (x) { return x.conf === 'West'; })[0];
-      nextRound.push(makeSeries(season, 'F', 'Finals', R, e.winner, seedOf(e, e.winner), w.winner, seedOf(w, w.winner), startDay));
+      nextRound.push(makeSeries(season, 'F', 'Finals', R, e.winner, seedOf(e, e.winner), w.winner, seedOf(w, w.winner), startDay, winsFor(spec, R)));
+    } else if (b.round === 1 && spec && spec.bye) {
+      nextRound = byeRound2(season, b, spec, startDay);
     } else {
       ['East', 'West'].forEach(function (c, ci) {
         var list = round.filter(function (x) { return x.conf === c; });
         for (var i = 0; i + 1 < list.length; i += 2) {
           var x = list[i], y = list[i + 1];
           nextRound.push(makeSeries(season, c[0] + (b.round + 1) + '-' + (i / 2 + 1), c, b.round + 1,
-            x.winner, seedOf(x, x.winner), y.winner, seedOf(y, y.winner), startDay + ((i / 2 + ci) % 2)));
+            x.winner, seedOf(x, x.winner), y.winner, seedOf(y, y.winner), startDay + ((i / 2 + ci) % 2), winsFor(spec, b.round + 1)));
         }
       });
     }
@@ -2145,6 +2205,8 @@
     newSeason: newSeason,
     realSchedule: realSchedule,
     buildSchedule: buildSchedule,
+    playoffSpecFor: playoffSpecFor,
+    applyPlayoffResult: applyPlayoffResult,
     simDays: simDays,
     simGame: simGame,
     playoffs: playoffs,

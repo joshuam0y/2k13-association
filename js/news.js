@@ -264,10 +264,11 @@
     var ww = Math.max(s.hw, s.lw), lw = Math.min(s.hw, s.lw);
     var games = ww + lw;
     var upset = s.winner === s.lo;
-    var round = ROUND_NAMES[s.round] || (s.conf === 'Finals' ? 'NBA Finals' : 'Playoffs');
+    var PR = (state.season && state.season.playoffs && state.season.playoffs.R) || 4;   // the early leagues played fewer rounds
+    var round = ROUND_NAMES[s.round + 4 - PR] || (s.conf === 'Finals' ? 'NBA Finals' : 'Playoffs');
     var W = nick(state, w), L = nick(state, l);
     var headline;
-    if (s.round === 4 || s.conf === 'Finals') headline = 'CHAMPIONS! ' + full(state, w) + ' Win The ' + yearOf(state) + ' NBA Title';
+    if (s.round === PR || s.conf === 'Finals') headline = 'CHAMPIONS! ' + full(state, w) + ' Win The ' + yearOf(state) + ' NBA Title';
     else if (lw === 0) headline = W + ' Sweep ' + L;
     else if (games === 7) headline = upset ? 'Upset! ' + W + ' Stun ' + L + ' In Game 7' : W + ' Survive ' + L + ' In Seven';
     else if (upset) headline = 'Upset Alert: ' + W + ' Knock Out ' + L;

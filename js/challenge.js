@@ -679,6 +679,7 @@
     var rng = mulberry32((ch.cfg.seed ^ 0x6C8E9CF5) >>> 0);
     var y = ch.year;
     var season = E.newSeason(ch.league, { year: y, realSchedule: false, playIn: false, rng: rng, userTeam: ch.user });
+    season.playoffSpec = null;   // the Draft Challenge sizes its own playoffs below
     var nT = season.teams.length, G = nT >= 28 ? 82 : Math.max(40, Math.min(82, seasonGames(ch)));
     if (nT < 28) {   // the old small leagues: fewer playoff teams a conference
       var cs = {}; season.teams.forEach(function (t) { cs[t.conf] = (cs[t.conf] || 0) + 1; });

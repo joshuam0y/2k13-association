@@ -116,13 +116,18 @@
     });
     return set;
   }
+  // how the first round was ordered: worst record first (before 1966), a coin flip between the worst East and worst West team for
+  // the top two picks (1966-1984), then the lottery: 1985-89 one envelope among the non-playoff teams, from 1990 weighted by record
+  function eraOrder(year) { return year < 1966 ? 'worst' : year < 1985 ? 'flip' : 'lottery'; }
   function lotteryTeams(state, year) {
+    if (eraOrder(year) !== 'lottery') return byRecordAsc(state, teamList(state), year);   // every team, worst first
     var po = playoffTeams(state, year);
     var non = teamList(state).filter(function (a) { return !po[a]; });
     return byRecordAsc(state, non, year);
   }
 
   function eraOdds(year, n) {
+    if (year >= 1985 && year < 1990) { var eq = []; for (var q = 0; q < n; q++) eq.push(1 / (n || 1)); return { odds: eq, draws: 1, era: '1985' }; }   // the envelope: every lottery team the same chance, one pick drawn
     var rules = cbaRules(year), raw = null, draws = year >= REFORM_YEAR ? 4 : 3;
     if (rules && rules.lotteryOdds && rules.lotteryOdds.length) {
       raw = rules.lotteryOdds.map(function (x) { return Array.isArray(x) ? +x[0] : (x && typeof x === 'object' ? +(x.first || x.pick1 || x.odds || 0) : +x); });
@@ -141,10 +146,18 @@
     opts = opts || {};
     var year = opts.year != null ? opts.year : state.year;
     rng = typeof rng === 'function' ? rng : seeded(state, 'lottery' + year);
-    var lt = lotteryTeams(state, year);
-    var eo = eraOdds(year, lt.length);
+    var lt = lotteryTeams(state, year), mode = eraOrder(year);
+    var eo = mode === 'lottery' ? eraOdds(year, lt.length) : { odds: lt.map(function () { return 1 / (lt.length || 1); }), draws: 0, era: mode };
     var remaining = lt.map(function (a, i) { return { abbr: a, seed: i + 1, w: eo.odds[i] }; });
     var drawn = [];
+    if (mode === 'flip') {   // the worst team in each conference flips for the first pick, the loser takes the second
+      var conf = function (c) { return lt.filter(function (a) { return (teams(state)[a].conf || 'East') === c; })[0]; };
+      var fe = conf('East'), fw = conf('West');
+      if (fe && fw) {
+        var two = rng() < 0.5 ? [fe, fw] : [fw, fe];
+        two.forEach(function (a) { var k = remaining.map(function (x) { return x.abbr; }).indexOf(a); drawn.push(remaining.splice(k, 1)[0]); });
+      }
+    }
     for (var d = 0; d < eo.draws && remaining.length; d++) {
       var tot = remaining.reduce(function (s, x) { return s + x.w; }, 0);
       var r = rng() * tot, k = 0;
@@ -174,9 +187,12 @@
     var slots = order(state, year);
     result.teams.forEach(function (t) { var s = slots[t.pick - 1]; t.owner = s.team; t.protectedFor = s.protectedFor || null; });
     var top = result.teams[0];
-    addNews(state, year, teamName(state, top.owner) + ' win the ' + year + ' draft lottery',
+    if (mode === 'lottery') addNews(state, year, teamName(state, top.owner) + ' win the ' + year + ' draft lottery',
       'The ' + teamName(state, top.owner) + ' jumped from the number ' + top.seed + ' spot (' + top.chance + '% odds) to win the first pick' +
       (top.owner !== top.abbr ? ', via ' + top.abbr + '.' : '.'), []);
+    else addNews(state, year, teamName(state, top.owner) + ' hold the first pick of the ' + year + ' draft',
+      mode === 'flip' ? 'The ' + teamName(state, top.owner) + ' won the coin flip between the worst teams of the East and West' + (top.owner !== top.abbr ? ' (the pick came from ' + top.abbr + ')' : '') + ' and pick first.'
+        : 'The ' + teamName(state, top.owner) + (top.owner !== top.abbr ? ' (via ' + top.abbr + ')' : '') + ' finished with the worst record and pick first. There was no lottery yet.', []);
     return result;
   }
 
