@@ -62,6 +62,28 @@
     LOB = { code: info.code, t: setInterval(up, 30000) };
   }
 
+  // the auto-draft reveal: when a side has its five (or no money left), the rest of the pool goes to the other side as face-down cards that flip one by one
+  UI.aucReveal = function (app, o) {
+    const es = o.entries, name = o.name, money = n => (n ? '$' + n : 'FREE');
+    const card = (e, k) => {
+      const p = o.byId[e.id], col = (o.color && o.color(p)) || '#555';
+      return `<div class="rv-card" data-k="${k}" style="--c1:${esc(col)}"><div class="rv-in"><div class="rv-back"><span>?</span></div>
+        <div class="rv-front"><div class="auc-face">${UI.faceImg(p, col)}</div><b class="rv-n">${esc(p.name)}</b><small>${esc(C.posLabel(p))}${p.season ? ' | ' + esc("'" + String(p.season - 1).slice(2) + "-'" + String(p.season).slice(2)) : ''}${p.ovr && !o.blind ? ' | ' + esc(p.ovr) + ' OVR' : ''}</small><div class="rv-to${e.side === 0 ? ' a' : ' b'}"><i>${esc(name(e.side))}</i><em>${money(e.price)}</em></div></div></div></div>`;
+    };
+    const to = es[0] ? name(es[0].side) : '';
+    const free = es.every(e => e.auto === 'free');
+    app.innerHTML = `<section class="rv"><small class="rv-k">${free ? 'ROSTER FULL' : 'NO ONE LEFT TO BID'}</small><h2>${free ? esc(name(1 - es[0].side).toUpperCase()) + ' IS DONE. THE REST ARE AUTO-DRAFTED.' : 'THEY CAN NOT TOP IT.'}</h2>
+      <p class="muted">${esc(to)} takes ${es.length === 1 ? 'the last player' : 'the last ' + es.length + ' players'}${free ? ' for free' : ''}.</p>
+      <div class="rv-grid n${es.length}">${es.map(card).join('')}</div>
+      <div class="ch-go"><button type="button" class="btn btn-gold" id="rvGo">SKIP</button></div></section>`;
+    let finished = false, timers = [];
+    const finish = () => { if (finished) return; finished = true; timers.forEach(clearTimeout); app.querySelectorAll('.rv-card').forEach(c => c.classList.add('flip')); setTimeout(() => o.onDone && o.onDone(), 350); };
+    es.forEach((e, k) => timers.push(setTimeout(() => { const c = app.querySelector('.rv-card[data-k="' + k + '"]'); if (c) c.classList.add('flip', 'pop'); if (window.SFX) window.SFX.play('chime'); }, 600 + k * 850)));
+    timers.push(setTimeout(() => { const b = UI.$('#rvGo', app); if (b) b.textContent = 'CONTINUE'; }, 600 + es.length * 850));
+    timers.push(setTimeout(finish, 600 + es.length * 850 + 2600));
+    UI.$('#rvGo', app).addEventListener('click', finish);
+  };
+
   UI.ranked = { eraOf, lineupScore, report, lobbyStart, lobbyStop, ERAS, eraName, regionName, REGIONS };
 
   // ---------- helpers for the pages ----------
@@ -86,12 +108,22 @@
     app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">RANKED</div><h1 class="ch-hero-t">THE BOARDS.</h1>
         <p class="ch-hero-p">Every era has its own ladder. Win ranked Head to Head auctions to climb it, or play today's daily auction (the same pool for everyone) and see where your lineup lands.</p></section>
       ${signed ? '' : signInBox('PLAY RANKED')}
+      <section class="rk-how"><div class="rk-how-t"><b>PLAY A RANKED MATCH</b><span class="muted">No code, no friend needed. Pick an era, and you are paired with whoever else is looking.</span></div>
+        <div class="rk-find"><label class="field"><span>ERA</span><select id="rkFindEra">${eraOpts(RK.era)}</select></label><button type="button" class="btn btn-gold btn-big" id="rkFind"${signed ? '' : ' disabled'}>FIND A MATCH</button></div>
+        <details class="rk-det"><summary>HOW RANKED WORKS</summary><ol>
+          <li>You and one other signed-in player bid on a hidden pool of ten stars from that era. You each get $20, bidding opens at $1 and goes up $1 at a time. Whoever passes lets the other have the player. Each of you ends with five.</li>
+          <li>Your five play a best-of-5 series, all five on the floor for 48 minutes.</li>
+          <li>The winner climbs that era's ladder and the loser drops (everyone starts at 1200; beating a higher rated player is worth more).</li>
+          <li>The result only counts when both phones report the same score, so nobody can fake a win.</li>
+          <li>Want to play a friend instead? Host a Head to Head room, choose the auction and switch Ranked on.</li></ol></details></section>
       <div class="rk-ctl"><label class="field"><span>ERA</span><select id="rkEra">${eraOpts(RK.era)}</select></label>
         <div class="ch-chips rk-scope"><button type="button" class="ch-chip${!RK.mine ? ' on' : ''}" data-scope="0">GLOBAL</button><button type="button" class="ch-chip${RK.mine ? ' on' : ''}" data-scope="1">MY REGION</button></div></div>
       <div class="ch-chips rk-tabs"><button type="button" class="ch-chip${RK.tab === 'ladder' ? ' on' : ''}" data-tab="ladder">LADDER</button><button type="button" class="ch-chip${RK.tab === 'daily' ? ' on' : ''}" data-tab="daily">DAILY AUCTION</button><button type="button" class="ch-chip${RK.tab === 'games' ? ' on' : ''}" data-tab="games">OPEN GAMES</button></div>
       <div id="rkBody" class="rk-body"><p class="muted">Loading...</p></div>
       <div class="ch-go"><a class="btn" href="#/me">MY PROFILE</a><a class="btn" href="#/challenge/vs">HEAD TO HEAD</a></div>`;
     UI.profile.wire(app, () => rankedPage(app));
+    const fe = UI.$('#rkFindEra', app); if (fe) fe.addEventListener('change', () => { RK.era = fe.value; ls.set('a13-rk-era', RK.era); });
+    const fb = UI.$('#rkFind', app); if (fb) fb.addEventListener('click', () => { location.hash = '#/ranked/find/' + encodeURIComponent(UI.$('#rkFindEra', app).value); });
     const era = UI.$('#rkEra', app); era.addEventListener('change', () => { RK.era = era.value; ls.set('a13-rk-era', RK.era); rankedPage(app); });
     app.querySelectorAll('[data-scope]').forEach(b => b.addEventListener('click', () => { RK.mine = b.dataset.scope === '1'; ls.set('a13-rk-mine', RK.mine); rankedPage(app); }));
     app.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => { RK.tab = b.dataset.tab; ls.set('a13-rk-tab', RK.tab); rankedPage(app); }));
@@ -182,6 +214,7 @@
     };
     const hdr = `<div class="ch-top"><div><div class="ch-top-k">DAILY AUCTION | ${esc(day)} | ${esc(eraName(era))}</div><div class="ch-top-t">${st.done ? 'YOUR FIVE IS SET' : 'PLAYER ' + (st.i + 1) + ' OF ' + st.ids.length}</div></div><a class="btn btn-small" href="#/ranked">BACK</a></div>`;
     if (st.done) {
+      stopClock();
       const five = st.won[0].map(id => byId[id]), score = UI.ranked.lineupScore(five), houseFive = st.won[1].map(id => byId[id]), hs = UI.ranked.lineupScore(houseFive);
       app.innerHTML = `${hdr}<div class="vs-sides vs-compact">${sideBox(0, 'YOU')}${sideBox(1, 'THE HOUSE')}</div>
         <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${score == null ? '-' : score.toFixed(1)}</b><span class="muted">The house scored ${hs == null ? '-' : hs.toFixed(1)}. ${score != null && hs != null ? (score > hs ? 'You beat the house.' : score < hs ? 'The house won this one.' : 'A tie.') : ''}</span></section>
@@ -196,15 +229,57 @@
       return;
     }
     const cur = byId[st.ids[st.i]], mine = st.turn === 0, canRaise = C.aucCanRaise(st, 0), left = st.ids.length - st.i - 1;
-    app.innerHTML = `${hdr}<div class="vs-sides vs-compact">${sideBox(0, 'YOU')}${sideBox(1, 'THE HOUSE')}</div>
-      <section class="ch-landed vs-auc-cur">${UI.faceImg(cur, '#555')}<div><div class="ch-wheel-k">UP FOR BID</div><div class="ch-landed-t">${esc(cur.name)}</div><small class="muted">${esc(C.posLabel(cur))}${cur.season ? ' | \'' + String(cur.season - 1).slice(2) + '-\'' + String(cur.season).slice(2) : ''}</small></div>
-        <div class="vs-auc-bid"><small>${st.holder === 0 ? 'YOU HOLD' : 'THE HOUSE HOLDS'}</small><b>${money(st.price)}</b></div></section>
-      <div class="vs-auc-act"><button type="button" class="btn btn-gold btn-big" id="aucRaise"${mine && canRaise ? '' : ' disabled'}>RAISE TO ${money(st.price + A.raise)}</button><button type="button" class="btn btn-big" id="aucPass"${mine ? '' : ' disabled'}>PASS: ${st.holder === 0 ? 'YOU GET HIM' : 'THE HOUSE GETS HIM'} FOR ${money(st.price)}</button></div>
-      <p class="muted">${left} more in the hidden pool. One try a day.</p>`;
-    const go = a => { if (C.auctionAct(st, 0, a)) { house(); save(st.done); draw(app, era, day, st, byId, key, house, save); window.scrollTo(0, 0); } };
-    const r = UI.$('#aucRaise', app); if (r) r.addEventListener('click', () => go('raise'));
+    const min = st.price + A.raise, max = C.aucMax(st, 0);
+    if (DB.i !== st.i || DB.price !== st.price || DB.amt < min || DB.amt > max) { DB.i = st.i; DB.price = st.price; DB.amt = min; }
+    const slots = i => Array.from({ length: per }, (_, k) => { const id = st.won[i][k]; const x = id && st.log.filter(l => l.id === id)[0]; return id ? `<li class="on"><span>${esc(byId[id] ? byId[id].name : '?')}${byId[id] && byId[id].season ? ' <small class="auc-yr">' + esc("'" + String(byId[id].season - 1).slice(2) + "-'" + String(byId[id].season).slice(2)) + '</small>' : ''}</span><b>${money(x ? x.price : 0)}</b></li>` : '<li class="empty"><span>OPEN</span></li>'; }).join('');
+    const side = (i, cls, name) => `<aside class="auc-side ${cls}${st.turn === i ? ' turn' : ''}${st.holder === i ? ' holds' : ''}"><div class="auc-who"><small>${name}</small><b class="auc-cash">${money(A.budget - st.spent[i])}</b><small>${st.won[i].length} OF ${per} SPOTS</small></div><ol class="auc-slots">${slots(i)}</ol></aside>`;
+    if (!st.until) st.until = Date.now() + DAILY_CLOCK * 1000;
+    const quick = [A.raise, 2, 5].filter((v, k, a2) => a2.indexOf(v) === k && v >= A.raise).map(v => ({ to: st.price + v, label: '+' + money(v) })).filter(x => x.to >= min && x.to <= max);
+    const tm = cur.colors || null;
+    app.innerHTML = `${hdr}
+      <div class="auc">${side(0, 'l', 'YOU')}
+        <main class="auc-stage">
+          <div class="vs-timer" id="vsTimer"><i style="--w:100%"></i><span>${Math.max(0, Math.ceil((st.until - Date.now()) / 1000))}</span></div>
+          <section class="auc-card"><div class="auc-face">${UI.faceImg(cur, '#555')}</div>
+            <div class="auc-info"><small>UP FOR BID</small><h2>${esc(cur.name)}</h2><p>${esc(C.posLabel(cur))}${cur.season ? ' | \'' + String(cur.season - 1).slice(2) + '-\'' + String(cur.season).slice(2) : ''} | <b class="ch-ovr ${UI.ovrClass(cur.ovr)}">${esc(cur.ovr)}</b></p></div>
+            <div class="auc-price"><small>${st.holder === 0 ? 'YOU HOLD' : 'THE HOUSE HOLDS'}</small><b>${money(st.price)}</b></div></section>
+          ${mine && !canRaise ? `<div class="auc-bid"><div class="auc-broke"><b>YOU CAN'T TOP ${money(st.price)}</b><span>You have ${money(A.budget - st.spent[0])}${per - st.won[0].length > 1 ? ' and must keep ' + money((per - st.won[0].length - 1) * A.start) + ' for your other open spots' : ''}, so the most you can bid is ${money(Math.max(0, max))}.</span></div><div class="auc-go"><button type="button" class="btn btn-big" disabled>BID<small>can't top ${money(st.price)}</small></button><button type="button" class="btn btn-gold btn-big" id="aucPass">PASS<small>${st.holder === 0 ? 'You get him' : 'The house gets him'} for ${money(st.price)}</small></button></div></div>` : `
+          <div class="auc-bid"><div class="auc-step"><button type="button" class="btn" id="aucDown"${DB.amt - A.raise < min ? ' disabled' : ''}>&minus;</button><div class="auc-amt"><small>YOUR BID</small><b>${money(DB.amt)}</b></div><button type="button" class="btn" id="aucUp"${DB.amt + A.raise > max ? ' disabled' : ''}>+</button></div>
+            <div class="auc-chips">${quick.map(x => `<button type="button" class="ch-chip${DB.amt === x.to ? ' on' : ''}" data-to="${x.to}">${x.label}</button>`).join('')}<button type="button" class="ch-chip${DB.amt === max ? ' on' : ''}" data-to="${max}"${canRaise ? '' : ' disabled'}>ALL IN ${money(max)}</button></div>
+            <div class="auc-go"><button type="button" class="btn btn-gold btn-big" id="aucRaise"${mine && canRaise ? '' : ' disabled'}>BID ${money(DB.amt)}</button><button type="button" class="btn btn-big" id="aucPass"${mine ? '' : ' disabled'}>PASS<small>${st.holder === 0 ? 'You get him' : 'The house gets him'} for ${money(st.price)}</small></button></div></div>`}
+          <div class="auc-dots">${st.ids.map((id, k) => `<i class="${k < st.i ? 'sold' : k === st.i ? 'now' : ''}"></i>`).join('')}</div><p class="auc-more">${left} MORE IN THE HIDDEN POOL | ONE TRY A DAY</p>
+        </main>${side(1, 'r', 'THE HOUSE')}</div>`;
+    const go = (a, to) => {
+      const before = st.log.length;
+      if (!C.auctionAct(st, 0, a, to)) return;
+      house(); st.until = Date.now() + DAILY_CLOCK * 1000; save(st.done); stopClock();
+      const autos = st.log.slice(before).filter(x => x.auto);
+      window.scrollTo(0, 0);
+      if (autos.length) { stopClock(); UI.aucReveal(app, { entries: autos, byId, name: i => (i === 0 ? 'YOU' : 'THE HOUSE'), onDone: () => { st.until = Date.now() + DAILY_CLOCK * 1000; draw(app, era, day, st, byId, key, house, save); } }); return; }
+      draw(app, era, day, st, byId, key, house, save);
+    };
+    const setAmt = v => { DB.amt = Math.max(min, Math.min(max, Math.round(v))); draw(app, era, day, st, byId, key, house, save); };
+    const dn = UI.$('#aucDown', app); if (dn) dn.addEventListener('click', () => setAmt(DB.amt - A.raise));
+    const up = UI.$('#aucUp', app); if (up) up.addEventListener('click', () => setAmt(DB.amt + A.raise));
+    app.querySelectorAll('[data-to]').forEach(b => b.addEventListener('click', () => setAmt(+b.dataset.to)));
+    const r = UI.$('#aucRaise', app); if (r) r.addEventListener('click', () => go('raise', DB.amt));
     const p = UI.$('#aucPass', app); if (p) p.addEventListener('click', () => go('pass'));
+    // the shot clock: out of time means you pass
+    stopClock();
+    CLOCK = setInterval(() => {
+      const el = UI.$('#vsTimer', app);
+      if (!el || !/^#\/ranked\/daily/.test(location.hash)) { stopClock(); return; }
+      const lf = st.until - Date.now();
+      el.querySelector('span').textContent = Math.max(0, Math.ceil(lf / 1000));
+      el.querySelector('i').style.setProperty('--w', Math.max(0, Math.min(100, 100 * lf / (DAILY_CLOCK * 1000))) + '%');
+      el.classList.toggle('low', lf < 8000);
+      if (lf <= 0 && mine) { stopClock(); UI.toast('Time. You pass.'); go('pass'); }
+    }, 250);
   }
+  const DB = { i: -1, price: -1, amt: 0 };
+  const DAILY_CLOCK = 24;
+  let CLOCK = null;
+  function stopClock() { if (CLOCK) { clearInterval(CLOCK); CLOCK = null; } }
 
   // ---------- #/me ----------
   async function mePage(app) {
@@ -218,6 +293,7 @@
       const ser = await c.from('series').select('p1,p2,w1,w2,era,style,ranked,created_at').order('created_at', { ascending: false }).limit(300);
       const rat = await c.from('ratings').select('era,rating,games,wins,losses').eq('user_id', id);
       const riv = await c.from('rivalries').select('a,b,a_wins,b_wins,last_at');
+      const rep = await c.from('series_reports').select('lineup').order('created_at', { ascending: false }).limit(500);   // your own reports: the lineups you drafted
       const missing = [ser, rat, riv].find(x => x.error);
       if (missing) throw missing.error;
       const games = (ser.data || []).map(s => ({ won: (s.p1 === id ? s.w1 > s.w2 : s.w2 > s.w1), era: s.era, at: s.created_at, ranked: s.ranked }));
@@ -230,7 +306,10 @@
       const names = {};
       if (oppIds.length) { const p = await c.from('profiles').select('id,username').in('id', oppIds); (p.data || []).forEach(x => { names[x.id] = x.username; }); }
       const rivals = (riv.data || []).map(r => ({ name: names[r.a === id ? r.b : r.a] || '?', me: r.a === id ? r.a_wins : r.b_wins, them: r.a === id ? r.b_wins : r.a_wins, at: r.last_at })).sort((x, y) => (y.me + y.them) - (x.me + x.them));
-      const bl = row.best_lineup;
+      const bl = row.best_lineup, tally = {};
+      (rep.data || []).forEach(x => { const l = x.lineup; if (!l || !Array.isArray(l.names)) return; l.names.forEach((n, k) => { const se = l.seasons && l.seasons[k] || 0, key = n + '|' + se; tally[key] = (tally[key] || 0) + 1; }); });
+      const most = Object.keys(tally).map(k => { const [n, se] = k.split('|'); return { n, se: +se, c: tally[k] }; }).sort((x, y) => y.c - x.c || x.n.localeCompare(y.n)).slice(0, 5);
+      const yr = se => (se ? "'" + String(se - 1).slice(2) + "-'" + String(se).slice(2) : '');
       app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PROFILE</div><h1 class="ch-hero-t">${esc(row.username || UI.profile.account()).toUpperCase()}</h1>
           <p class="ch-hero-p">${games.length ? W + '-' + L + ' in Head to Head series' + (streak > 1 ? ', ' + streak + ' ' + (games[0].won ? 'wins' : 'losses') + ' in a row' : '') + '.' : 'No series on your account yet. Play a friend in Head to Head while you are both signed in.'}</p></section>
         <div class="rk-cards"><div class="rk-card"><small>RECORD</small><b>${W}-${L}</b></div><div class="rk-card"><small>FAVORITE ERA</small><b>${fav ? esc(eraName(fav)) : '-'}</b></div><div class="rk-card"><small>BEST LINEUP</small><b>${row.best_score != null ? Number(row.best_score).toFixed(1) : '-'}</b></div></div>
@@ -239,6 +318,7 @@
           <label class="field"><span>FAVORITE ERA</span><select id="meFav"><option value="">${auto ? 'THE ERA I PLAY MOST (' + esc(eraName(auto)) + ')' : 'THE ERA I PLAY MOST'}</option>${eraOpts(row.fav_era || '___')}</select></label>
           <small class="muted">Your region is only what you pick here. Nothing reads your location.</small>
           <div class="ch-go"><button type="button" class="btn btn-gold" id="meSave">SAVE</button><span class="pf-msg" id="meMsg"></span></div></div>
+        ${most.length ? `<div class="ch-step"><div class="ch-step-k">MOST DRAFTED</div>${table(['PLAYER', 'SEASON', 'TIMES'], most.map(m => [esc(m.n), esc(yr(m.se) || 'ANY'), '<b>' + m.c + '</b>']), true)}</div>` : ''}
         ${bl && bl.names ? `<div class="ch-step"><div class="ch-step-k">BEST LINEUP</div><p class="rk-lineup">${bl.names.map(n => `<span>${esc(n)}</span>`).join('')}</p><small class="muted">Score ${Number(bl.score || row.best_score).toFixed(1)}${bl.era ? ' | ' + esc(eraName(bl.era)) : ''}</small></div>` : ''}
         ${rat.data && rat.data.length ? `<div class="ch-step"><div class="ch-step-k">YOUR LADDER RATINGS</div>${table(['ERA', 'RATING', 'W-L'], rat.data.slice().sort((x, y) => y.rating - x.rating).map(r => [esc(eraName(r.era)), '<b>' + r.rating + '</b>', wl(r.wins, r.losses)]), true)}</div>` : ''}
         <div class="ch-step"><div class="ch-step-k">RIVALRIES</div>${rivals.length ? table(['VS', 'RECORD', ''], rivals.map(r => [esc(r.name), '<b>' + r.me + '-' + r.them + '</b>', r.me > r.them ? 'YOU LEAD' : r.me < r.them ? 'THEY LEAD' : 'TIED']), true) : '<p class="muted">Your rivalries show up here: one record for each friend you play, and one series counts for each draft.</p>'}</div>
@@ -252,11 +332,54 @@
     } catch (e) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PROFILE</div><h1 class="ch-hero-t">YOUR PROFILE.</h1></section><p class="rk-err">${esc(failMsg(e))}</p>`; }
   }
 
+  // ---------- #/ranked/find/ERA: a ranked match with no code ----------
+  let FIND = null;
+  function stopFind() { if (FIND) { clearInterval(FIND.t); FIND = null; } }
+  function findPage(app, era) {
+    stopFind(); stopRefresh();
+    era = ERAS.indexOf(era) >= 0 ? era : '1990s';
+    if (!UI.profile.signedIn()) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">RANKED MATCH | ${esc(eraName(era))}</div><h1 class="ch-hero-t">SIGN IN FIRST.</h1></section>${signInBox('PLAY RANKED')}<div class="ch-go"><a class="btn" href="#/ranked">BACK</a></div>`; UI.profile.wire(app, () => findPage(app, era)); return; }
+    if (!UI.vsQuick) { app.innerHTML = '<p class="rk-err">Head to Head did not load.</p>'; return; }
+    app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">RANKED MATCH | ${esc(eraName(era))}</div><h1 class="ch-hero-t" id="fgT">LOOKING FOR AN OPPONENT.</h1>
+        <p class="ch-hero-p" id="fgP">Stay on this screen. When someone else looks for a ${esc(eraName(era))} ranked match, you are paired and the auction starts on its own. You never type a code.</p></section>
+      <div class="ch-load"><div class="ch-spin-ring"></div></div>
+      <div class="ch-go"><button type="button" class="btn" id="fgCancel">CANCEL</button></div>`;
+    const me = UI.profile.account(), st0 = UI.vsQuick.status();
+    if (st0.role) UI.vsQuick.leave();
+    const F = FIND = { era, joinedAt: 0, t: null, busy: false };
+    const say = (t, p) => { const a = UI.$('#fgT', app), b = UI.$('#fgP', app); if (a) a.textContent = t; if (b && p) b.textContent = p; };
+    UI.$('#fgCancel', app).addEventListener('click', () => { stopFind(); UI.vsQuick.leave(); location.hash = '#/ranked'; });
+    const tick = async () => {
+      if (FIND !== F || F.busy) return;
+      if (!/^#\/ranked\/find/.test(location.hash)) { stopFind(); return; }
+      F.busy = true;
+      try {
+        const st = UI.vsQuick.status();
+        if (st.status === 'connected') { stopFind(); location.hash = UI.vsQuick.target(); return; }
+        const rows = await UI.profile.rpc('lobby_list');
+        const cand = (rows || []).filter(r => r.ranked && r.era === era && r.host_name !== me);
+        if (!st.role) {
+          if (cand[0]) { UI.vsQuick.join(cand[0].code, era); F.joinedAt = Date.now(); say('OPPONENT FOUND.', 'Connecting to ' + cand[0].host_name + '...'); }
+          else { UI.vsQuick.host(era); say('WAITING FOR AN OPPONENT.', 'You are listed for a ranked ' + eraName(era) + ' match. This screen pairs you the moment someone else looks.'); }
+        } else if (st.role === 'host' && st.status === 'waiting') {
+          const other = cand.filter(r => r.code < st.code)[0];   // two people searching at once: the lower room code is the one that stays
+          if (other) { UI.vsQuick.leave(); UI.vsQuick.join(other.code, era); F.joinedAt = Date.now(); say('OPPONENT FOUND.', 'Connecting to ' + other.host_name + '...'); }
+        } else if (st.role === 'guest' && F.joinedAt && Date.now() - F.joinedAt > 25000) {
+          UI.vsQuick.leave(); F.joinedAt = 0; say('LOOKING FOR AN OPPONENT.', 'That room did not answer. Looking again...');
+        }
+      } catch (e) { say('COULD NOT SEARCH.', failMsg(e)); stopFind(); }
+      F.busy = false;
+    };
+    F.t = setInterval(tick, 2000);
+    tick();
+  }
+
   P.ranked = function (app, arg) {
     const part = String(arg || '').split('/');
+    if (part[0] === 'find') return findPage(app, part[1] ? decodeURIComponent(part[1]) : RK.era);
     if (part[0] === 'daily') return dailyPage(app, part[1] ? decodeURIComponent(part[1]) : RK.era);
     return rankedPage(app);
   };
   P.me = function (app) { return mePage(app); };
-  window.addEventListener('hashchange', () => { if (!/^#\/ranked/.test(location.hash)) stopRefresh(); });
+  window.addEventListener('hashchange', () => { if (!/^#\/ranked/.test(location.hash)) { stopRefresh(); stopFind(); } });
 })();

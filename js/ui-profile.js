@@ -15,6 +15,7 @@
   const hasToken = () => { try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (/^sb-.*-auth-token$/.test(k)) return true; } } catch (e) { /* none */ } return false; };
   const fire = () => { try { window.dispatchEvent(new Event('a13-profile')); } catch (e) { /* old browser */ } };
 
+  const FRC = {};   // friend states looked up lately
   let sb = null, loading = null, USER = null, ONLINE = {}, PRES = null, INV = null;
   const WIRED = { fn: null };
 
@@ -66,7 +67,39 @@
       if (r.error) throw r.error;
       return r.data;
     },
-    userId() { return USER ? USER.id : null; }
+    userId() { return USER ? USER.id : null; },
+    // how you stand with a player in a room, by username: 'guest' (no account), 'self', 'friends', 'sent', 'incoming' or 'none'
+    async friendState(name) {
+      if (!P.account() || !name) return 'guest';
+      const key = String(name).toLowerCase(), hit = FRC[key];
+      if (hit && Date.now() - hit.at < 20000) return hit.st;
+      const c = await getClient();
+      if (!USER) return 'guest';
+      const f = await c.from('profiles').select('id,username').ilike('username', String(name).replace(/[_%\\]/g, '\\$&')).maybeSingle();
+      let st = 'guest';
+      if (f.data) {
+        if (f.data.id === USER.id) st = 'self';
+        else {
+          const r = await c.from('friendships').select('requester,addressee,status');
+          const row = (r.data || []).filter(x => (x.requester === f.data.id && x.addressee === USER.id) || (x.requester === USER.id && x.addressee === f.data.id))[0];
+          st = !row ? 'none' : row.status === 'accepted' ? 'friends' : row.requester === USER.id ? 'sent' : 'incoming';
+        }
+      }
+      FRC[key] = { st, at: Date.now() };
+      return st;
+    },
+    // sends a friend request (or accepts theirs); returns the new state
+    async addFriend(name) {
+      const c = await getClient(), key = String(name).toLowerCase();
+      delete FRC[key];
+      const f = await c.from('profiles').select('id,username').ilike('username', String(name).replace(/[_%\\]/g, '\\$&')).maybeSingle();
+      if (!f.data || !USER) return 'guest';
+      const theirs = await c.from('friendships').select('id').eq('requester', f.data.id).eq('addressee', USER.id).maybeSingle();
+      if (theirs.data) { await c.from('friendships').update({ status: 'accepted' }).eq('id', theirs.data.id); delete FRC[key]; return 'friends'; }
+      const r = await c.from('friendships').insert({ requester: USER.id, addressee: f.data.id });
+      delete FRC[key];
+      return r.error && r.error.code !== '23505' ? 'none' : 'sent';
+    }
   };
   window.UI = window.UI || {};
   UI.profile = P;

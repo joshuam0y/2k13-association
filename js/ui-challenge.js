@@ -886,13 +886,13 @@
     if (!list.length) { done(); return; }
     const many = list.length > 5, per = many ? 260 : 480, lead = 250, total = lead + per * list.length + (many ? 3200 : 450);   // two full rosters: they stay up longer
     const el = document.createElement('div');
-    el.className = 'in-wrap' + (groups.length > 1 && list.length > 10 ? ' in-many' : '');
+    el.className = 'in-wrap' + (groups.length > 1 && list.length > 6 ? ' in-many' : '');
     el.setAttribute('role', 'dialog');
     el.setAttribute('aria-label', 'Starters introduction. Tap to skip.');
     let k = 0;
     el.innerHTML = `<div class="in-box">${groups.map((g, gi) => `<div class="in-grp"><div class="in-k">${esc(g.label || 'STARTERS')}</div><ol class="in-list">${(g.players || []).map(p => {
         const d = lead + per * k++, name = p.name || '', pos = C.primaryPos ? C.primaryPos(p.pos) : p.pos;
-        return `<li class="in-c" style="animation-delay:${d}ms">${face(p, g.color || '#888', 'in-hs')}<span class="in-n"><b>${esc(name)}</b><small>${esc(pos || '')}</small></span>${opts.ratings === false || p.ovr == null ? '' : `<span class="ch-ovr in-o ${UI.ovrClass(p.ovr)}">${esc(p.ovr)}</span>`}</li>`;
+        return `<li class="in-c" style="animation-delay:${d}ms">${face(p, g.color || '#888', 'in-hs')}<span class="in-n"><b>${esc(name)}</b><small>${esc(pos || '')}${p.season ? ' | ' + esc("'" + String(p.season - 1).slice(2) + "-'" + String(p.season).slice(2)) : ''}</small></span>${opts.ratings === false || p.ovr == null ? '' : `<span class="ch-ovr in-o ${UI.ovrClass(p.ovr)}">${esc(p.ovr)}</span>`}</li>`;
       }).join('')}</ol></div>`).join('')}<div class="in-skip">TAP TO SKIP</div></div>`;
     document.body.appendChild(el);
     const timers = [];

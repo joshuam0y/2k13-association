@@ -96,32 +96,36 @@
     OKC: [60, 22], SAS: [58, 24], DEN: [57, 25], LAC: [56, 26], MEM: [56, 26], GSW: [47, 35], HOU: [45, 37], LAL: [45, 37],
     UTA: [43, 39], DAL: [41, 41], POR: [33, 49], MIN: [31, 51], SAC: [28, 54], NOH: [27, 55], PHX: [25, 57] };
 
+  // Loads a script file, trying again (with a fresh URL, so a bad cached copy does not stick) when the connection drops: up to three tries
+  function fetchScript(src, check, msg) {
+    return new Promise(function (res, rej) {
+      var n = 0;
+      (function go() {
+        var s = document.createElement('script');
+        function fail() { if (s.parentNode) s.parentNode.removeChild(s); if (++n < 3) setTimeout(go, 700 * n); else rej(new Error(msg)); }
+        s.src = n ? src + (src.indexOf('?') >= 0 ? '&' : '?') + 'r=' + Date.now() + n : src;
+        s.onload = function () { if (check()) res(); else fail(); };
+        s.onerror = fail;
+        document.head.appendChild(s);
+      })();
+    });
+  }
   // Loads data/era-YYYY.js once (browser). Resolves to the season data.
   var loading = {};
   function load(year) {
     if (year === 'pool') {
       if (W.CHALLENGE_POOL) return Promise.resolve(W.CHALLENGE_POOL);
       if (typeof document === 'undefined') return Promise.reject(new Error('No all-time pool'));
-      if (!loading.pool) loading.pool = new Promise(function (res, rej) {
-        var sp = document.createElement('script');
-        sp.src = POOL_FILE;
-        sp.onload = function () { W.CHALLENGE_POOL ? res(W.CHALLENGE_POOL) : rej(new Error('The all-time pool did not load.')); };
-        sp.onerror = function () { delete loading.pool; rej(new Error('The all-time pool did not load. Check the connection and try again.')); };
-        document.head.appendChild(sp);
-      });
+      if (!loading.pool) loading.pool = fetchScript(POOL_FILE, function () { return !!W.CHALLENGE_POOL; }, 'The all-time pool did not load. Check the connection and try again.')
+        .then(function () { return W.CHALLENGE_POOL; }, function (e) { delete loading.pool; throw e; });
       return loading.pool;
     }
     year = +year;
     if (loaded(year)) return Promise.resolve(seasonData(year));
     var info = seasonInfo(year);
     if (!info || !info.file || typeof document === 'undefined') return Promise.reject(new Error('No data for ' + year));
-    if (!loading[year]) loading[year] = new Promise(function (res, rej) {
-      var s = document.createElement('script');
-      s.src = info.file;
-      s.onload = function () { loaded(year) ? res(seasonData(year)) : rej(new Error('The ' + info.label + ' rosters did not load.')); };
-      s.onerror = function () { delete loading[year]; rej(new Error('The ' + info.label + ' rosters did not load. Check the connection and try again.')); };
-      document.head.appendChild(s);
-    });
+    if (!loading[year]) loading[year] = fetchScript(info.file, function () { return loaded(year); }, 'The ' + info.label + ' rosters did not load. Check the connection and try again.')
+      .then(function () { return seasonData(year); }, function (e) { delete loading[year]; throw e; });
     return loading[year];
   }
   function loadAll() { return Promise.all(SEASONS.map(function (s) { return load(s.year).catch(function () { return null; }); })); }
@@ -279,9 +283,10 @@
   // the most this side may bid now: its money minus the start price for each of its other empty slots
   function aucMax(st, side) { return st.o.budget - st.spent[side] - Math.max(0, st.per - st.won[side].length - 1) * st.o.start; }
   function aucCanRaise(st, side) { return !aucFull(st, side) && st.price + st.o.raise <= aucMax(st, side); }
-  function aucSell(st, side, price) {
+  // auto: the sale was not a bid or a pass but settled by the rules (the other side is full, or cannot afford a raise); the screens show those as a reveal
+  function aucSell(st, side, price, auto) {
     var id = st.ids[st.i];
-    st.won[side].push(id); st.spent[side] += price; st.log.push({ id: id, side: side, price: price });
+    st.won[side].push(id); st.spent[side] += price; st.log.push({ id: id, side: side, price: price, auto: auto ? (price === 0 ? 'free' : 'default') : undefined });
   }
   // moves to the next player and settles every round nobody can contest
   function aucNext(st) {
@@ -290,12 +295,11 @@
       if (st.i >= st.ids.length || (aucFull(st, 0) && aucFull(st, 1))) { st.done = true; st.turn = -1; st.holder = -1; return st; }
       var open = st.i % 2;
       if (aucFull(st, open)) {   // the opener has his five: the other side takes him free
-        aucSell(st, 1 - open, 0); continue;
+        aucSell(st, 1 - open, 0, true); continue;
       }
-      if (aucFull(st, 1 - open)) { aucSell(st, open, 0); continue; }
+      if (aucFull(st, 1 - open)) { aucSell(st, open, 0, true); continue; }
       st.holder = open; st.price = st.o.start; st.turn = 1 - open;
-      if (!aucCanRaise(st, st.turn)) { aucSell(st, st.holder, st.price); continue; }
-      return st;
+      return st;   // a side out of money still gets its turn: it can only pass
     }
   }
   function auctionStart(cfg, players) {
@@ -307,13 +311,15 @@
     return aucNext(st);
   }
   // side raises (action 'raise') or passes (action 'pass'); returns false when it is not his move
-  function auctionAct(st, side, action) {
+  // to: the bid, anything from one raise above the price up to the most this side can pay (default: one raise)
+  function auctionAct(st, side, action, to) {
     if (!st || st.done || st.turn !== side) return false;
     if (action === 'raise') {
       if (!aucCanRaise(st, side)) return false;
-      st.price += st.o.raise; st.holder = side; st.turn = 1 - side;
-      if (!aucCanRaise(st, st.turn)) { aucSell(st, st.holder, st.price); aucNext(st); }
-      return true;
+      to = to == null ? st.price + st.o.raise : Math.floor(+to);
+      if (!(to >= st.price + st.o.raise) || to > aucMax(st, side)) return false;
+      st.price = to; st.holder = side; st.turn = 1 - side;
+      return true;   // the other side may be out of money: then it can only pass
     }
     if (action === 'pass') { aucSell(st, st.holder, st.price); aucNext(st); return true; }
     return false;

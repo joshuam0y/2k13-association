@@ -232,6 +232,7 @@
     push(); NET.role = 'guest'; NET.status = 'connecting'; NET.peerSeen = Date.now(); route();
   }
   function hangUp() {
+    QUICK = 0;
     NET.timers.forEach(t => clearInterval(t)); NET.timers = [];
     if (UI.ranked) UI.ranked.lobbyStop();
     try { if (NET.client) NET.client.end(true); } catch (e) { /* gone */ }
@@ -303,10 +304,28 @@
       ${st === 'waiting' ? `<button type="button" class="btn btn-small" id="vsCopy">COPY LINK</button>` : ''}
       ${NET.role === 'host' && (st === 'waiting' || st === 'connected') ? `<button type="button" class="btn btn-small" id="vsCopyWatch">COPY WATCH LINK</button>${watchers() ? `<span class="vs-spec">${watchers()} WATCHING</span>` : ''}` : ''}
       ${NET.role === 'host' && st === 'connected' ? `<button type="button" class="btn btn-small" id="vsHand">MAKE ${esc(who(1 - NET.side).toUpperCase())} HOST</button>` : ''}
+      ${st === 'connected' && me() !== null && me() >= 0 && UI.profile.signedIn() ? '<span class="vs-fr" id="vsFriend"></span>' : ''}
       ${st === 'lost' || st === 'error' ? `<button type="button" class="btn btn-small" id="vsRetry">${NET.role === 'host' ? 'NEW ROOM' : 'TRY AGAIN'}</button>` : ''}
       <button type="button" class="btn btn-small" id="vsLeave">LEAVE</button></div>`;
   }
+  // next to the other player: add as a friend, or that you already are
+  function fillFriend(app) {
+    const el = UI.$('#vsFriend', app);
+    if (!el || me() === null || me() < 0 || !UI.profile.signedIn()) return;
+    const name = who(1 - me());
+    if (!name || /^PLAYER \d$/.test(name)) return;
+    const paint = st => {
+      const e = UI.$('#vsFriend', app); if (!e) return;
+      if (st === 'friends') e.innerHTML = '<span class="vs-fr ok">&#10003; ' + esc(name.toUpperCase()) + ' IS YOUR FRIEND</span>';
+      else if (st === 'sent') e.innerHTML = '<span class="muted">FRIEND REQUEST SENT</span>';
+      else if (st === 'none' || st === 'incoming') { e.innerHTML = '<button type="button" class="btn btn-small btn-gold" id="vsAddFr">' + (st === 'incoming' ? 'ACCEPT FRIEND REQUEST' : 'ADD ' + esc(name.toUpperCase()) + ' AS FRIEND') + '</button>'; const b = UI.$('#vsAddFr', app); b.addEventListener('click', () => { b.disabled = true; UI.profile.addFriend(name).then(s2 => { paint(s2); UI.toast(s2 === 'friends' ? 'You are now friends with ' + name + '.' : 'Friend request sent to ' + name + '.'); }).catch(() => { b.disabled = false; UI.toast('Could not send the request.', 'error'); }); }); }
+      else e.innerHTML = '';   // a guest or yourself: nothing to add
+    };
+    UI.profile.friendState(name).then(paint).catch(() => {});
+  }
   function bindNet(app) {
+    fillFriend(app);
+    const rb = UI.$('#vsRules', app); if (rb) rb.addEventListener('click', () => { const bx = UI.$('#vsRulesBox', app); if (bx) bx.hidden = !bx.hidden; });
     const cp = UI.$('#vsCopy', app);
     if (cp) cp.addEventListener('click', async () => {
       const link = joinLink(), text = 'Draft me on Starting Five. Room ' + NET.code + ': ' + link;
@@ -406,18 +425,24 @@
   }
   function go(page) { VS.page = page; push(); route(); window.scrollTo(0, 0); }
 
+  // rosters would not load: stay in the game (the room is still open) and offer to try again
+  function loadFail(app, e, retry) {
+    app.innerHTML = UI.empty('ROSTERS DID NOT LOAD', esc((e && e.message) || e) + ' Your game is still here.', '<div class="row-btns"><button type="button" class="btn btn-gold" id="vsRetryLoad">TRY AGAIN</button>' + (online() ? '' : '<a class="btn" href="#/challenge">BACK</a>') + '</div>');
+    const b = UI.$('#vsRetryLoad', app); if (b) b.addEventListener('click', () => { b.disabled = true; retry(); });
+    setTimeout(() => { if (UI.$('#vsRetryLoad') && /^#\/challenge\/vs/.test(location.hash)) retry(); }, 8000);   // and it tries again by itself
+  }
   function loadThen(app, year, fn) {
     if (!year) {   // every season: the all-time pool plus the 2012-13 franchises
       // players drafted from a landed season's full roster need that season's file, also after a reload
       const yrs = [...new Set([].concat(...((VS.cfg && VS.cfg.sides) || []).map(sd => sd.picks)).map(k => +String(k).split('@')[1]).filter(y => y && y !== 2013 && !C.loaded(y)))];
       if (C.loaded('pool') && C.loaded(2013) && !yrs.length) { fn(); return; }
       app.innerHTML = '<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING EVERY SEASON...</div></section>';
-      Promise.all([C.load('pool'), C.load(2013)].concat(yrs.map(y => C.load(y)))).then(() => fn()).catch(e => { app.innerHTML = UI.empty('ROSTERS DID NOT LOAD', esc(e.message || e), '<div class="row-btns"><a class="btn" href="#/challenge">BACK</a></div>'); });
+      Promise.all([C.load('pool'), C.load(2013)].concat(yrs.map(y => C.load(y)))).then(() => fn()).catch(e => loadFail(app, e, () => loadThen(app, year, fn)));
       return;
     }
     if (C.loaded(year)) { fn(); return; }
     app.innerHTML = `<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE ${esc(lbl(year))} ROSTERS...</div></section>`;
-    C.load(year).then(fn).catch(e => { app.innerHTML = UI.empty('ROSTERS DID NOT LOAD', esc(e.message || e), '<div class="row-btns"><a class="btn" href="#/challenge">BACK</a></div>'); });
+    C.load(year).then(fn).catch(e => loadFail(app, e, () => loadThen(app, year, fn)));
   }
 
   // ---------- setup ----------
@@ -443,7 +468,7 @@
     return `<div><span class="ts-start-k">RANKED AND OPEN GAMES</span><div class="ch-chips">
         ${VS.opts.auction ? `<button type="button" class="ch-chip${VS.opts.ranked ? ' on' : ''}" data-rk="ranked"${dis}>${VS.opts.ranked ? 'RANKED: ON' : 'RANKED: OFF'}</button>` : ''}
         ${NET.role === 'host' ? `<button type="button" class="ch-chip${VS.opts.pub ? ' on' : ''}" data-rk="pub"${dis}>${VS.opts.pub ? 'OPEN GAME: LISTED' : 'OPEN GAME: PRIVATE'}</button>` : ''}</div>
-      <small class="muted">${VS.opts.ranked && VS.opts.auction ? 'Ranked uses the standard rules ($20 each, $1 to open, +$1 raises, ten stars in the pool, best of 5, just the five). If you both finish the series signed in, it moves your ladder rating for this era.' : VS.opts.auction ? 'Turn on ranked for a series that counts on the ladder.' : 'Ranked games are auctions. Pick the auction draft style to turn it on.'} ${VS.opts.pub ? 'Anyone can find this room under Ranked, Open games, until your friend joins.' : ''}</small></div>`;
+      <small class="muted">${VS.opts.ranked && VS.opts.auction ? 'Ranked uses the standard rules ($20 each, $1 to open, any raise, ten stars in the pool, 24 second shot clock, best of 5, just the five). If you both finish the series signed in, it moves your ladder rating for this era.' : VS.opts.auction ? 'Turn on ranked for a series that counts on the ladder.' : 'Ranked games are auctions. Pick the auction draft style to turn it on.'} ${VS.opts.pub ? 'Anyone can find this room under Ranked, Open games, until your friend joins.' : ''}</small></div>`;
   }
   function syncLobby() {
     if (!UI.ranked) return;
@@ -461,13 +486,20 @@
       const boss = NET.role !== 'guest' && NET.role !== 'watch';   // the host (or the one phone) sets the season and the rules
       const dis = c => (c ? '' : ' disabled');
       const grid = i => `<div class="ch-teams">${teams.map(t => `<button type="button" class="ch-team${VS.teams[i] === t.abbr ? ' on' : ''}" data-side="${i}" data-team="${esc(t.abbr)}"${VS.teams[1 - i] === t.abbr || !canAct(i) ? ' disabled' : ''} style="--c1:${esc(t.colors[0])}">${logo(t, 30)}<span>${esc(t.name)}</span></button>`).join('')}</div>`;
+      // a carousel of teams for each player (swipe it, tap the arrows, or SPIN for a random one)
+      const wheel = i => `<div class="tc" data-car="${i}"><button type="button" class="tc-ar" data-arrow="${i}:-1" aria-label="Earlier teams">&lsaquo;</button><div class="tc-strip">${teams.map(t => `<button type="button" class="tc-t${VS.teams[i] === t.abbr ? ' on' : ''}" data-side="${i}" data-team="${esc(t.abbr)}"${VS.teams[1 - i] === t.abbr || !canAct(i) ? ' disabled' : ''} style="--c1:${esc(t.colors[0])}">${logo(t, 44)}<span>${esc(t.abbr)}</span></button>`).join('')}</div><button type="button" class="tc-ar" data-arrow="${i}:1" aria-label="Later teams">&rsaquo;</button></div>
+        <div class="tc-bar"><span class="tc-name">${esc(tName(tOf(teams, VS.teams[i])))}</span><button type="button" class="btn btn-small" data-spin="${i}"${canAct(i) ? '' : ' disabled'}>&#8635; SPIN</button></div>`;
+      const ch0 = chosen(), seasonSum = !ch0.length ? 'NONE PICKED' : ch0.length === ALL_YEARS.length ? 'EVERY SEASON' : lblC({ year: ch0.length === 1 ? ch0[0] : 0, seasons: ch0.length > 1 ? ch0 : null });
+      const rulesSum = ['BEST OF ' + VS.opts.bestOf, VS.opts.auction ? 'AUCTION' : VS.opts.board ? 'OPEN BOARD' : 'WHEEL', VS.opts.bench ? '8-MAN' : 'JUST THE FIVE'].concat(VS.opts.ranked && VS.opts.auction ? ['RANKED'] : [], VS.opts.cap && !VS.opts.auction ? ['$' + VS.opts.cap + 'M CAP'] : [], VS.opts.timer ? ['24 SEC CLOCK'] : [], VS.opts.bans && !VS.opts.auction ? [VS.opts.bans + ' BAN' + (VS.opts.bans > 1 ? 'S' : '') + ' EACH'] : []).join(' | ');
+      const opened = k => (VS.det && VS.det[k] ? ' open' : '');
       if (me() !== null && me() >= 0 && UI.profile.name() && VS.names[me()] !== UI.profile.name()) { VS.names[me()] = UI.profile.name(); if (NET.role === 'guest') send({ t: 'hello', name: VS.names[me()] }); else { uniqNames(); push(); } }   // online, your name is your account
+      if (QUICK && NET.role === 'host' && linked() && !VS.cfg) VS.ready = [true, true];   // quick match: nobody has to press anything
       const ready = !online() || linked();
       app.innerHTML = `
         <section class="ch-hero"><div class="ch-hero-k">DRAFT CHALLENGE | TWO PLAYERS</div><h1 class="ch-hero-t">YOU VS ME.</h1>
           <p class="ch-hero-p">Take turns spinning the wheel and taking one player from the team it lands on, until you both have five (or switch the wheel off and draft from an open board). Then a series: nobody comes off the bench, all five play 48 minutes, so positions and fit matter.</p></section>
         ${netBar()}
-        <div class="ch-setup">
+        <div class="ch-setup vs-setup">
           ${UI.profile.bar()}${PEND ? `<p class="muted">Pick a name below to join room <b>${esc(PEND)}</b>.</p>` : ''}
           <div class="ch-step"><div class="ch-step-k">1 | HOW YOU PLAY</div>
             <div class="ch-seg vs-seg3"><button type="button" class="ch-seg-b${!online() ? ' on' : ''}" data-net="local"><b>SAME PHONE</b><small>Pass it back and forth</small></button>
@@ -476,10 +508,10 @@
             ${!online() && savedRoom() ? `<div class="vs-join"><button type="button" class="btn btn-gold" id="vsRejoin">REJOIN ROOM ${esc(savedRoom().code)}${savedRoom().role === 'watch' ? ' (WATCHING)' : ''}</button><button type="button" class="btn btn-small" id="vsForget">FORGET IT</button></div>` : ''}
             ${NET.role === 'guest' && !linked() ? `<div class="vs-join"><label class="field"><span>ROOM CODE</span><input id="vsCode" maxlength="5" placeholder="ABCDE" value="${esc(NET.code)}" autocomplete="off" autocapitalize="characters"></label><button type="button" class="btn btn-gold" id="vsJoin">JOIN</button><button type="button" class="btn" id="vsWatchBtn">WATCH INSTEAD</button></div>` : ''}
           </div>
-          <div class="ch-step"><div class="ch-step-k">2 | THE SEASON</div><div class="row-btns vs-seas-all"><button type="button" class="btn btn-small${!VS.skip.length ? ' on' : ''}" data-seas="all"${dis(boss)}>ALL</button><button type="button" class="btn btn-small" data-seas="none"${dis(boss)}>CLEAR</button>${DECADES().length > 1 ? DECADES().map(d => { const ys = ALL_YEARS.filter(y => decOf(y) === d), n = ys.filter(y => VS.skip.indexOf(y) < 0).length; return `<button type="button" class="btn btn-small${n === ys.length ? ' on' : n ? ' part' : ''}" data-dec="${d}"${dis(boss)}>${d}s</button>`; }).join('') : ''}<span class="muted">${chosen().length} of ${ALL_YEARS.length} on</span></div>
+          <details class="ch-step vs-det" data-det="s2"${opened('s2')}><summary class="ch-step-k">2 | THE SEASON <em>${esc(seasonSum)}</em></summary><div class="row-btns vs-seas-all"><button type="button" class="btn btn-small${!VS.skip.length ? ' on' : ''}" data-seas="all"${dis(boss)}>ALL</button><button type="button" class="btn btn-small" data-seas="none"${dis(boss)}>CLEAR</button>${DECADES().length > 1 ? DECADES().map(d => { const ys = ALL_YEARS.filter(y => decOf(y) === d), n = ys.filter(y => VS.skip.indexOf(y) < 0).length; return `<button type="button" class="btn btn-small${n === ys.length ? ' on' : n ? ' part' : ''}" data-dec="${d}"${dis(boss)}>${d}s</button>`; }).join('') : ''}<span class="muted">${chosen().length} of ${ALL_YEARS.length} on</span></div>
             <div class="vs-seas">${C.SEASONS.map(s => `<button type="button" class="ch-chip${VS.skip.indexOf(s.year) < 0 ? ' on' : ''}" data-yr="${s.year}"${dis(boss)}>${esc(s.label)}</button>`).join('')}</div>
-            <small class="muted">${!chosen().length ? 'Pick at least one season.' : chosen().length === 1 ? 'One season: the whole ' + esc(lbl(chosen()[0])) + ' league.' : 'Every spin lands on a team and a season from the ones on. Nobody can be drafted twice, even from different seasons. Tap a season to switch it off.'}</small></div>
-          <div class="ch-step"><div class="ch-step-k">3 | THE RULES</div>
+            <small class="muted">${!chosen().length ? 'Pick at least one season.' : chosen().length === 1 ? 'One season: the whole ' + esc(lbl(chosen()[0])) + ' league.' : 'Every spin lands on a team and a season from the ones on. Nobody can be drafted twice, even from different seasons. Tap a season to switch it off.'}</small></details>
+          <details class="ch-step vs-det" data-det="s3"${opened('s3')}><summary class="ch-step-k">3 | THE RULES <em>${esc(rulesSum)}</em></summary>
             <div class="vs-rules"><div><span class="ts-start-k">SERIES</span><div class="ch-chips">${[3, 5, 7].map(n => `<button type="button" class="ch-chip${VS.opts.bestOf === n ? ' on' : ''}" data-bo="${n}"${dis(boss)}>BEST OF ${n}</button>`).join('')}</div></div>
               <div><span class="ts-start-k">SHOT CLOCK</span><div class="ch-chips">${[[24, '24 SEC'], [0, 'OFF']].map(([v, l]) => `<button type="button" class="ch-chip${(VS.opts.timer || 0) === v ? ' on' : ''}" data-timer="${v}"${dis(boss)}>${l}</button>`).join('')}</div>
                 <small class="muted">${VS.opts.timer ? 'Run out of time and the wheel spins for you, or you get the best player on its team.' : 'No clock.'}</small></div>
@@ -496,19 +528,43 @@
               <div><span class="ts-start-k">BENCH</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.bench ? ' on' : ''}" data-bench="0"${dis(boss)}>JUST THE FIVE</button><button type="button" class="ch-chip${VS.opts.bench ? ' on' : ''}" data-bench="3"${dis(boss)}>8-MAN: +3 BENCH</button></div>
                 <small class="muted">${VS.opts.bench ? 'Everyone drafts eight. The first five start, the last three come off the bench (with a salary cap the cap grows to cover all eight).' : 'Five players each, all 48 minutes.'}</small></div>
               ${VS.opts.auction ? '' : `<div><span class="ts-start-k">SALARY CAP</span><div class="ch-chips">${UI.challengeCap.CAPS.map(v => `<button type="button" class="ch-chip${(VS.opts.cap || 0) === v ? ' on' : ''}" data-cap="${v}"${dis(boss)}>${v ? '$' + v + 'M' : 'OFF'}</button>`).join('')}</div>
-                <small class="muted">${VS.opts.cap ? 'Every player has a price from his rating (a 99 is $45M, the minimum $1M). Both rosters must fit under $' + C.capFor(VS.opts.cap, VS.opts.bench) + 'M.' : 'No cap: take anyone.'}</small></div></div>`}</div>
-          ${[0, 1].map(i => `<div class="ch-step"><div class="ch-step-k">${i + 4} | PLAYER ${i + 1}${me() === i ? ' (YOU)' : ''}</div>
+                <small class="muted">${VS.opts.cap ? 'Every player has a price from his rating (a 99 is $45M, the minimum $1M). Both rosters must fit under $' + C.capFor(VS.opts.cap, VS.opts.bench) + 'M.' : 'No cap: take anyone.'}</small></div></div>`}</details>
+          <div class="vs-players">${[0, 1].map(i => `<div class="ch-step vs-pl"><div class="ch-step-k">PLAYER ${i + 1}${me() === i ? ' (YOU)' : ''}</div>
             <label class="field"><span>NAME</span><input data-name="${i}" name="p${i}-${Date.now()}" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="20" placeholder="Player ${i + 1}" value="${esc(VS.names[i] || '')}"${online() ? ' readonly' : dis(canAct(i))}></label>
-            <label class="field"><span>TEAM NAME</span><input data-tname="${i}" name="t${i}-${Date.now()}" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="24" placeholder="${esc(tName(tOf(teams, VS.teams[i])))}" value="${esc(VS.tnames[i] || '')}"${dis(canAct(i))}></label>${grid(i)}</div>`).join('')}
+            <label class="field"><span>TEAM NAME</span><input data-tname="${i}" name="t${i}-${Date.now()}" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="24" placeholder="${esc(tName(tOf(teams, VS.teams[i])))}" value="${esc(VS.tnames[i] || '')}"${dis(canAct(i))}></label>${wheel(i)}</div>`).join('')}</div>
           <div class="ch-go"><button type="button" class="btn btn-small" id="vsResetNames">RESET NAMES</button></div>
           ${rivalBox(rivalry(), true)}
-          ${online() && linked() ? `<div class="ch-step"><div class="ch-step-k">READY CHECK</div><div class="ch-chips">${[0, 1].map(i => `<button type="button" class="ch-chip${VS.ready && VS.ready[i] ? ' on' : ''}" data-ready="${i}"${canAct(i) ? '' : ' disabled'}>${esc(who(i).toUpperCase())}: ${VS.ready && VS.ready[i] ? 'READY' : canAct(i) ? 'TAP WHEN READY' : 'NOT READY'}</button>`).join('')}</div><small class="muted">The host can start once you are both ready.</small></div>` : ''}
-          <div class="ch-go">${boss ? `<button type="button" class="btn btn-gold btn-big" id="vsStart"${ready && (!online() || (VS.ready && VS.ready[0] && VS.ready[1])) ? '' : ' disabled'}>${!ready ? 'WAITING FOR PLAYER 2' : online() && !(VS.ready && VS.ready[0] && VS.ready[1]) ? 'WAITING FOR BOTH TO BE READY' : 'START THE DRAFT'}</button>` : '<p class="muted">Your friend starts the draft when you are both set.</p>'}
-            ${VS.cfg ? '<button type="button" class="btn" id="vsBack">BACK TO OUR DRAFT</button>' : ''}<a class="btn" href="#/challenge">ONE PLAYER</a></div>
+          <div class="vs-dock"><div class="vs-dock-in">
+            ${online() && linked() ? `<div class="vs-ready">${[0, 1].map(i => `<button type="button" class="vs-rd${VS.ready && VS.ready[i] ? ' on' : ''}" data-ready="${i}"${canAct(i) ? '' : ' disabled'}><i></i><span>${esc(who(i))}</span><b>${VS.ready && VS.ready[i] ? 'READY' : canAct(i) ? 'TAP TO READY' : 'NOT READY'}</b></button>`).join('')}</div>` : ''}
+            <div class="vs-dock-go">${boss ? `<button type="button" class="btn btn-gold btn-big" id="vsStart"${ready && (!online() || (VS.ready && VS.ready[0] && VS.ready[1])) ? '' : ' disabled'}>${!ready ? 'WAITING FOR PLAYER 2' : online() && !(VS.ready && VS.ready[0] && VS.ready[1]) ? 'WAITING FOR BOTH TO BE READY' : 'START THE DRAFT'}</button>` : '<span class="muted">Your friend starts the draft when you are both ready.</span>'}
+              ${VS.cfg ? '<button type="button" class="btn" id="vsBack">BACK TO OUR DRAFT</button>' : ''}</div></div></div>
         </div>`;
       UI.centerChips(app);
+      app.querySelectorAll('details[data-det]').forEach(d => d.addEventListener('toggle', () => { VS.det = Object.assign({}, VS.det, { [d.dataset.det]: d.open }); }));
+      const centerOn = (strip, t) => { strip.scrollLeft = t.offsetLeft - strip.clientWidth / 2 + t.offsetWidth / 2; };
+      app.querySelectorAll('.tc').forEach(car => { const strip = car.querySelector('.tc-strip'), on = strip.querySelector('.on'); if (on) centerOn(strip, on); });
+      app.querySelectorAll('[data-arrow]').forEach(b => b.addEventListener('click', () => { const [i, d] = b.dataset.arrow.split(':'), strip = app.querySelector('.tc[data-car="' + i + '"] .tc-strip'); strip.scrollBy({ left: +d * strip.clientWidth * 0.7, behavior: 'smooth' }); }));
+      app.querySelectorAll('[data-spin]').forEach(b => b.addEventListener('click', () => {   // the carousel spins through the teams and slows down onto one
+        const i = +b.dataset.spin;
+        if (!canAct(i)) return;
+        const car = app.querySelector('.tc[data-car="' + i + '"]'), strip = car.querySelector('.tc-strip'), tiles = [...car.querySelectorAll('.tc-t:not([disabled])')];
+        if (tiles.length < 2) return;
+        app.querySelectorAll('[data-spin],[data-arrow]').forEach(x => { x.disabled = true; });
+        const fi = Math.floor(Math.random() * tiles.length), final = tiles[fi];
+        let k = Math.max(0, tiles.indexOf(strip.querySelector('.tc-t.on'))), n = 0;
+        const total = tiles.length + ((fi - k + tiles.length) % tiles.length) || tiles.length;   // one full lap, then on to the team it lands on
+        const tick = () => {
+          tiles.forEach(t => t.classList.remove('spin'));
+          k = (k + 1) % tiles.length; const t = tiles[k]; t.classList.add('spin'); n++;
+          strip.scrollTo({ left: t.offsetLeft - strip.clientWidth / 2 + t.offsetWidth / 2 });
+          if (n >= total) { if (window.SFX) window.SFX.play('chime'); setTimeout(() => { VS.teams[i] = final.dataset.team; redraw(); }, 500); return; }
+          setTimeout(tick, 35 + 250 * Math.pow(n / total, 3));   // fast, then slowing down onto the pick
+        };
+        tick();
+      }));
       bindNet(app);
       syncLobby();
+      if (QUICK && NET.role === 'host' && linked() && !VS.cfg) setTimeout(() => { const b = UI.$('#vsStart'); if (QUICK && b && !b.disabled) b.click(); }, 900);
       const redraw = () => { KEEP = window.scrollY; push(); setup(app); };
       if (KEEP != null) { const y = KEEP; KEEP = null; window.scrollTo(0, y); requestAnimationFrame(() => window.scrollTo(0, y)); }   // a setup choice keeps your place, even when it had to load a season first
       app.querySelectorAll('[data-net]').forEach(b => b.addEventListener('click', () => {
@@ -538,7 +594,7 @@
       app.querySelectorAll('[data-board]').forEach(b => b.addEventListener('click', () => { const v = +b.dataset.board; VS.opts.board = v === 1 ? 1 : 0; VS.opts.auction = v === 2 ? 1 : 0; if (v === 2) VS.opts.cap = 0; redraw(); }));
       app.querySelectorAll('[data-rk]').forEach(b => b.addEventListener('click', () => {
         const k = b.dataset.rk; VS.opts[k] = VS.opts[k] ? 0 : 1;
-        if (k === 'ranked' && VS.opts.ranked) Object.assign(VS.opts, { aBudget: 20, aStart: 1, aRaise: 1, aPool: 10, aQ: 'stars', aShow: 0, bench: 0, bestOf: 5, blind: false, cap: 0 });
+        if (k === 'ranked' && VS.opts.ranked) Object.assign(VS.opts, { aBudget: 20, aStart: 1, aRaise: 1, aPool: 10, aQ: 'stars', aShow: 0, bench: 0, bestOf: 5, blind: false, cap: 0, timer: 24, dupes: 0 });
         redraw(); syncLobby();
       }));
       app.querySelectorAll('[data-bans]').forEach(b => b.addEventListener('click', () => { VS.opts.bans = +b.dataset.bans; redraw(); }));
@@ -566,9 +622,9 @@
         uniqNames();
         const ch = chosen();
         if (!ch.length) { UI.toast('Switch on at least one season', 'error'); return; }
-        if (VS.opts.ranked && VS.opts.auction && online()) Object.assign(VS.opts, { aBudget: 20, aStart: 1, aRaise: 1, aPool: 10, aQ: 'stars', aShow: 0, bench: 0, bestOf: 5, blind: false, cap: 0 });
+        if (VS.opts.ranked && VS.opts.auction && online()) Object.assign(VS.opts, { aBudget: 20, aStart: 1, aRaise: 1, aPool: 10, aQ: 'stars', aShow: 0, bench: 0, bestOf: 5, blind: false, cap: 0, timer: 24, dupes: 0 });
         VS.year = ch.length === 1 ? ch[0] : 0;
-        VS.cfg = { mode: 'versus', year: VS.year, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null, bestOf: VS.opts.bestOf, blind: !VS.opts.cap && !!VS.opts.blind, cap: VS.opts.auction ? 0 : C.capFor(+VS.opts.cap || 0, VS.opts.bench), bench: +VS.opts.bench || 0, board: VS.opts.board && !VS.opts.auction ? 1 : 0, ranked: !!(VS.opts.ranked && VS.opts.auction && online() && UI.profile.signedIn()), bansN: VS.opts.auction ? 0 : +VS.opts.bans || 0, bans: [], dupes: ch.length > 1 && VS.opts.dupes ? 1 : 0, timer: VS.opts.auction ? 0 : +VS.opts.timer || 0, era: +VS.opts.era || 2013, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
+        VS.cfg = { mode: 'versus', year: VS.year, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null, bestOf: VS.opts.bestOf, blind: !VS.opts.cap && !!VS.opts.blind, cap: VS.opts.auction ? 0 : C.capFor(+VS.opts.cap || 0, VS.opts.bench), bench: +VS.opts.bench || 0, board: VS.opts.board && !VS.opts.auction ? 1 : 0, ranked: !!(VS.opts.ranked && VS.opts.auction && online() && UI.profile.signedIn()), bansN: VS.opts.auction ? 0 : +VS.opts.bans || 0, bans: [], dupes: ch.length > 1 && VS.opts.dupes ? 1 : 0, timer: VS.opts.auction && VS.opts.ranked && online() ? 24 : +VS.opts.timer || 0, era: +VS.opts.era || 2013, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
           sides: [0, 1].map(i => ({ team: VS.teams[i], name: (VS.tnames[i] || '').trim() || (VS.names[i] ? VS.names[i] + "'s " + tOf(teams, VS.teams[i]).name : ''), picks: [] })) };
         VS.spin = null; VS.spun = []; VS.respins = [1, 1]; VS.shown = 0; VS.pos = ''; VS.q = ''; VS.season = ''; VS.sort = ''; VS.sw = null; VS.auc = null; VS.ready = [false, false];
         if (VS.opts.auction) {
@@ -576,13 +632,33 @@
           if (o.aBudget < per * o.aStart) { UI.toast('$' + o.aBudget + ' is not enough to fill ' + per + ' spots at $' + o.aStart + ' each.', 'error'); VS.cfg = null; return; }
           VS.cfg.auction = { budget: o.aBudget, start: o.aStart, raise: o.aRaise, pool: Math.max(o.aPool, 2 * per), quality: o.aQ, show: o.aShow ? 1 : 0 };
           const B0 = board(VS.cfg);
-          VS.auc = C.auctionStart(VS.cfg, B0.players.concat(B0.extra || []));
+          const best = {};   // one entry for each player, his best season (every season of him only with duplicates on)
+          B0.players.concat(B0.extra || []).forEach(p => { const k = B0.base(p); if (!best[k] || p.ovr > best[k].ovr) best[k] = p; });
+          VS.auc = C.auctionStart(VS.cfg, Object.keys(best).map(k => best[k]));
         }
         VS.turn = VS.opts.auction ? null : turnFor(VS.cfg, 0, 'spin');
+        if (VS.auc && VS.cfg.timer) VS.auc.until = Date.now() + VS.cfg.timer * 1000;
         go('draft');
       });
     });
   }
+
+  // ---------- quick match: ranked with no code (the finder lives in js/ui-ranked.js) ----------
+  let QUICK = 0;
+  const decKeyY = y => ((y - 1) - (y - 1) % 10) + 's';
+  function quickPresets(era) {
+    VS.skip = era === 'ALL' ? [] : ALL_YEARS.filter(y => decKeyY(y) !== era);
+    const ch = chosen(); VS.year = ch.length === 1 ? ch[0] : 0;
+    Object.assign(VS.opts, { auction: 1, board: 0, ranked: 1, pub: 1, aBudget: 20, aStart: 1, aRaise: 1, aPool: 10, aQ: 'stars', aShow: 0, bench: 0, bestOf: 5, blind: false, cap: 0, bans: 0, timer: 24, dupes: 0 });
+    VS.cfg = null; VS.auc = null; VS.page = 'setup'; VS.ready = [false, false]; VS.names = ['', '']; VS.tnames = ['', '']; VS.spin = null; VS.shown = 0;
+  }
+  UI.vsQuick = {
+    host(era) { quickPresets(era); QUICK = 1; host(); },
+    join(code, era) { quickPresets(era); QUICK = 1; join(code); },
+    leave() { QUICK = 0; forgetRoom(); hangUp(); },
+    status() { return { role: NET.role, status: NET.status, code: NET.code }; },
+    target() { return '#/challenge/vs' + (VS.page === 'draft' ? '/draft' : VS.page === 'series' ? '/result' : ''); }
+  };
 
   // ---------- the draft: a spin for every pick ----------
   let BLIM = 60;
@@ -646,6 +722,24 @@
   function turnFor(cfg, pick, phase) { if (cfg && cfg.board) phase = 'pick'; return cfg && cfg.timer ? { pick, phase, until: Date.now() + cfg.timer * 1000 + (phase === 'pick' && !cfg.board ? SPIN_MS : 0) } : null; }
   let TICK = null;
   function stopTick() { if (TICK) { clearInterval(TICK); TICK = null; } }
+  // the rules of this game, for the RULES button on the draft pages
+  function rulesBox(cfg) {
+    const A = cfg.auction ? C.aucOpts(cfg.auction) : null, per = C.vsPer(cfg), m = n => '$' + n, li = t => '<li>' + t + '</li>';
+    const rows = [];
+    rows.push(li(`<b>The series:</b> best of ${cfg.bestOf || 5}. ${cfg.bench && !cfg.noBench ? 'Eight deep: the starters play about 34 minutes and the bench the rest.' : 'All five play the full 48 minutes, so positions and fit matter.'}${cfg.ranked ? ' You and the other player both report the score, and it counts for the ladder.' : ''}`));
+    if (A) rows.push(li(`<b>Auction:</b> a hidden pool of ${Math.max(A.pool, 2 * per)} ${A.quality === 'stars' ? 'of the best players' : A.quality === 'mixed' ? 'good players' : 'players'} in the seasons you picked${A.show ? ' (the pool is visible)' : ''}. They come up one at a time, and you each have ${m(A.budget)}.`));
+    if (A) rows.push(li(`<b>Bidding:</b> a player opens at ${m(A.start)} held by whoever opens that round (it alternates). The other side bids any amount ${m(A.raise)} or more above the price, or passes and lets the holder have him at that price. Then it flips.`));
+    if (A) rows.push(li(`<b>Money:</b> you must keep ${m(A.start)} for every spot you still have to fill, so your top bid is your money minus that. When you cannot top the bid you can only pass. Once a side has its ${per}, the rest of the pool is auto-drafted to the other side for free.`));
+    if (!A) rows.push(li(cfg.board ? '<b>Open board:</b> take turns picking anyone still left, in snake order (A, B, B, A, A, B...).' : '<b>The wheel:</b> take turns in snake order (A, B, B, A, A, B...). The wheel picks a team and a season, and you take one player from it. Each side gets one re-spin.'));
+    rows.push(li(cfg.timer ? `<b>Shot clock:</b> ${cfg.timer} seconds a turn. ${A ? 'Run out and you pass.' : cfg.board ? 'Run out and you get the best player left.' : 'Run out and the wheel spins for you, or you get a random player from the team it landed on.'}` : '<b>No shot clock.</b>'));
+    if (cfg.bansN) rows.push(li(`<b>Bans:</b> ${cfg.bansN} each, before the draft. Banned players are off the wheel and the board.`));
+    if (cfg.cap) rows.push(li(`<b>Salary cap:</b> every player costs from ${m(1)} to ${m(45)} by rating. Your whole roster has to fit under ${m(cfg.cap)}M.`));
+    if (cfg.blind) rows.push(li('<b>Blind draft:</b> no ratings or fit grades until the series is over.'));
+    if (cfg.seasons && cfg.seasons.length > 1 || !cfg.year) rows.push(li(cfg.dupes ? '<b>Duplicates on:</b> the same player can be drafted from different seasons.' : '<b>No duplicates:</b> a player is gone once he is taken, whatever the season.'));
+    if (cfg.ranked) rows.push(li('<b>Ranked:</b> the standard rules above, set for every ranked game: an auction, best of 5, 24 second shot clock, just the five, ten stars from one era.'));
+    return `<div class="vs-rulesbox" id="vsRulesBox" hidden><b>THE RULES</b><ul>${rows.join('')}</ul></div>`;
+  }
+  const RULES_BTN = '<button type="button" class="btn btn-small" id="vsRules">RULES</button>';
   // the players banned before the draft
   function bansStrip(cfg, byId) {
     const b = cfg.bans || [];
@@ -658,8 +752,8 @@
     const q = (VS.bq || '').trim().toLowerCase();
     const list = B.players.concat(B.extra || []).filter(p => bans.indexOf(p.id) < 0 && (!q || p.name.toLowerCase().indexOf(q) >= 0));
     if (blind) list.sort((a, b) => a.name.localeCompare(b.name)); else list.sort((a, b) => b.ovr - a.ovr);
-    app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(lblC(cfg))} | TWO PLAYERS | BAN ROUND</div><div class="ch-top-t">${esc(who(side).toUpperCase())} BANS A PLAYER</div></div><button type="button" class="btn btn-small" id="vsSetup">SETUP</button></div>
-      ${netBar()}
+    app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(lblC(cfg))} | TWO PLAYERS | BAN ROUND</div><div class="ch-top-t">${esc(who(side).toUpperCase())} BANS A PLAYER</div></div><span class="ch-top-acts">${RULES_BTN}<button type="button" class="btn btn-small" id="vsSetup">SETUP</button></span></div>
+      ${netBar()}${rulesBox(cfg)}
       <div class="vs-clock">BAN ${bans.length + 1} OF ${2 * n}: <b>${esc(who(side))}</b> <span class="muted">${mine ? 'Pick a player nobody gets.' : 'is choosing.'}</span></div>
       ${bansStrip(cfg, B.byId)}
       <label class="field"><span>SEARCH</span><input id="vsBanQ" value="${esc(VS.bq || '')}" placeholder="Name" autocomplete="off"></label>
@@ -676,37 +770,83 @@
       push(); draft(app); window.scrollTo(0, 0);
     }));
   }
-  // the auction: the player who is up, the standing bid, your money
+  // the auction: the player who is up, the standing bid and your money. Bid any amount from one raise up to what you can spend.
+  const AB = { i: -1, price: -1, amt: 0, key: null, seen: 0 };
+  let REV = false;   // the auto-draft reveal is on screen   // the amount picked on this phone for the player who is up
   function auctionPage(app, cfg, B) {
+    stopTick();
     const st = VS.auc, A = st.o, per = st.per, byId = B.byId, blind = !!cfg.blind;
-    const cur = byId[st.ids[st.i]], money = n => '$' + n, t = p => B.teamFor(p.team, p.season);
+    const cur = byId[st.ids[st.i]], money = n => '$' + n, tm = B.teamFor(cur.team, cur.season);
+    const yearOf = p => { const y = p && (p.season || cfg.year); return y ? ' <small class="auc-yr">' + esc(short(y)) + '</small>' : ''; };
     const left = st.ids.length - st.i - 1;
     const mineTurn = canAct(st.turn), canRaise = C.aucCanRaise(st, st.turn);
-    const sideBox = i => {
-      const won = st.won[i].map((id, k) => ({ p: byId[id], price: (st.log.filter(x => x.id === id)[0] || {}).price }));
-      return `<div class="vs-side${st.turn === i ? ' on' : ''}"><div class="vs-side-h"><div><small>${esc(who(i))}${me() === i ? ' (YOU)' : ''}</small><b>${money(A.budget - st.spent[i])} left</b><small class="vs-pay">${st.won[i].length} of ${per} spots</small></div></div>
-        <ol class="vs-auc-won">${won.map(w => `<li>${esc(w.p ? w.p.name : '?')} <small class="muted">${money(w.price || 0)}</small></li>`).join('') || '<li class="muted">Nobody yet</li>'}</ol></div>`;
+    const min = st.price + A.raise, max = C.aucMax(st, st.turn);
+    if (AB.i !== st.i || AB.price !== st.price || AB.amt < min || AB.amt > max) { AB.i = st.i; AB.price = st.price; AB.amt = min; }
+    const sideBox = (i, cls) => {
+      const won = st.won[i].map(id => ({ p: byId[id], price: (st.log.filter(x => x.id === id)[0] || {}).price }));
+      const slots = Array.from({ length: per }, (_, k) => won[k]
+        ? `<li class="on"><span>${esc(won[k].p ? won[k].p.name : '?')}${yearOf(won[k].p)}</span><b>${money(won[k].price || 0)}</b></li>` : '<li class="empty"><span>OPEN</span></li>').join('');
+      return `<aside class="auc-side ${cls}${st.turn === i ? ' turn' : ''}${st.holder === i ? ' holds' : ''}"><div class="auc-who"><small>${esc(who(i))}${me() === i ? ' (YOU)' : ''}</small><b class="auc-cash">${money(A.budget - st.spent[i])}</b><small>${st.won[i].length} OF ${per} SPOTS</small></div><ol class="auc-slots">${slots}</ol></aside>`;
     };
-    const tm = t(cur);
-    const raiseTo = st.price + A.raise;
-    const act = mineTurn
-      ? `<div class="vs-auc-act"><button type="button" class="btn btn-gold btn-big" id="aucRaise"${canRaise ? '' : ' disabled'}>RAISE TO ${money(raiseTo)}</button><button type="button" class="btn btn-big" id="aucPass">PASS: ${esc(who(st.holder).toUpperCase())} GETS HIM FOR ${money(st.price)}</button></div>`
-      : `<p class="muted">${esc(who(st.turn))} is deciding. ${esc(who(st.holder))} holds the bid at ${money(st.price)}.</p>`;
-    const pool = A.show ? `<div class="vs-auc-pool"><small>STILL TO COME (${left})</small><span>${st.ids.slice(st.i + 1).map(id => esc(byId[id] ? byId[id].name : id)).join(', ') || 'nobody'}</span></div>` : `<p class="muted">${left} more in the hidden pool.</p>`;
-    const sold = st.log.slice().reverse().map(x => `<li><b>${esc(byId[x.id] ? byId[x.id].name : x.id)}</b> to ${esc(who(x.side))} <small>${money(x.price)}</small></li>`).join('');
-    app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(lblC(cfg))} | TWO PLAYERS | AUCTION | ${money(A.budget)} EACH</div><div class="ch-top-t">PLAYER ${st.i + 1} OF ${st.ids.length}</div></div><button type="button" class="btn btn-small" id="vsSetup">SETUP</button></div>
-      ${netBar()}
-      <div class="vs-sides vs-compact">${sideBox(0)}${sideBox(1)}</div>
-      <section class="ch-landed vs-auc-cur" style="--c1:${esc((tm.colors || ['#444'])[0])}">${UI.faceImg(cur, (tm.colors || ['#444'])[0])}<div><div class="ch-wheel-k">UP FOR BID</div><div class="ch-landed-t">${esc(cur.name)}</div>
-        <small class="muted">${esc(C.posLabel(cur))}${B.era && cur.season ? ' | ' + esc(short(cur.season)) : ''}${blind ? '' : ' | ' + esc(cur.ovr) + ' OVR'}</small></div>
-        <div class="vs-auc-bid"><small>${esc(who(st.holder).toUpperCase())} HOLDS</small><b>${money(st.price)}</b></div></section>
-      ${act}${pool}
-      ${sold ? `<div class="vs-auc-log"><small>SOLD</small><ol>${sold}</ol></div>` : ''}${reactBar()}`;
+    const timed = cfg.timer > 0;
+    if (timed && !st.until) st.until = Date.now() + cfg.timer * 1000;
+    const dots = st.ids.map((id, k) => `<i class="${k < st.i ? 'sold' : k === st.i ? 'now' : ''}"></i>`).join('');
+    const quick = [A.raise, 2, 5].filter((v, k, a2) => v >= A.raise && a2.indexOf(v) === k).map(v => ({ to: st.price + v, label: '+' + money(v) })).filter(x => x.to >= min && x.to <= max);
+    const broke = !canRaise;   // cannot top the bid: pass is all that is left
+    const reserve = Math.max(0, per - st.won[st.turn].length - 1) * A.start, have = A.budget - st.spent[st.turn];
+    const whyBroke = who => `${who} ${who === 'You' ? 'have' : 'has'} ${money(have)}${reserve ? ' and must keep ' + money(reserve) + ' for the other open spot' + (reserve / A.start > 1 ? 's' : '') : ''}, so the most ${who === 'You' ? 'you' : 'they'} can bid is ${money(Math.max(0, max))}. The bid is ${money(st.price)}.`;
+    const bid = mineTurn && broke
+      ? `<div class="auc-bid"><div class="auc-broke"><b>YOU CAN'T TOP ${money(st.price)}</b><span>${whyBroke('You')} Pass, and ${esc(who(st.holder))} gets him.</span></div>
+          <div class="auc-go"><button type="button" class="btn btn-big" disabled>BID<small>can't top ${money(st.price)}</small></button><button type="button" class="btn btn-gold btn-big" id="aucPass">PASS<small>${esc(who(st.holder))} gets him for ${money(st.price)}</small></button></div></div>`
+      : mineTurn
+      ? `<div class="auc-bid"><div class="auc-step"><button type="button" class="btn" id="aucDown" aria-label="Lower the bid"${AB.amt - A.raise < min ? ' disabled' : ''}>&minus;</button><div class="auc-amt"><small>YOUR BID</small><b id="aucAmt">${money(AB.amt)}</b></div><button type="button" class="btn" id="aucUp" aria-label="Raise the bid"${AB.amt + A.raise > max ? ' disabled' : ''}>+</button></div>
+          <div class="auc-chips">${quick.map(x => `<button type="button" class="ch-chip${AB.amt === x.to ? ' on' : ''}" data-to="${x.to}">${x.label}</button>`).join('')}<button type="button" class="ch-chip${AB.amt === max ? ' on' : ''}" data-to="${max}"${canRaise ? '' : ' disabled'}>ALL IN ${money(max)}</button></div>
+          <div class="auc-go"><button type="button" class="btn btn-gold btn-big" id="aucRaise"${canRaise ? '' : ' disabled'}>BID ${money(AB.amt)}</button><button type="button" class="btn btn-big" id="aucPass">PASS<small>${esc(who(st.holder))} gets him for ${money(st.price)}</small></button></div></div>`
+      : `<div class="auc-wait"><b>${esc(who(st.turn))} ${broke ? "can't top the bid" : 'is deciding'}...</b><span>${broke ? whyBroke(esc(who(st.turn))) + ' They can only pass. ' : ''}${esc(who(st.holder))} holds the bid at ${money(st.price)}.</span></div>`;
+    const sold = st.log.slice().reverse().map(x => `<li><b>${esc(byId[x.id] ? byId[x.id].name : x.id)}${yearOf(byId[x.id])}</b><span>${esc(who(x.side))}</span><i>${money(x.price)}</i></li>`).join('');
+    const pool = A.show ? `<p class="auc-more">STILL TO COME: ${st.ids.slice(st.i + 1).map(id => esc(byId[id] ? byId[id].name + (byId[id].season ? ' ' + short(byId[id].season) : '') : id)).join(', ') || 'nobody'}</p>` : `<p class="auc-more">${left} MORE IN THE HIDDEN POOL</p>`;
+    app.innerHTML = `<div class="ch-top auc-top"><div><div class="ch-top-k">${esc(lblC(cfg))} | AUCTION | ${money(A.budget)} EACH${cfg.ranked ? ' | RANKED' : ''}</div><div class="ch-top-t">PLAYER ${st.i + 1} OF ${st.ids.length}</div></div><span class="ch-top-acts">${RULES_BTN}<button type="button" class="btn btn-small" id="vsSetup">SETUP</button></span></div>
+      ${netBar()}${rulesBox(cfg)}
+      <div class="auc">
+        ${sideBox(0, 'l')}
+        <main class="auc-stage">
+          ${timed ? `<div class="vs-timer" id="vsTimer"><i style="--w:100%"></i><span>${Math.max(0, Math.ceil((st.until - Date.now()) / 1000))}</span></div>` : ''}
+          <section class="auc-card" style="--c1:${esc((tm.colors || ['#444'])[0])}">
+            <div class="auc-face">${UI.faceImg(cur, (tm.colors || ['#444'])[0])}</div>
+            <div class="auc-info"><small>UP FOR BID</small><h2>${esc(cur.name)}</h2><p>${esc(C.posLabel(cur))}${cur.season || cfg.year ? ' | ' + esc(short(cur.season || cfg.year)) : ''}${blind ? '' : ' | <b class="ch-ovr ' + UI.ovrClass(cur.ovr) + '">' + esc(cur.ovr) + '</b>'}</p></div>
+            <div class="auc-price"><small>${esc(who(st.holder).toUpperCase())} HOLDS</small><b>${money(st.price)}</b></div>
+          </section>
+          ${bid}
+          <div class="auc-dots" aria-label="Progress">${dots}</div>${pool}
+        </main>
+        ${sideBox(1, 'r')}
+      </div>
+      ${sold ? `<div class="auc-log"><small>SOLD SO FAR</small><ol>${sold}</ol></div>` : ''}${reactBar()}`;
     bindNet(app); bindReact(app);
     UI.$('#vsSetup', app).addEventListener('click', () => go('setup'));
-    const done = () => { cfg.sides[0].picks = st.won[0].slice(); cfg.sides[1].picks = st.won[1].slice(); if (window.SFX) window.SFX.play('chime'); push(); draft(app); window.scrollTo(0, 0); };
-    const rs = UI.$('#aucRaise', app); if (rs) rs.addEventListener('click', () => { if (C.auctionAct(st, st.turn, 'raise')) done(); });
+    const fresh = () => { st.until = cfg.timer ? Date.now() + cfg.timer * 1000 : null; };
+    const done = () => { cfg.sides[0].picks = st.won[0].slice(); cfg.sides[1].picks = st.won[1].slice(); fresh(); if (window.SFX) window.SFX.play('chime'); push(); draft(app); window.scrollTo(0, 0); };
+    const setAmt = v => { AB.amt = Math.max(min, Math.min(max, Math.round(v))); auctionPage(app, cfg, B); };
+    const dn = UI.$('#aucDown', app); if (dn) dn.addEventListener('click', () => setAmt(AB.amt - A.raise));
+    const up = UI.$('#aucUp', app); if (up) up.addEventListener('click', () => setAmt(AB.amt + A.raise));
+    app.querySelectorAll('[data-to]').forEach(b => b.addEventListener('click', () => setAmt(+b.dataset.to)));
+    const rs = UI.$('#aucRaise', app); if (rs) rs.addEventListener('click', () => { if (C.auctionAct(st, st.turn, 'raise', AB.amt)) done(); });
     const ps = UI.$('#aucPass', app); if (ps) ps.addEventListener('click', () => { if (C.auctionAct(st, st.turn, 'pass')) done(); });
+    // the shot clock: when it runs out the player on the clock passes; online, the other phone steps in five seconds later if his is gone
+    if (timed) {
+      const total = cfg.timer * 1000, actor = canAct(st.turn) ? 0 : online() ? 5000 : null;
+      TICK = setInterval(() => {
+        const el = UI.$('#vsTimer', app);
+        if (!el || VS.auc !== st) { stopTick(); return; }
+        const lf = st.until - Date.now();
+        el.querySelector('span').textContent = Math.max(0, Math.ceil(lf / 1000));
+        el.querySelector('i').style.setProperty('--w', Math.max(0, Math.min(100, 100 * lf / total)) + '%');
+        el.classList.toggle('low', lf < 8000);
+        if (actor === null || lf > -actor) return;
+        stopTick();
+        if (C.auctionAct(st, st.turn, 'pass')) { UI.toast('Time: ' + who(st.holder) + ' gets ' + (byId[st.ids[st.i - 1]] ? byId[st.ids[st.i - 1]].name : 'him') + '.'); done(); }
+      }, 250);
+    }
   }
   function draft(app) {
     if (UI.challengeWheel.busy && UI.challengeWheel.busy()) return;   // a spin is running: its landing redraws the page
@@ -716,6 +856,17 @@
       const B = board(cfg), teams = B.teams, byId = B.byId;
       const blind = !!cfg.blind;
       const taken = cfg.sides[0].picks.concat(cfg.sides[1].picks), on = C.vsOnClock(cfg), gone = taken.concat(cfg.bans || []);   // gone: drafted or banned
+      if (cfg.auction && VS.auc) {
+        if (REV) return;   // a reveal is playing: its end redraws the page
+        if (AB.key !== cfg.seed) { AB.key = cfg.seed; AB.seen = VS.auc.log.length; }   // arrived late or reloaded: no replay of old sales
+        const autos = VS.auc.log.slice(AB.seen).filter(x => x.auto);
+        AB.seen = VS.auc.log.length;
+        if (autos.length && UI.aucReveal) {
+          REV = true; stopTick(); window.scrollTo(0, 0);
+          UI.aucReveal(app, { entries: autos, byId, blind, name: i => who(i), color: p => (B.teamFor(p.team, p.season).colors || ['#555'])[0], onDone: () => { REV = false; if (VS.auc && VS.auc.until && cfg.timer) VS.auc.until = Date.now() + cfg.timer * 1000; if (/^#\/challenge\/vs/.test(location.hash)) route(); } });
+          return;
+        }
+      }
       if (cfg.auction && VS.auc && !VS.auc.done) return auctionPage(app, cfg, B);
       if ((cfg.bansN || 0) > 0 && (cfg.bans || []).length < 2 * cfg.bansN) return banPage(app, cfg, B);
       const pay = sd => (cfg.cap ? ` <small class="vs-pay">${UI.challengeCap.money(C.capState(cfg.cap, sd.picks.map(id => byId[id]).filter(Boolean)).spent)} of $${cfg.cap}M</small>` : '');
@@ -771,8 +922,8 @@
       const turn = on >= 0 && VS.turn && VS.turn.pick === taken.length ? VS.turn : null;
       const clock = turn ? `<div class="vs-timer" id="vsTimer"><i style="--w:100%"></i><span>${Math.max(0, Math.ceil((turn.until - Date.now()) / 1000))}</span></div>` : '';
       app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(lblC(cfg))} | TWO PLAYERS | BEST OF ${cfg.bestOf || 5}${blind ? ' | BLIND' : ''}${cfg.timer ? ' | ' + cfg.timer + ' SEC CLOCK' : ''}${cfg.cap ? ' | $' + cfg.cap + 'M CAP' : ''}</div><div class="ch-top-t">THE DRAFT</div></div>
-          <button type="button" class="btn btn-small" id="vsSetup">SETUP</button></div>
-        ${netBar()}
+          <span class="ch-top-acts">${RULES_BTN}<button type="button" class="btn btn-small" id="vsSetup">SETUP</button></span></div>
+        ${netBar()}${rulesBox(cfg)}
         <div class="vs-sides vs-compact">${fives}</div>
         ${bansStrip(cfg, byId)}${clock}${body}${reactBar()}`;
       bindNet(app); bindReact(app);
@@ -904,7 +1055,7 @@
         if (!UI.slib || sim.dataset.busy) { go2(); return; }
         sim.dataset.busy = '1';
         const groups = [0, 1].map(i => ({ label: who(i).toUpperCase() + ' | ' + ((tOf(B.teams, VS.cfg.sides[i].team).name) || '').toUpperCase(), color: (tOf(B.teams, VS.cfg.sides[i].team).colors || ['#888'])[0],
-          players: VS.cfg.sides[i].picks.map(id => byId[id]).filter(Boolean) }));
+          players: VS.cfg.sides[i].picks.map(id => byId[id]).filter(Boolean).map(p => (p.season || !VS.cfg.year ? p : Object.assign({}, p, { season: VS.cfg.year }))) }));
         UI.slib.intro(groups, { ratings: !(VS.cfg.blind || (VS.opts && VS.opts.blind)) }, () => { delete sim.dataset.busy; go2(); });
       });
     });
@@ -977,7 +1128,7 @@
       if (done && online() && me() !== null && me() >= 0 && UI.ranked && UI.profile.signedIn() && NET.code) {   // both signed-in players report: the database counts it when the two agree
         const i = me(), sc = UI.ranked.lineupScore(S[i].five);
         UI.ranked.report({ key: NET.code + ':' + cfg.seed, opp: who(1 - i), myWins: r.wins[S[i].abbr] || 0, oppWins: r.wins[S[1 - i].abbr] || 0, era: UI.ranked.eraOf(cfg), style: cfg.auction ? 'auction' : cfg.board ? 'board' : 'wheel', ranked: !!cfg.ranked, bestOf: r.bestOf,
-          lineup: { names: S[i].five.map(p => p.name), seasons: S[i].five.map(p => p.season || null), score: sc, era: UI.ranked.eraOf(cfg) }, score: sc });
+          lineup: { names: S[i].five.map(p => p.name), seasons: S[i].five.map(p => p.season || cfg.year || null), score: sc, era: UI.ranked.eraOf(cfg) }, score: sc });
       }
       const games = r.games.slice(0, shown).map(g => {
         const t = g.top && PL[g.top.id];
