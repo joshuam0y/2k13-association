@@ -198,6 +198,10 @@
     if (m.t === 'conceded' && VS.cfg && VS.cfg.ranked) { RKDONE[rkKey(VS.cfg)] = 1; if (UI.ranked) UI.ranked.noteForfeit('win'); UI.toast(who(1 - me()) + ' forfeited. You win.'); const el = document.getElementById('vsDc'); if (el) el.remove(); location.hash = '#/ranked/result'; return; }
     if (m.t === 'rematch' && VS.cfg && VS.cfg.ranked && m.seed === VS.cfg.seed) { RM.seed = VS.cfg.seed; RM.them = true; maybeRematch(); route(); return; }
     if (m.t === 'rresume') { if (!DC.res.on && rkOn(VS.cfg) && !RKDONE[rkKey(VS.cfg)]) DC.res = { on: true, me: false, them: false, until: Date.now() + 60000 }; DC.res.them = true; seen(); dcTick(); return; }
+    if (m.t === 'bye') {   // the other player left: no need to wait the whole grace time for them (in a ranked game they have fifteen seconds to come back)
+      if (NET.status === 'connected') { NET.status = 'lost'; DC.at = Date.now() - (rkOn(VS.cfg) ? GRACE - 15000 : 0); route(); drawChat(); dcTick(); }
+      return;
+    }
     if (m.t === 'ping') { seen(); return; }
     if (m.t === 'hello' && NET.role === 'host') {
       NET.peerAcct = !!m.acct;
@@ -264,7 +268,11 @@
     QUICK = 0;
     NET.timers.forEach(t => clearInterval(t)); NET.timers = [];
     if (UI.ranked) UI.ranked.lobbyStop();
-    try { if (NET.client) NET.client.end(true); } catch (e) { /* gone */ }
+    const c = NET.client, end = () => { try { if (c) c.end(true); } catch (e) { /* gone */ } };
+    if (c && NET.key && linked() && NET.role !== 'watch') {   // tell the other phone we left on purpose, so it does not wait for us
+      const tp = topic();
+      seal({ from: NET.me, role: NET.role, ep: VS.epoch || 0, t: 'bye' }).then(txt => { try { c.publish(tp, txt, { qos: 1 }, end); } catch (e) { end(); } setTimeout(end, 1500); }).catch(end);
+    } else end();
     Object.assign(NET, { role: null, code: '', status: '', err: '', client: null, key: null, peerSeen: 0, peerAcct: undefined });
   }
   // connects to a relay (falling back to the next if one will not answer), joins the room, starts the pings
@@ -335,7 +343,7 @@
     const cfg = VS.cfg, key = rkKey(cfg);
     const ok = await UI.ranked.forfeit({ key, opp: who(1 - me()), era: UI.ranked.eraOf(cfg), bestOf: cfg.bestOf || 7 });
     if (ok) { RKDONE[key] = 1; const el = document.getElementById('vsDc'); if (el) el.remove(); location.hash = '#/ranked/result'; }
-    else { DC.tries = (DC.tries || 0) + 1; if (DC.tries >= 4) { RKDONE[key] = 1; const el = document.getElementById('vsDc'); if (el) el.remove(); UI.toast('Could not record the forfeit. The game was not counted.', 'error'); } else { DC.claimed = false; DC.at = Date.now() - GRACE + 20000; } }   // could not record it: try again in 20 seconds, four times
+    else { DC.tries = (DC.tries || 0) + 1; if (DC.tries >= 2) { RKDONE[key] = 1; const el = document.getElementById('vsDc'); if (el) el.remove(); location.hash = '#/ranked/result'; } else { DC.claimed = false; DC.at = Date.now() - GRACE + 15000; } }   // refused: the series may already be settled (they gave up), so the result screen checks
   }
   function dcTick() {
     let el = document.getElementById('vsDc');
