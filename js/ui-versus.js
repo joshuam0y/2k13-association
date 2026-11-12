@@ -206,7 +206,7 @@
         UI.toast((m.name ? String(m.name).slice(0, 16) : 'A guest') + ' is a guest, so they cannot play a ranked game. They were turned away.', 'error');
         return;
       }
-      if (VS.opts.ranked && VS.opts.auction && !VS.cfg && m.name && UI.ranked && UI.ranked.playedBefore) {   // each ranked matchup counts once
+      if (VS.opts.ranked && VS.opts.auction && !VS.cfg && !QUICK && m.name && UI.ranked && UI.ranked.playedBefore) {   // each ranked matchup counts once
         const nm = String(m.name).slice(0, 20);
         UI.ranked.playedBefore(nm).then(pb => {
           if (!pb || VS.cfg || NET.role !== 'host') return;

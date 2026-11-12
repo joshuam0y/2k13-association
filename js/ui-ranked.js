@@ -466,7 +466,7 @@
 
   // ---------- #/ranked/find/ERA: a ranked match with no code ----------
   let FIND = null;
-  function stopFind() { if (FIND) { clearInterval(FIND.t); FIND = null; } }
+  function stopFind() { if (FIND) { clearInterval(FIND.t); clearInterval(FIND.t2); FIND = null; } }
   function findPage(app, era) {
     stopFind(); stopRefresh();
     era = ERAS.indexOf(era) >= 0 ? era : 'ALL';
@@ -475,10 +475,19 @@
     app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">RANKED MATCH | ${esc(eraName(era))}</div><h1 class="ch-hero-t" id="fgT">LOOKING FOR AN OPPONENT.</h1>
         <p class="ch-hero-p" id="fgP">Stay on this screen. When someone else looks for a ${esc(eraName(era))} ranked match, you are paired and the auction starts on its own. You never type a code.</p></section>
       <div class="ch-load"><div class="ch-spin-ring"></div></div>
+      <p class="center rk-wait" id="fgInfo"></p>
       <div class="ch-go"><button type="button" class="btn" id="fgCancel">CANCEL</button></div>`;
     const me = UI.profile.account(), st0 = UI.vsQuick.status();
     if (st0.role) UI.vsQuick.leave();
-    const F = FIND = { era, joinedAt: 0, t: null, busy: false, rating: null };
+    const F = FIND = { era, joinedAt: 0, t: null, t2: null, busy: false, rating: null, start: Date.now(), others: null, countAt: 0 };
+    const WAITS = 'a13-rk-waits', waits = () => { try { return JSON.parse(localStorage.getItem(WAITS) || '[]'); } catch (e) { return []; } };
+    const mmss = ms => Math.floor(ms / 60000) + ':' + String(Math.floor(ms / 1000) % 60).padStart(2, '0');
+    const paint = () => {   // how long you have been looking, how many others are, and how long it usually takes
+      const el = UI.$('#fgInfo', app); if (!el || FIND !== F) return;
+      const w = waits(), avg = w.length ? Math.round(w.reduce((a, b) => a + b, 0) / w.length / 1000) : 0;
+      el.innerHTML = 'WAITING <b>' + mmss(Date.now() - F.start) + '</b>' + (F.others == null ? '' : ' | <b>' + F.others + '</b> OTHER' + (F.others === 1 ? '' : 'S') + ' SEARCHING NOW') + (avg ? ' | USUALLY ABOUT <b>' + (avg < 60 ? avg + ' SEC' : Math.round(avg / 60) + ' MIN') + '</b>' : ' | NO ESTIMATE YET');
+    };
+    F.t2 = setInterval(paint, 1000); paint();
     const say = (t, p) => { const a = UI.$('#fgT', app), b = UI.$('#fgP', app); if (a) a.textContent = t; if (b && p) b.textContent = p; };
     UI.$('#fgCancel', app).addEventListener('click', () => { stopFind(); UI.vsQuick.leave(); location.hash = '#/ranked'; });
     const tick = async () => {
@@ -487,11 +496,14 @@
       F.busy = true;
       try {
         const st = UI.vsQuick.status();
-        if (st.status === 'connected') { stopFind(); location.hash = UI.vsQuick.target(); return; }
+        if (st.status === 'connected') { try { const w = waits(); w.push(Date.now() - F.start); localStorage.setItem(WAITS, JSON.stringify(w.slice(-8))); } catch (e) { /* private mode */ } stopFind(); location.hash = UI.vsQuick.target(); return; }
         UI.profile.rpc('queue_ping').catch(() => {});   // counts you as searching
+        if (Date.now() - F.countAt > 6000) { F.countAt = Date.now(); UI.profile.rpc('online_counts').then(d => { if (d) F.others = Math.max(0, (d.searching || 0) - 1); }).catch(() => {}); }
         const rows = await UI.profile.rpc('lobby_list');
         const cand = [];
-        for (const r of (rows || []).filter(r => r.ranked && r.era === era && r.host_name !== me)) { if (!(await playedBefore(r.host_name))) cand.push(r); }   // each ranked matchup counts once
+        const all = (rows || []).filter(r => r.ranked && r.era === era && r.host_name !== me);
+        for (const r of all) { if (!(await playedBefore(r.host_name))) cand.push(r); }   // new opponents first
+        if (!cand.length && Date.now() - F.start > 20000) all.forEach(r => cand.push(r));   // nobody new for 20 seconds: you both searched, so a rematch is fine
         if (F.rating == null) { try { F.rating = (await ratingNow(era)).rating; } catch (e) { F.rating = 1200; } }
         cand.sort((a, b) => Math.abs((a.rating || 1200) - F.rating) - Math.abs((b.rating || 1200) - F.rating));   // whoever is online, the closest rating first
         if (!st.role) {
