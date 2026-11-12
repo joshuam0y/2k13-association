@@ -52,8 +52,81 @@
   async function started(info) {
     if (!UI.profile.signedIn() || STARTED[info.key]) return;
     STARTED[info.key] = 1;
+    rememberBefore(info);
     try { await UI.profile.rpc('start_series', { p_key: info.key, p_opp: info.opp, p_era: info.era, p_style: info.style, p_ranked: !!info.ranked, p_best_of: info.bestOf }); }
     catch (e) { STARTED[info.key] = 0; console.warn('[ranked] could not log the start:', failMsg(e)); }
+  }
+
+
+  // ---------- the rating change screen (#/ranked/result) ----------
+  const LASTKEY = 'a13-rk-last';
+  const lastGet = () => { try { return JSON.parse(sessionStorage.getItem(LASTKEY) || 'null'); } catch (e) { return null; } };
+  const lastSet = o => { try { sessionStorage.setItem(LASTKEY, JSON.stringify(o)); } catch (e) { /* private mode */ } };
+  async function ratingNow(era) {
+    const c = await UI.profile.client(), id = UI.profile.userId();
+    if (!c || !id) return null;
+    const r = await c.from('ratings').select('rating,games,wins,losses').eq('user_id', id).eq('era', era).maybeSingle();
+    if (r.error) throw r.error;
+    const row = r.data || { rating: 1200, games: 0, wins: 0, losses: 0 };
+    const above = await c.from('ratings').select('user_id', { count: 'exact', head: true }).eq('era', era).gt('games', 0).gt('rating', row.rating);
+    const all = await c.from('ratings').select('user_id', { count: 'exact', head: true }).eq('era', era).gt('games', 0);
+    return Object.assign({}, row, { rank: (above.count || 0) + 1, of: Math.max(all.count || 0, row.games ? 1 : 0) });
+  }
+  async function rememberBefore(info) {
+    const cur = lastGet();
+    if (cur && cur.key === info.key) return;
+    let before = { rating: 1200, games: 0, rank: 0, of: 0 };
+    try { before = (await ratingNow(info.era)) || before; } catch (e) { /* the result screen copes without it */ }
+    const again = lastGet();
+    if (again && again.key === info.key) return;
+    lastSet({ key: info.key, era: info.era, opp: info.opp, bestOf: info.bestOf, before: { rating: before.rating, games: before.games, rank: before.rank, of: before.of }, at: Date.now() });
+  }
+  // the other player stayed gone: the series is recorded as a forfeit win for this phone
+  async function forfeit(info) {
+    if (!UI.profile.signedIn()) return false;
+    try {
+      const ok = await UI.profile.rpc('forfeit_series', { p_key: info.key });
+      if (ok) { const cur = lastGet() || { key: info.key, era: info.era, opp: info.opp, bestOf: info.bestOf, before: { rating: 1200, games: 0 }, at: Date.now() }; cur.forfeit = 'win'; lastSet(cur); }
+      return !!ok;
+    } catch (e) { console.warn('[ranked] could not record the forfeit:', failMsg(e)); return false; }
+  }
+  function resultPage(app) {
+    stopRefresh();
+    const last = lastGet();
+    if (!last) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">RANKED</div><h1 class="ch-hero-t">NO RANKED RESULT YET.</h1></section><div class="ch-go"><a class="btn btn-gold" href="#/ranked">RANKED</a></div>`; return; }
+    const back = UI.vsQuick && /^#\/challenge\/vs/.test(UI.vsQuick.target()) && UI.vsQuick.status().role ? `<a class="btn" href="${UI.vsQuick.target()}">BACK TO THE SERIES</a>` : '';
+    const acts = `<div class="ch-go">${back}<a class="btn btn-gold" href="#/ranked">RANKED</a><a class="btn" href="#/me">MY PROFILE</a></div>`;
+    const wait = () => `<section class="ch-hero"><div class="ch-hero-k">RANKED | ${esc(eraName(last.era))} | VS ${esc(last.opp || '')}</div><h1 class="ch-hero-t">${last.forfeit === 'win' ? 'WIN BY FORFEIT.' : 'COUNTING THE RESULT.'}</h1>
+      <p class="ch-hero-p">${last.forfeit === 'win' ? 'Your opponent did not come back in time. Recording it...' : 'Waiting for both phones to report the same score. This updates on its own.'}</p></section>
+      <div class="ch-load"><div class="ch-spin-ring"></div></div>${acts}`;
+    app.innerHTML = wait();
+    let tries = 0, stopped = false;
+    const stop = () => { stopped = true; };
+    window.addEventListener('hashchange', stop, { once: true });
+    const tick = async () => {
+      if (stopped || !/^#\/ranked\/result/.test(location.hash)) return;
+      tries++;
+      let now = null;
+      try { now = await ratingNow(last.era); } catch (e) { /* retry */ }
+      if (stopped) return;
+      if (now && now.games > (last.before ? last.before.games : 0)) return show(now);
+      if (tries > 60) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">RANKED | ${esc(eraName(last.era))}</div><h1 class="ch-hero-t">STILL WAITING.</h1><p class="ch-hero-p">${esc(last.opp || 'The other player')} has not reported the score yet. It counts as soon as they do, or about fifteen minutes after the series if they never do. Check your profile later.</p></section>${acts}`; return; }
+      setTimeout(tick, 2500);
+    };
+    const show = now => {
+      const b = last.before || { rating: 1200 }, d = now.rating - b.rating, won = d > 0 || (d === 0 && now.wins > (b.wins || 0));
+      const rk = now.of ? `#${now.rank} of ${now.of} in ${esc(eraName(last.era))}` : '';
+      app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">RANKED | ${esc(eraName(last.era))} | VS ${esc(last.opp || '')}</div><h1 class="ch-hero-t">${last.forfeit === 'win' ? 'WIN BY FORFEIT.' : won ? 'YOU WON.' : 'YOU LOST.'}</h1></section>
+        <section class="rk-elo ${won ? 'up' : 'down'}"><small>RATING</small>
+          <div class="rk-elo-n"><span class="rk-elo-from">${b.rating}</span><span class="rk-elo-arrow">${won ? '&#9650;' : '&#9660;'}</span><b id="rkEloNow">${b.rating}</b></div>
+          <div class="rk-elo-d">${d > 0 ? '+' : ''}${d}</div>
+          <div class="rk-elo-meta"><span>${now.wins}-${now.losses} ranked this era</span>${rk ? `<span>${rk}</span>` : ''}${b.rank && now.rank !== b.rank ? `<span>${now.rank < b.rank ? 'UP' : 'DOWN'} ${Math.abs(b.rank - now.rank)} PLACE${Math.abs(b.rank - now.rank) > 1 ? 'S' : ''}</span>` : ''}</div></section>${acts}`;
+      const el = UI.$('#rkEloNow', app), t0 = Date.now(), from = b.rating, to = now.rating;
+      const step = () => { if (!el.isConnected) return; const k = Math.min(1, (Date.now() - t0) / 1400); el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(step); };
+      requestAnimationFrame(step);
+      if (window.SFX) window.SFX.play(won ? 'chime' : 'buzzer');
+    };
+    tick();
   }
 
   // ---------- an open game: listed while the room waits ----------
@@ -94,7 +167,7 @@
   };
 
   UI.userLink = (name, tab) => `<a class="u-link" href="#/u/${encodeURIComponent(name)}"${tab ? ' target="_blank" rel="noopener"' : ''}>${esc(name)}</a>`;   // a name you can click to see that player's profile
-  UI.ranked = { eraOf, lineupScore, report, started, lobbyStart, lobbyStop, ERAS, eraName, regionName, REGIONS };
+  UI.ranked = { eraOf, lineupScore, report, started, forfeit, lobbyStart, lobbyStop, ERAS, eraName, regionName, REGIONS };
 
   // ---------- helpers for the pages ----------
   const eraOpts = cur => ERAS.map(e => `<option value="${e}"${e === cur ? ' selected' : ''}>${esc(eraName(e))}</option>`).join('');
@@ -109,7 +182,7 @@
   const signInBox = what => `<div class="rk-note"><b>SIGN IN TO ${what}.</b><span class="muted"> Ranked results, rivalries and your profile live on your account.</span><button type="button" class="btn btn-gold" data-pf="open">SIGN IN OR CREATE ACCOUNT</button></div>`;
 
   // ---------- #/ranked ----------
-  const RK = { open: ls.get('a13-rk-open', 'all'), era: ls.get('a13-rk-era', '1990s'), mine: !!ls.get('a13-rk-mine', false), tab: ls.get('a13-rk-tab', 'ladder') };
+  const RK = { open: ls.get('a13-rk-open', 'all'), era: ls.get('a13-rk-era', 'ALL'), mine: !!ls.get('a13-rk-mine', false), tab: ls.get('a13-rk-tab', 'ladder') };
   let REFRESH = null;
   function stopRefresh() { if (REFRESH) { clearInterval(REFRESH); REFRESH = null; } }
   function rankedPage(app) {
@@ -196,7 +269,7 @@
   }
   function dailyPage(app, era) {
     stopRefresh();
-    era = ERAS.indexOf(era) >= 0 ? era : '1990s';
+    era = ERAS.indexOf(era) >= 0 ? era : 'ALL';
     if (!UI.profile.signedIn()) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">DAILY AUCTION | ${esc(eraName(era))}</div><h1 class="ch-hero-t">SIGN IN FIRST.</h1></section>${signInBox('PLAY THE DAILY AUCTION')}<div class="ch-go"><a class="btn" href="#/ranked">BACK</a></div>`; UI.profile.wire(app, () => dailyPage(app, era)); return; }
     const day = today(), key = 'a13-rk-d-' + day + '-' + era;
     if (!C.loaded('pool')) {   // the all-time pool loads on demand
@@ -349,7 +422,7 @@
   function stopFind() { if (FIND) { clearInterval(FIND.t); FIND = null; } }
   function findPage(app, era) {
     stopFind(); stopRefresh();
-    era = ERAS.indexOf(era) >= 0 ? era : '1990s';
+    era = ERAS.indexOf(era) >= 0 ? era : 'ALL';
     if (!UI.profile.signedIn()) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">RANKED MATCH | ${esc(eraName(era))}</div><h1 class="ch-hero-t">SIGN IN FIRST.</h1></section>${signInBox('PLAY RANKED')}<div class="ch-go"><a class="btn" href="#/ranked">BACK</a></div>`; UI.profile.wire(app, () => findPage(app, era)); return; }
     if (!UI.vsQuick) { app.innerHTML = '<p class="rk-err">Head to Head did not load.</p>'; return; }
     app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">RANKED MATCH | ${esc(eraName(era))}</div><h1 class="ch-hero-t" id="fgT">LOOKING FOR AN OPPONENT.</h1>
@@ -417,6 +490,7 @@
   P.ranked = function (app, arg) {
     const part = String(arg || '').split('/');
     if (part[0] === 'find') return findPage(app, part[1] ? decodeURIComponent(part[1]) : RK.era);
+    if (part[0] === 'result') return resultPage(app);
     if (part[0] === 'daily') return dailyPage(app, part[1] ? decodeURIComponent(part[1]) : RK.era);
     return rankedPage(app);
   };

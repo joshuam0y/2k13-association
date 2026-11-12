@@ -263,3 +263,24 @@ begin
     'wins', w, 'losses', t - w, 'ratings', rat, 'most', most, 'vs', vs, 'friend', fr, 'self', me = prof.id, 'friends', nf, 'mutual', mut, 'mutual_count', nm);
 end $$;
 grant execute on function public.public_profile(text) to authenticated, anon;
+
+-- ---------- a player who stays gone past the grace time forfeits ----------
+-- The other phone calls this after the grace time. Only works when both phones logged the start, nobody reported and the series is not final yet.
+create or replace function public.forfeit_series(p_key text) returns boolean
+language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); a public.ranked_starts; need int;
+begin
+  if me is null then return false; end if;
+  select * into a from public.ranked_starts where key = p_key and uid = me;
+  if a.key is null or not a.ranked then return false; end if;
+  if not exists (select 1 from public.ranked_starts b where b.key = p_key and b.uid = a.opp and b.opp = me) then return false; end if;
+  if exists (select 1 from public.series s where s.key = p_key) then return false; end if;
+  if exists (select 1 from public.series_reports r where r.key = p_key) then return false; end if;
+  need := (a.best_of + 1) / 2;
+  insert into public.series_reports (key, reporter, opp, my_wins, opp_wins, era, style, ranked, best_of)
+    values (p_key, me, a.opp, need, 0, a.era, a.style, true, a.best_of),
+           (p_key, a.opp, me, 0, need, a.era, a.style, true, a.best_of) on conflict do nothing;
+  perform public.finalize_series(p_key);
+  return true;
+end $$;
+grant execute on function public.forfeit_series(text) to authenticated;

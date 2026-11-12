@@ -178,7 +178,7 @@
   function seen() {
     NET.peerSeen = Date.now();
     if (NET.status !== 'connected') {
-      NET.status = 'connected'; NET.err = '';
+      NET.status = 'connected'; NET.err = ''; DC.at = 0; DC.claimed = false; dcTick();
       if (NET.role === 'host') push(); else send({ t: NET.role === 'watch' ? 'watch' : 'hello', name: myName() });
       saveRoom(); syncLobby();
       route(); drawChat();
@@ -287,9 +287,10 @@
         if (!NET.client || NET.code !== code) return;
         send({ t: NET.role === 'watch' ? 'watch' : NET.role === 'guest' && NET.status !== 'connected' ? 'hello' : 'ping', name: myName() });
         if (NET.role === 'host') { const nw = watchers(); if ((VS.watching || 0) !== nw) { VS.watching = nw; push(); route(); } }   // everyone sees how many are watching
-        if (NET.status === 'connected' && Date.now() - NET.peerSeen > 15000) { NET.status = 'lost'; route(); drawChat(); }
+        if (NET.status === 'connected' && Date.now() - NET.peerSeen > 15000) { NET.status = 'lost'; DC.at = Date.now(); route(); drawChat(); dcTick(); }
         else if (NET.role === 'guest' && NET.status === 'lost' && Date.now() - NET.peerSeen > 25000 && VS.cfg) becomeHost(false);
       }, 4000));
+      NET.timers.push(setInterval(dcTick, 1000));
       // a guest whose host never answers: say so, but keep listening
       if (role === 'guest' || role === 'watch') setTimeout(() => { if (NET.code === code && NET.status === 'connecting') { NET.err = 'No answer from room ' + code + ' yet. Check the code, and that your friend still has the room open. Still trying...'; NET.status = 'error-wait'; route(); } }, 20000);
     }).catch(e => { NET.status = 'error'; NET.err = e.message || 'The connection failed.'; route(); });
@@ -306,6 +307,30 @@
   function join(code) { const c = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); if (c.length >= 4) connectRoom('guest', c); }
   const joinLink = () => location.origin + location.pathname + '#/challenge/vs/join/' + NET.code;
   const watchLink = () => location.origin + location.pathname + '#/challenge/vs/watch/' + NET.code;
+  // ---------- ranked: the series is logged when the auction starts; a player who stays gone past the grace time forfeits ----------
+  const RKDONE = {}, DC = { at: 0, claimed: false }, GRACE = 90000;
+  const rkKey = cfg => NET.code + ':' + cfg.seed;
+  const rkOn = cfg => !!(cfg && cfg.ranked && online() && me() !== null && me() >= 0 && UI.ranked && UI.profile.signedIn() && NET.code);
+  function rkStart(cfg) { if (rkOn(cfg)) UI.ranked.started({ key: rkKey(cfg), opp: who(1 - me()), era: UI.ranked.eraOf(cfg), style: 'auction', ranked: true, bestOf: cfg.bestOf || 7 }); }
+  const dcOn = () => !!(rkOn(VS.cfg) && NET.status === 'lost' && DC.at && !RKDONE[rkKey(VS.cfg)]);
+  async function claimForfeit() {
+    DC.claimed = true;
+    const cfg = VS.cfg, key = rkKey(cfg);
+    const ok = await UI.ranked.forfeit({ key, opp: who(1 - me()), era: UI.ranked.eraOf(cfg), bestOf: cfg.bestOf || 7 });
+    if (ok) { RKDONE[key] = 1; const el = document.getElementById('vsDc'); if (el) el.remove(); location.hash = '#/ranked/result'; }
+    else { DC.claimed = false; DC.at = Date.now() - GRACE + 20000; }   // could not record it: try again in 20 seconds
+  }
+  function dcTick() {
+    let el = document.getElementById('vsDc');
+    if (!dcOn()) { if (el) el.remove(); return; }
+    const left = Math.max(0, DC.at + GRACE - Date.now()), mm = Math.floor(left / 60000), ss = String(Math.floor(left / 1000) % 60).padStart(2, '0');
+    const onl = !!(NET.client && NET.client.connected), other = who(1 - me());
+    if (!el) { el = document.createElement('div'); el.id = 'vsDc'; el.className = 'vs-dc'; document.body.appendChild(el); }
+    el.innerHTML = onl
+      ? `<div class="vs-dc-box"><small>RANKED GAME PAUSED</small><h2>${esc(other.toUpperCase())} DISCONNECTED.</h2><p>They have <b>${mm}:${ss}</b> to get back. If they do not, you win by forfeit and the rating points are yours.</p><div class="ch-spin-ring"></div></div>`
+      : `<div class="vs-dc-box"><small>RANKED GAME PAUSED</small><h2>YOU ARE OFFLINE.</h2><p>Reconnecting. You can not play a ranked game while disconnected. If you stay gone you forfeit.</p><div class="ch-spin-ring"></div></div>`;
+    if (left <= 0 && onl && !DC.claimed) claimForfeit();
+  }
   function netBar() {
     if (!online()) return '';
     if (NET.role === 'watch') return `<div class="vs-net ${NET.status}"><span class="vs-net-dot"></span><span>${NET.status === 'connected' ? 'Watching room <b>' + esc(NET.code) + '</b>: <b>' + esc(who(0)) + '</b> vs <b>' + esc(who(1)) + '</b>. You see everything live.' + ((VS.watching || 0) ? ' <span class="vs-spec">&#128065; ' + VS.watching + ' WATCHING</span>' : '') : NET.status === 'error-wait' || NET.status === 'error' ? esc(NET.err) : 'Joining room <b>' + esc(NET.code) + '</b> to watch...'}</span><button type="button" class="btn btn-small" id="vsLeave">LEAVE</button></div>`;
@@ -800,6 +825,7 @@
   const AB = { i: -1, price: -1, amt: 0, key: null, seen: 0 };
   let REV = false;   // the auto-draft reveal is on screen   // the amount picked on this phone for the player who is up
   function auctionPage(app, cfg, B) {
+    rkStart(cfg);
     stopTick();
     const st = VS.auc, A = st.o, per = st.per, byId = B.byId, blind = !!cfg.blind;
     const cur = byId[st.ids[st.i]], money = n => '$' + n, tm = B.teamFor(cur.team, cur.season);
@@ -868,6 +894,7 @@
       TICK = setInterval(() => {
         const el = UI.$('#vsTimer', app);
         if (!el || VS.auc !== st) { stopTick(); return; }
+        if (dcOn()) st.until += 250;   // ranked and the other player is gone: the clock waits
         const lf = st.until - Date.now();
         el.querySelector('span').textContent = Math.max(0, Math.ceil(lf / 1000));
         el.querySelector('i').style.setProperty('--w', Math.max(0, Math.min(100, 100 * lf / total)) + '%');
@@ -1124,7 +1151,7 @@
       const need = [...new Set(cfg.sides[0].picks.concat(cfg.sides[1].picks).map(k => +String(k).split('@')[1]).filter(y => y && y !== 2013 && !C.loaded(y)))];
       if (need.length) { app.innerHTML = '<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE ROSTERS...</div></section>'; Promise.all(need.map(y => C.load(y))).then(() => series(app)).catch(e => UI.toast(e.message || 'Rosters did not load', 'error')); return; }
     }
-    if (cfg.ranked && online() && me() !== null && me() >= 0 && UI.ranked && UI.profile.signedIn() && NET.code) UI.ranked.started({ key: NET.code + ':' + cfg.seed, opp: who(1 - me()), era: UI.ranked.eraOf(cfg), style: 'auction', ranked: true, bestOf: cfg.bestOf || 7 });
+    rkStart(cfg);
     loadThen(app, cfg.year, () => {
       let r;
       try { r = runFor(cfg); } catch (e) { app.innerHTML = UI.empty('COULD NOT PLAY IT', esc(e.message || e), '<div class="row-btns"><a class="btn" href="#/challenge/vs">BACK</a></div>'); return; }
@@ -1158,6 +1185,8 @@
       const R = done ? recordSeries(r, cfg) : null;
       if (done && online() && me() !== null && me() >= 0 && UI.ranked && UI.profile.signedIn() && NET.code) {   // both signed-in players report: the database counts it when the two agree
         const i = me(), sc = UI.ranked.lineupScore(S[i].five);
+        if (cfg.ranked) { const k = rkKey(cfg); RKDONE[k] = 1; let seenNav = false; try { seenNav = sessionStorage.getItem('a13-rk-nav-' + k); sessionStorage.setItem('a13-rk-nav-' + k, '1'); } catch (e) { /* private mode */ }
+          if (!seenNav) setTimeout(() => { if (location.hash.indexOf('#/challenge/vs') === 0) location.hash = '#/ranked/result'; }, 1500); }
         UI.ranked.report({ key: NET.code + ':' + cfg.seed, opp: who(1 - i), myWins: r.wins[S[i].abbr] || 0, oppWins: r.wins[S[1 - i].abbr] || 0, era: UI.ranked.eraOf(cfg), style: cfg.auction ? 'auction' : cfg.board ? 'board' : 'wheel', ranked: !!cfg.ranked, bestOf: r.bestOf,
           lineup: { names: S[i].five.map(p => p.name), seasons: S[i].five.map(p => p.season || cfg.year || null), score: sc, era: UI.ranked.eraOf(cfg) }, score: sc });
       }
