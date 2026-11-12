@@ -30,7 +30,14 @@
     setGuest(v) { v = String(v || '').trim(); const bad = P.check(v); if (bad) return bad; wr(GUEST, v); fire(); return ''; },
     email() { return USER ? USER.email : ''; },
     // '' when the name is allowed, else what is wrong with it
-    check(v) { v = String(v || '').trim(); return OKNAME.test(v) ? '' : v ? '3 to 16 letters, numbers, _ or -. No spaces or symbols.' : 'Type a username first.'; },
+    check(v) {
+      v = String(v || '').trim();
+      if (!OKNAME.test(v)) return v ? '3 to 16 letters, numbers, _ or -. No spaces or symbols.' : 'Type a username first.';
+      const flat = v.toLowerCase().replace(/[_-]/g, '').replace(/0/g, 'o').replace(/1/g, 'i').replace(/3/g, 'e').replace(/[4@]/g, 'a').replace(/[5$]/g, 's');
+      if (/(fuck|shit|bitch|cunt|nigg|fagg|slut|whore|rape|nazi|hitler|retard)/.test(flat)) return 'That username is not allowed. Pick another.';
+      if (/(admin|moderator|support|staff|joshuamoy|joshuam0y|startingfive)/.test(flat)) return 'That username looks like an official one. Pick another.';
+      return '';
+    },
     isOnline(n) { return !!ONLINE[String(n || '').toLowerCase()]; },
     signOut() {
       del(KEY); del(OLD); ROOMS.forEach(del);

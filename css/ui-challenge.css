@@ -1054,3 +1054,12 @@
 .hist b { font-family: var(--display); font-size: 18px; }
 .hist-d { font-family: var(--display); letter-spacing: .06em; }
 .hist-d.w { color: #5fd38a; } .hist-d.l { color: #e5645a; }
+
+.rk-search { display: flex; gap: 8px; margin: 8px 0; }
+.rk-search input { flex: 1; min-width: 0; padding: 10px; background: var(--bg2); border: 1px solid var(--line2); color: var(--text); font-family: var(--display); letter-spacing: .1em; }
+.rk-tbl tr.rk-me td { background: color-mix(in srgb, var(--gold) 16%, transparent); }
+.lb-gap { text-align: center; font-family: var(--display); letter-spacing: .1em; font-size: 14px; color: var(--text2); margin: 4px 0; min-height: 1.2em; }
+.lb-gap b { color: var(--gold2); }
+.rk-report { margin: 14px 0; }
+.rk-report-b { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+.rk-report-b select { padding: 8px; background: var(--bg2); border: 1px solid var(--line2); color: var(--text); }

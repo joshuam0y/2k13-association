@@ -53,6 +53,7 @@ create table if not exists public.lobbies (
   era text not null, style text not null, ranked boolean not null default false,
   updated_at timestamptz not null default now()
 );
+alter table public.lobbies add column if not exists created_at timestamptz not null default now();
 
 create table if not exists public.ranked_starts (
   key text not null, uid uuid not null, opp uuid not null,
@@ -184,9 +185,9 @@ end $$;
 create or replace function public.lobby_down(p_code text) returns void
 language sql security definer set search_path = public as $$ delete from public.lobbies where code = upper(p_code) and host = auth.uid() $$;
 drop function if exists public.lobby_list();
-create or replace function public.lobby_list() returns table (code text, host_name text, era text, style text, ranked boolean, rating int)
+create or replace function public.lobby_list() returns table (code text, host_name text, era text, style text, ranked boolean, rating int, age int)
 language sql security definer set search_path = public as $$
-  select l.code, l.host_name, l.era, l.style, l.ranked, coalesce(r.rating, 1200)
+  select l.code, l.host_name, l.era, l.style, l.ranked, coalesce(r.rating, 1200), extract(epoch from now() - l.created_at)::int
   from public.lobbies l left join public.ratings r on r.user_id = l.host and r.era = l.era
   where l.updated_at > now() - interval '90 seconds' order by l.updated_at desc limit 30
 $$;
@@ -365,3 +366,21 @@ language sql security definer set search_path = public as $$
   update public.ratings set rating = round(1200 + (rating - 1200) * p_keep), games = 0, wins = 0, losses = 0, updated_at = now()
 $$;
 revoke execute on function public.reset_season(numeric) from public, anon, authenticated;
+
+-- ---------- reporting a player (read the reports in the Supabase table editor: user_reports) ----------
+create table if not exists public.user_reports (
+  id bigserial primary key, reporter uuid not null, target uuid not null, reason text not null, created_at timestamptz not null default now()
+);
+alter table public.user_reports enable row level security;
+create or replace function public.report_user(p_name text, p_reason text) returns boolean
+language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); t uuid;
+begin
+  if me is null then return false; end if;
+  select id into t from public.profiles where lower(username) = lower(p_name);
+  if t is null or t = me then return false; end if;
+  if exists (select 1 from public.user_reports where reporter = me and target = t and created_at > now() - interval '1 day') then return false; end if;
+  insert into public.user_reports (reporter, target, reason) values (me, t, left(coalesce(p_reason, 'OTHER'), 60));
+  return true;
+end $$;
+grant execute on function public.report_user(text, text) to authenticated;

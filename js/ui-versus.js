@@ -195,7 +195,7 @@
       }
       return;
     }
-    if (m.t === 'conceded' && VS.cfg && VS.cfg.ranked) { rkOver(rkKey(VS.cfg)); if (UI.ranked) UI.ranked.noteForfeit('win'); UI.toast(who(1 - me()) + ' forfeited. You win.'); const el = document.getElementById('vsDc'); if (el) el.remove(); location.hash = '#/ranked/result'; return; }
+    if (m.t === 'conceded' && VS.cfg && VS.cfg.ranked) { rkOver(rkKey(VS.cfg)); if (UI.ranked) UI.ranked.noteForfeit('win'); UI.toast(who(1 - me()) + ' forfeited. You win.'); if (window.SFX) window.SFX.play('whistle'); const el = document.getElementById('vsDc'); if (el) el.remove(); location.hash = '#/ranked/result'; return; }
     if (m.t === 'rematch' && VS.cfg && VS.cfg.ranked && m.seed === VS.cfg.seed) { RM.seed = VS.cfg.seed; RM.them = true; maybeRematch(); route(); return; }
     if (m.t === 'rresume') { if (!DC.res.on && rkOn(VS.cfg) && !RKDONE[rkKey(VS.cfg)]) DC.res = { on: true, me: false, them: false, until: Date.now() + 60000 }; DC.res.them = true; seen(); dcTick(); return; }
     if (m.t === 'bye') {
@@ -767,14 +767,24 @@
       <div class="lb-cards">${slot(a, 1)}<div class="lb-vs">VS</div>${slot(b, 0)}</div>
       <div class="lb-ready"><button type="button" class="btn btn-gold btn-big" data-ready="${i0}">${rdy[i0] ? 'READY: TAP TO CANCEL' : 'I AM READY'}</button>
         <span class="muted">${esc(b)}: <b>${rdy[1 - i0] ? 'READY' : 'NOT YET'}</b></span></div>
+      <p class="lb-gap" id="lbGap"></p>
       <p class="muted lb-note">An auction with a hidden pool of ten mixed players, $20 each, $1 to open, raises of $1 or more, a 24 second shot clock on every bid, then a best-of-7 series. Take a minute: nothing starts until you both press ready. Leaving before the auction costs nothing; leaving after it starts is a forfeit.</p>
       <button type="button" id="vsStart" hidden></button>${reactBar()}`;
     bindReact(app);
+    if (LB.sound !== NET.code) { LB.sound = NET.code; if (window.SFX) window.SFX.play('chime'); }   // a match was found
+    const gap = () => {   // who is favored, from the two ratings
+      const ra = UI.ranked.ratingOf(a), rb = UI.ranked.ratingOf(b), el = document.getElementById('lbGap');
+      if (ra == null || rb == null || !el) return;
+      const p = Math.round(100 / (1 + Math.pow(10, (rb - ra) / 400))), d = Math.abs(ra - rb);
+      el.innerHTML = d < 10 ? 'EVEN MATCH | <b>50%</b> EACH' : (ra > rb ? 'YOU ARE FAVORED BY <b>' + d + '</b>' : 'YOU ARE THE UNDERDOG BY <b>' + d + '</b>') + ' | YOUR WIN CHANCE <b>' + p + '%</b>';
+    };
+    gap();
     [[a, 1], [b, 0]].forEach(([n, mine]) => {
       if (LB.cards[n]) return;
       UI.ranked.lobbyCard(n, era, mine).then(html => {
         const el = app.querySelector('[data-lbn="' + String(n).replace(/"/g, '\\"') + '"]');
         if (el) el.innerHTML = html;
+        gap();
         const rb = el && el.querySelector('[data-lbretry]');
         if (rb) rb.addEventListener('click', () => { delete LB.cards[n]; lobbyDraw(app); });   // it gave up: ask again
         else LB.cards[n] = html;
