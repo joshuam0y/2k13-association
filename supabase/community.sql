@@ -265,10 +265,23 @@ end $$;
 grant execute on function public.public_profile(text) to authenticated, anon;
 
 -- ---------- a player who stays gone past the grace time forfeits ----------
--- The other phone calls this after the grace time. Only works when both phones logged the start, nobody reported and the series is not final yet.
+-- Both phones ping every ten seconds while a ranked game is on. A forfeit win only works when the other player's pings stopped over a minute
+-- ago and yours are still coming, so nobody can claim a win against a player who is still there.
+create table if not exists public.ranked_presence (key text not null, uid uuid not null, seen_at timestamptz not null default now(), primary key (key, uid));
+alter table public.ranked_presence enable row level security;
+create or replace function public.ranked_ping(p_key text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then return; end if;
+  if not exists (select 1 from public.ranked_starts where key = p_key and uid = auth.uid()) then return; end if;
+  insert into public.ranked_presence (key, uid, seen_at) values (p_key, auth.uid(), now())
+    on conflict (key, uid) do update set seen_at = now();
+end $$;
+grant execute on function public.ranked_ping(text) to authenticated;
+
 create or replace function public.forfeit_series(p_key text) returns boolean
 language plpgsql security definer set search_path = public as $$
-declare me uuid := auth.uid(); a public.ranked_starts; need int;
+declare me uuid := auth.uid(); a public.ranked_starts; need int; mine timestamptz; theirs timestamptz;
 begin
   if me is null then return false; end if;
   select * into a from public.ranked_starts where key = p_key and uid = me;
@@ -276,6 +289,10 @@ begin
   if not exists (select 1 from public.ranked_starts b where b.key = p_key and b.uid = a.opp and b.opp = me) then return false; end if;
   if exists (select 1 from public.series s where s.key = p_key) then return false; end if;
   if exists (select 1 from public.series_reports r where r.key = p_key) then return false; end if;
+  select seen_at into mine from public.ranked_presence where key = p_key and uid = me;
+  select seen_at into theirs from public.ranked_presence where key = p_key and uid = a.opp;
+  if mine is null or mine < now() - interval '40 seconds' then return false; end if;
+  if coalesce(theirs, a.created_at) > now() - interval '60 seconds' then return false; end if;
   need := (a.best_of + 1) / 2;
   insert into public.series_reports (key, reporter, opp, my_wins, opp_wins, era, style, ranked, best_of)
     values (p_key, me, a.opp, need, 0, a.era, a.style, true, a.best_of),

@@ -304,6 +304,7 @@
         else if (NET.role === 'guest' && NET.status === 'lost' && Date.now() - NET.peerSeen > 25000 && VS.cfg) becomeHost(false);
       }, 4000));
       NET.timers.push(setInterval(dcTick, 1000));
+      NET.timers.push(setInterval(() => { if (rkOn(VS.cfg) && !RKDONE[rkKey(VS.cfg)] && NET.client && NET.client.connected) UI.profile.rpc('ranked_ping', { p_key: rkKey(VS.cfg) }).catch(() => {}); }, 10000));   // proof that this phone is still in the game
       // a guest whose host never answers: say so, but keep listening
       if (role === 'guest' || role === 'watch') setTimeout(() => { if (NET.code === code && NET.status === 'connecting') { NET.err = 'No answer from room ' + code + ' yet. Check the code, and that your friend still has the room open. Still trying...'; NET.status = 'error-wait'; route(); } }, 20000);
     }).catch(e => { NET.status = 'error'; NET.err = e.message || 'The connection failed.'; route(); });
