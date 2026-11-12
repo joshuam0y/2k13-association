@@ -5,7 +5,7 @@
 (function () {
   const SB_URL = 'https://feozimahsjhnvlqlkwyh.supabase.co', SB_KEY = 'sb_publishable_IejaVhDl93-NonWwHdeeIA_zBRDGXv9';
   const LIB = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js';
-  const KEY = 'a13-profile', OLD = 'a13-tn-name', ROOMS = ['a13-tn-host', 'a13-tn-room', 'a13-vs-room', 'a13-vs-host'];
+  const KEY = 'a13-profile', GUEST = 'a13-guest', OLD = 'a13-tn-name', ROOMS = ['a13-tn-host', 'a13-tn-room', 'a13-vs-room', 'a13-vs-host'];
   const rd = k => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } };
   const wr = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode */ } };
   const del = k => { try { localStorage.removeItem(k); } catch (e) { /* private mode */ } };
@@ -20,8 +20,13 @@
 
   const P = {
     // your username, instantly: kept on this device while you are signed in to an account
-    name() { return hasToken() ? String(rd(KEY) || '') : ''; },
-    signedIn() { return !!P.name(); },
+    account() { return hasToken() ? String(rd(KEY) || '') : ''; },
+    // the name you play under: your account's, or the guest name you typed (a room code is enough to play, no account needed)
+    name() { return P.account() || String(rd(GUEST) || ''); },
+    isGuest() { return !P.account() && !!P.name(); },
+    signedIn() { return !!P.account(); },
+    canPlay() { return !!P.name(); },
+    setGuest(v) { v = String(v || '').trim(); const bad = P.check(v); if (bad) return bad; wr(GUEST, v); fire(); return ''; },
     email() { return USER ? USER.email : ''; },
     // '' when the name is allowed, else what is wrong with it
     check(v) { v = String(v || '').trim(); return OKNAME.test(v) ? '' : v ? '3 to 16 letters, numbers, _ or -. No spaces or symbols.' : 'Type a username first.'; },
@@ -34,15 +39,20 @@
     },
     // the card for the top of a multiplayer screen
     bar() {
-      const n = P.name();
-      return `<div class="ch-step pf-bar">${n
-        ? `<div class="ch-step-k">SIGNED IN</div><div class="pf-row"><span class="pf-who">${esc(n)}</span><button type="button" class="btn btn-small" data-pf="open">ACCOUNT AND FRIENDS</button></div>`
-        : `<div class="ch-step-k">SIGN IN TO PLAY ONLINE</div><div class="pf-row"><span class="muted">Create a free account, or sign in. Your username is your name in every room.</span><button type="button" class="btn btn-gold" data-pf="open">SIGN IN OR CREATE ACCOUNT</button></div>`}</div>`;
+      const n = P.account(), g = P.name();
+      if (n) return `<div class="ch-step pf-bar"><div class="ch-step-k">SIGNED IN</div><div class="pf-row"><span class="pf-who">${esc(n)}</span><button type="button" class="btn btn-small" data-pf="open">ACCOUNT AND FRIENDS</button></div></div>`;
+      return `<div class="ch-step pf-bar"><div class="ch-step-k">${g ? 'PLAYING AS GUEST' : 'YOUR NAME FOR ONLINE PLAY'}</div><div class="pf-row"><label class="field"><span>NAME</span><input id="pfGuest" maxlength="16" placeholder="3 to 16 letters or numbers" value="${esc(g)}" autocomplete="off"></label><button type="button" class="btn btn-gold" id="pfGuestGo">${g ? 'RENAME' : 'PLAY AS GUEST'}</button></div><div class="pf-row"><span class="muted">No account needed to play with a room code. Sign in to keep your name and add friends.</span><button type="button" class="btn btn-small" data-pf="open">SIGN IN OR CREATE ACCOUNT</button></div><p class="muted pf-err" id="pfGuestErr" hidden></p></div>`;
     },
     // makes the bar work; onChange() runs after a sign in, a sign out or a rename
     wire(root, onChange) {
       const b = root.querySelector('[data-pf="open"]');
-      if (b) b.addEventListener('click', () => openPanel());
+      root.querySelectorAll('[data-pf="open"]').forEach(x => x.addEventListener('click', () => openPanel()));
+      const gi = root.querySelector('#pfGuest'), gb = root.querySelector('#pfGuestGo');
+      if (gi && gb) {
+        const go = () => { const bad = P.setGuest(gi.value); const e = root.querySelector('#pfGuestErr'); if (e) { e.hidden = !bad; e.textContent = bad; } };
+        gb.addEventListener('click', go);
+        gi.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+      }
       if (WIRED.fn) window.removeEventListener('a13-profile', WIRED.fn);
       WIRED.fn = () => { if (onChange && root.isConnected) onChange(); };
       window.addEventListener('a13-profile', WIRED.fn);
@@ -88,7 +98,7 @@
 
   // ---------- friends: online status and invites ----------
   function startSocial() {
-    const me = P.name();
+    const me = P.account();
     if (!sb || !me) return;
     if (!PRES) {
       PRES = sb.channel('sf-online', { config: { presence: { key: me } } });
@@ -220,7 +230,7 @@
 
     function account(tab) {
       tab = tab || 'me';
-      const n = P.name();
+      const n = P.account();
       const tabs = `<div class="ct-ptabs pf-tabs"><button type="button" class="ct-ptab${tab === 'me' ? ' on' : ''}" data-t="me">ACCOUNT</button><button type="button" class="ct-ptab${tab === 'fr' ? ' on' : ''}" data-t="fr">FRIENDS</button></div>`;
       if (tab === 'fr') {
         card(`${tabs}<div class="pf-add"><input id="pfFind" maxlength="16" placeholder="Friend's username" autocomplete="off" autocapitalize="off" spellcheck="false"><button type="button" class="btn btn-gold" id="pfAdd">ADD</button></div><div id="pfFriends" class="pf-friends">Loading...</div><div class="row-btns">${closeBtn}</div>`);
@@ -311,7 +321,7 @@
     if (!bar || document.getElementById('pfChip')) return;
     const b = document.createElement('button');
     b.type = 'button'; b.id = 'pfChip'; b.className = 'pf-chip';
-    const paint = () => { const n = P.name(); b.innerHTML = n ? '<small>SIGNED IN</small><b>' + esc(n) + '</b>' : '<b>SIGN IN</b>'; };
+    const paint = () => { const n = P.account(); b.innerHTML = n ? '<small>SIGNED IN</small><b>' + esc(n) + '</b>' : '<b>SIGN IN</b>'; };
     paint();
     bar.insertBefore(b, document.getElementById('userchip') || null);
     window.addEventListener('a13-profile', paint);

@@ -128,6 +128,7 @@
     }).catch(e => { NET.status = 'error'; NET.err = e.message || 'The connection failed.'; refreshNet(); });
   }
   window.addEventListener('a13-profile', () => {   // a username change from the top bar, mid room
+    if (!NET.role && PEND && PEND.length >= 4 && UI.profile.name() && ON) { SIG = ''; A.swap({ page: 'entry' }); connect('guest', PEND); return; }   // a join link was waiting for a name
     const t = TN(); if (!t || !NET.role || !NET.client) return;
     const n = UI.profile.name(); if (!n) return;
     if (NET.role === 'host') { const i = mySeat(); if (i >= 0 && t.page === 'lobby' && !t.names.some((x, j) => j !== i && String(x).toLowerCase() === n.toLowerCase())) { t.names[i] = n; A.save(); push(); changed(); } }

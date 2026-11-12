@@ -421,7 +421,7 @@
           <p class="ch-hero-p">Take turns spinning the wheel and taking one player from the team it lands on, until you both have five (or switch the wheel off and draft from an open board). Then a series: nobody comes off the bench, all five play 48 minutes, so positions and fit matter.</p></section>
         ${netBar()}
         <div class="ch-setup">
-          ${UI.profile.bar()}${PEND ? `<p class="muted">Sign in to join room <b>${esc(PEND)}</b>.</p>` : ''}
+          ${UI.profile.bar()}${PEND ? `<p class="muted">Pick a name below to join room <b>${esc(PEND)}</b>.</p>` : ''}
           <div class="ch-step"><div class="ch-step-k">1 | HOW YOU PLAY</div>
             <div class="ch-seg vs-seg3"><button type="button" class="ch-seg-b${!online() ? ' on' : ''}" data-net="local"><b>SAME PHONE</b><small>Pass it back and forth</small></button>
               <button type="button" class="ch-seg-b${NET.role === 'host' ? ' on' : ''}" data-net="host"><b>HOST ONLINE</b><small>Get a room code for your friend</small></button>
@@ -460,7 +460,7 @@
       if (KEEP != null) { const y = KEEP; KEEP = null; window.scrollTo(0, y); requestAnimationFrame(() => window.scrollTo(0, y)); }   // a setup choice keeps your place, even when it had to load a season first
       app.querySelectorAll('[data-net]').forEach(b => b.addEventListener('click', () => {
         const v = b.dataset.net;
-        if (v !== 'local' && !UI.profile.signedIn()) { UI.toast('Sign in to play online. Your name is your account.', 'error'); const bar = UI.$('.pf-bar', app); if (bar) bar.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+        if (v !== 'local' && !UI.profile.canPlay()) { UI.toast('Pick a guest name or sign in first.', 'error'); const bar = UI.$('.pf-bar', app); if (bar) bar.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
         if (v === 'local') hangUp();
         else if (v === 'host' && NET.role !== 'host') host();
         else if (v === 'join' && NET.role !== 'guest') { hangUp(); Object.assign(NET, { role: 'guest', code: '', status: 'code', err: '' }); }
@@ -487,8 +487,8 @@
       app.querySelectorAll('[data-tname]').forEach(inp => inp.addEventListener('change', () => { VS.tnames[+inp.dataset.tname] = inp.value.trim().slice(0, 24); push(); }));
       app.querySelectorAll('[data-name]').forEach(inp => inp.addEventListener('change', () => { VS.names[+inp.dataset.name] = inp.value.trim().slice(0, 20); if (NET.role === 'guest') send({ t: 'hello', name: VS.names[me()] || '' }); else { uniqNames(); push(); redraw(); } }));
       UI.profile.wire(app, () => {
-        if (!UI.profile.signedIn() && NET.role) { hangUp(); route(); return; }
-        if (UI.profile.signedIn() && PEND) { const c = PEND; PEND = null; join(c); route(); return; }
+        if (!UI.profile.canPlay() && NET.role) { hangUp(); route(); return; }
+        if (UI.profile.canPlay() && PEND) { const c = PEND; PEND = null; join(c); route(); return; }
         const i = me(); if (i !== null) VS.names[i] = UI.profile.name();
         if (NET.role === 'guest') send({ t: 'hello', name: VS.names[i] || '' }); else { uniqNames(); push(); }
         redraw();
@@ -931,7 +931,7 @@
     APP = app;
     if (part[1] === 'join' && part[2]) {
       VS.page = 'setup';
-      if (!UI.profile.signedIn()) PEND = part[2].toUpperCase();
+      if (!UI.profile.canPlay()) PEND = part[2].toUpperCase();
       else if (!(NET.role === 'guest' && NET.code === part[2].toUpperCase())) join(part[2]);
       if (location.hash !== '#/challenge/vs') { history.replaceState(null, '', '#/challenge/vs'); }
       return setup(app);
