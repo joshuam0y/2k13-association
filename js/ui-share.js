@@ -156,7 +156,7 @@
   };
   // Shares a result: the text and link are copied to the clipboard, nothing else.
   UI.shareResult = async function (spec, text, url, name) {
-    const all = text + '\n' + url;
+    const all = text + '\n' + String(url).replace(/^https?:\/\//, '');
     try { await navigator.clipboard.writeText(all); UI.toast('Copied. Paste it anywhere.'); }
     catch (e) {
       const t = document.createElement('textarea'); t.value = all; t.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(t); t.select();

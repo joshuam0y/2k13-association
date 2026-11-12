@@ -100,7 +100,7 @@
   }
   // sharing is just the text and link, copied (no picture)
   async function shareCard(o, text, hash) {
-    const all = text + '\n' + location.origin + location.pathname + (hash || '');
+    const all = text + '\n' + (location.host + location.pathname + (hash || '')).replace(/index\.html$/, '');
     try { await navigator.clipboard.writeText(all); UI.toast('Copied. Paste it anywhere.'); }
     catch (e) {
       const t = document.createElement('textarea'); t.value = all; t.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(t); t.select();
