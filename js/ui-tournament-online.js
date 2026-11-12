@@ -15,7 +15,7 @@
   const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081'];
   const SPIN_MS = 4700;
   const ERAS = [[2013, 'MODERN'], [2003, '2000S'], [1993, '1990S'], [1985, '1980S'], [1975, '1970S'], [1965, '1960S'], [1955, '1950S']];   // the rules a mixed-seasons game plays by: pace, the three-point line (none before 1979-80), shooting
-  const SHARED = ['page', 'n', 'humans', 'names', 'ai', 'seats', 'live', 'opts', 'skip', 'cfg', 'teams', 'picks', 'seeds', 'rounds', 'cur', 'champ', 'rating', 'watch', 'spins', 'respins', 'spun', 'clk', 'lock', 'auc', 'hnow', 'epoch', 'hostCid'];
+  const SHARED = ['page', 'n', 'humans', 'names', 'ai', 'seats', 'live', 'opts', 'skip', 'cfg', 'teams', 'picks', 'seeds', 'rounds', 'cur', 'champ', 'rating', 'watch', 'spins', 'respins', 'spun', 'clk', 'lock', 'auc', 'watching', 'hnow', 'epoch', 'hostCid'];
   const store = k => ({
     get() { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } },
     set(v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode */ } },
@@ -61,8 +61,11 @@
     const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: all.slice(0, 12) }, NET.key, all.slice(12));
     return JSON.parse(new TextDecoder().decode(pt));
   }
+  const SPEC = {};   // spectators the host has heard from lately
+  const watchers = () => Object.keys(SPEC).filter(k => Date.now() - SPEC[k] < 12000).length;
   function send(obj) {
     if (!NET.client || !NET.key) return;
+    if (NET.role === 'watch' && obj.t !== 'watch') return;   // a spectator only listens
     seal(Object.assign({ from: NET.me, role: NET.role, cid: CID }, obj)).then(txt => { try { NET.client.publish(topic(), txt, { qos: 1 }); } catch (e) { /* reconnecting */ } }).catch(() => {});
   }
   function push() {
@@ -111,6 +114,7 @@
         if (!NET.client || NET.code !== code) return;
         if (NET.role === 'host') {
           send({ t: 'ping', hn: Date.now() });
+          { const tw = TN(), nw = watchers(); if ((tw.watching || 0) !== nw) { tw.watching = nw; push(); soft(); } }
           beat++; if (beat % 5 === 0) push();
           const t = TN(), live = t.seats.map((c, i) => c === CID || Date.now() - (SEEN[c] || 0) < 15000);
           if (JSON.stringify(live) !== JSON.stringify(t.live)) { t.live = live; push(); soft(); }
@@ -124,7 +128,7 @@
         }
       }, 4000));
       NET.timers.push(setInterval(clockCheck, 500));
-      if (role === 'guest') setTimeout(() => { if (NET.code === code && NET.status === 'connecting') { NET.err = 'No answer from room ' + code + ' yet. Check the code, and that the host still has the room open. Still trying...'; refreshNet(); } }, 20000);
+      if (role === 'guest' || role === 'watch') setTimeout(() => { if (NET.code === code && NET.status === 'connecting') { NET.err = 'No answer from room ' + code + ' yet. Check the code, and that the host still has the room open. Still trying...'; refreshNet(); } }, 20000);
     }).catch(e => { NET.status = 'error'; NET.err = e.message || 'The connection failed.'; refreshNet(); });
   }
   window.addEventListener('a13-profile', () => {   // a username change from the top bar, mid room
@@ -134,7 +138,7 @@
     if (NET.role === 'host') { const i = mySeat(); if (i >= 0 && t.page === 'lobby' && !t.names.some((x, j) => j !== i && String(x).toLowerCase() === n.toLowerCase())) { t.names[i] = n; A.save(); push(); changed(); } }
     else send({ t: 'hello', name: n });
   });
-  const hello = () => send({ t: 'hello', name: lsName.get() || '' });
+  const hello = () => (NET.role === 'watch' ? send({ t: 'watch' }) : send({ t: 'hello', name: lsName.get() || '' }));
   const CODE_CH = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const newCode = () => Array.from({ length: 5 }, () => CODE_CH[Math.floor(Math.random() * CODE_CH.length)]).join('');
   const joinLink = () => location.origin + location.pathname + '#/challenge/tournament/join/' + NET.code;
@@ -143,7 +147,7 @@
   const REACTS = ['🔥', '😂', '😬', '👀', '🧱', '🐐', 'REACH', 'STEAL', 'COOKED', 'GG'];
   const CHAT = { list: [], open: false, unread: 0, typingUntil: 0, typingName: '', sentAt: 0, lastReact: 0 };
   const chatName = () => UI.profile.name() || (TN() && TN().names[mySeat()]) || 'PLAYER';
-  const chatOn = () => !!(NET.role && NET.client && NET.status === 'connected' && /tournament\/online/.test(location.hash) && TN() && TN().page !== 'entry');
+  const chatOn = () => !!(NET.role && NET.role !== 'watch' && NET.client && NET.status === 'connected' && /tournament\/online/.test(location.hash) && TN() && TN().page !== 'entry');
   function bubble(r, name, mine) {
     let host = document.getElementById('vsBubbles');
     if (!host) { host = document.createElement('div'); host.id = 'vsBubbles'; host.className = 'vs-bubbles'; document.body.appendChild(host); }
@@ -218,6 +222,7 @@
       if (c && A.watchN() === m.n) { if (m.k === 'speed') c.setSpeed(+m.v || 1); else if (m.k === 'play') c.play(); else if (m.k === 'pause') c.pause(); else if (m.k === 'skip') c.skipQuarter(); }
       return;
     }
+    if (m.t === 'watch') { if (NET.role === 'host') { const fresh = !SPEC[m.from] || Date.now() - SPEC[m.from] > 12000; SPEC[m.from] = Date.now(); if (fresh) { TN().watching = watchers(); push(); soft(); } } return; }
     if (NET.role === 'host') {
       if (m.role === 'host') {   // a second host: the one with the newer epoch keeps the room
         if (m.t !== 'state' || !m.s) return;
@@ -234,7 +239,7 @@
     }
     if (m.role !== 'host') return;
     NET.peerSeen = Date.now();
-    if (NET.status !== 'connected') { NET.status = 'connected'; NET.err = ''; lsRoom.set({ code: NET.code, at: Date.now() }); refreshNet(); }
+    if (NET.status !== 'connected') { NET.status = 'connected'; NET.err = ''; if (NET.role !== 'watch') lsRoom.set({ code: NET.code, at: Date.now() }); refreshNet(); }
     if (m.t === 'ping' && m.hn) OFF = m.hn - Date.now();
     else if (m.t === 'dupe' && m.to === CID) { NET.status = 'error'; NET.err = 'Someone in this room already has your username. Change it with the account button at the top, then join again.'; refreshNet(); }
     else if (m.t === 'full' && m.to === CID) { NET.status = 'error'; NET.err = 'That room is full, or the draft already started. Ask the host.'; refreshNet(); }
@@ -285,7 +290,7 @@
     }
     return -1;
   }
-  function mySig() { const t = TN(), w = mySeat(), on = t.cfg && t.cfg.turns ? onClockSeat(t) : w; return JSON.stringify([(t.cfg && t.cfg.bans || []).length, t.auc ? [t.auc.i, t.auc.price, t.auc.holder, t.auc.turn, t.auc.until, t.auc.won.map(x => x.length)] : null, t.lock, t.picks[w], t.spins[w], t.respins[w], t.clk[w], on, t.picks[on], t.spins[on], t.clk[on]]); }
+  function mySig() { const t = TN(), w = mySeat(), on = t.cfg && t.cfg.turns ? onClockSeat(t) : w; return JSON.stringify([t.watching || 0, (t.cfg && t.cfg.bans || []).length, t.auc ? [t.auc.i, t.auc.price, t.auc.holder, t.auc.turn, t.auc.until, t.auc.won.map(x => x.length)] : null, t.lock, t.picks[w], t.spins[w], t.respins[w], t.clk[w], on, t.picks[on], t.spins[on], t.clk[on]]); }
   const onPage = () => /#\/challenge\/tournament\/online/.test(location.hash);
   function changed() {
     const t = TN(), mine = mySig();
@@ -462,18 +467,19 @@
       });
     });
   }
-  function act(a) { if (NET.role === 'host') hostAct(mySeat(), a); else send({ t: 'act', a }); }
+  function act(a) { if (NET.role === 'watch') return; if (NET.role === 'host') hostAct(mySeat(), a); else send({ t: 'act', a }); }
 
   // ---------- pages ----------
   const netBar = () => {
     if (!NET.role) return '';
     const st = NET.status, host = NET.role === 'host';
-    const msg = st === 'connected' ? 'Connected to the host.'
+    const msg = st === 'connected' ? (NET.role === 'watch' ? 'Watching room <b>' + esc(NET.code) + '</b>. You see everything live.' : 'Connected to the host.')
       : st === 'ready' ? `Room <b>${esc(NET.code)}</b>: send the link to your friends.`
       : st === 'lost' ? 'Lost the host. Reconnecting on its own when they are back...'
       : st === 'error' ? esc(NET.err || 'Not connected.') : (NET.err ? esc(NET.err) : 'Connecting...');
     return `<div class="vs-net ${st === 'ready' ? 'waiting' : st}"><span class="vs-net-dot"></span><span>${msg}</span>
-      ${host && NET.code ? '<button type="button" class="btn btn-small" id="tnCopy">COPY LINK</button>' : ''}
+      ${host && NET.code ? '<button type="button" class="btn btn-small" id="tnCopy">COPY LINK</button><button type="button" class="btn btn-small" id="tnCopyWatch">COPY WATCH LINK</button>' : ''}
+      ${(TN() && TN().watching) ? '<span class="vs-spec">&#128065; ' + TN().watching + ' WATCHING</span>' : ''}
       ${st === 'lost' || st === 'error' ? '<button type="button" class="btn btn-small" id="tnRetry">TRY AGAIN</button>' : ''}
       <button type="button" class="btn btn-small" id="tnLeaveRoom">LEAVE</button></div>`;
   };
@@ -501,6 +507,7 @@
       if (navigator.share) { try { await navigator.share({ text, url: link }); return; } catch (e) { /* closed */ } }
       try { await navigator.clipboard.writeText(link); UI.toast('Link copied. Send it around.'); } catch (e) { UI.toast(link); }
     });
+    const cw = el.querySelector('#tnCopyWatch'); if (cw) cw.addEventListener('click', async () => { const link = location.origin + location.pathname + '#/challenge/tournament/watch/' + NET.code; try { await navigator.clipboard.writeText(link); UI.toast('Watch link copied. Anyone with it can watch.'); } catch (e) { UI.toast(link); } });
     const rt = el.querySelector('#tnRetry'); if (rt) rt.addEventListener('click', () => connect(NET.role, NET.code));
     const lv = el.querySelector('#tnLeaveRoom'); if (lv) lv.addEventListener('click', () => HOOK.quit());
   }
@@ -537,7 +544,7 @@
         <div class="ch-step"><div class="ch-step-k">2 | HOST A ROOM</div>
           <div class="ch-go"><button type="button" class="btn btn-gold btn-big" id="tnHost"${name ? '' : ' disabled'}>HOST A ROOM</button>${saved && saved.code ? '<button type="button" class="btn" id="tnResume">RESUME YOUR ROOM ' + esc(saved.code) + '</button>' : ''}</div></div>
         <div class="ch-step"><div class="ch-step-k">3 | OR JOIN ONE</div>
-          <div class="vs-join"><label class="field"><span>ROOM CODE</span><input id="tnCode" maxlength="5" placeholder="ABCDE" value="${esc(PEND || '')}" autocomplete="off" autocapitalize="characters"></label><button type="button" class="btn btn-gold" id="tnJoin"${name ? '' : ' disabled'}>JOIN</button></div>
+          <div class="vs-join"><label class="field"><span>ROOM CODE</span><input id="tnCode" maxlength="5" placeholder="ABCDE" value="${esc(PEND || '')}" autocomplete="off" autocapitalize="characters"></label><button type="button" class="btn btn-gold" id="tnJoin"${name ? '' : ' disabled'}>JOIN</button><button type="button" class="btn" id="tnWatchBtn">WATCH INSTEAD</button></div>
           ${room && room.code ? '<div class="ch-go"><button type="button" class="btn" id="tnRejoin">REJOIN ROOM ' + esc(room.code) + '</button></div>' : ''}</div>
         <div class="ch-go"><a class="btn" href="#/challenge/tournament">ONE PHONE INSTEAD</a><a class="btn" href="#/home">HOME</a></div>
       </div>`;
@@ -558,6 +565,7 @@
       SIG = ''; connect('guest', c);
     };
     UI.$('#tnJoin', app).addEventListener('click', () => go(UI.$('#tnCode', app).value));
+    const wt = UI.$('#tnWatchBtn', app); if (wt) wt.addEventListener('click', () => { const c = String(UI.$('#tnCode', app).value || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); if (c.length < 4) { UI.toast('Type the room code', 'error'); return; } SIG = ''; connect('watch', c); });
     const rj = UI.$('#tnRejoin', app); if (rj) rj.addEventListener('click', () => go(room.code));
   }
 
@@ -688,64 +696,9 @@
     }));
   }
   // ---------- the auction: every team bids, round the table ----------
-  const TA = { i: -1, price: -1, amt: 0 };   // the amount picked on this phone for the player who is up
   function aucPage(app, t, cfg, B) {
-    stopTick();
-    const st = t.auc, o = st.o, per_ = st.per, byId = B.byId, w = mySeat(), money = n => '$' + n, showR = t.opts.ratings !== false;
-    const cur = byId[st.ids[st.i]], tm = B.teamFor(cur.team, cur.season), left = st.ids.length - st.i - 1;
-    const mineTurn = w >= 0 && st.turn === w, inIt = w >= 0 && st.active[w], canRaise = mineTurn && C.aucNCanRaise(st, w);
-    const min = st.price + o.raise, max = w >= 0 ? C.aucNMax(st, w) : 0, have = w >= 0 ? o.budget - st.spent[w] : 0;
-    if (TA.i !== st.i || TA.price !== st.price || TA.amt < min || TA.amt > max) { TA.i = st.i; TA.price = st.price; TA.amt = min; }
-    const yr = p => { const y = p && (p.season || cfg.year); return y ? ' <small class="auc-yr">' + esc(A.short(y)) + '</small>' : ''; };
-    const teamsHtml = t.names.map((nm, i) => {
-      const tt = A.teamOf(i), won = st.won[i].map(id => byId[id]).filter(Boolean);
-      return `<div class="atm${st.turn === i ? ' turn' : ''}${st.holder === i ? ' holds' : ''}${i === w ? ' me' : ''}${st.active[i] ? '' : ' out'}" style="--c1:${esc((tt.colors || ['#444'])[0])}"><div class="atm-h">${A.logo(tt, 24)}<b>${esc(nm)}${t.ai[i] ? ' <i class="tn-ai">AI</i>' : ''}</b></div>
-        <div class="atm-m"><span>${money(o.budget - st.spent[i])}</span><small>${st.won[i].length} OF ${per_}${st.holder === i ? ' | HOLDS' : !st.active[i] && st.won[i].length < per_ ? ' | OUT' : ''}</small></div>
-        <ol>${won.map(p => `<li>${esc(p.name)}${yr(p)}</li>`).join('')}</ol></div>`;
-    }).join('');
-    const reserve = w >= 0 ? Math.max(0, per_ - st.won[w].length - 1) * o.start : 0;
-    let bid;
-    if (w < 0) bid = '<div class="auc-wait"><b>You are watching.</b></div>';
-    else if (mineTurn && !canRaise) bid = `<div class="auc-bid"><div class="auc-broke"><b>YOU CAN'T TOP ${money(st.price)}</b><span>You have ${money(have)}${reserve ? ' and must keep ' + money(reserve) + ' for your other open spots, so your top bid is ' + money(Math.max(0, max)) : ''}. Pass and drop out on him.</span></div>
-        <div class="auc-go"><button type="button" class="btn btn-big" disabled>BID<small>can't top ${money(st.price)}</small></button><button type="button" class="btn btn-gold btn-big" id="tAucPass">PASS<small>drop out on him</small></button></div></div>`;
-    else if (mineTurn) bid = `<div class="auc-bid"><div class="auc-maxline">YOUR MAX BID IS <b>${money(max)}</b> <span>${money(have)} left${reserve ? ', keeping ' + money(reserve) + ' for your other open spot' + (reserve / o.start > 1 ? 's' : '') : ''}</span></div>
-        <div class="auc-step"><button type="button" class="btn" id="tAucDn"${TA.amt - o.raise < min ? ' disabled' : ''}>&minus;</button><div class="auc-amt"><small>YOUR BID</small><b>${money(TA.amt)}</b></div><button type="button" class="btn" id="tAucUp"${TA.amt + o.raise > max ? ' disabled' : ''}>+</button></div>
-        <div class="auc-chips">${[o.raise, 2, 5].filter((v, k, a2) => a2.indexOf(v) === k && v >= o.raise).map(v => ({ to: st.price + v, label: '+' + money(v) })).filter(x => x.to >= min && x.to <= max).map(x => `<button type="button" class="ch-chip${TA.amt === x.to ? ' on' : ''}" data-tto="${x.to}">${x.label}</button>`).join('')}<button type="button" class="ch-chip${TA.amt === max ? ' on' : ''}" data-tto="${max}">ALL IN ${money(max)}</button></div>
-        <div class="auc-go"><button type="button" class="btn btn-gold btn-big" id="tAucBid">BID ${money(TA.amt)}</button><button type="button" class="btn btn-big" id="tAucPass">PASS<small>drop out on him</small></button></div></div>`;
-    else bid = `<div class="auc-wait"><b>${esc(t.names[st.turn] || '')} ${t.ai[st.turn] ? '(AI) ' : ''}is deciding...</b><span>${esc(t.names[st.holder] || '')} holds the bid at ${money(st.price)}.${w >= 0 && !inIt ? ' You are out on this one.' : ''}</span></div>`;
-    const dots = st.ids.map((id, k) => `<i class="${k < st.i ? 'sold' : k === st.i ? 'now' : ''}"></i>`).join('');
-    const pool = o.show ? `<div class="auc-poolrow">${st.ids.map((id, k) => { const p = byId[id], sale = st.log.filter(x => x.id === id)[0], col = (B.teamFor(p.team, p.season).colors || ['#555'])[0], y = p.season || cfg.year; return `<div class="apc${k < st.i ? ' sold' : k === st.i ? ' now' : ''}" style="--c1:${esc(col)}"><div class="apc-f">${UI.faceImg(p, col)}</div><b>${esc(p.name)}</b><small>${y ? esc(A.short(y)) : ''}${showR ? ' | ' + esc(p.ovr) : ''}</small>${sale ? `<em>${esc(t.names[sale.side])} ${sale.price ? money(sale.price) : 'FREE'}</em>` : k === st.i ? '<em>UP NOW</em>' : ''}</div>`; }).join('')}</div>` : `<p class="auc-more">${left} MORE IN THE HIDDEN POOL</p>`;
-    const nowTs = () => Date.now() + OFF, timed = cfg.timer > 0 && st.until;
-    app.innerHTML = `<div class="ch-top auc-top"><div><div class="ch-top-k">${esc(A.lblC(cfg))} | ${t.n} TEAMS | AUCTION | ${money(o.budget)} EACH</div><div class="ch-top-t">PLAYER ${st.i + 1} OF ${st.ids.length}</div></div></div>
-      <main class="auc-stage tauc">
-        ${timed ? `<div class="vs-timer" id="vsTimer"><i style="--w:100%"></i><span>${Math.max(0, Math.ceil((st.until - nowTs()) / 1000))}</span></div>` : ''}
-        <section class="auc-card" style="--c1:${esc((tm.colors || ['#444'])[0])}">
-          <div class="auc-face">${UI.faceImg(cur, (tm.colors || ['#444'])[0])}</div>
-          <div class="auc-info"><small>UP FOR BID</small><h2>${esc(cur.name)}</h2><p>${esc(C.posLabel(cur))}${cur.season || cfg.year ? ' | ' + esc(A.short(cur.season || cfg.year)) : ''}${showR ? ' | <b class="ch-ovr ' + UI.ovrClass(cur.ovr) + '">' + esc(cur.ovr) + '</b>' : ''}</p></div>
-          <div class="auc-price"><small>${esc((t.names[st.holder] || '').toUpperCase())} HOLDS</small><b>${money(st.price)}</b></div>
-        </section>
-        ${bid}
-        <div class="auc-dots">${dots}</div>${pool}
-      </main>
-      <div class="atm-grid">${teamsHtml}</div>`;
-    const dn = UI.$('#tAucDn', app), up = UI.$('#tAucUp', app);
-    const setAmt = v => { TA.amt = Math.max(min, Math.min(max, Math.round(v))); aucPage(app, t, cfg, B); };
-    if (dn) dn.addEventListener('click', () => setAmt(TA.amt - o.raise));
-    if (up) up.addEventListener('click', () => setAmt(TA.amt + o.raise));
-    app.querySelectorAll('[data-tto]').forEach(b => b.addEventListener('click', () => setAmt(+b.dataset.tto)));
-    const bd = UI.$('#tAucBid', app); if (bd) bd.addEventListener('click', () => act({ k: 'auc', a: 'raise', to: TA.amt }));
-    const ps = UI.$('#tAucPass', app); if (ps) ps.addEventListener('click', () => act({ k: 'auc', a: 'pass' }));
-    if (timed) {
-      const total = cfg.timer * 1000;
-      TICK = setInterval(() => {
-        const el = UI.$('#vsTimer', app);
-        if (!el || TN().auc !== st) { stopTick(); return; }
-        const lf = st.until - nowTs();
-        el.querySelector('span').textContent = Math.max(0, Math.ceil(lf / 1000));
-        el.querySelector('i').style.setProperty('--w', Math.max(0, Math.min(100, 100 * lf / total)) + '%');
-        el.classList.toggle('low', lf < 8000);
-      }, 250);
-    }
+    A.aucView(app, { t, cfg, B, st: t.auc, w: mySeat(), now: () => Date.now() + OFF, still: () => TN().auc === t.auc && /#\/challenge\/tournament\/online/.test(location.hash),
+      act: (a, to) => act({ k: 'auc', a, to }), redraw: () => aucPage(app, t, cfg, B) });
   }
   function draft(app) {
     if (UI.challengeWheel.busy && UI.challengeWheel.busy()) return;   // a spin is running: its landing redraws the page
@@ -754,6 +707,13 @@
     if (!cfg) return;
     A.ensure(app, cfg, () => {
       const B = A.board(cfg), teams = B.teams, byId = B.byId;
+      if (NET.role === 'watch') {   // a spectator sees the ban round and the auction as they happen, and everyone's progress otherwise
+        if (banning(t)) { const kk = (cfg.bans || []).length, bs = kk % t.seats.length; A.banUI(app, { cfg, B, name: t.names[bs], k: kk, total: t.seats.length * cfg.bansN, mine: false, blind: t.opts.ratings === false, redraw: () => draft(app), onBan: () => {} }); return; }
+        if (cfg.auction && t.auc && !t.auc.done) { aucPage(app, t, cfg, B); return; }
+        app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(A.lblC(cfg))} | ${t.n} TEAMS | WATCHING</div><div class="ch-top-t">THE DRAFT</div></div></div><div id="tnNet">${netBar()}</div><div id="tnProg">${progHtml()}</div><p class="muted">You are watching. Everyone's picks show up here as they are made, and the bracket follows.</p>`;
+        refreshNet(); bindProg(UI.$('#tnProg', app));
+        return;
+      }
       if (w < 0) { app.innerHTML = UI.empty('YOU ARE NOT IN THIS DRAFT', 'Ask the host for the link to the next one.', '<div class="row-btns"><button type="button" class="btn" id="tnOut">LEAVE</button></div>'); UI.$('#tnOut', app).addEventListener('click', leave); return; }
       if (banning(t)) {
         const kk = (cfg.bans || []).length, bs = kk % t.seats.length;
@@ -766,7 +726,7 @@
       const onK = on >= 0 ? t.picks[on].length : per(t);
       const spin = on >= 0 && t.spins[on] && t.spins[on].pick === onK ? t.spins[on] : null;
       const onName = on >= 0 ? esc(t.names[on]) : '';
-      const meta = `${esc(A.lblC(cfg))} | ${t.n} TEAMS | BEST OF ${t.opts.bestOf}${cfg.timer ? ' | ' + cfg.timer + ' SEC CLOCK' : ''}${cfg.cap ? ' | $' + cfg.cap + 'M CAP' : ''}`;
+      const meta = `${esc(A.lblC(cfg))} | ${t.n} TEAMS | BEST OF ${t.opts.bestOf}${cfg.timer ? ' | ' + cfg.timer + ' SEC CLOCK' : ''}${cfg.cap ? ' | $' + cfg.cap + 'M CAP' : ''}${t.watching ? ' | &#128065; ' + t.watching + ' WATCHING' : ''}`;
       let body = '';
       const lockBox = () => {
         const mine = t.lock && t.lock[w], doneAll = humansDone(), host = NET.role === 'host';
@@ -796,7 +756,8 @@
       }
       const fit = five.length ? UI.challengeFit(C.lineupFit(five.slice(0, 5)), { compact: true, title: (t.names[w] + "'s lineup").toUpperCase() }) : '';
       const clk = on >= 0 && t.clk[on] && onK < per(t);
-      app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${meta}</div><div class="ch-top-t">THE DRAFT</div></div><button type="button" class="btn btn-small" id="tnQuit">LEAVE</button></div>
+      app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${meta}</div><div class="ch-top-t">THE DRAFT</div></div><span class="ch-top-acts">${A.RULES_BTN}<button type="button" class="btn btn-small" id="tnQuit">LEAVE</button></span></div>
+        ${A.rulesBox(cfg)}
         <div id="tnNet">${netBar()}</div>
         <div id="tnProg">${progHtml()}</div>
         <div class="vs-side tn-me" style="--c1:${esc(tm.colors[0])}"><div class="vs-side-h">${A.logo(tm, 36)}<div><small>${esc(t.names[w])} | YOU</small><b>${esc(A.tName(tm))}</b>${cfg.cap ? ' <small class="vs-pay">' + UI.challengeCap.money(C.capState(cfg.cap, five).spent) + ' of $' + cfg.cap + 'M</small>' : ''}</div></div>
@@ -813,7 +774,7 @@
         else { const a = SW; SW = null; act({ k: 'swap', i: a, j: i }); }
         draft(app);
       });
-      UI.$('#tnQuit', app).addEventListener('click', () => HOOK.quit());
+      A.bindRules(app); UI.$('#tnQuit', app).addEventListener('click', () => HOOK.quit());
       if (spin && !ANIM[spin.n]) UI.challengeWheel.animate(app, teams, () => { ANIM[spin.n] = true; const cs = TN().spins[on]; if (cs && cs.n === spin.n) draft(app); }, { year: spin.year, abbr: spin.abbr }, { mode: B.era ? 'alltime' : 'versus', seasons: cfg.seasons });
       const once = (id, a) => { const b = UI.$(id, app); if (b) b.addEventListener('click', () => { b.disabled = true; act(a); }); };
       if (cfg.board && (cfg.turns ? mineTurn : k < per(t))) {
@@ -854,6 +815,11 @@
   function enter(app, part) {
     APP = app;
     if (!ON) { ON = true; HOOK.on = true; A.swap({ page: 'entry' }); SIG = ''; LAST = { page: '', mine: '' }; }
+    if (part[1] === 'watch' && part[2]) {   // a spectator's link: no name needed
+      const wc = part[2].toUpperCase().replace(/[^A-Z0-9]/g, '');
+      history.replaceState(null, '', '#/challenge/tournament/online');
+      if (!(NET.role === 'watch' && NET.code === wc) && wc.length >= 4) { SIG = ''; A.swap({ page: 'entry' }); connect('watch', wc); }
+    }
     if (part[1] === 'join' && part[2]) {
       PEND = part[2].toUpperCase().replace(/[^A-Z0-9]/g, '');
       history.replaceState(null, '', '#/challenge/tournament/online');
@@ -864,7 +830,7 @@
   const prev = P.challenge;
   P.challenge = function (app, arg) {
     const part = String(arg || '').split('/');
-    if (part[0] === 'tournament' && (part[1] === 'online' || part[1] === 'join')) return enter(app, part);
+    if (part[0] === 'tournament' && (part[1] === 'online' || part[1] === 'join' || part[1] === 'watch')) return enter(app, part);
     if (ON) { ON = false; hangUp(); pill(); HOOK.on = false; HOOK.host = false; A.swap(null); }
     return prev.apply(this, arguments);
   };

@@ -16,8 +16,8 @@
   };
   const ALL_YEARS = C.SEASONS.map(s => s.year);
   const ERAS = [[2013, 'MODERN'], [2003, '2000S'], [1993, '1990S'], [1985, '1980S'], [1975, '1970S'], [1965, '1960S'], [1955, '1950S']];   // the rules a mixed-seasons game plays by: pace, the three-point line (none before 1979-80), shooting
-  const FRESH = () => ({ v: 1, page: 'setup', n: 4, humans: 0, ai: [], cpu: false, names: [], skip: [], opts: { timer: 24, cap: 0, bestOf: 1, seeding: 'random', ratings: true, board: 0, dupes: 0, bench: 0 },
-    cfg: null, teams: [], picks: [], who: 0, hand: false, spin: null, spun: [], respins: [], seeds: [], rounds: [], cur: null, champ: -1 });
+  const FRESH = () => ({ v: 1, page: 'setup', n: 4, humans: 0, ai: [], cpu: false, names: [], skip: [], opts: { timer: 24, cap: 0, bestOf: 1, seeding: 'random', ratings: true, board: 0, dupes: 0, bench: 0, auction: 0, bans: 0 },
+    cfg: null, auc: null, teams: [], picks: [], who: 0, hand: false, spin: null, spun: [], respins: [], seeds: [], rounds: [], cur: null, champ: -1 });
   let TN = Object.assign(FRESH(), ls.get() || {});
   TN.opts = Object.assign({ timer: 24, cap: 0, bestOf: 1, seeding: 'random', ratings: true }, TN.opts || {});
   const HOOK = { pages: {} };   // filled in by the online tournament (js/ui-tournament-online.js)
@@ -225,12 +225,15 @@
             <div><span class="ts-start-k">RATINGS</span><div class="ch-chips">${[[true, 'ON'], [false, 'OFF']].map(([v, l]) => `<button type="button" class="ch-chip${(o.ratings !== false) === v ? ' on' : ''}" data-rate="${v}">${l}</button>`).join('')}</div></div>
             ${chosen().length === 1 ? '' : `<div><span class="ts-start-k">SAME PLAYER TWICE</span><div class="ch-chips"><button type="button" class="ch-chip${!o.dupes ? ' on' : ''}" data-dupes="0">NO DUPLICATES</button><button type="button" class="ch-chip${o.dupes ? ' on' : ''}" data-dupes="1">DUPLICATES ON</button></div>
               <small class="muted">${o.dupes ? 'The same player can be drafted from different seasons. Only that exact season is gone once taken.' : 'A player is gone for good once taken, whatever the season.'}</small></div>`}
-            <div><span class="ts-start-k">DRAFT STYLE</span><div class="ch-chips"><button type="button" class="ch-chip${!o.board ? ' on' : ''}" data-board="0">THE WHEEL</button><button type="button" class="ch-chip${o.board ? ' on' : ''}" data-board="1">OPEN BOARD</button></div>
-              <small class="muted">${o.board ? 'No wheel: take turns picking anyone left on the board. Every season you picked loads in, so anyone who ever played can go.' : 'Every pick comes from the team the wheel lands on.'}</small></div>
+            <div><span class="ts-start-k">DRAFT STYLE</span><div class="ch-chips"><button type="button" class="ch-chip${!o.board && !o.auction ? ' on' : ''}" data-board="0">THE WHEEL</button><button type="button" class="ch-chip${o.board && !o.auction ? ' on' : ''}" data-board="1">OPEN BOARD</button><button type="button" class="ch-chip${o.auction ? ' on' : ''}" data-board="2">AUCTION</button></div>
+              <small class="muted">${o.auction ? 'A hidden pool of players goes up one at a time and every team bids, round the table. Raise or drop out; the last team in gets him. Bidding is public, so everyone watches the same screen.' : o.board ? 'No wheel: take turns picking anyone left on the board. Every season you picked loads in, so anyone who ever played can go.' : 'Every pick comes from the team the wheel lands on.'}</small></div>
+            ${o.auction ? `<div><span class="ts-start-k">MONEY EACH</span><div class="ch-chips">${[10, 15, 20, 30].map(v => `<button type="button" class="ch-chip${(o.aBudget || 20) === v ? ' on' : ''}" data-habud="${v}">$${v}</button>`).join('')}</div></div>
+            <div><span class="ts-start-k">WHO IS IN THE POOL</span><div class="ch-chips">${[['stars', 'STARS'], ['mixed', 'MIXED'], ['any', 'ANYONE']].map(([v, l]) => `<button type="button" class="ch-chip${(o.aQ || 'mixed') === v ? ' on' : ''}" data-haq="${v}">${l}</button>`).join('')}</div></div>
+            <div><span class="ts-start-k">THE POOL</span><div class="ch-chips">${[[0, 'HIDDEN'], [1, 'VISIBLE']].map(([v, l]) => `<button type="button" class="ch-chip${(o.aShow ? 1 : 0) === v ? ' on' : ''}" data-hashow="${v}">${l}</button>`).join('')}</div></div>` : ''}
             <div><span class="ts-start-k">BENCH</span><div class="ch-chips"><button type="button" class="ch-chip${!o.bench ? ' on' : ''}" data-bench="0">JUST THE FIVE</button><button type="button" class="ch-chip${o.bench ? ' on' : ''}" data-bench="3">8-MAN: +3 BENCH</button></div>
               <small class="muted">${o.bench ? 'Everyone drafts eight. The first five start, the last three come off the bench.' + (o.cap ? ' The cap grows to $' + C.capFor(o.cap, o.bench) + 'M to cover all eight.' : '') : 'Five players each, all 48 minutes.'}</small></div>
-            <div><span class="ts-start-k">BANS</span><div class="ch-chips">${[[0, 'NONE'], [1, '1 EACH'], [2, '2 EACH']].map(([v, l]) => `<button type="button" class="ch-chip${(o.bans || 0) === v ? ' on' : ''}" data-tbans="${v}">${l}</button>`).join('')}</div>
-              <small class="muted">${o.bans ? 'Before the draft, each player bans ' + o.bans + ' player' + (o.bans > 1 ? 's' : '') + ' in turn. Banned players are off the wheel and the board.' : 'Nobody is banned.'}</small></div>
+            ${o.auction ? '' : `<div><span class="ts-start-k">BANS</span><div class="ch-chips">${[[0, 'NONE'], [1, '1 EACH'], [2, '2 EACH']].map(([v, l]) => `<button type="button" class="ch-chip${(o.bans || 0) === v ? ' on' : ''}" data-tbans="${v}">${l}</button>`).join('')}</div>
+              <small class="muted">${o.bans ? 'Before the draft, each player bans ' + o.bans + ' player' + (o.bans > 1 ? 's' : '') + ' in turn. Banned players are off the wheel and the board.' : 'Nobody is banned.'}</small></div>`}
             ${o.bench ? `<div><span class="ts-start-k">IN THE GAMES</span><div class="ch-chips"><button type="button" class="ch-chip${!o.noBench ? ' on' : ''}" data-nb="0">BENCH PLAYS</button><button type="button" class="ch-chip${o.noBench ? ' on' : ''}" data-nb="1">STARTERS ONLY</button></div>
               <small class="muted">${o.noBench ? 'All eight are drafted, but only the five starters play, all 48 minutes.' : 'The bench subs in during the games.'}</small></div>` : ''}
             <div><span class="ts-start-k">SALARY CAP</span><div class="ch-chips">${UI.challengeCap.CAPS.map(v => `<button type="button" class="ch-chip${(o.cap || 0) === v ? ' on' : ''}" data-cap="${v}">${v ? '$' + v + 'M' : 'OFF'}</button>`).join('')}</div></div>
@@ -258,16 +261,19 @@
     app.querySelectorAll('[data-rate]').forEach(b => b.addEventListener('click', () => { o.ratings = b.dataset.rate === 'true'; redraw(); }));
     app.querySelectorAll('[data-cap]').forEach(b => b.addEventListener('click', () => { o.cap = +b.dataset.cap; redraw(); }));
     app.querySelectorAll('[data-dupes]').forEach(b => b.addEventListener('click', () => { o.dupes = +b.dataset.dupes; redraw(); }));
-    app.querySelectorAll('[data-board]').forEach(b => b.addEventListener('click', () => { o.board = +b.dataset.board; redraw(); }));
+    app.querySelectorAll('[data-board]').forEach(b => b.addEventListener('click', () => { const v = +b.dataset.board; o.board = v === 1 ? 1 : 0; o.auction = v === 2 ? 1 : 0; if (v === 2) o.cap = 0; redraw(); }));
     app.querySelectorAll('[data-bench]').forEach(b => b.addEventListener('click', () => { o.bench = +b.dataset.bench; redraw(); }));
     app.querySelectorAll('[data-nb]').forEach(b => b.addEventListener('click', () => { o.noBench = +b.dataset.nb; redraw(); }));
+    app.querySelectorAll('[data-habud]').forEach(b => b.addEventListener('click', () => { o.aBudget = +b.dataset.habud; redraw(); }));
+    app.querySelectorAll('[data-haq]').forEach(b => b.addEventListener('click', () => { o.aQ = b.dataset.haq; redraw(); }));
+    app.querySelectorAll('[data-hashow]').forEach(b => b.addEventListener('click', () => { o.aShow = +b.dataset.hashow; redraw(); }));
     app.querySelectorAll('[data-tbans]').forEach(b => b.addEventListener('click', () => { o.bans = +b.dataset.tbans; redraw(); }));
     UI.$('#tnStart', app).addEventListener('click', () => {
       readNames();
       const c = chosen();
       if (!c.length) { UI.toast('Switch on at least one season', 'error'); return; }
       const year = c.length === 1 ? c[0] : 0;
-      const cfg = { mode: 'versus', year, seasons: c.length > 1 && c.length < ALL_YEARS.length ? c : null, bestOf: o.bestOf, blind: false, cap: C.capFor(+o.cap || 0, o.bench), timer: o.timer ? 24 : 0, era: +o.era || 2013, injuries: false, board: o.board ? 1 : 0, dupes: year === 0 && o.dupes ? 1 : 0, bench: +o.bench || 0, noBench: !!(o.bench && o.noBench), bansN: +o.bans || 0, bans: [], seed: Math.floor(Math.random() * 2147483646) + 1 };
+      const cfg = { mode: 'versus', year, seasons: c.length > 1 && c.length < ALL_YEARS.length ? c : null, bestOf: o.bestOf, blind: false, cap: o.auction ? 0 : C.capFor(+o.cap || 0, o.bench), timer: o.timer ? 24 : 0, era: +o.era || 2013, injuries: false, board: o.board && !o.auction ? 1 : 0, auction: o.auction ? { budget: o.aBudget || 20, start: 1, raise: 1, pool: TN.n * (5 + (+o.bench || 0)), quality: o.aQ || 'mixed', show: o.aShow ? 1 : 0 } : null, first: Math.floor(Math.random() * TN.n), dupes: year === 0 && o.dupes ? 1 : 0, bench: +o.bench || 0, noBench: !!(o.bench && o.noBench), bansN: o.auction ? 0 : +o.bans || 0, bans: [], seed: Math.floor(Math.random() * 2147483646) + 1 };
       ensure(app, cfg, () => {
         const d = C.seasonData(year || 2013);
         TN.cfg = cfg;
@@ -279,6 +285,15 @@
         TN.respins = TN.names.map(() => 1);
         TV.pos = ''; TV.q = ''; TV.season = ''; TV.sort = ''; TV.lim = 60; BGT.skip = [];
         TN.who = 0; TN.hand = true; TN.spin = null; TN.spun = []; TN.rounds = []; TN.seeds = []; TN.cur = null; TN.champ = -1;
+        TN.auc = null;
+        if (cfg.auction) {   // one entry for each player, his best season (every season of him with duplicates on); bidding is public, so there is no pass-the-phone screen
+          const B0 = board(cfg), best = {};
+          B0.players.concat(B0.extra || []).forEach(p => { const k = B0.base(p); if (!best[k] || p.ovr > best[k].ovr) best[k] = p; });
+          TN.auc = C.auctionNStart(cfg, TN.n, Object.keys(best).map(k => best[k]));
+          C.auctionNRunAI(TN.auc, B0.byId, Math.random, i => i < hum());
+          TN.auc.until = cfg.timer && !TN.auc.done ? Date.now() + cfg.timer * 1000 : null;
+          TN.hand = false; TN.opts.order = 'all';
+        }
         go('draft');
       });
     });
@@ -348,6 +363,89 @@
   // ---------- the draft: pass the phone, one player at a time ----------
   const ANIM = {};   // spins already animated on this page load
   let TICK = null, CLOCK = null;
+  // ---------- the auction screen: every team bids, round the table (hot-seat and online) ----------
+  // o: { t (names, ai, n, opts, watching), cfg, B, st, w (the seat that is acting on this device, -1 for a spectator), act(a, to), now(), redraw(), still() }
+  const TA = { i: -1, price: -1, amt: 0 };   // the amount picked on this device for the player who is up
+  function aucView(app, o) {
+    stopTick();
+    const t = o.t, cfg = o.cfg, B = o.B, st = o.st, ao = st.o, per_ = st.per, byId = B.byId, w = o.w, money = n => '$' + n, showR = t.opts.ratings !== false;
+    const cur = byId[st.ids[st.i]], tm = B.teamFor(cur.team, cur.season), left = st.ids.length - st.i - 1;
+    const mineTurn = w >= 0 && st.turn === w, inIt = w >= 0 && st.active[w], canRaise = mineTurn && C.aucNCanRaise(st, w);
+    const min = st.price + ao.raise, max = w >= 0 ? C.aucNMax(st, w) : 0, have = w >= 0 ? ao.budget - st.spent[w] : 0;
+    if (TA.i !== st.i || TA.price !== st.price || TA.amt < min || TA.amt > max) { TA.i = st.i; TA.price = st.price; TA.amt = min; }
+    const yr = p => { const y = p && (p.season || cfg.year); return y ? ' <small class="auc-yr">' + esc(short(y)) + '</small>' : ''; };
+    const teamsHtml = t.names.map((nm2, i) => {
+      const tt = teamOf(i), won = st.won[i].map(id => byId[id]).filter(Boolean);
+      return `<div class="atm${st.turn === i ? ' turn' : ''}${st.holder === i ? ' holds' : ''}${i === w ? ' me' : ''}${st.active[i] ? '' : ' out'}" style="--c1:${esc((tt.colors || ['#444'])[0])}"><div class="atm-h">${logo(tt, 24)}<b>${esc(nm2)}${t.ai && t.ai[i] ? ' <i class="tn-ai">AI</i>' : ''}</b></div>
+        <div class="atm-m"><span>${money(ao.budget - st.spent[i])}</span><small>${st.won[i].length} OF ${per_}${st.holder === i ? ' | HOLDS' : !st.active[i] && st.won[i].length < per_ ? ' | OUT' : ''}</small></div>
+        <ol>${won.map(p => `<li>${esc(p.name)}${yr(p)}</li>`).join('')}</ol></div>`;
+    }).join('');
+    const reserve = w >= 0 ? Math.max(0, per_ - st.won[w].length - 1) * ao.start : 0, who2 = i => esc(t.names[i] || '');
+    let bid;
+    if (w < 0) bid = '<div class="auc-wait"><b>You are watching.</b></div>';
+    else if (mineTurn && !canRaise) bid = `<div class="auc-bid"><div class="auc-broke"><b>${o.hot ? who2(w).toUpperCase() + " CAN'T TOP " : "YOU CAN'T TOP "}${money(st.price)}</b><span>${o.hot ? who2(w) + ' has' : 'You have'} ${money(have)}${reserve ? ' and must keep ' + money(reserve) + ' for the other open spots, so the top bid is ' + money(Math.max(0, max)) : ''}. Pass and drop out on him.</span></div>
+        <div class="auc-go"><button type="button" class="btn btn-big" disabled>BID<small>can't top ${money(st.price)}</small></button><button type="button" class="btn btn-gold btn-big" id="tAucPass">PASS<small>drop out on him</small></button></div></div>`;
+    else if (mineTurn) bid = `<div class="auc-bid">${o.hot ? `<div class="auc-turn">${who2(w).toUpperCase()}'S TURN</div>` : ''}<div class="auc-maxline">${o.hot ? 'MAX BID' : 'YOUR MAX BID'} IS <b>${money(max)}</b> <span>${money(have)} left${reserve ? ', keeping ' + money(reserve) + ' for the other open spot' + (reserve / ao.start > 1 ? 's' : '') : ''}</span></div>
+        <div class="auc-step"><button type="button" class="btn" id="tAucDn"${TA.amt - ao.raise < min ? ' disabled' : ''}>&minus;</button><div class="auc-amt"><small>${o.hot ? 'THE BID' : 'YOUR BID'}</small><b>${money(TA.amt)}</b></div><button type="button" class="btn" id="tAucUp"${TA.amt + ao.raise > max ? ' disabled' : ''}>+</button></div>
+        <div class="auc-chips">${[ao.raise, 2, 5].filter((v, k, a2) => a2.indexOf(v) === k && v >= ao.raise).map(v => ({ to: st.price + v, label: '+' + money(v) })).filter(x => x.to >= min && x.to <= max).map(x => `<button type="button" class="ch-chip${TA.amt === x.to ? ' on' : ''}" data-tto="${x.to}">${x.label}</button>`).join('')}<button type="button" class="ch-chip${TA.amt === max ? ' on' : ''}" data-tto="${max}">ALL IN ${money(max)}</button></div>
+        <div class="auc-go"><button type="button" class="btn btn-gold btn-big" id="tAucBid">BID ${money(TA.amt)}</button><button type="button" class="btn btn-big" id="tAucPass">PASS<small>drop out on him</small></button></div></div>`;
+    else bid = `<div class="auc-wait"><b>${who2(st.turn)} ${t.ai && t.ai[st.turn] ? '(AI) ' : ''}is deciding...</b><span>${who2(st.holder)} holds the bid at ${money(st.price)}.${w >= 0 && !inIt ? ' You are out on this one.' : ''}</span></div>`;
+    const dots = st.ids.map((id, k) => `<i class="${k < st.i ? 'sold' : k === st.i ? 'now' : ''}"></i>`).join('');
+    const pool = ao.show ? `<div class="auc-poolrow">${st.ids.map((id, k) => { const p = byId[id], sale = st.log.filter(x => x.id === id)[0], col = (B.teamFor(p.team, p.season).colors || ['#555'])[0], y = p.season || cfg.year; return `<div class="apc${k < st.i ? ' sold' : k === st.i ? ' now' : ''}" style="--c1:${esc(col)}"><div class="apc-f">${UI.faceImg(p, col)}</div><b>${esc(p.name)}</b><small>${y ? esc(short(y)) : ''}${showR ? ' | ' + esc(p.ovr) : ''}</small>${sale ? `<em>${esc(t.names[sale.side])} ${sale.price ? money(sale.price) : 'FREE'}</em>` : k === st.i ? '<em>UP NOW</em>' : ''}</div>`; }).join('')}</div>` : `<p class="auc-more">${left} MORE IN THE HIDDEN POOL</p>`;
+    const timed = cfg.timer > 0 && st.until;
+    app.innerHTML = `<div class="ch-top auc-top"><div><div class="ch-top-k">${esc(lblC(cfg))} | ${t.n} TEAMS | AUCTION | ${money(ao.budget)} EACH${t.watching ? ' | &#128065; ' + t.watching + ' WATCHING' : ''}</div><div class="ch-top-t">PLAYER ${st.i + 1} OF ${st.ids.length}</div></div><span class="ch-top-acts">${RULES_BTN}${o.quit ? '<button type="button" class="btn btn-small" id="tnQuit">QUIT</button>' : ''}</span></div>
+      ${rulesBox(cfg)}
+      <main class="auc-stage tauc">
+        ${timed ? `<div class="vs-timer" id="vsTimer"><i style="--w:100%"></i><span>${Math.max(0, Math.ceil((st.until - o.now()) / 1000))}</span></div>` : ''}
+        <section class="auc-card" style="--c1:${esc((tm.colors || ['#444'])[0])}">
+          <div class="auc-face">${UI.faceImg(cur, (tm.colors || ['#444'])[0])}</div>
+          <div class="auc-info"><small>UP FOR BID</small><h2>${esc(cur.name)}</h2><p>${esc(C.posLabel(cur))}${cur.season || cfg.year ? ' | ' + esc(short(cur.season || cfg.year)) : ''}${showR ? ' | <b class="ch-ovr ' + UI.ovrClass(cur.ovr) + '">' + esc(cur.ovr) + '</b>' : ''}</p></div>
+          <div class="auc-price"><small>${who2(st.holder).toUpperCase()} HOLDS</small><b>${money(st.price)}</b></div>
+        </section>
+        ${bid}
+        <div class="auc-dots">${dots}</div>${pool}
+      </main>
+      <div class="atm-grid">${teamsHtml}</div>`;
+    const dn = UI.$('#tAucDn', app), up = UI.$('#tAucUp', app);
+    const setAmt = v => { TA.amt = Math.max(min, Math.min(max, Math.round(v))); o.redraw(); };
+    if (dn) dn.addEventListener('click', () => setAmt(TA.amt - ao.raise));
+    if (up) up.addEventListener('click', () => setAmt(TA.amt + ao.raise));
+    app.querySelectorAll('[data-tto]').forEach(b => b.addEventListener('click', () => setAmt(+b.dataset.tto)));
+    const bd = UI.$('#tAucBid', app); if (bd) bd.addEventListener('click', () => o.act('raise', TA.amt));
+    const ps = UI.$('#tAucPass', app); if (ps) ps.addEventListener('click', () => o.act('pass'));
+    const qt = UI.$('#tnQuit', app); if (qt && o.quit) qt.addEventListener('click', o.quit);
+    bindRules(app);
+    if (timed) {
+      const total = cfg.timer * 1000;
+      TICK = setInterval(() => {
+        const el = UI.$('#vsTimer', app);
+        if (!el || !o.still()) { stopTick(); return; }
+        const lf = st.until - o.now();
+        el.querySelector('span').textContent = Math.max(0, Math.ceil(lf / 1000));
+        el.querySelector('i').style.setProperty('--w', Math.max(0, Math.min(100, 100 * lf / total)) + '%');
+        el.classList.toggle('low', lf < 8000);
+        if (o.expire && lf <= 0) { stopTick(); o.expire(); }
+      }, 250);
+    }
+  }
+  // hot-seat auction: AI teams bid on their own, a human's turn waits for a tap
+  function aucHS(app, cfg, B) {
+    const st = TN.auc;
+    const step = () => {
+      C.auctionNRunAI(st, B.byId, Math.random, i => i < humDone());
+      if (st.done) { finishAuc(app, cfg, B); return; }
+      st.until = cfg.timer ? Date.now() + cfg.timer * 1000 : null; save(); draft(app); window.scrollTo(0, 0);
+    };
+    aucView(app, { t: TN, cfg, B, st, w: st.turn, hot: true, now: () => Date.now(), still: () => TN.auc === st && TN.page === 'draft', quit, redraw: () => draft(app),
+      act: (a, to) => { if (C.auctionNAct(st, st.turn, a, to)) step(); }, expire: () => { if (C.auctionNAct(st, st.turn, 'pass')) step(); } });
+  }
+  function finishAuc(app, cfg, B) {
+    TN.picks = TN.auc.won.map(w => w.slice()); TN.auc.until = null;
+    if (cfg.bench) { TN.who = 0; TN.hand = true; TN.lineup = true; TN.sw = null; save(); draft(app); }   // each human sets their starters in turn
+    else if (humDone() < TN.n) { TN.cpu = true; TN.spin = null; save(); draft(app); }
+    else startBracket(B);
+    window.scrollTo(0, 0);
+  }
   // the ban round: each human bans players in turn before the draft. o: { cfg, B, name, k (this ban, from 0), total, mine, onBan(id), redraw(), quit() }
   const BQ = { q: '' };
   function banUI(app, o) {
@@ -369,7 +467,8 @@
   function rulesBox(cfg) {
     const o = TN.opts, per5 = per(), li = t => '<li>' + t + '</li>', hh = humDone();
     const rows = [li(`<b>The bracket:</b> ${TN.n} teams, single elimination (${rounds()} rounds). Every series is best of ${o.bestOf || 1}${o.seeding === 'rating' ? ', seeded by team rating' : ', seeded at random'}.`),
-      li(`<b>The draft:</b> everyone drafts ${per5} players${cfg.bench ? ' (the first five start, the last ' + cfg.bench + ' come off the bench)' : ''}. ${cfg.board ? 'Open board: pick anyone left.' : 'The wheel picks a team and a season, and you take one player from it.'}${hh > 1 ? (o.order === 'all' ? ' Everybody drafts at the same time.' : ' Players take turns.') : ''}${TN.n > hh ? ' Empty seats are AI teams that draft for themselves.' : ''}`),
+      li(`<b>The draft:</b> everyone drafts ${per5} players${cfg.bench ? ' (the first five start, the last ' + cfg.bench + ' come off the bench)' : ''}. ${cfg.auction ? 'Auction: a hidden pool of ' + (cfg.auction.pool || TN.n * per5) + ' players goes up one at a time, ' + cfg.auction.budget + ' dollars each. Bidding opens at $' + cfg.auction.start + ' and goes round the table: raise (any amount, $' + cfg.auction.raise + ' or more above the price) or pass and drop out on that player. The last team in gets him. Keep $' + cfg.auction.start + ' for every spot you still have to fill. A team with its full roster stops bidding.' : cfg.board ? 'Open board: pick anyone left.' : 'The wheel picks a team and a season, and you take one player from it.'}${cfg.auction ? '' : hh > 1 ? (o.order === 'all' ? ' Everybody drafts at the same time.' : ' Players take turns.') : ''}${TN.n > hh ? ' Empty seats are AI teams that ' + (cfg.auction ? 'bid for themselves.' : 'draft for themselves.') : ''}`),
+      ...(cfg.bansN ? [li(`<b>Bans:</b> before the draft each player bans ${cfg.bansN}, in turn. Banned players are off the wheel and the board.`)] : []),
       li(cfg.timer ? `<b>Shot clock:</b> ${cfg.timer} seconds a pick. Run out and ${cfg.board ? 'you get the best player left' : 'the wheel spins for you, or you get a random player from the team it lands on'}.` : '<b>No shot clock.</b>'),
       li(`<b>The games:</b> ${cfg.bench && !cfg.noBench ? 'starters play about 34 minutes and the bench the rest' : 'all five play the full 48 minutes'}, so positions and fit count.`)];
     if (cfg.cap) rows.push(li(`<b>Salary cap:</b> every player costs from $1 to $45 by rating. Your whole roster has to fit under $${cfg.cap}M.`));
@@ -388,6 +487,7 @@
       const t = teamOf(w), five = mineIds.map(id => byId[id]).filter(Boolean);
       const meta = `${esc(lblC(cfg))} | ${TN.n} TEAMS | BEST OF ${TN.opts.bestOf}${cfg.timer ? ' | ' + cfg.timer + ' SEC CLOCK' : ''}${cfg.cap ? ' | $' + cfg.cap + 'M CAP' : ''}`;
       if (TN.cpu) { cpuPage(app, B); return; }
+      if (cfg.auction && TN.auc && !TN.auc.done) { aucHS(app, cfg, B); return; }
       if ((cfg.bansN || 0) > 0 && (cfg.bans || []).length < humDone() * cfg.bansN) {   // the ban round: the humans take turns on this phone
         const kk = (cfg.bans || []).length, who2 = kk % humDone();
         banUI(app, { cfg, B, name: nm(who2), k: kk, total: humDone() * cfg.bansN, mine: true, blind: TN.opts.ratings === false, redraw: () => draft(app), quit, onBan: id => { cfg.bans = (cfg.bans || []).concat([id]); save(); draft(app); window.scrollTo(0, 0); } });
@@ -483,7 +583,12 @@
         else { const x = pk[i]; pk[i] = pk[TN.sw]; pk[TN.sw] = x; TN.sw = null; }
         save(); draft(app);
       });
-      const lk = UI.$('#tnLineup', app); if (lk) lk.addEventListener('click', () => { TN.lineup = false; TN.sw = null; save(); advance(); });
+      const lk = UI.$('#tnLineup', app);
+      if (lk) lk.addEventListener('click', () => {
+        TN.sw = null;
+        if (cfg.auction && w + 1 < humDone()) { TN.who = w + 1; TN.hand = true; TN.lineup = true; UI.toast(nm(w) + ' is locked in. Pass the phone.'); save(); draft(app); window.scrollTo(0, 0); return; }   // after an auction every human sets their starters in turn
+        TN.lineup = false; save(); advance();
+      });
       if (cfg.board && !TN.lineup) boardBind(app, cfg, B, five, takeChecked);
       app.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => {
         const p = byId[b.dataset.add];
@@ -725,7 +830,7 @@
   }
 
   // what the online tournament drives: the same bracket, match and champion screens on every phone
-  window.TOURNAMENT.api = { hook: HOOK, get: () => TN, render, save, ensure, board, banUI, boardHtml, boardBind, TV, BGT, rosterOf, spinFor, aiChoose, ovrTag, startBracket, teamOf, tName, logo, lblC, short, lbl,
+  window.TOURNAMENT.api = { hook: HOOK, get: () => TN, render, save, ensure, board, banUI, aucView, rulesBox, RULES_BTN, bindRules, boardHtml, boardBind, TV, BGT, rosterOf, spinFor, aiChoose, ovrTag, startBracket, teamOf, tName, logo, lblC, short, lbl,
     ALL_YEARS, decOf, shuffle, CPU_NAMES, clearRuns: RUNS_CLEAR, nm, f1,
     nm2: nm, mount(app) { APP = app; render(); },
     swap(obj) { TN = Object.assign(FRESH(), obj || ls.get() || {}); TN.opts = Object.assign({ timer: 24, cap: 0, bestOf: 1, seeding: 'random', ratings: true }, TN.opts || {}); RUNS_CLEAR(); WATCH = 0; AUTO = false; dropCourt(); },
