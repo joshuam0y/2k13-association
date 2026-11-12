@@ -99,8 +99,8 @@
     return c;
   }
   // sharing is just the text and link, copied (no picture)
-  async function shareCard(o, text) {
-    const all = text + '\n' + location.origin + location.pathname;
+  async function shareCard(o, text, hash) {
+    const all = text + '\n' + location.origin + location.pathname + (hash || '');
     try { await navigator.clipboard.writeText(all); UI.toast('Copied. Paste it anywhere.'); }
     catch (e) {
       const t = document.createElement('textarea'); t.value = all; t.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(t); t.select();
@@ -229,7 +229,7 @@
         const o = up ? { tier: ta, k: 'RANK UNLOCKED', title: ta.name, color: ta.color, big: String(now.rating), sub: 'RATING | ' + eraName(last.era).toUpperCase(), name: me0 }
           : { tier: ta, k: (won ? 'RANKED WIN' : 'RANKED RESULT') + ' | VS ' + String(last.opp || '').toUpperCase(), title: ta.name, color: ta.color, big: (d > 0 ? '+' : '') + d, sub: 'NOW ' + now.rating + ' RATING', name: me0 };
         shareBtn.disabled = true;
-        const r = await shareCard(o, 'Starting Five Ranked \u{1F3C0}\n' + (up ? 'Reached ' + ta.name + ' | ' + now.rating : ta.name + ' | ' + now.rating + ' (' + (d > 0 ? '+' : '') + d + ')'));
+        const r = await shareCard(o, 'Starting Five Ranked \u{1F3C0}\n' + (up ? 'Reached ' + ta.name + ' | ' + now.rating : ta.name + ' | ' + now.rating + ' (' + (d > 0 ? '+' : '') + d + ')'), '#/ranked');
         shareBtn.disabled = false; 
       });
       const el = UI.$('#rkEloNow', app), t0 = Date.now(), from = b.rating, to = now.rating;
@@ -607,7 +607,7 @@
         <div id="rkSub" class="rkn"><span class="muted">Sending your score...</span></div>
         <div class="ch-go">${isPr ? `<a class="btn btn-gold" href="#/daily/practice/${esc(prKey)}/${Date.now()}">PLAY AGAIN</a><a class="btn" href="#/daily/practice">ARCHIVE</a>` : `<a class="btn btn-gold" href="#/daily">SEE THE BOARD</a>${pct == null ? '' : '<button type="button" class="btn" id="dlShare">SHARE YOUR SCORE</button>'}`}</div>`;
       const dsh = UI.$('#dlShare', app);
-      const doShare = async btn => { btn.disabled = true; const r = await shareCard({ k: 'DAILY #' + dayNo(day), title: 'OF A PERFECT FIVE', color: '#d4af37', big: pct.toFixed(1) + '%', sub: TH.title, name: UI.profile.account() || '' }, 'Starting Five Daily #' + dayNo(day) + ' \u{1F3C0}\n' + five.map(p => { const o = p.baseOvr != null ? p.baseOvr : (p.ovr || 0); return o >= 90 ? '\u{1F7EA}' : o >= 80 ? '\u{1F7E6}' : o >= 70 ? '\u{1F7E9}' : o >= 60 ? '\u{1F7E8}' : '\u{1F7E5}'; }).join('') + '\n' + pct.toFixed(1) + '% of a perfect five'); btn.disabled = false;  };
+      const doShare = async btn => { btn.disabled = true; const r = await shareCard({ k: 'DAILY #' + dayNo(day), title: 'OF A PERFECT FIVE', color: '#d4af37', big: pct.toFixed(1) + '%', sub: TH.title, name: UI.profile.account() || '' }, 'Starting Five Daily #' + dayNo(day) + ' \u{1F3C0}\n' + five.map(p => { const o = p.baseOvr != null ? p.baseOvr : (p.ovr || 0); return o >= 90 ? '\u{1F7EA}' : o >= 80 ? '\u{1F7E6}' : o >= 70 ? '\u{1F7E9}' : o >= 60 ? '\u{1F7E8}' : '\u{1F7E5}'; }).join('') + '\n' + pct.toFixed(1) + '% of a perfect five', '#/daily'); btn.disabled = false;  };
       if (dsh) dsh.addEventListener('click', () => doShare(dsh));
       if (!isPr && pct != null) {   // the result pops up with the share button every time this screen opens
         const ov = document.createElement('div'); ov.className = 'rk-tour';
