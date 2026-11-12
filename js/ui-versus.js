@@ -208,6 +208,15 @@
       if (NET.status === 'connected') { NET.status = 'lost'; DC.at = Date.now() - (rkOn(VS.cfg) ? GRACE - 15000 : 0); route(); drawChat(); dcTick(); }
       return;
     }
+    if (m.t === 'adv') {
+      if (m.go) { Object.assign(ADV, { k: '', me: false, them: false, run: null }); return; }
+      if (ADV.me && ADV.k === m.k && ADV.n === m.n) {   // both asked at the same moment: the host runs it
+        if (NET.role === 'host' && ADV.run && (VS.shown || 0) === m.n) { const run = ADV.run; Object.assign(ADV, { k: '', me: false, them: false, run: null }); send({ t: 'adv', k: m.k, n: m.n, go: 1 }); run(); }
+        else ADV.them = true;
+        return;
+      }
+      Object.assign(ADV, { k: m.k, n: m.n, them: true, me: false, run: null }); route(); return;
+    }
     if (m.t === 'ping') { seen(); return; }
     if (m.t === 'hello' && NET.role === 'host') {
       NET.peerAcct = !!m.acct;
@@ -285,7 +294,7 @@
   function connectRoom(role, code, opt) {
     NET.timers.forEach(t => clearInterval(t)); NET.timers = [];
     try { if (NET.client) NET.client.end(true); } catch (e) { /* gone */ }
-    Object.assign(NET, { role, side: role === 'host' ? (opt && opt.side != null ? opt.side : 0) : role === 'watch' ? -1 : 1, code, status: role === 'host' ? 'starting' : 'connecting', err: '', client: null, peerSeen: 0, me: Math.random().toString(36).slice(2, 10) });
+    Object.assign(NET, { role, side: role === 'host' ? (opt && opt.side != null ? opt.side : 0) : role === 'watch' ? -1 : (opt && opt.side != null ? opt.side : 1), code, status: role === 'host' ? 'starting' : 'connecting', err: '', client: null, peerSeen: 0, me: Math.random().toString(36).slice(2, 10) });
   if (role === 'host') { VS.epoch = opt && opt.keep ? (VS.epoch || 0) + 1 : 0; VS.hostSide = NET.side; } else VS.epoch = -1;
     route();
     Promise.all([loadMqtt(), keyFor(code)]).then(([, key]) => {
@@ -824,7 +833,12 @@
       const left = GRACE - (Date.now() - (r.at || 0));
       return left > 0 ? { code: r.code, left, lobby: !VS.cfg } : null;
     },
-    rejoin() { const r = savedRoom(); if (!r || !UI.profile.canPlay()) return; connectRoom(r.role, r.code, r.role === 'host' ? { side: r.side, keep: true } : null); location.hash = VS.cfg ? '#/challenge/vs/draft' : '#/challenge/vs'; },
+    rejoin() {   // back into the same match: first as a guest on our own side, so the phone that kept the room hands the game back; if nobody answers, take the room over
+      const r = savedRoom(); if (!r || !UI.profile.canPlay()) return;
+      connectRoom('guest', r.code, { side: r.side });
+      if (r.role === 'host') setTimeout(() => { if (NET.code === r.code && NET.role === 'guest' && NET.status !== 'connected') connectRoom('host', r.code, { side: r.side, keep: true }); }, 9000);
+      location.hash = VS.cfg ? '#/challenge/vs/draft' : '#/challenge/vs';
+    },
     rematch() { quickPresets(QERA); QUICK = 1; LB.cards = {}; LB.cd = 0; go('setup'); },
     status() { return { role: NET.role, status: NET.status, code: NET.code }; },
     target() { return '#/challenge/vs' + (VS.page === 'draft' ? '/draft' : VS.page === 'series' ? '/result' : ''); }
@@ -1262,6 +1276,22 @@
   }
   function dropCourt() { stopSync(); if (courtCtl) { try { courtCtl.destroy(); } catch (e) { /* gone */ } courtCtl = null; } }
   const f1 = v => v == null ? '-' : (+v).toFixed(1);   // per game: 8.0, not 8
+  // online, moving the series on (watch a game, sim a game, sim the rest, skip to the final) takes both players: the first tap asks, the second agrees
+  const ADV = { k: '', n: -1, me: false, them: false, run: null };
+  const advTwo = () => online() && linked() && me() !== null && me() >= 0;
+  function advance(kind, run) {
+    if (!advTwo()) { run(); return; }
+    const n = VS.shown || 0;
+    if (ADV.k === kind && ADV.n === n && ADV.them) { Object.assign(ADV, { k: '', me: false, them: false, run: null }); send({ t: 'adv', k: kind, n, go: 1 }); run(); return; }
+    Object.assign(ADV, { k: kind, n, me: true, them: false, run });
+    send({ t: 'adv', k: kind, n }); route();
+  }
+  function advLabel(kind, base) {
+    if (!advTwo() || ADV.k !== kind || ADV.n !== (VS.shown || 0)) return base;
+    if (ADV.me && !ADV.them) return 'WAITING FOR ' + who(1 - me()).toUpperCase() + '...';
+    if (ADV.them && !ADV.me) return base + ' (' + who(1 - me()).toUpperCase() + ' ASKED: TAP TO AGREE)';
+    return base;
+  }
   function series(app) {
     stopTick();
     const cfg = VS.cfg;
@@ -1320,8 +1350,8 @@
       const next = shown + 1;
       const acts = done
         ? `<button type="button" class="btn btn-share" id="vsShare">${UI.shareIcon || ''}SEND THIS TO YOUR FRIENDS</button><button type="button" class="btn sl-copy" id="vsCopy">COPY LINK</button><button type="button" class="btn" id="vsNew">NEW MATCHUP</button>${rematchBtn(cfg)}`
-        : WATCH ? `<button type="button" class="btn btn-gold" id="vsFinal">SKIP TO THE FINAL</button>`
-        : `<button type="button" class="btn btn-gold btn-big" id="vsWatch">WATCH GAME ${next}</button><button type="button" class="btn" id="vsNext">SIM GAME ${next}</button><button type="button" class="btn" id="vsAll">SIM THE REST</button>`;
+        : WATCH ? `<button type="button" class="btn btn-gold" id="vsFinal">${advLabel('final', 'SKIP TO THE FINAL')}</button>`
+        : `<button type="button" class="btn btn-gold btn-big" id="vsWatch">${advLabel('watch', 'WATCH GAME ' + next)}</button><button type="button" class="btn" id="vsNext">${advLabel('next', 'SIM GAME ' + next)}</button><button type="button" class="btn" id="vsAll">${advLabel('all', 'SIM THE REST')}</button>`;
       app.innerHTML = `${head}${netBar()}${score}
         ${WATCH ? '<div class="ct-host" id="vsCourt"></div>' : ''}
         <div class="row-btns center ch-acts vs-acts">${acts}</div>
@@ -1344,10 +1374,10 @@
         el.scrollIntoView({ block: 'start', behavior: 'smooth' });
       };
       const $ = id => UI.$(id, app);
-      if ($('#vsWatch')) $('#vsWatch').addEventListener('click', () => { VS.watch = { n: next, at: Date.now() }; push(); watch(next); });
-      if ($('#vsNext')) $('#vsNext').addEventListener('click', () => reveal(next));
-      if ($('#vsAll')) $('#vsAll').addEventListener('click', () => reveal(r.games.length));
-      if ($('#vsFinal')) $('#vsFinal').addEventListener('click', () => reveal(WATCH));
+      if ($('#vsWatch')) $('#vsWatch').addEventListener('click', () => advance('watch', () => { VS.watch = { n: next, at: Date.now() }; push(); watch(next); }));
+      if ($('#vsNext')) $('#vsNext').addEventListener('click', () => advance('next', () => reveal(next)));
+      if ($('#vsAll')) $('#vsAll').addEventListener('click', () => advance('all', () => reveal(r.games.length)));
+      if ($('#vsFinal')) $('#vsFinal').addEventListener('click', () => advance('final', () => reveal(WATCH)));
       app.querySelectorAll('[data-rewatch]').forEach(b => b.addEventListener('click', () => {
         const n = +b.dataset.rewatch, g = r.games[n - 1], el = document.createElement('div');
         dropCourt(); el.className = 'ct-host'; b.closest('li').after(el);
