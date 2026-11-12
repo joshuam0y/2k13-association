@@ -697,3 +697,29 @@
 #chOdds { white-space: normal; }
 .ch-odds { margin-top: 10px; }
 .ch-odds .ch-bar { margin: 8px 0 10px; }
+
+/* ranked boards and the profile */
+.rk-ctl { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: end; margin: 10px 0; }
+.rk-ctl .field { margin: 0; }
+.rk-tabs, .rk-scope { margin: 8px 0; }
+.rk-body { margin: 6px 0 12px; }
+.rk-sub { margin: 4px 0 10px; font-size: 13px; }
+.rk-note { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 12px 14px; border: 1px solid var(--line2); background: var(--bg2); margin: 10px 0; }
+.rk-err { color: #e88a8a; padding: 12px 0; }
+.rk-tbl-w { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.rk-tbl { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.rk-tbl th { text-align: left; font-family: var(--display); letter-spacing: .14em; font-size: 11px; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line2); }
+.rk-tbl td { padding: 9px 8px; border-bottom: 1px solid var(--line); }
+.rk-tbl td.n { width: 34px; color: var(--muted); font-family: var(--display); }
+.rk-tbl tr:first-child td.n { color: var(--gold2); }
+.rk-tag { display: inline-block; padding: 1px 6px; border: 1px solid var(--gold); color: var(--gold2); font-family: var(--display); font-size: 10px; letter-spacing: .12em; vertical-align: middle; }
+.rk-score { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px; border: 1px solid var(--gold); background: var(--bg2); margin: 12px 0; text-align: center; }
+.rk-score small { font-family: var(--display); letter-spacing: .16em; font-size: 11px; color: var(--muted); }
+.rk-score b { font-family: var(--display); font-size: 56px; line-height: 1; color: var(--gold2); }
+.rk-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 10px 0; }
+.rk-card { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 6px; background: var(--bg2); border: 1px solid var(--line2); text-align: center; }
+.rk-card small { font-family: var(--display); letter-spacing: .14em; font-size: 10px; color: var(--muted); }
+.rk-card b { font-family: var(--display); font-size: 24px; color: #fff; }
+.rk-lineup { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.rk-lineup span { padding: 4px 10px; background: var(--bg3); border: 1px solid var(--line2); font-size: 14px; }
+@media (max-width: 560px) { .rk-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } .rk-card b { font-size: 19px; } .rk-ctl { grid-template-columns: minmax(0, 1fr); } }

@@ -46,7 +46,7 @@
     ['SEASON', [['season', 'Schedule'], ['standings', 'Standings'], ['stats', 'Stats'], ['leaders', 'Leaders'], ['playoffs', 'Playoffs'], ['allstar', 'All-Star'], ['live', 'Watch Live'], ['share', 'Share Season']]],
     ['LEAGUE', [['league', 'League Home'], ['news', 'News'], ['news/transactions', 'Transactions'], ['awards', 'Awards'], ['awardshow', 'Awards Show'],
       ['history', 'History'], ['records', 'Records'], ['retirements', 'Retirements'], ['classes', 'Draft Classes'], ['teams', 'All Teams']]],
-    ['MODES', [['new', 'New League'], ['challenge', 'Season Mode'], ['challenge/vs', 'Head to Head'], ['challenge/tournament', 'Tournament'], ['challenge/tournament/online', 'Online Tournament'], ['fantasy', 'Fantasy Draft']]],
+    ['MODES', [['new', 'New League'], ['challenge', 'Season Mode'], ['challenge/vs', 'Head to Head'], ['challenge/tournament', 'Tournament'], ['challenge/tournament/online', 'Online Tournament'], ['ranked', 'Ranked'], ['fantasy', 'Fantasy Draft']]],
     ['GAME', [['saves', 'Saves'], ['settings', 'Settings'], ['commish', 'Commissioner'], ['soundtrack', 'Soundtrack']]],
     ['INFO', [['about', 'About'], ['faq', 'FAQ'], ['contact', 'Contact'], ['privacy', 'Privacy'], ['terms', 'Terms'], ['disclaimer', 'Disclaimer']]]
   ];
@@ -189,7 +189,7 @@
     if (page !== 'continue' && typeof (UI.pages || {})[page] !== 'function') page = 'home';
     const navKey = NAV[page] || page;
     // the top links belong to the Association; the home screen, Season Mode, Head to Head and the info pages are bare
-    document.body.classList.toggle('no-assoc-nav', ['home', 'challenge', 'new', 'saves', 'soundtrack', 'continue'].concat(UI.INFO_ROUTES || []).includes(page));
+    document.body.classList.toggle('no-assoc-nav', ['home', 'challenge', 'new', 'saves', 'soundtrack', 'continue', 'ranked', 'me'].concat(UI.INFO_ROUTES || []).includes(page));
     UI.$$('#mainnav a').forEach(a => a.classList.toggle('on', a.getAttribute('data-nav') === navKey));
     const more = UI.$('#mainnav .navmore');
     if (more) more.classList.toggle('on', !UI.$(`#mainnav > a[data-nav="${navKey}"]`) && !!more.querySelector(`a[data-nav="${navKey}"]`));

@@ -14,10 +14,10 @@
     get() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; } },
     set(v) { if (typeof NET !== 'undefined' && NET.role === 'watch') return; try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) { /* private mode */ } }
   };
-  const FRESH = () => ({ year: 2008, teams: ['BOS', 'LAL'], names: ['', ''], tnames: ['', ''], opts: { bestOf: 5, blind: false, timer: 24, bench: 0, board: 0, dupes: 0, bans: 0, auction: 0, aBudget: 20, aStart: 1, aRaise: 1, aPool: 10, aQ: 'stars', aShow: 0 }, cfg: null, auc: null, ready: [false, false], shown: 0, page: 'setup', spin: null, spun: [], respins: [1, 1], turn: null, pos: '', q: '', epoch: 0, hostSide: 0 });
+  const FRESH = () => ({ year: 2008, teams: ['BOS', 'LAL'], names: ['', ''], tnames: ['', ''], opts: { bestOf: 5, blind: false, timer: 24, bench: 0, board: 0, dupes: 0, bans: 0, auction: 0, aBudget: 20, aStart: 1, aRaise: 1, aPool: 10, aQ: 'stars', aShow: 0, ranked: 0, pub: 0 }, cfg: null, auc: null, ready: [false, false], shown: 0, page: 'setup', spin: null, spun: [], respins: [1, 1], turn: null, pos: '', q: '', epoch: 0, hostSide: 0 });
   let VS = Object.assign(FRESH(), ls.get() || {});
   if (!VS.cfg || VS.page === 'setup') { VS.names = ['', '']; VS.tnames = ['', '']; }   // a new game starts as Player 1 and Player 2 again
-  VS.opts = Object.assign({ bestOf: 5, blind: false, timer: 24, era: 2013, bench: 0, bans: 0, auction: 0, aBudget: 20, aStart: 1, aRaise: 1, aPool: 10, aQ: 'stars', aShow: 0 }, VS.opts || {});
+  VS.opts = Object.assign({ bestOf: 5, blind: false, timer: 24, era: 2013, bench: 0, bans: 0, auction: 0, aBudget: 20, aStart: 1, aRaise: 1, aPool: 10, aQ: 'stars', aShow: 0, ranked: 0, pub: 0 }, VS.opts || {});
   if (VS.opts.timer) VS.opts.timer = 24;   // the pick clock is a shot clock: 24 seconds or off
   // the seasons in play: every season but the ones switched off (VS.skip). One season left is a one-season
   // draft (cfg.year); more is the era spin over just those (cfg.year 0, cfg.seasons)
@@ -175,7 +175,7 @@
     if (NET.status !== 'connected') {
       NET.status = 'connected'; NET.err = '';
       if (NET.role === 'host') push(); else send({ t: NET.role === 'watch' ? 'watch' : 'hello', name: myName() });
-      saveRoom();
+      saveRoom(); syncLobby();
       route(); drawChat();
     }
   }
@@ -233,6 +233,7 @@
   }
   function hangUp() {
     NET.timers.forEach(t => clearInterval(t)); NET.timers = [];
+    if (UI.ranked) UI.ranked.lobbyStop();
     try { if (NET.client) NET.client.end(true); } catch (e) { /* gone */ }
     Object.assign(NET, { role: null, code: '', status: '', err: '', client: null, key: null, peerSeen: 0 });
   }
@@ -255,7 +256,7 @@
         client.on('connect', () => {
           up = true; clearTimeout(giveUp);
           client.subscribe(topic(), { qos: 1 }, () => {
-            if (NET.status === 'starting') NET.status = 'waiting';
+            if (NET.status === 'starting') { NET.status = 'waiting'; syncLobby(); }
             if (NET.role === 'guest' && NET.status !== 'connected') NET.status = 'connecting';
             send({ t: NET.role === 'guest' ? 'hello' : NET.role === 'watch' ? 'watch' : 'ping', name: myName() });
             route();
@@ -435,6 +436,22 @@
       ${row('v', 'THE POOL', 'aShow', [[0, 'HIDDEN'], [1, 'VISIBLE']], o.aShow ? 'Everyone sees who is still to come.' : 'You only see the player who is up.')}
     </div>`;
   }
+  // ranked (an auction between two signed-in players counts for the ladder) and listing the room as an open game
+  function rankedSetup(boss) {
+    if (!online() || !UI.profile.signedIn() || NET.role === 'watch') return '';
+    const dis = boss ? '' : ' disabled';
+    return `<div><span class="ts-start-k">RANKED AND OPEN GAMES</span><div class="ch-chips">
+        ${VS.opts.auction ? `<button type="button" class="ch-chip${VS.opts.ranked ? ' on' : ''}" data-rk="ranked"${dis}>${VS.opts.ranked ? 'RANKED: ON' : 'RANKED: OFF'}</button>` : ''}
+        ${NET.role === 'host' ? `<button type="button" class="ch-chip${VS.opts.pub ? ' on' : ''}" data-rk="pub"${dis}>${VS.opts.pub ? 'OPEN GAME: LISTED' : 'OPEN GAME: PRIVATE'}</button>` : ''}</div>
+      <small class="muted">${VS.opts.ranked && VS.opts.auction ? 'Ranked uses the standard rules ($20 each, $1 to open, +$1 raises, ten stars in the pool, best of 5, just the five). If you both finish the series signed in, it moves your ladder rating for this era.' : VS.opts.auction ? 'Turn on ranked for a series that counts on the ladder.' : 'Ranked games are auctions. Pick the auction draft style to turn it on.'} ${VS.opts.pub ? 'Anyone can find this room under Ranked, Open games, until your friend joins.' : ''}</small></div>`;
+  }
+  function syncLobby() {
+    if (!UI.ranked) return;
+    if (NET.role === 'host' && NET.status === 'waiting' && VS.opts.pub && UI.profile.signedIn()) {
+      const ch = chosen();
+      UI.ranked.lobbyStart({ code: NET.code, era: UI.ranked.eraOf({ year: ch.length === 1 ? ch[0] : 0, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null }), style: VS.opts.auction ? 'auction' : VS.opts.board ? 'board' : 'wheel', ranked: !!(VS.opts.ranked && VS.opts.auction) });
+    } else UI.ranked.lobbyStop();
+  }
   function setup(app) {
     stopTick();
     loadThen(app, VS.year, () => {
@@ -473,7 +490,8 @@
                 <small class="muted">${VS.opts.dupes ? 'The same player can be drafted from different seasons, so you can stack every Giannis. Only that exact season is gone once taken.' : 'A player is gone for good once taken, whatever the season.'}</small></div>`}
               <div><span class="ts-start-k">DRAFT STYLE</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.board && !VS.opts.auction ? ' on' : ''}" data-board="0"${dis(boss)}>THE WHEEL</button><button type="button" class="ch-chip${VS.opts.board && !VS.opts.auction ? ' on' : ''}" data-board="1"${dis(boss)}>OPEN BOARD</button><button type="button" class="ch-chip${VS.opts.auction ? ' on' : ''}" data-board="2"${dis(boss)}>AUCTION</button></div>
                 <small class="muted">${VS.opts.auction ? 'A hidden pool of players goes up one at a time. Start at the opening price and take turns raising, or pass and let the other side have him. Everyone has the same money.' : VS.opts.board ? 'No wheel: take turns picking anyone left from the whole board. Drafted players come off it.' : 'Every pick comes from the team the wheel lands on.'}</small></div>
-              ${VS.opts.auction ? aucSetup(boss) : `<div><span class="ts-start-k">BANS</span><div class="ch-chips">${[[0, 'NONE'], [1, '1 EACH'], [2, '2 EACH']].map(([v, l]) => `<button type="button" class="ch-chip${(VS.opts.bans || 0) === v ? ' on' : ''}" data-bans="${v}"${dis(boss)}>${l}</button>`).join('')}</div>
+              ${rankedSetup(boss)}
+              ${VS.opts.auction ? aucSetup(boss && !(VS.opts.ranked && online())) : `<div><span class="ts-start-k">BANS</span><div class="ch-chips">${[[0, 'NONE'], [1, '1 EACH'], [2, '2 EACH']].map(([v, l]) => `<button type="button" class="ch-chip${(VS.opts.bans || 0) === v ? ' on' : ''}" data-bans="${v}"${dis(boss)}>${l}</button>`).join('')}</div>
                 <small class="muted">${VS.opts.bans ? 'Before the draft you take turns banning players. A banned player is off the wheel and the board for both of you.' : 'Nobody is banned.'}</small></div>`}
               <div><span class="ts-start-k">BENCH</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.bench ? ' on' : ''}" data-bench="0"${dis(boss)}>JUST THE FIVE</button><button type="button" class="ch-chip${VS.opts.bench ? ' on' : ''}" data-bench="3"${dis(boss)}>8-MAN: +3 BENCH</button></div>
                 <small class="muted">${VS.opts.bench ? 'Everyone drafts eight. The first five start, the last three come off the bench (with a salary cap the cap grows to cover all eight).' : 'Five players each, all 48 minutes.'}</small></div>
@@ -490,6 +508,7 @@
         </div>`;
       UI.centerChips(app);
       bindNet(app);
+      syncLobby();
       const redraw = () => { KEEP = window.scrollY; push(); setup(app); };
       if (KEEP != null) { const y = KEEP; KEEP = null; window.scrollTo(0, y); requestAnimationFrame(() => window.scrollTo(0, y)); }   // a setup choice keeps your place, even when it had to load a season first
       app.querySelectorAll('[data-net]').forEach(b => b.addEventListener('click', () => {
@@ -517,6 +536,11 @@
       app.querySelectorAll('[data-cap]').forEach(b => b.addEventListener('click', () => { VS.opts.cap = +b.dataset.cap; if (VS.opts.cap) VS.opts.blind = false; redraw(); }));
       app.querySelectorAll('[data-dupes]').forEach(b => b.addEventListener('click', () => { VS.opts.dupes = +b.dataset.dupes; redraw(); }));
       app.querySelectorAll('[data-board]').forEach(b => b.addEventListener('click', () => { const v = +b.dataset.board; VS.opts.board = v === 1 ? 1 : 0; VS.opts.auction = v === 2 ? 1 : 0; if (v === 2) VS.opts.cap = 0; redraw(); }));
+      app.querySelectorAll('[data-rk]').forEach(b => b.addEventListener('click', () => {
+        const k = b.dataset.rk; VS.opts[k] = VS.opts[k] ? 0 : 1;
+        if (k === 'ranked' && VS.opts.ranked) Object.assign(VS.opts, { aBudget: 20, aStart: 1, aRaise: 1, aPool: 10, aQ: 'stars', aShow: 0, bench: 0, bestOf: 5, blind: false, cap: 0 });
+        redraw(); syncLobby();
+      }));
       app.querySelectorAll('[data-bans]').forEach(b => b.addEventListener('click', () => { VS.opts.bans = +b.dataset.bans; redraw(); }));
       app.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => { const [k, v] = b.dataset.a.split(':'); VS.opts[k] = k === 'aQ' ? v : +v; redraw(); }));
       app.querySelectorAll('[data-ready]').forEach(b => b.addEventListener('click', () => { const i = +b.dataset.ready; if (!canAct(i)) return; VS.ready = (VS.ready || [false, false]).slice(); VS.ready[i] = !VS.ready[i]; redraw(); }));
@@ -542,8 +566,9 @@
         uniqNames();
         const ch = chosen();
         if (!ch.length) { UI.toast('Switch on at least one season', 'error'); return; }
+        if (VS.opts.ranked && VS.opts.auction && online()) Object.assign(VS.opts, { aBudget: 20, aStart: 1, aRaise: 1, aPool: 10, aQ: 'stars', aShow: 0, bench: 0, bestOf: 5, blind: false, cap: 0 });
         VS.year = ch.length === 1 ? ch[0] : 0;
-        VS.cfg = { mode: 'versus', year: VS.year, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null, bestOf: VS.opts.bestOf, blind: !VS.opts.cap && !!VS.opts.blind, cap: VS.opts.auction ? 0 : C.capFor(+VS.opts.cap || 0, VS.opts.bench), bench: +VS.opts.bench || 0, board: VS.opts.board && !VS.opts.auction ? 1 : 0, bansN: VS.opts.auction ? 0 : +VS.opts.bans || 0, bans: [], dupes: ch.length > 1 && VS.opts.dupes ? 1 : 0, timer: VS.opts.auction ? 0 : +VS.opts.timer || 0, era: +VS.opts.era || 2013, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
+        VS.cfg = { mode: 'versus', year: VS.year, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null, bestOf: VS.opts.bestOf, blind: !VS.opts.cap && !!VS.opts.blind, cap: VS.opts.auction ? 0 : C.capFor(+VS.opts.cap || 0, VS.opts.bench), bench: +VS.opts.bench || 0, board: VS.opts.board && !VS.opts.auction ? 1 : 0, ranked: !!(VS.opts.ranked && VS.opts.auction && online() && UI.profile.signedIn()), bansN: VS.opts.auction ? 0 : +VS.opts.bans || 0, bans: [], dupes: ch.length > 1 && VS.opts.dupes ? 1 : 0, timer: VS.opts.auction ? 0 : +VS.opts.timer || 0, era: +VS.opts.era || 2013, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
           sides: [0, 1].map(i => ({ team: VS.teams[i], name: (VS.tnames[i] || '').trim() || (VS.names[i] ? VS.names[i] + "'s " + tOf(teams, VS.teams[i]).name : ''), picks: [] })) };
         VS.spin = null; VS.spun = []; VS.respins = [1, 1]; VS.shown = 0; VS.pos = ''; VS.q = ''; VS.season = ''; VS.sort = ''; VS.sw = null; VS.auc = null; VS.ready = [false, false];
         if (VS.opts.auction) {
@@ -949,6 +974,11 @@
           <tfoot><tr><td class="l">TOTALS</td>${tr({ min: sum('min'), pts: sum('pts'), oreb: sum('oreb'), dreb: sum('dreb'), ast: sum('ast'), stl: sum('stl'), blk: sum('blk'), tov: sum('tov'), fgm: sum('fgm'), fga: sum('fga'), tpm: sum('tpm'), tpa: sum('tpa'), ftm: sum('ftm'), fta: sum('fta') })}<td></td></tr></tfoot></table></div></div>`;
       };
       const R = done ? recordSeries(r, cfg) : null;
+      if (done && online() && me() !== null && me() >= 0 && UI.ranked && UI.profile.signedIn() && NET.code) {   // both signed-in players report: the database counts it when the two agree
+        const i = me(), sc = UI.ranked.lineupScore(S[i].five);
+        UI.ranked.report({ key: NET.code + ':' + cfg.seed, opp: who(1 - i), myWins: r.wins[S[i].abbr] || 0, oppWins: r.wins[S[1 - i].abbr] || 0, era: UI.ranked.eraOf(cfg), style: cfg.auction ? 'auction' : cfg.board ? 'board' : 'wheel', ranked: !!cfg.ranked, bestOf: r.bestOf,
+          lineup: { names: S[i].five.map(p => p.name), seasons: S[i].five.map(p => p.season || null), score: sc, era: UI.ranked.eraOf(cfg) }, score: sc });
+      }
       const games = r.games.slice(0, shown).map(g => {
         const t = g.top && PL[g.top.id];
         return `<li><span class="vs-g-n">GAME ${g.n}</span><span class="vs-g-s"><b class="${g.winner === g.away ? 'w' : ''}">${esc(whoA(g.away))} ${g.as}</b> @ <b class="${g.winner === g.home ? 'w' : ''}">${esc(whoA(g.home))} ${g.hs}</b>${g.ot ? ' <small>(' + (g.ot > 1 ? g.ot : '') + 'OT)</small>' : ''}</span>${t ? `<small class="muted">${esc(t.name)}: ${g.top.pts} pts, ${g.top.reb} reb, ${g.top.ast} ast</small>` : ''}

@@ -57,7 +57,16 @@
       WIRED.fn = () => { if (onChange && root.isConnected) onChange(); };
       window.addEventListener('a13-profile', WIRED.fn);
     },
-    open() { openPanel(); }
+    open() { openPanel(); },
+    // the account service, for the ranked pages: a client (null without a connection) and a call to a database function
+    client() { return getClient().then(c => c, () => null); },
+    async rpc(name, args) {
+      const c = await getClient();
+      const r = await c.rpc(name, args || {});
+      if (r.error) throw r.error;
+      return r.data;
+    },
+    userId() { return USER ? USER.id : null; }
   };
   window.UI = window.UI || {};
   UI.profile = P;
@@ -325,7 +334,7 @@
         return;
       }
       card(`${tabs}<div class="pf-card-k">YOUR USERNAME</div>${field('pfName', 'CHANGE IT ANY TIME', 'text', 'maxlength="16" value="' + esc(n) + '"')}<small class="muted">Signed in as ${esc(P.email())}. Letters, numbers, _ and - only. It has to be one nobody else has.</small>
-        <div class="row-btns"><button type="button" class="btn btn-gold" id="pfSave">SAVE USERNAME</button></div>
+        <div class="row-btns"><button type="button" class="btn btn-gold" id="pfSave">SAVE USERNAME</button><a class="btn" href="#/me" id="pfMe">MY PROFILE</a><a class="btn" href="#/ranked" id="pfRk">RANKED</a></div>
         <div class="pf-card-k">CHANGE PASSWORD</div>${pw('pfNew', 'NEW PASSWORD (AT LEAST 8 CHARACTERS)', 'new-password')}<div class="row-btns"><button type="button" class="btn" id="pfPw">CHANGE PASSWORD</button><button type="button" class="btn" id="pfOut">SIGN OUT</button>${closeBtn}</div>`);
       wireClose(); wireShow();
       el.querySelector('#pfPw').addEventListener('click', async e => {
@@ -355,6 +364,7 @@
       save.addEventListener('click', doSave);
       inp.addEventListener('keydown', e => { if (e.key === 'Enter') doSave(); if (e.key === 'Escape') close(); });
       el.querySelector('#pfOut').addEventListener('click', () => { P.signOut(); close(); });
+      ['#pfMe', '#pfRk'].forEach(q => { const a = el.querySelector(q); if (a) a.addEventListener('click', () => close()); });
     }
 
     if (view === 'recover') { getClient().then(recover); return; }
