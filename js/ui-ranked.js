@@ -100,17 +100,22 @@
     return 'saved';
   }
 
-  // ---------- the daily streak (kept on this device) ----------
-  const STK = 'a13-rk-streak';
+  // ---------- the daily streak: counted from the daily auctions you finished on this device (so earlier plays count too) ----------
   const dayBefore = d => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() - 1); return x.toISOString().slice(0, 10); };
-  const streakGet = () => { try { return JSON.parse(localStorage.getItem(STK) || '{}'); } catch (e) { return {}; } };
-  function streakBump(day) {
-    const s0 = streakGet(); if (s0.last === day) return s0;
-    const n = s0.last === dayBefore(day) ? (s0.n || 0) + 1 : 1, o = { last: day, n, best: Math.max(s0.best || 0, n) };
-    try { localStorage.setItem(STK, JSON.stringify(o)); } catch (e) { /* private mode */ }
-    return o;
+  function dailyDays() {
+    const days = new Set();
+    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i), m = /^a13-rk-d-(\d{4}-\d\d-\d\d)-/.exec(k || ''); if (m) { const v = JSON.parse(localStorage.getItem(k) || 'null'); if (v && (v.fin || v.sent)) days.add(m[1]); } } } catch (e) { /* private mode */ }
+    return days;
   }
-  function streakNow() { const s0 = streakGet(), d = today(), alive = s0.last === d || s0.last === dayBefore(d); return { n: alive ? (s0.n || 0) : 0, done: s0.last === d, best: s0.best || 0 }; }
+  const streakBump = () => {};   // nothing to store: the finished auctions are the record
+  function streakNow() {
+    const days = dailyDays(), d = today(), done = days.has(d);
+    let n = 0, x = done ? d : dayBefore(d);
+    while (days.has(x)) { n++; x = dayBefore(x); }
+    let best = 0, run = 0, prev = '';
+    [...days].sort().forEach(k => { run = prev && dayBefore(k) === prev ? run + 1 : 1; best = Math.max(best, run); prev = k; });
+    return { n, done, best: Math.max(best, n) };
+  }
   const regionName = r => { const x = REGIONS.find(y => y[0] === r); return x ? x[1].trim() : (r || ''); };
   const NOT_SET_UP = 'The ranked boards are not switched on yet. The site owner needs to run supabase/community.sql once in the Supabase SQL editor.';
   const failMsg = e => { const m = String((e && e.message) || e); return /does not exist|schema cache|Could not find|relation .* does not exist|PGRST20/i.test(m) ? NOT_SET_UP : m; };
