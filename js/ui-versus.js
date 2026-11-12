@@ -353,7 +353,7 @@
     if (!el) { el = document.createElement('div'); el.id = 'vsDc'; el.className = 'vs-dc'; document.body.appendChild(el); }
     el.innerHTML = onl
       ? `<div class="vs-dc-box"><small>RANKED GAME PAUSED</small><h2>${esc(other.toUpperCase())} DISCONNECTED.</h2><p>They have <b>${mm}:${ss}</b> to get back. If they do not, you win by forfeit and the rating points are yours.</p><div class="ch-spin-ring"></div></div>`
-      : `<div class="vs-dc-box"><small>RANKED GAME PAUSED</small><h2>YOU ARE OFFLINE.</h2><p>Reconnecting. You can not play a ranked game while disconnected. If you stay gone you forfeit.</p><div class="ch-spin-ring"></div></div>`;
+      : `<div class="vs-dc-box"><small>RANKED GAME PAUSED</small><h2>YOU ARE OFFLINE.</h2><p>Reconnecting on its own. Keep this page open. You can not play a ranked game while disconnected, and if you are not back in time you forfeit.</p><div class="ch-spin-ring"></div></div>`;
     if (left <= 0 && onl && !DC.claimed) claimForfeit();
   }
   function netBar() {
@@ -374,7 +374,7 @@
       ${st === 'connected' && me() !== null && me() >= 0 && UI.profile.signedIn() ? '<span class="vs-fr" id="vsFriend"></span>' : ''}
       ${st === 'lost' || st === 'error' ? `<button type="button" class="btn btn-small" id="vsRetry">${NET.role === 'host' ? 'NEW ROOM' : 'TRY AGAIN'}</button>` : ''}
       ${rkOn(VS.cfg) && !RKDONE[rkKey(VS.cfg)] ? '<button type="button" class="btn btn-small btn-danger" id="vsForfeit">FORFEIT</button>' : ''}
-      <button type="button" class="btn btn-small" id="vsLeave">LEAVE</button></div>`;
+      ${rkOn(VS.cfg) && !RKDONE[rkKey(VS.cfg)] ? '' : '<button type="button" class="btn btn-small" id="vsLeave">LEAVE</button>'}</div>`;   // no Leave in a live ranked game: it would count as a forfeit, so only the two-tap Forfeit is there
   }
   // next to the other player: add as a friend, or that you already are
   function fillFriend(app) {
@@ -404,11 +404,11 @@
     const rt = UI.$('#vsRetry', app); if (rt) rt.addEventListener('click', () => (NET.role === 'host' ? host() : join(NET.code)));
     const cw = UI.$('#vsCopyWatch', app);
     if (cw) cw.addEventListener('click', async () => { try { await navigator.clipboard.writeText(watchLink()); UI.toast('Watch link copied. Anyone with it can watch.'); } catch (e) { UI.toast(watchLink()); } });
-    const lv = UI.$('#vsLeave', app); if (lv) lv.addEventListener('click', () => {
-      if (rkOn(VS.cfg) && !RKDONE[rkKey(VS.cfg)]) { if (confirm('Leaving a ranked game is a forfeit: you lose rating points and the other player wins. Leave anyway?')) concede().then(() => { forgetRoom(); hangUp(); }); return; }
-      forgetRoom(); hangUp(); route();
+    const lv = UI.$('#vsLeave', app); if (lv) lv.addEventListener('click', () => { forgetRoom(); hangUp(); route(); });
+    const ff = UI.$('#vsForfeit', app); if (ff) ff.addEventListener('click', () => {   // two taps, so a stray tap never costs rating
+      if (!ff.dataset.sure) { ff.dataset.sure = '1'; ff.textContent = 'TAP AGAIN TO FORFEIT'; setTimeout(() => { if (ff.isConnected) { delete ff.dataset.sure; ff.textContent = 'FORFEIT'; } }, 4000); return; }
+      concede();
     });
-    const ff = UI.$('#vsForfeit', app); if (ff) ff.addEventListener('click', () => { if (confirm('Forfeit this ranked game? You lose rating points and the other player wins.')) concede(); });
   }
 
   // ---------- trash talk: quick reactions that pop up on both phones (online) ----------
