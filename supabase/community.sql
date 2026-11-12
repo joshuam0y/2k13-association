@@ -180,3 +180,29 @@ grant execute on function public.lobby_list() to authenticated, anon;
 grant execute on function public.lb_ratings(text, text, int) to authenticated, anon;
 grant execute on function public.lb_daily(date, text, text, int) to authenticated, anon;
 revoke execute on function public.finalize_series(text) from public, anon, authenticated;
+
+-- ---------- viewing another player's profile: only totals, never their private rows ----------
+create or replace function public.public_profile(p_name text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare prof public.profiles; me uuid := auth.uid(); w int; t int; auto text; rat jsonb; most jsonb; vs jsonb; fr text; ua uuid; ub uuid;
+begin
+  select * into prof from public.profiles where lower(username) = lower(p_name);
+  if prof.id is null then return null; end if;
+  select count(*) filter (where (p1 = prof.id and w1 > w2) or (p2 = prof.id and w2 > w1)), count(*) into w, t from public.series where p1 = prof.id or p2 = prof.id;
+  select era into auto from public.series where p1 = prof.id or p2 = prof.id group by era order by count(*) desc, era limit 1;
+  select coalesce(jsonb_agg(jsonb_build_object('era', era, 'rating', rating, 'games', games, 'wins', wins, 'losses', losses) order by rating desc), '[]'::jsonb) into rat from public.ratings where user_id = prof.id and games > 0;
+  select coalesce(jsonb_agg(jsonb_build_object('name', nm, 'season', se, 'count', c) order by c desc, nm), '[]'::jsonb) into most from (
+    select n.value as nm, coalesce(nullif(s.value, 'null')::int, 0) as se, count(*) as c
+    from public.series_reports r
+    cross join lateral jsonb_array_elements_text(coalesce(r.lineup -> 'names', '[]'::jsonb)) with ordinality as n(value, ord)
+    left join lateral jsonb_array_elements_text(coalesce(r.lineup -> 'seasons', '[]'::jsonb)) with ordinality as s(value, ord) on s.ord = n.ord
+    where r.reporter = prof.id group by 1, 2 order by c desc, nm limit 5) x;
+  if me is not null and me <> prof.id then
+    ua := least(me, prof.id); ub := greatest(me, prof.id);
+    select jsonb_build_object('me', case when me = ua then a_wins else b_wins end, 'them', case when me = ua then b_wins else a_wins end) into vs from public.rivalries where a = ua and b = ub;
+    select case when f.status = 'accepted' then 'friends' when f.requester = me then 'sent' else 'incoming' end into fr from public.friendships f where (f.requester = me and f.addressee = prof.id) or (f.requester = prof.id and f.addressee = me) limit 1;
+  end if;
+  return jsonb_build_object('username', prof.username, 'region', prof.region, 'fav_era', prof.fav_era, 'auto_era', auto, 'best_score', prof.best_score, 'best_lineup', prof.best_lineup,
+    'wins', w, 'losses', t - w, 'ratings', rat, 'most', most, 'vs', vs, 'friend', fr, 'self', me = prof.id);
+end $$;
+grant execute on function public.public_profile(text) to authenticated, anon;

@@ -189,7 +189,7 @@
     if (page !== 'continue' && typeof (UI.pages || {})[page] !== 'function') page = 'home';
     const navKey = NAV[page] || page;
     // the top links belong to the Association; the home screen, Season Mode, Head to Head and the info pages are bare
-    document.body.classList.toggle('no-assoc-nav', ['home', 'challenge', 'new', 'saves', 'soundtrack', 'continue', 'ranked', 'me'].concat(UI.INFO_ROUTES || []).includes(page));
+    document.body.classList.toggle('no-assoc-nav', ['home', 'challenge', 'new', 'saves', 'soundtrack', 'continue', 'ranked', 'me', 'u'].concat(UI.INFO_ROUTES || []).includes(page));
     UI.$$('#mainnav a').forEach(a => a.classList.toggle('on', a.getAttribute('data-nav') === navKey));
     const more = UI.$('#mainnav .navmore');
     if (more) more.classList.toggle('on', !UI.$(`#mainnav > a[data-nav="${navKey}"]`) && !!more.querySelector(`a[data-nav="${navKey}"]`));

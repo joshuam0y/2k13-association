@@ -84,6 +84,7 @@
     UI.$('#rvGo', app).addEventListener('click', finish);
   };
 
+  UI.userLink = (name, tab) => `<a class="u-link" href="#/u/${encodeURIComponent(name)}"${tab ? ' target="_blank" rel="noopener"' : ''}>${esc(name)}</a>`;   // a name you can click to see that player's profile
   UI.ranked = { eraOf, lineupScore, report, lobbyStart, lobbyStop, ERAS, eraName, regionName, REGIONS };
 
   // ---------- helpers for the pages ----------
@@ -154,12 +155,12 @@
       } else {
         const rows = await UI.profile.rpc('lobby_list');
         const mine = UI.profile.account();
-        body.innerHTML = `<p class="muted rk-sub">Rooms waiting for a second player right now. They update every few seconds.</p>` + (rows.length ? table(['HOST', 'ERA', 'STYLE', ''], rows.map(r => [esc(r.host_name), esc(eraName(r.era)), esc(String(r.style).toUpperCase()) + (r.ranked ? ' <span class="rk-tag">RANKED</span>' : ''), r.host_name === mine ? '<span class="muted">YOU</span>' : `<a class="btn btn-small btn-gold" href="#/challenge/vs/join/${esc(r.code)}">JOIN</a>`]), true) : '<p class="muted">No open games. Host one from Head to Head and tick "Open game" to list it here.</p>');
+        body.innerHTML = `<p class="muted rk-sub">Rooms waiting for a second player right now. They update every few seconds.</p>` + (rows.length ? table(['HOST', 'ERA', 'STYLE', ''], rows.map(r => [UI.userLink(r.host_name), esc(eraName(r.era)), esc(String(r.style).toUpperCase()) + (r.ranked ? ' <span class="rk-tag">RANKED</span>' : ''), r.host_name === mine ? '<span class="muted">YOU</span>' : `<a class="btn btn-small btn-gold" href="#/challenge/vs/join/${esc(r.code)}">JOIN</a>`]), true) : '<p class="muted">No open games. Host one from Head to Head and tick "Open game" to list it here.</p>');
         if (!REFRESH) REFRESH = setInterval(() => { if (!/^#\/ranked/.test(location.hash) || RK.tab !== 'games') { stopRefresh(); return; } fill(app); }, 10000);
       }
     } catch (e) { body.innerHTML = '<p class="rk-err">' + esc(failMsg(e)) + '</p>'; }
   }
-  const nameCell = (r, me) => `<b>${esc(r.username)}</b>${me && r.username === me ? ' <span class="rk-tag">YOU</span>' : ''}${r.region ? ` <small class="muted">${esc(regionName(r.region))}</small>` : ''}`;
+  const nameCell = (r, me) => `<b>${UI.userLink(r.username)}</b>${me && r.username === me ? ' <span class="rk-tag">YOU</span>' : ''}${r.region ? ` <small class="muted">${esc(regionName(r.region))}</small>` : ''}`;
   function table(head, rows, raw) {
     return `<div class="rk-tbl-w"><table class="rk-tbl"><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map((c, i) => `<td${i === 0 && !raw ? ' class="n"' : ''}>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
   }
@@ -321,7 +322,7 @@
         ${most.length ? `<div class="ch-step"><div class="ch-step-k">MOST DRAFTED</div>${table(['PLAYER', 'SEASON', 'TIMES'], most.map(m => [esc(m.n), esc(yr(m.se) || 'ANY'), '<b>' + m.c + '</b>']), true)}</div>` : ''}
         ${bl && bl.names ? `<div class="ch-step"><div class="ch-step-k">BEST LINEUP</div><p class="rk-lineup">${bl.names.map(n => `<span>${esc(n)}</span>`).join('')}</p><small class="muted">Score ${Number(bl.score || row.best_score).toFixed(1)}${bl.era ? ' | ' + esc(eraName(bl.era)) : ''}</small></div>` : ''}
         ${rat.data && rat.data.length ? `<div class="ch-step"><div class="ch-step-k">YOUR LADDER RATINGS</div>${table(['ERA', 'RATING', 'W-L'], rat.data.slice().sort((x, y) => y.rating - x.rating).map(r => [esc(eraName(r.era)), '<b>' + r.rating + '</b>', wl(r.wins, r.losses)]), true)}</div>` : ''}
-        <div class="ch-step"><div class="ch-step-k">RIVALRIES</div>${rivals.length ? table(['VS', 'RECORD', ''], rivals.map(r => [esc(r.name), '<b>' + r.me + '-' + r.them + '</b>', r.me > r.them ? 'YOU LEAD' : r.me < r.them ? 'THEY LEAD' : 'TIED']), true) : '<p class="muted">Your rivalries show up here: one record for each friend you play, and one series counts for each draft.</p>'}</div>
+        <div class="ch-step"><div class="ch-step-k">RIVALRIES</div>${rivals.length ? table(['VS', 'RECORD', ''], rivals.map(r => [UI.userLink(r.name), '<b>' + r.me + '-' + r.them + '</b>', r.me > r.them ? 'YOU LEAD' : r.me < r.them ? 'THEY LEAD' : 'TIED']), true) : '<p class="muted">Your rivalries show up here: one record for each friend you play, and one series counts for each draft.</p>'}</div>
         <div class="ch-go"><a class="btn btn-gold" href="#/ranked">RANKED</a><a class="btn" href="#/challenge/vs">HEAD TO HEAD</a></div>`;
       const save = UI.$('#meSave', app), msg = UI.$('#meMsg', app);
       save.addEventListener('click', async () => {
@@ -373,6 +374,33 @@
     F.t = setInterval(tick, 2000);
     tick();
   }
+
+  // ---------- #/u/NAME: another player's profile ----------
+  async function userPage(app, name) {
+    stopRefresh(); stopFind();
+    if (!name) { location.hash = '#/ranked'; return; }
+    app.innerHTML = '<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING ' + esc(name.toUpperCase()) + '...</div></section>';
+    try {
+      const d = await UI.profile.rpc('public_profile', { p_name: name });
+      if (!d) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PROFILE</div><h1 class="ch-hero-t">NO ACCOUNT.</h1><p class="ch-hero-p">Nobody has an account named ${esc(name)}. They may be playing as a guest.</p></section><div class="ch-go"><a class="btn" href="#/ranked">RANKED</a></div>`; return; }
+      if (d.self) { location.replace('#/me'); return; }
+      const fav = d.fav_era || d.auto_era, bl = d.best_lineup, yr = se => (se ? "'" + String(se - 1).slice(2) + "-'" + String(se).slice(2) : '');
+      const total = d.wins + d.losses, signed = UI.profile.signedIn();
+      const fr = !signed ? '' : d.friend === 'friends' ? '<span class="vs-fr ok">&#10003; FRIENDS</span>' : d.friend === 'sent' ? '<span class="muted">REQUEST SENT</span>' : `<button type="button" class="btn btn-gold" id="uAdd">${d.friend === 'incoming' ? 'ACCEPT FRIEND REQUEST' : 'ADD AS FRIEND'}</button>`;
+      app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PROFILE${d.region ? ' | ' + esc(regionName(d.region).toUpperCase()) : ''}</div><h1 class="ch-hero-t">${esc(d.username).toUpperCase()}</h1>
+          <p class="ch-hero-p">${total ? d.wins + '-' + d.losses + ' in Head to Head series.' : 'No series on this account yet.'}</p></section>
+        <div class="ch-go u-act">${fr}${signed ? `<a class="btn" href="#/ranked/find/${esc(fav || RK.era)}">PLAY RANKED</a>` : ''}</div>
+        <div class="rk-cards"><div class="rk-card"><small>RECORD</small><b>${d.wins}-${d.losses}</b></div><div class="rk-card"><small>FAVORITE ERA</small><b>${fav ? esc(eraName(fav)) : '-'}</b></div><div class="rk-card"><small>BEST LINEUP</small><b>${d.best_score != null ? Number(d.best_score).toFixed(1) : '-'}</b></div></div>
+        ${d.vs ? `<div class="ch-step"><div class="ch-step-k">YOU VS ${esc(d.username.toUpperCase())}</div><p class="rk-vs"><b>${d.vs.me}</b><span>-</span><b>${d.vs.them}</b></p><small class="muted">${d.vs.me > d.vs.them ? 'You lead the rivalry.' : d.vs.me < d.vs.them ? 'They lead the rivalry.' : 'Tied.'} One series counts for each draft.</small></div>` : ''}
+        ${d.ratings && d.ratings.length ? `<div class="ch-step"><div class="ch-step-k">LADDER RATINGS</div>${table(['ERA', 'RATING', 'W-L'], d.ratings.map(r => [esc(eraName(r.era)), '<b>' + r.rating + '</b>', wl(r.wins, r.losses)]), true)}</div>` : ''}
+        ${d.most && d.most.length ? `<div class="ch-step"><div class="ch-step-k">MOST DRAFTED</div>${table(['PLAYER', 'SEASON', 'TIMES'], d.most.map(m => [esc(m.name), esc(yr(m.season) || 'ANY'), '<b>' + m.count + '</b>']), true)}</div>` : ''}
+        ${bl && bl.names ? `<div class="ch-step"><div class="ch-step-k">BEST LINEUP</div><p class="rk-lineup">${bl.names.map((n, k) => `<span>${esc(n)}${bl.seasons && bl.seasons[k] ? ' <small class="muted">' + esc(yr(bl.seasons[k])) + '</small>' : ''}</span>`).join('')}</p><small class="muted">Score ${Number(bl.score || d.best_score).toFixed(1)}${bl.era ? ' | ' + esc(eraName(bl.era)) : ''}</small></div>` : ''}
+        <div class="ch-go"><a class="btn" href="#/ranked">RANKED</a><a class="btn" href="#/me">MY PROFILE</a></div>`;
+      const add = UI.$('#uAdd', app);
+      if (add) add.addEventListener('click', () => { add.disabled = true; UI.profile.addFriend(d.username).then(st => { UI.toast(st === 'friends' ? 'You are now friends with ' + d.username + '.' : 'Friend request sent to ' + d.username + '.'); userPage(app, name); }).catch(() => { add.disabled = false; UI.toast('Could not send the request.', 'error'); }); });
+    } catch (e) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PROFILE</div><h1 class="ch-hero-t">${esc(name.toUpperCase())}</h1></section><p class="rk-err">${esc(failMsg(e))}</p>`; }
+  }
+  P.u = function (app, arg) { return userPage(app, decodeURIComponent(String(arg || '').split('/')[0])); };
 
   P.ranked = function (app, arg) {
     const part = String(arg || '').split('/');

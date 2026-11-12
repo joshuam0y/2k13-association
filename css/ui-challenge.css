@@ -904,3 +904,9 @@
 .vs-rulesbox b { font-family: var(--display); letter-spacing: .16em; font-size: 12px; color: var(--gold2); }
 .vs-rulesbox ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; color: var(--text2); }
 .vs-rulesbox li b { font-family: inherit; letter-spacing: normal; font-size: inherit; color: #fff; }
+.u-link { color: inherit; text-decoration: underline; text-decoration-color: var(--gold); text-underline-offset: 3px; cursor: pointer; }
+.u-link:hover { color: var(--gold2); }
+.u-act { justify-content: flex-start; margin: 6px 0; }
+.rk-vs { display: flex; gap: 14px; align-items: baseline; margin: 6px 0; font-family: var(--display); font-size: 40px; }
+.rk-vs b { color: var(--gold2); }
+.rk-vs span { color: var(--muted); }

@@ -294,7 +294,7 @@
     if (!online()) return '';
     if (NET.role === 'watch') return `<div class="vs-net ${NET.status}"><span class="vs-net-dot"></span><span>${NET.status === 'connected' ? 'Watching room <b>' + esc(NET.code) + '</b>: <b>' + esc(who(0)) + '</b> vs <b>' + esc(who(1)) + '</b>. You see everything live.' : NET.status === 'error-wait' || NET.status === 'error' ? esc(NET.err) : 'Joining room <b>' + esc(NET.code) + '</b> to watch...'}</span><button type="button" class="btn btn-small" id="vsLeave">LEAVE</button></div>`;
     const st = NET.status, other = who(1 - NET.side);
-    const msg = st === 'connected' ? `Connected with <b>${esc(other)}</b>. You are ${esc(who(me()))}.`
+    const msg = st === 'connected' ? `Connected with <b>${UI.userLink ? UI.userLink(other, true) : esc(other)}</b>. You are ${esc(who(me()))}.`
       : st === 'waiting' ? `Room <b>${esc(NET.code)}</b>: send your friend the link, then wait here.`
       : st === 'connecting' || st === 'starting' ? 'Connecting...'
       : st === 'code' ? 'Type the room code your friend sees on his phone.'
