@@ -109,7 +109,7 @@
   const dayBefore = d => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() - 1); return x.toISOString().slice(0, 10); };
   function dailyDays() {
     const days = new Set();
-    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i), m = /^a13-rk-d-(\d{4}-\d\d-\d\d)-/.exec(k || ''); if (m) { const v = JSON.parse(localStorage.getItem(k) || 'null'); if (v && (v.fin || v.sent)) days.add(m[1]); } } } catch (e) { /* private mode */ }
+    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i), m = /^a13-rk-d-(\d{4}-\d\d-\d\d)-T$/.exec(k || ''); if (m) { const v = JSON.parse(localStorage.getItem(k) || 'null'); if (v && (v.fin || v.sent)) days.add(m[1]); } } } catch (e) { /* private mode */ }
     return days;
   }
   const streakBump = () => {};   // nothing to store: the finished auctions are the record
@@ -563,7 +563,7 @@
     stopRefresh();
     era = ERAS.indexOf(era) >= 0 ? era : 'ALL';
     era = 'ALL';   // the daily is one theme a day, whatever era is picked above
-    const day = pr ? 'practice:' + pr.info.key + ':' + pr.n : today(), key = 'a13-rk-d-' + day + '-ALL';
+    const day = pr ? 'practice:' + pr.info.key + ':' + pr.n : today(), key = 'a13-rk-d-' + day + '-T';
     if (!THEME[day]) {
       app.innerHTML = '<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE THEME...</div></section>';
       (pr ? buildTheme(pr.info).then(t => { THEME[day] = t; }) : dailyTheme(day)).then(() => { if (/^#\/daily/.test(location.hash)) dailyPage(app, era, pr); }).catch(e => { app.innerHTML = '<p class="rk-err">' + esc(e.message || e) + '</p>'; });
@@ -984,7 +984,7 @@
       let TH = null; try { await dailyTheme(day); TH = THEME[day].info; } catch (e) { /* the theme card stays out */ }
       let rows = []; try { rows = (await UI.profile.rpc('lb_daily', { p_day: day, p_era: 'ALL', p_region: null, p_limit: 100 })) || []; } catch (e) { rows = null; }
       const perf = TH ? dailyPerfect('ALL', day) : 0, pctOf = sc => (perf > 0 ? Math.min(100, 100 * Number(sc) / perf).toFixed(1) + '%' : '');
-      const me = UI.profile.account(), done = ls.get('a13-rk-d-' + day + '-ALL', null), played = done && done.fin, sk = streakNow();
+      const me = UI.profile.account(), done = ls.get('a13-rk-d-' + day + '-T', null), played = done && done.fin, sk = streakNow();
       const left = (() => { const n = new Date(), ms = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + 1) - n.getTime(); return Math.floor(ms / 3600000) + 'H ' + (Math.floor(ms / 60000) % 60) + 'M'; })();
       body.innerHTML = `${TH ? `<div class="rk-theme"><small>TODAY | ${esc(TH.kind)}</small><b>${esc(TH.title)}</b><span class="muted">${esc(TH.tag)}</span></div>` : ''}
         <p class="rk-streak">${sk.n ? '<b>' + sk.n + '</b> DAY STREAK' + (sk.done ? ' | TODAY DONE' : ' | PLAY TODAY TO KEEP IT') : 'START A STREAK: PLAY ONE A DAY'}</p>
