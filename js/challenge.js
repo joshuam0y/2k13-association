@@ -268,6 +268,56 @@
     var n = cfg.sides[0].picks.length + cfg.sides[1].picks.length;
     return n >= 2 * vsPer(cfg) ? -1 : (n === 0 ? 0 : (Math.floor((n - 1) / 2) % 2 === 0 ? 1 : 0));
   }
+
+  // ---------- auction draft (versus): a hidden pool, bid for every player ----------
+  // cfg.auction = { budget: 20, start: 1, raise: 1, pool: 10, quality: 'stars' | 'mixed' | 'any', show: 0 | 1 (the pool is visible) }.
+  // A player goes up at the start price, held by whoever opens that round (the opener alternates); the other side raises or passes;
+  // a pass sells him to the side that holds the bid, at that price. Each side must keep the start price for every slot it still has to
+  // fill, a full side stops bidding, and the other side takes what is left at no cost.
+  function aucOpts(a) { return Object.assign({ budget: 20, start: 1, raise: 1, pool: 10, quality: 'stars', show: 0 }, a || {}); }
+  function aucFull(st, side) { return st.won[side].length >= st.per; }
+  // the most this side may bid now: its money minus the start price for each of its other empty slots
+  function aucMax(st, side) { return st.o.budget - st.spent[side] - Math.max(0, st.per - st.won[side].length - 1) * st.o.start; }
+  function aucCanRaise(st, side) { return !aucFull(st, side) && st.price + st.o.raise <= aucMax(st, side); }
+  function aucSell(st, side, price) {
+    var id = st.ids[st.i];
+    st.won[side].push(id); st.spent[side] += price; st.log.push({ id: id, side: side, price: price });
+  }
+  // moves to the next player and settles every round nobody can contest
+  function aucNext(st) {
+    for (;;) {
+      st.i++;
+      if (st.i >= st.ids.length || (aucFull(st, 0) && aucFull(st, 1))) { st.done = true; st.turn = -1; st.holder = -1; return st; }
+      var open = st.i % 2;
+      if (aucFull(st, open)) {   // the opener has his five: the other side takes him free
+        aucSell(st, 1 - open, 0); continue;
+      }
+      if (aucFull(st, 1 - open)) { aucSell(st, open, 0); continue; }
+      st.holder = open; st.price = st.o.start; st.turn = 1 - open;
+      if (!aucCanRaise(st, st.turn)) { aucSell(st, st.holder, st.price); continue; }
+      return st;
+    }
+  }
+  function auctionStart(cfg, players) {
+    var o = aucOpts(cfg.auction), per = vsPer(cfg), n = Math.max(o.pool, 2 * per), rng = mulberry32(((cfg.seed || 1) ^ 0xA0C710) >>> 0);
+    var sorted = players.slice().sort(function (a, b) { return b.ovr - a.ovr || (a.id < b.id ? -1 : 1); });
+    var top = o.quality === 'stars' ? Math.max(n, 60) : o.quality === 'mixed' ? Math.max(n, 200) : sorted.length;
+    var pool = shuffle(sorted.slice(0, top), rng).slice(0, n);
+    var st = { o: o, per: per, ids: pool.map(function (p) { return p.id; }), i: -1, price: o.start, holder: 0, turn: 1, spent: [0, 0], won: [[], []], log: [], done: false };
+    return aucNext(st);
+  }
+  // side raises (action 'raise') or passes (action 'pass'); returns false when it is not his move
+  function auctionAct(st, side, action) {
+    if (!st || st.done || st.turn !== side) return false;
+    if (action === 'raise') {
+      if (!aucCanRaise(st, side)) return false;
+      st.price += st.o.raise; st.holder = side; st.turn = 1 - side;
+      if (!aucCanRaise(st, st.turn)) { aucSell(st, st.holder, st.price); aucNext(st); }
+      return true;
+    }
+    if (action === 'pass') { aucSell(st, st.holder, st.price); aucNext(st); return true; }
+    return false;
+  }
   // Versus: no season. The two fives meet in a series (cfg.bestOf 3, 5 or 7; home court on a coin flip:
   // 1-1-1, 2-2-1 or 2-2-1-1-1), each playing all 48 minutes, nobody on the bench. Fit and positions count
   // like everywhere else. opts.pbp keeps every game's play-by-play (res) for the court view.
@@ -840,7 +890,7 @@
     SEASONS: SEASONS, ROUNDS: ROUNDS, seasonInfo: seasonInfo, seasonData: seasonData, loaded: loaded, load: load, loadAll: loadAll,
     allTimePool: allTimePool, poolSeasons: poolSeasons, eraTeam: eraTeam, buildYear: buildYear, buildAllTime: buildAllTime, newDraft: newDraft, onClock: onClock,
     draftSlot: draftSlot, draftPick: draftPick, aiPick: aiPick, simToUser: simToUser, autoDraft: autoDraft, available: available,
-    teamPicks: teamPicks, lineupFit: lineupFit, posLabel: posLabel, secondPos: secondPos, SLOTS: SLOTS, vsOnClock: vsOnClock, vsPer: vsPer, playVersus: playVersus, VS_ORDER: VS_ORDER, spin: spin, takenKey: takenKey, extendPool: extendPool, franchise: franchise, spinRoster: spinRoster, matchups: matchups, start: start, step: step, runAll: runAll,
+    teamPicks: teamPicks, lineupFit: lineupFit, posLabel: posLabel, secondPos: secondPos, SLOTS: SLOTS, vsOnClock: vsOnClock, vsPer: vsPer, auctionStart: auctionStart, auctionAct: auctionAct, aucOpts: aucOpts, aucMax: aucMax, aucCanRaise: aucCanRaise, playVersus: playVersus, VS_ORDER: VS_ORDER, spin: spin, takenKey: takenKey, extendPool: extendPool, franchise: franchise, spinRoster: spinRoster, matchups: matchups, start: start, step: step, runAll: runAll,
     progress: progress, summary: summary, play: play, perGame: perGame, groupOf: groupOf, primaryPos: primaryPos, rng: mulberry32
   };
   W.CHALLENGE = API;

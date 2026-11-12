@@ -12,12 +12,12 @@
   const KEY = 'a13-ch-vs';
   const ls = {
     get() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; } },
-    set(v) { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) { /* private mode */ } }
+    set(v) { if (typeof NET !== 'undefined' && NET.role === 'watch') return; try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) { /* private mode */ } }
   };
-  const FRESH = () => ({ year: 2008, teams: ['BOS', 'LAL'], names: ['', ''], tnames: ['', ''], opts: { bestOf: 5, blind: false, timer: 24, bench: 0, board: 0, dupes: 0 }, cfg: null, shown: 0, page: 'setup', spin: null, spun: [], respins: [1, 1], turn: null, pos: '', q: '', epoch: 0, hostSide: 0 });
+  const FRESH = () => ({ year: 2008, teams: ['BOS', 'LAL'], names: ['', ''], tnames: ['', ''], opts: { bestOf: 5, blind: false, timer: 24, bench: 0, board: 0, dupes: 0, bans: 0, auction: 0, aBudget: 20, aStart: 1, aRaise: 1, aPool: 10, aQ: 'stars', aShow: 0 }, cfg: null, auc: null, ready: [false, false], shown: 0, page: 'setup', spin: null, spun: [], respins: [1, 1], turn: null, pos: '', q: '', epoch: 0, hostSide: 0 });
   let VS = Object.assign(FRESH(), ls.get() || {});
   if (!VS.cfg || VS.page === 'setup') { VS.names = ['', '']; VS.tnames = ['', '']; }   // a new game starts as Player 1 and Player 2 again
-  VS.opts = Object.assign({ bestOf: 5, blind: false, timer: 24, era: 2013, bench: 0 }, VS.opts || {});
+  VS.opts = Object.assign({ bestOf: 5, blind: false, timer: 24, era: 2013, bench: 0, bans: 0, auction: 0, aBudget: 20, aStart: 1, aRaise: 1, aPool: 10, aQ: 'stars', aShow: 0 }, VS.opts || {});
   if (VS.opts.timer) VS.opts.timer = 24;   // the pick clock is a shot clock: 24 seconds or off
   // the seasons in play: every season but the ones switched off (VS.skip). One season left is a one-season
   // draft (cfg.year); more is the era spin over just those (cfg.year 0, cfg.seasons)
@@ -117,7 +117,7 @@
       <p class="muted">Series won. Games: ${esc(a)} ${R.games[a] || 0}, ${esc(b)} ${R.games[b] || 0}.${sw ? ' Sweeps: ' + esc(sw) + '.' : ''} ${esc(streak)}</p>
       <div class="vs-rival-log">${R.log.slice(0, 8).map(x => `<span class="${x.w === a ? 'a' : 'b'}">${esc(x.w.split(' ')[0])} ${esc(x.s)}<small>${esc(x.y ? short(x.y) : 'ALL')}</small></span>`).join('')}</div></section>`;
   }
-  const SHARED = ['year', 'skip', 'teams', 'names', 'tnames', 'opts', 'cfg', 'shown', 'watch', 'page', 'spin', 'spun', 'respins', 'turn', 'epoch', 'hostSide'];
+  const SHARED = ['year', 'skip', 'teams', 'names', 'tnames', 'opts', 'cfg', 'shown', 'watch', 'page', 'spin', 'spun', 'respins', 'turn', 'epoch', 'hostSide', 'auc', 'ready'];
   let APP = null;   // the page element the versus screens draw into
 
   // ---------- online (an encrypted relay) ----------
@@ -129,6 +129,8 @@
   // phone is back (the host then sends the whole state again).
   const MQTT_SRC = 'https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js';
   const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081'];
+  const SPEC = {};   // spectators the host has heard from lately
+  const watchers = () => Object.keys(SPEC).filter(k => Date.now() - SPEC[k] < 12000).length;
   const NET = { role: null, side: 0, code: '', status: '', err: '', client: null, key: null, me: '', peerSeen: 0, broker: 0, timers: [] };
   const me = () => (NET.role ? NET.side : null);   // null: same phone, both sides
   const canAct = side => me() === null || me() === side;
@@ -161,6 +163,7 @@
   }
   function send(obj) {
     if (!NET.client || !NET.key) return;
+    if (NET.role === 'watch' && obj.t !== 'watch') return;   // a spectator only listens
     seal(Object.assign({ from: NET.me, role: NET.role, ep: VS.epoch || 0 }, obj)).then(txt => { try { NET.client.publish(topic(), txt, { qos: 1 }); } catch (e) { /* reconnecting */ } }).catch(() => {});
   }
   function push() {
@@ -171,12 +174,14 @@
     NET.peerSeen = Date.now();
     if (NET.status !== 'connected') {
       NET.status = 'connected'; NET.err = '';
-      if (NET.role === 'host') push(); else send({ t: 'hello', name: myName() });
+      if (NET.role === 'host') push(); else send({ t: NET.role === 'watch' ? 'watch' : 'hello', name: myName() });
+      saveRoom();
       route(); drawChat();
     }
   }
   function onMsg(m) {
     if (!m || typeof m !== 'object' || m.from === NET.me) return;
+    if (m.t === 'watch') { if (NET.role === 'host') { const fresh = !SPEC[m.from] || Date.now() - SPEC[m.from] > 12000; SPEC[m.from] = Date.now(); if (fresh) { push(); route(); } } return; }
     if (m.role === NET.role) {   // a third phone with our role, or two hosts after a handover: the newer epoch keeps the room
       if (NET.role === 'host' && (m.ep || 0) !== undefined) {
         const mine = VS.epoch || 0, theirs = m.ep || 0;
@@ -200,7 +205,7 @@
     if (m.t === 'court' && courtCtl && WATCH === m.n) {   // the other phone tapped pause, play, a speed or skip
       if (m.k === 'speed') courtCtl.setSpeed(+m.v || 1); else if (m.k === 'play') courtCtl.play(); else if (m.k === 'pause') courtCtl.pause(); else if (m.k === 'skip') courtCtl.skipQuarter();
     }
-    if (m.t === 'csync' && courtCtl && WATCH === m.n && NET.role === 'guest') {   // the host's clock: catch up, wait, or follow its pause and speed
+    if (m.t === 'csync' && courtCtl && WATCH === m.n && NET.role !== 'host') {   // the host's clock: catch up, wait, or follow its pause and speed
       const s = courtCtl.state();
       SYNC_SEEN = Date.now();
       if (m.cur - s.cur > 3) courtCtl.seek(m.cur);
@@ -232,11 +237,11 @@
     Object.assign(NET, { role: null, code: '', status: '', err: '', client: null, key: null, peerSeen: 0 });
   }
   // connects to a relay (falling back to the next if one will not answer), joins the room, starts the pings
-  function connectRoom(role, code) {
+  function connectRoom(role, code, opt) {
     NET.timers.forEach(t => clearInterval(t)); NET.timers = [];
     try { if (NET.client) NET.client.end(true); } catch (e) { /* gone */ }
-    Object.assign(NET, { role, side: role === 'host' ? 0 : 1, code, status: role === 'host' ? 'starting' : 'connecting', err: '', client: null, peerSeen: 0, me: Math.random().toString(36).slice(2, 10) });
-  if (role === 'host') { VS.epoch = 0; VS.hostSide = 0; } else VS.epoch = -1;
+    Object.assign(NET, { role, side: role === 'host' ? (opt && opt.side != null ? opt.side : 0) : role === 'watch' ? -1 : 1, code, status: role === 'host' ? 'starting' : 'connecting', err: '', client: null, peerSeen: 0, me: Math.random().toString(36).slice(2, 10) });
+  if (role === 'host') { VS.epoch = opt && opt.keep ? (VS.epoch || 0) + 1 : 0; VS.hostSide = NET.side; } else VS.epoch = -1;
     route();
     Promise.all([loadMqtt(), keyFor(code)]).then(([, key]) => {
       NET.key = key;
@@ -252,7 +257,7 @@
           client.subscribe(topic(), { qos: 1 }, () => {
             if (NET.status === 'starting') NET.status = 'waiting';
             if (NET.role === 'guest' && NET.status !== 'connected') NET.status = 'connecting';
-            send({ t: NET.role === 'guest' ? 'hello' : 'ping', name: myName() });
+            send({ t: NET.role === 'guest' ? 'hello' : NET.role === 'watch' ? 'watch' : 'ping', name: myName() });
             route();
           });
         });
@@ -263,21 +268,29 @@
       // pings both ways; silence means lost, a ping back heals it
       NET.timers.push(setInterval(() => {
         if (!NET.client || NET.code !== code) return;
-        send({ t: NET.role === 'guest' && NET.status !== 'connected' ? 'hello' : 'ping', name: myName() });
+        send({ t: NET.role === 'watch' ? 'watch' : NET.role === 'guest' && NET.status !== 'connected' ? 'hello' : 'ping', name: myName() });
         if (NET.status === 'connected' && Date.now() - NET.peerSeen > 15000) { NET.status = 'lost'; route(); drawChat(); }
         else if (NET.role === 'guest' && NET.status === 'lost' && Date.now() - NET.peerSeen > 25000 && VS.cfg) becomeHost(false);
       }, 4000));
       // a guest whose host never answers: say so, but keep listening
-      if (role === 'guest') setTimeout(() => { if (NET.code === code && NET.status === 'connecting') { NET.err = 'No answer from room ' + code + ' yet. Check the code, and that your friend still has the room open. Still trying...'; NET.status = 'error-wait'; route(); } }, 20000);
+      if (role === 'guest' || role === 'watch') setTimeout(() => { if (NET.code === code && NET.status === 'connecting') { NET.err = 'No answer from room ' + code + ' yet. Check the code, and that your friend still has the room open. Still trying...'; NET.status = 'error-wait'; route(); } }, 20000);
     }).catch(e => { NET.status = 'error'; NET.err = e.message || 'The connection failed.'; route(); });
   }
   const CODE_CH = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const newCode = () => Array.from({ length: 5 }, () => CODE_CH[Math.floor(Math.random() * CODE_CH.length)]).join('');
   function host() { connectRoom('host', newCode()); }
+  function watchRoom(code) { const c = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); if (c.length >= 4) connectRoom('watch', c); }
+  // a phone that reloads or drops can get back into its room from the setup page
+  const ROOMKEY = 'a13-vs-room';
+  function saveRoom() { try { if (NET.role && NET.code) localStorage.setItem(ROOMKEY, JSON.stringify({ code: NET.code, role: NET.role, side: NET.side, at: Date.now() })); } catch (e) { /* private mode */ } }
+  function savedRoom() { try { const r = JSON.parse(localStorage.getItem(ROOMKEY) || 'null'); return r && r.code && Date.now() - (r.at || 0) < 6 * 3600 * 1000 ? r : null; } catch (e) { return null; } }
+  function forgetRoom() { try { localStorage.removeItem(ROOMKEY); } catch (e) { /* private mode */ } }
   function join(code) { const c = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); if (c.length >= 4) connectRoom('guest', c); }
   const joinLink = () => location.origin + location.pathname + '#/challenge/vs/join/' + NET.code;
+  const watchLink = () => location.origin + location.pathname + '#/challenge/vs/watch/' + NET.code;
   function netBar() {
     if (!online()) return '';
+    if (NET.role === 'watch') return `<div class="vs-net ${NET.status}"><span class="vs-net-dot"></span><span>${NET.status === 'connected' ? 'Watching room <b>' + esc(NET.code) + '</b>: <b>' + esc(who(0)) + '</b> vs <b>' + esc(who(1)) + '</b>. You see everything live.' : NET.status === 'error-wait' || NET.status === 'error' ? esc(NET.err) : 'Joining room <b>' + esc(NET.code) + '</b> to watch...'}</span><button type="button" class="btn btn-small" id="vsLeave">LEAVE</button></div>`;
     const st = NET.status, other = who(1 - NET.side);
     const msg = st === 'connected' ? `Connected with <b>${esc(other)}</b>. You are ${esc(who(me()))}.`
       : st === 'waiting' ? `Room <b>${esc(NET.code)}</b>: send your friend the link, then wait here.`
@@ -287,6 +300,7 @@
       : st === 'error-wait' ? esc(NET.err) : esc(NET.err || 'Not connected.');
     return `<div class="vs-net ${st}"><span class="vs-net-dot"></span><span>${msg}</span>
       ${st === 'waiting' ? `<button type="button" class="btn btn-small" id="vsCopy">COPY LINK</button>` : ''}
+      ${NET.role === 'host' && (st === 'waiting' || st === 'connected') ? `<button type="button" class="btn btn-small" id="vsCopyWatch">COPY WATCH LINK</button>${watchers() ? `<span class="vs-spec">${watchers()} WATCHING</span>` : ''}` : ''}
       ${NET.role === 'host' && st === 'connected' ? `<button type="button" class="btn btn-small" id="vsHand">MAKE ${esc(who(1 - NET.side).toUpperCase())} HOST</button>` : ''}
       ${st === 'lost' || st === 'error' ? `<button type="button" class="btn btn-small" id="vsRetry">${NET.role === 'host' ? 'NEW ROOM' : 'TRY AGAIN'}</button>` : ''}
       <button type="button" class="btn btn-small" id="vsLeave">LEAVE</button></div>`;
@@ -300,7 +314,9 @@
     });
     const hd = UI.$('#vsHand', app); if (hd) hd.addEventListener('click', handOver);
     const rt = UI.$('#vsRetry', app); if (rt) rt.addEventListener('click', () => (NET.role === 'host' ? host() : join(NET.code)));
-    const lv = UI.$('#vsLeave', app); if (lv) lv.addEventListener('click', () => { hangUp(); route(); });
+    const cw = UI.$('#vsCopyWatch', app);
+    if (cw) cw.addEventListener('click', async () => { try { await navigator.clipboard.writeText(watchLink()); UI.toast('Watch link copied. Anyone with it can watch.'); } catch (e) { UI.toast(watchLink()); } });
+    const lv = UI.$('#vsLeave', app); if (lv) lv.addEventListener('click', () => { forgetRoom(); hangUp(); route(); });
   }
 
   // ---------- trash talk: quick reactions that pop up on both phones (online) ----------
@@ -317,7 +333,7 @@
     setTimeout(() => b.remove(), 3000);
   }
   function reactBar() {
-    if (!linked()) return '';
+    if (!linked() || NET.role === 'watch') return '';
     return `<div class="vs-react" role="group" aria-label="Reactions">${REACTS.map(r => `<button type="button" data-react="${esc(r)}"${/^[A-Z]/.test(r) ? ' class="word"' : ''}>${esc(r)}</button>`).join('')}</div>`;
   }
   function bindReact(app) {
@@ -347,7 +363,7 @@
   }
   function drawChat() {
     let box = document.getElementById('vsChat');
-    if (!linked() || !/^#\/challenge\/vs/.test(location.hash)) { if (box) box.remove(); return; }
+    if (!linked() || NET.role === 'watch' || !/^#\/challenge\/vs/.test(location.hash)) { if (box) box.remove(); return; }
     if (!box) {
       box = document.createElement('div'); box.id = 'vsChat'; box.className = 'vs-chat';
       document.body.appendChild(box);
@@ -405,16 +421,30 @@
 
   // ---------- setup ----------
   let KEEP = null;   // scroll position to restore after the next setup draw
+  // the auction's options: pool size, money, opening price, raise, who is in the pool, whether it shows
+  function aucSetup(boss) {
+    const o = VS.opts, per = 5 + (+o.bench > 0 ? +o.bench : 0), dis = boss ? '' : ' disabled';
+    const row = (k, label, key, list, note) => `<div><span class="ts-start-k">${label}</span><div class="ch-chips">${list.map(([v, l]) => `<button type="button" class="ch-chip${o[key] === v ? ' on' : ''}" data-a="${key}:${v}"${dis}>${l}</button>`).join('')}</div>${note ? `<small class="muted">${note}</small>` : ''}</div>`;
+    const need = 2 * per;
+    return `<div class="vs-auc-set">
+      ${row('p', 'POOL SIZE', 'aPool', [[need, need + ' (EXACT)'], [10, '10'], [12, '12'], [16, '16'], [20, '20'], [30, '30']].filter(([v], i, a) => v >= need && a.findIndex(x => x[0] === v) === i), 'The pool is hidden. Players come up one at a time, and the draft ends when you both have ' + per + '. A bigger pool leaves some players unsold.')}
+      ${row('b', 'MONEY EACH', 'aBudget', [[10, '$10'], [15, '$15'], [20, '$20'], [30, '$30'], [50, '$50']])}
+      ${row('s', 'OPENING PRICE', 'aStart', [[1, '$1'], [2, '$2'], [3, '$3']], 'Each side must keep this much for every empty roster spot.')}
+      ${row('r', 'EACH RAISE', 'aRaise', [[1, '+$1'], [2, '+$2'], [5, '+$5']])}
+      ${row('q', 'WHO IS IN THE POOL', 'aQ', [['stars', 'STARS'], ['mixed', 'MIXED'], ['any', 'ANYONE']], o.aQ === 'stars' ? 'Drawn from the 60 best players in the seasons you picked.' : o.aQ === 'mixed' ? 'Drawn from the 200 best.' : 'Anyone who played, stars and role players.')}
+      ${row('v', 'THE POOL', 'aShow', [[0, 'HIDDEN'], [1, 'VISIBLE']], o.aShow ? 'Everyone sees who is still to come.' : 'You only see the player who is up.')}
+    </div>`;
+  }
   function setup(app) {
     stopTick();
     loadThen(app, VS.year, () => {
       const d = C.seasonData(VS.year || 2013), teams = d.teams.slice().sort((a, b) => tName(a).localeCompare(tName(b)));
       VS.teams = VS.teams.map((a, i) => teams.some(t => t.abbr === a) ? a : teams[i].abbr);
       if (VS.teams[0] === VS.teams[1]) VS.teams[1] = teams.find(t => t.abbr !== VS.teams[0]).abbr;
-      const boss = NET.role !== 'guest';   // the host (or the one phone) sets the season and the rules
+      const boss = NET.role !== 'guest' && NET.role !== 'watch';   // the host (or the one phone) sets the season and the rules
       const dis = c => (c ? '' : ' disabled');
       const grid = i => `<div class="ch-teams">${teams.map(t => `<button type="button" class="ch-team${VS.teams[i] === t.abbr ? ' on' : ''}" data-side="${i}" data-team="${esc(t.abbr)}"${VS.teams[1 - i] === t.abbr || !canAct(i) ? ' disabled' : ''} style="--c1:${esc(t.colors[0])}">${logo(t, 30)}<span>${esc(t.name)}</span></button>`).join('')}</div>`;
-      if (me() !== null && UI.profile.name() && VS.names[me()] !== UI.profile.name()) { VS.names[me()] = UI.profile.name(); if (NET.role === 'guest') send({ t: 'hello', name: VS.names[me()] }); else { uniqNames(); push(); } }   // online, your name is your account
+      if (me() !== null && me() >= 0 && UI.profile.name() && VS.names[me()] !== UI.profile.name()) { VS.names[me()] = UI.profile.name(); if (NET.role === 'guest') send({ t: 'hello', name: VS.names[me()] }); else { uniqNames(); push(); } }   // online, your name is your account
       const ready = !online() || linked();
       app.innerHTML = `
         <section class="ch-hero"><div class="ch-hero-k">DRAFT CHALLENGE | TWO PLAYERS</div><h1 class="ch-hero-t">YOU VS ME.</h1>
@@ -426,7 +456,8 @@
             <div class="ch-seg vs-seg3"><button type="button" class="ch-seg-b${!online() ? ' on' : ''}" data-net="local"><b>SAME PHONE</b><small>Pass it back and forth</small></button>
               <button type="button" class="ch-seg-b${NET.role === 'host' ? ' on' : ''}" data-net="host"><b>HOST ONLINE</b><small>Get a room code for your friend</small></button>
               <button type="button" class="ch-seg-b${NET.role === 'guest' ? ' on' : ''}" data-net="join"><b>JOIN ONLINE</b><small>Enter your friend's code</small></button></div>
-            ${NET.role === 'guest' && !linked() ? `<div class="vs-join"><label class="field"><span>ROOM CODE</span><input id="vsCode" maxlength="5" placeholder="ABCDE" value="${esc(NET.code)}" autocomplete="off" autocapitalize="characters"></label><button type="button" class="btn btn-gold" id="vsJoin">JOIN</button></div>` : ''}
+            ${!online() && savedRoom() ? `<div class="vs-join"><button type="button" class="btn btn-gold" id="vsRejoin">REJOIN ROOM ${esc(savedRoom().code)}${savedRoom().role === 'watch' ? ' (WATCHING)' : ''}</button><button type="button" class="btn btn-small" id="vsForget">FORGET IT</button></div>` : ''}
+            ${NET.role === 'guest' && !linked() ? `<div class="vs-join"><label class="field"><span>ROOM CODE</span><input id="vsCode" maxlength="5" placeholder="ABCDE" value="${esc(NET.code)}" autocomplete="off" autocapitalize="characters"></label><button type="button" class="btn btn-gold" id="vsJoin">JOIN</button><button type="button" class="btn" id="vsWatchBtn">WATCH INSTEAD</button></div>` : ''}
           </div>
           <div class="ch-step"><div class="ch-step-k">2 | THE SEASON</div><div class="row-btns vs-seas-all"><button type="button" class="btn btn-small${!VS.skip.length ? ' on' : ''}" data-seas="all"${dis(boss)}>ALL</button><button type="button" class="btn btn-small" data-seas="none"${dis(boss)}>CLEAR</button>${DECADES().length > 1 ? DECADES().map(d => { const ys = ALL_YEARS.filter(y => decOf(y) === d), n = ys.filter(y => VS.skip.indexOf(y) < 0).length; return `<button type="button" class="btn btn-small${n === ys.length ? ' on' : n ? ' part' : ''}" data-dec="${d}"${dis(boss)}>${d}s</button>`; }).join('') : ''}<span class="muted">${chosen().length} of ${ALL_YEARS.length} on</span></div>
             <div class="vs-seas">${C.SEASONS.map(s => `<button type="button" class="ch-chip${VS.skip.indexOf(s.year) < 0 ? ' on' : ''}" data-yr="${s.year}"${dis(boss)}>${esc(s.label)}</button>`).join('')}</div>
@@ -440,18 +471,21 @@
                 <small class="muted">${VS.opts.cap ? 'Off with a salary cap: the prices give the ratings away.' : VS.opts.blind ? 'No ratings and no fit grades until the series is over: pick on what you know.' : 'Ratings and fit grades show while you draft.'}</small></div>
               ${chosen().length === 1 ? '' : `<div><span class="ts-start-k">SAME PLAYER TWICE</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.dupes ? ' on' : ''}" data-dupes="0"${dis(boss)}>NO DUPLICATES</button><button type="button" class="ch-chip${VS.opts.dupes ? ' on' : ''}" data-dupes="1"${dis(boss)}>DUPLICATES ON</button></div>
                 <small class="muted">${VS.opts.dupes ? 'The same player can be drafted from different seasons, so you can stack every Giannis. Only that exact season is gone once taken.' : 'A player is gone for good once taken, whatever the season.'}</small></div>`}
-              <div><span class="ts-start-k">DRAFT STYLE</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.board ? ' on' : ''}" data-board="0"${dis(boss)}>THE WHEEL</button><button type="button" class="ch-chip${VS.opts.board ? ' on' : ''}" data-board="1"${dis(boss)}>OPEN BOARD</button></div>
-                <small class="muted">${VS.opts.board ? 'No wheel: take turns picking anyone left from the whole board. Drafted players come off it.' : 'Every pick comes from the team the wheel lands on.'}</small></div>
+              <div><span class="ts-start-k">DRAFT STYLE</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.board && !VS.opts.auction ? ' on' : ''}" data-board="0"${dis(boss)}>THE WHEEL</button><button type="button" class="ch-chip${VS.opts.board && !VS.opts.auction ? ' on' : ''}" data-board="1"${dis(boss)}>OPEN BOARD</button><button type="button" class="ch-chip${VS.opts.auction ? ' on' : ''}" data-board="2"${dis(boss)}>AUCTION</button></div>
+                <small class="muted">${VS.opts.auction ? 'A hidden pool of players goes up one at a time. Start at the opening price and take turns raising, or pass and let the other side have him. Everyone has the same money.' : VS.opts.board ? 'No wheel: take turns picking anyone left from the whole board. Drafted players come off it.' : 'Every pick comes from the team the wheel lands on.'}</small></div>
+              ${VS.opts.auction ? aucSetup(boss) : `<div><span class="ts-start-k">BANS</span><div class="ch-chips">${[[0, 'NONE'], [1, '1 EACH'], [2, '2 EACH']].map(([v, l]) => `<button type="button" class="ch-chip${(VS.opts.bans || 0) === v ? ' on' : ''}" data-bans="${v}"${dis(boss)}>${l}</button>`).join('')}</div>
+                <small class="muted">${VS.opts.bans ? 'Before the draft you take turns banning players. A banned player is off the wheel and the board for both of you.' : 'Nobody is banned.'}</small></div>`}
               <div><span class="ts-start-k">BENCH</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.bench ? ' on' : ''}" data-bench="0"${dis(boss)}>JUST THE FIVE</button><button type="button" class="ch-chip${VS.opts.bench ? ' on' : ''}" data-bench="3"${dis(boss)}>8-MAN: +3 BENCH</button></div>
                 <small class="muted">${VS.opts.bench ? 'Everyone drafts eight. The first five start, the last three come off the bench (with a salary cap the cap grows to cover all eight).' : 'Five players each, all 48 minutes.'}</small></div>
-              <div><span class="ts-start-k">SALARY CAP</span><div class="ch-chips">${UI.challengeCap.CAPS.map(v => `<button type="button" class="ch-chip${(VS.opts.cap || 0) === v ? ' on' : ''}" data-cap="${v}"${dis(boss)}>${v ? '$' + v + 'M' : 'OFF'}</button>`).join('')}</div>
-                <small class="muted">${VS.opts.cap ? 'Every player has a price from his rating (a 99 is $45M, the minimum $1M). Both rosters must fit under $' + C.capFor(VS.opts.cap, VS.opts.bench) + 'M.' : 'No cap: take anyone.'}</small></div></div></div>
+              ${VS.opts.auction ? '' : `<div><span class="ts-start-k">SALARY CAP</span><div class="ch-chips">${UI.challengeCap.CAPS.map(v => `<button type="button" class="ch-chip${(VS.opts.cap || 0) === v ? ' on' : ''}" data-cap="${v}"${dis(boss)}>${v ? '$' + v + 'M' : 'OFF'}</button>`).join('')}</div>
+                <small class="muted">${VS.opts.cap ? 'Every player has a price from his rating (a 99 is $45M, the minimum $1M). Both rosters must fit under $' + C.capFor(VS.opts.cap, VS.opts.bench) + 'M.' : 'No cap: take anyone.'}</small></div></div>`}</div>
           ${[0, 1].map(i => `<div class="ch-step"><div class="ch-step-k">${i + 4} | PLAYER ${i + 1}${me() === i ? ' (YOU)' : ''}</div>
             <label class="field"><span>NAME</span><input data-name="${i}" name="p${i}-${Date.now()}" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="20" placeholder="Player ${i + 1}" value="${esc(VS.names[i] || '')}"${online() ? ' readonly' : dis(canAct(i))}></label>
             <label class="field"><span>TEAM NAME</span><input data-tname="${i}" name="t${i}-${Date.now()}" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="24" placeholder="${esc(tName(tOf(teams, VS.teams[i])))}" value="${esc(VS.tnames[i] || '')}"${dis(canAct(i))}></label>${grid(i)}</div>`).join('')}
           <div class="ch-go"><button type="button" class="btn btn-small" id="vsResetNames">RESET NAMES</button></div>
           ${rivalBox(rivalry(), true)}
-          <div class="ch-go">${boss ? `<button type="button" class="btn btn-gold btn-big" id="vsStart"${ready ? '' : ' disabled'}>${ready ? 'START THE DRAFT' : 'WAITING FOR PLAYER 2'}</button>` : '<p class="muted">Your friend starts the draft when you are both set.</p>'}
+          ${online() && linked() ? `<div class="ch-step"><div class="ch-step-k">READY CHECK</div><div class="ch-chips">${[0, 1].map(i => `<button type="button" class="ch-chip${VS.ready && VS.ready[i] ? ' on' : ''}" data-ready="${i}"${canAct(i) ? '' : ' disabled'}>${esc(who(i).toUpperCase())}: ${VS.ready && VS.ready[i] ? 'READY' : canAct(i) ? 'TAP WHEN READY' : 'NOT READY'}</button>`).join('')}</div><small class="muted">The host can start once you are both ready.</small></div>` : ''}
+          <div class="ch-go">${boss ? `<button type="button" class="btn btn-gold btn-big" id="vsStart"${ready && (!online() || (VS.ready && VS.ready[0] && VS.ready[1])) ? '' : ' disabled'}>${!ready ? 'WAITING FOR PLAYER 2' : online() && !(VS.ready && VS.ready[0] && VS.ready[1]) ? 'WAITING FOR BOTH TO BE READY' : 'START THE DRAFT'}</button>` : '<p class="muted">Your friend starts the draft when you are both set.</p>'}
             ${VS.cfg ? '<button type="button" class="btn" id="vsBack">BACK TO OUR DRAFT</button>' : ''}<a class="btn" href="#/challenge">ONE PLAYER</a></div>
         </div>`;
       UI.centerChips(app);
@@ -466,6 +500,9 @@
         else if (v === 'join' && NET.role !== 'guest') { hangUp(); Object.assign(NET, { role: 'guest', code: '', status: 'code', err: '' }); }
         route();
       }));
+      const wb = UI.$('#vsWatchBtn', app); if (wb) wb.addEventListener('click', () => { const v = UI.$('#vsCode', app).value; if (v.trim().length >= 4) watchRoom(v); });
+      const rj = UI.$('#vsRejoin', app); if (rj) rj.addEventListener('click', () => { const r = savedRoom(); if (!r) return; if (r.role !== 'watch' && !UI.profile.canPlay()) { UI.toast('Pick a guest name or sign in first.', 'error'); return; } connectRoom(r.role, r.code, r.role === 'host' ? { side: r.side, keep: true } : null); });
+      const fg = UI.$('#vsForget', app); if (fg) fg.addEventListener('click', () => { forgetRoom(); redraw(); });
       const jb = UI.$('#vsJoin', app); if (jb) jb.addEventListener('click', () => { const v = UI.$('#vsCode', app).value; if (v.trim().length >= 4) join(v); });
       const setYear = () => { const c = chosen(); VS.year = c.length === 1 ? c[0] : 0; };
       app.querySelectorAll('[data-yr]').forEach(b => b.addEventListener('click', () => { const y = +b.dataset.yr, i = VS.skip.indexOf(y); if (!VS.skip.length) VS.skip = ALL_YEARS.filter(x => x !== y); else if (i >= 0) VS.skip.splice(i, 1); else VS.skip.push(y); setYear(); redraw(); }));
@@ -479,7 +516,10 @@
       app.querySelectorAll('[data-era]').forEach(b => b.addEventListener('click', () => { VS.opts.era = +b.dataset.era; redraw(); }));
       app.querySelectorAll('[data-cap]').forEach(b => b.addEventListener('click', () => { VS.opts.cap = +b.dataset.cap; if (VS.opts.cap) VS.opts.blind = false; redraw(); }));
       app.querySelectorAll('[data-dupes]').forEach(b => b.addEventListener('click', () => { VS.opts.dupes = +b.dataset.dupes; redraw(); }));
-      app.querySelectorAll('[data-board]').forEach(b => b.addEventListener('click', () => { VS.opts.board = +b.dataset.board; redraw(); }));
+      app.querySelectorAll('[data-board]').forEach(b => b.addEventListener('click', () => { const v = +b.dataset.board; VS.opts.board = v === 1 ? 1 : 0; VS.opts.auction = v === 2 ? 1 : 0; if (v === 2) VS.opts.cap = 0; redraw(); }));
+      app.querySelectorAll('[data-bans]').forEach(b => b.addEventListener('click', () => { VS.opts.bans = +b.dataset.bans; redraw(); }));
+      app.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => { const [k, v] = b.dataset.a.split(':'); VS.opts[k] = k === 'aQ' ? v : +v; redraw(); }));
+      app.querySelectorAll('[data-ready]').forEach(b => b.addEventListener('click', () => { const i = +b.dataset.ready; if (!canAct(i)) return; VS.ready = (VS.ready || [false, false]).slice(); VS.ready[i] = !VS.ready[i]; redraw(); }));
       app.querySelectorAll('[data-bench]').forEach(b => b.addEventListener('click', () => { VS.opts.bench = +b.dataset.bench; redraw(); }));
       app.querySelectorAll('[data-blind]').forEach(b => b.addEventListener('click', () => { VS.opts.blind = b.dataset.blind === '1'; redraw(); }));
       app.querySelectorAll('[data-timer]').forEach(b => b.addEventListener('click', () => { VS.opts.timer = +b.dataset.timer; redraw(); }));
@@ -489,7 +529,7 @@
       UI.profile.wire(app, () => {
         if (!UI.profile.canPlay() && NET.role) { hangUp(); route(); return; }
         if (UI.profile.canPlay() && PEND) { const c = PEND; PEND = null; join(c); route(); return; }
-        const i = me(); if (i !== null) VS.names[i] = UI.profile.name();
+        const i = me(); if (i !== null && i >= 0) VS.names[i] = UI.profile.name();
         if (NET.role === 'guest') send({ t: 'hello', name: VS.names[i] || '' }); else { uniqNames(); push(); }
         redraw();
       });
@@ -503,10 +543,17 @@
         const ch = chosen();
         if (!ch.length) { UI.toast('Switch on at least one season', 'error'); return; }
         VS.year = ch.length === 1 ? ch[0] : 0;
-        VS.cfg = { mode: 'versus', year: VS.year, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null, bestOf: VS.opts.bestOf, blind: !VS.opts.cap && !!VS.opts.blind, cap: C.capFor(+VS.opts.cap || 0, VS.opts.bench), bench: +VS.opts.bench || 0, board: VS.opts.board ? 1 : 0, dupes: ch.length > 1 && VS.opts.dupes ? 1 : 0, timer: +VS.opts.timer || 0, era: +VS.opts.era || 2013, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
+        VS.cfg = { mode: 'versus', year: VS.year, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null, bestOf: VS.opts.bestOf, blind: !VS.opts.cap && !!VS.opts.blind, cap: VS.opts.auction ? 0 : C.capFor(+VS.opts.cap || 0, VS.opts.bench), bench: +VS.opts.bench || 0, board: VS.opts.board && !VS.opts.auction ? 1 : 0, bansN: VS.opts.auction ? 0 : +VS.opts.bans || 0, bans: [], dupes: ch.length > 1 && VS.opts.dupes ? 1 : 0, timer: VS.opts.auction ? 0 : +VS.opts.timer || 0, era: +VS.opts.era || 2013, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
           sides: [0, 1].map(i => ({ team: VS.teams[i], name: (VS.tnames[i] || '').trim() || (VS.names[i] ? VS.names[i] + "'s " + tOf(teams, VS.teams[i]).name : ''), picks: [] })) };
-        VS.spin = null; VS.spun = []; VS.respins = [1, 1]; VS.shown = 0; VS.pos = ''; VS.q = ''; VS.season = ''; VS.sort = '';
-        VS.turn = turnFor(VS.cfg, 0, 'spin');
+        VS.spin = null; VS.spun = []; VS.respins = [1, 1]; VS.shown = 0; VS.pos = ''; VS.q = ''; VS.season = ''; VS.sort = ''; VS.sw = null; VS.auc = null; VS.ready = [false, false];
+        if (VS.opts.auction) {
+          const per = C.vsPer(VS.cfg), o = VS.opts;
+          if (o.aBudget < per * o.aStart) { UI.toast('$' + o.aBudget + ' is not enough to fill ' + per + ' spots at $' + o.aStart + ' each.', 'error'); VS.cfg = null; return; }
+          VS.cfg.auction = { budget: o.aBudget, start: o.aStart, raise: o.aRaise, pool: Math.max(o.aPool, 2 * per), quality: o.aQ, show: o.aShow ? 1 : 0 };
+          const B0 = board(VS.cfg);
+          VS.auc = C.auctionStart(VS.cfg, B0.players.concat(B0.extra || []));
+        }
+        VS.turn = VS.opts.auction ? null : turnFor(VS.cfg, 0, 'spin');
         go('draft');
       });
     });
@@ -553,7 +600,7 @@
     return `<li class="ch-pl">${UI.faceImg(p, (t.colors || ['#444'])[0])}<span class="ch-pl-b"><b>${esc(p.name)}</b><small>${logo(t, 18)} ${esc(C.posLabel(p))}${UI.heightStr && UI.heightStr(p) ? ' | ' + UI.heightStr(p) : ''}${B.era && p.season ? ' | ' + short(p.season) : p.age ? ' | ' + p.age : ''}</small>${blind || !UI.gradesHtml ? '' : UI.gradesHtml(p)}</span>${B.cap ? UI.challengeCap.priceTag(p) : ''}${ovrTag(p, blind)}${btn}</li>`;
   }
   function spinFor(cfg, B, taken, avoid) {
-    const tk = B.takenSet(taken), groups = {};
+    const tk = B.takenSet(taken.concat(cfg.bans || [])), groups = {};
     const PT = window.CHALLENGE_POOL && window.CHALLENGE_POOL.teams;
     // a season the pool does not cover (the newest) spins on the teams of the one before it
     if (B.era && PT) (cfg.seasons || Object.keys(PT).map(Number)).forEach(y => (PT[y] || PT[y - 1] || []).forEach(t => { groups[y + ':' + t.abbr] = { abbr: t.abbr, year: +y, key: y + ':' + t.abbr }; }));
@@ -574,6 +621,68 @@
   function turnFor(cfg, pick, phase) { if (cfg && cfg.board) phase = 'pick'; return cfg && cfg.timer ? { pick, phase, until: Date.now() + cfg.timer * 1000 + (phase === 'pick' && !cfg.board ? SPIN_MS : 0) } : null; }
   let TICK = null;
   function stopTick() { if (TICK) { clearInterval(TICK); TICK = null; } }
+  // the players banned before the draft
+  function bansStrip(cfg, byId) {
+    const b = cfg.bans || [];
+    if (!b.length) return '';
+    return `<div class="vs-bans"><small>BANNED</small>${b.map((id, i) => `<span class="vs-ban">${esc(byId[id] ? byId[id].name : id)}<i>${esc(who(i % 2))}</i></span>`).join('')}</div>`;
+  }
+  // before the draft: take turns banning players, who are then off the wheel and the board
+  function banPage(app, cfg, B) {
+    const n = cfg.bansN, bans = cfg.bans || [], side = bans.length % 2, mine = canAct(side), blind = !!cfg.blind;
+    const q = (VS.bq || '').trim().toLowerCase();
+    const list = B.players.concat(B.extra || []).filter(p => bans.indexOf(p.id) < 0 && (!q || p.name.toLowerCase().indexOf(q) >= 0));
+    if (blind) list.sort((a, b) => a.name.localeCompare(b.name)); else list.sort((a, b) => b.ovr - a.ovr);
+    app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(lblC(cfg))} | TWO PLAYERS | BAN ROUND</div><div class="ch-top-t">${esc(who(side).toUpperCase())} BANS A PLAYER</div></div><button type="button" class="btn btn-small" id="vsSetup">SETUP</button></div>
+      ${netBar()}
+      <div class="vs-clock">BAN ${bans.length + 1} OF ${2 * n}: <b>${esc(who(side))}</b> <span class="muted">${mine ? 'Pick a player nobody gets.' : 'is choosing.'}</span></div>
+      ${bansStrip(cfg, B.byId)}
+      <label class="field"><span>SEARCH</span><input id="vsBanQ" value="${esc(VS.bq || '')}" placeholder="Name" autocomplete="off"></label>
+      <ul class="ch-list" id="vsBanList">${list.slice(0, 40).map(p => playerRow(p, B, mine ? `<button type="button" class="btn btn-small btn-gold" data-ban="${esc(p.id)}">BAN</button>` : '', blind)).join('')}</ul>
+      <p class="muted">${list.length > 40 ? 'Showing 40 of ' + list.length + '. Search to find anyone.' : list.length + ' players.'}</p>${reactBar()}`;
+    bindNet(app); bindReact(app);
+    UI.$('#vsSetup', app).addEventListener('click', () => go('setup'));
+    const qi = UI.$('#vsBanQ', app);
+    qi.addEventListener('input', () => { VS.bq = qi.value; const pos = qi.selectionStart; draft(app); const n2 = UI.$('#vsBanQ', app); if (n2) { n2.focus(); n2.setSelectionRange(pos, pos); } });
+    app.querySelectorAll('[data-ban]').forEach(b => b.addEventListener('click', () => {
+      if (!canAct((VS.cfg.bans || []).length % 2)) return;
+      VS.cfg.bans = (VS.cfg.bans || []).concat([b.dataset.ban]); VS.bq = '';
+      if (window.SFX) window.SFX.play('chime');
+      push(); draft(app); window.scrollTo(0, 0);
+    }));
+  }
+  // the auction: the player who is up, the standing bid, your money
+  function auctionPage(app, cfg, B) {
+    const st = VS.auc, A = st.o, per = st.per, byId = B.byId, blind = !!cfg.blind;
+    const cur = byId[st.ids[st.i]], money = n => '$' + n, t = p => B.teamFor(p.team, p.season);
+    const left = st.ids.length - st.i - 1;
+    const mineTurn = canAct(st.turn), canRaise = C.aucCanRaise(st, st.turn);
+    const sideBox = i => {
+      const won = st.won[i].map((id, k) => ({ p: byId[id], price: (st.log.filter(x => x.id === id)[0] || {}).price }));
+      return `<div class="vs-side${st.turn === i ? ' on' : ''}"><div class="vs-side-h"><div><small>${esc(who(i))}${me() === i ? ' (YOU)' : ''}</small><b>${money(A.budget - st.spent[i])} left</b><small class="vs-pay">${st.won[i].length} of ${per} spots</small></div></div>
+        <ol class="vs-auc-won">${won.map(w => `<li>${esc(w.p ? w.p.name : '?')} <small class="muted">${money(w.price || 0)}</small></li>`).join('') || '<li class="muted">Nobody yet</li>'}</ol></div>`;
+    };
+    const tm = t(cur);
+    const raiseTo = st.price + A.raise;
+    const act = mineTurn
+      ? `<div class="vs-auc-act"><button type="button" class="btn btn-gold btn-big" id="aucRaise"${canRaise ? '' : ' disabled'}>RAISE TO ${money(raiseTo)}</button><button type="button" class="btn btn-big" id="aucPass">PASS: ${esc(who(st.holder).toUpperCase())} GETS HIM FOR ${money(st.price)}</button></div>`
+      : `<p class="muted">${esc(who(st.turn))} is deciding. ${esc(who(st.holder))} holds the bid at ${money(st.price)}.</p>`;
+    const pool = A.show ? `<div class="vs-auc-pool"><small>STILL TO COME (${left})</small><span>${st.ids.slice(st.i + 1).map(id => esc(byId[id] ? byId[id].name : id)).join(', ') || 'nobody'}</span></div>` : `<p class="muted">${left} more in the hidden pool.</p>`;
+    const sold = st.log.slice().reverse().map(x => `<li><b>${esc(byId[x.id] ? byId[x.id].name : x.id)}</b> to ${esc(who(x.side))} <small>${money(x.price)}</small></li>`).join('');
+    app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(lblC(cfg))} | TWO PLAYERS | AUCTION | ${money(A.budget)} EACH</div><div class="ch-top-t">PLAYER ${st.i + 1} OF ${st.ids.length}</div></div><button type="button" class="btn btn-small" id="vsSetup">SETUP</button></div>
+      ${netBar()}
+      <div class="vs-sides vs-compact">${sideBox(0)}${sideBox(1)}</div>
+      <section class="ch-landed vs-auc-cur" style="--c1:${esc((tm.colors || ['#444'])[0])}">${UI.faceImg(cur, (tm.colors || ['#444'])[0])}<div><div class="ch-wheel-k">UP FOR BID</div><div class="ch-landed-t">${esc(cur.name)}</div>
+        <small class="muted">${esc(C.posLabel(cur))}${B.era && cur.season ? ' | ' + esc(short(cur.season)) : ''}${blind ? '' : ' | ' + esc(cur.ovr) + ' OVR'}</small></div>
+        <div class="vs-auc-bid"><small>${esc(who(st.holder).toUpperCase())} HOLDS</small><b>${money(st.price)}</b></div></section>
+      ${act}${pool}
+      ${sold ? `<div class="vs-auc-log"><small>SOLD</small><ol>${sold}</ol></div>` : ''}${reactBar()}`;
+    bindNet(app); bindReact(app);
+    UI.$('#vsSetup', app).addEventListener('click', () => go('setup'));
+    const done = () => { cfg.sides[0].picks = st.won[0].slice(); cfg.sides[1].picks = st.won[1].slice(); if (window.SFX) window.SFX.play('chime'); push(); draft(app); window.scrollTo(0, 0); };
+    const rs = UI.$('#aucRaise', app); if (rs) rs.addEventListener('click', () => { if (C.auctionAct(st, st.turn, 'raise')) done(); });
+    const ps = UI.$('#aucPass', app); if (ps) ps.addEventListener('click', () => { if (C.auctionAct(st, st.turn, 'pass')) done(); });
+  }
   function draft(app) {
     if (UI.challengeWheel.busy && UI.challengeWheel.busy()) return;   // a spin is running: its landing redraws the page
     const cfg = VS.cfg;
@@ -581,7 +690,9 @@
     loadThen(app, cfg.year, () => {
       const B = board(cfg), teams = B.teams, byId = B.byId;
       const blind = !!cfg.blind;
-      const taken = cfg.sides[0].picks.concat(cfg.sides[1].picks), on = C.vsOnClock(cfg);
+      const taken = cfg.sides[0].picks.concat(cfg.sides[1].picks), on = C.vsOnClock(cfg), gone = taken.concat(cfg.bans || []);   // gone: drafted or banned
+      if (cfg.auction && VS.auc && !VS.auc.done) return auctionPage(app, cfg, B);
+      if ((cfg.bansN || 0) > 0 && (cfg.bans || []).length < 2 * cfg.bansN) return banPage(app, cfg, B);
       const pay = sd => (cfg.cap ? ` <small class="vs-pay">${UI.challengeCap.money(C.capState(cfg.cap, sd.picks.map(id => byId[id]).filter(Boolean)).spent)} of $${cfg.cap}M</small>` : '');
       const fives = cfg.sides.map((sd, i) => {
         const t = tOf(teams, sd.team), mine = sd.picks.map(id => byId[id]).filter(Boolean);
@@ -622,7 +733,7 @@
         C.load(spin.year).then(() => { if (VS.spin && VS.spin.n === spin.n) draft(app); }).catch(() => UI.toast('That roster did not load. Try a re-spin.', 'error'));
       } else {
         const t = B.teamFor(spin.abbr, spin.year);
-        const ros = UI.challengeAlpha(rosterOf(B, spin.key, taken)), five = cfg.sides[on].picks.map(id => byId[id]).filter(Boolean);
+        const ros = UI.challengeAlpha(rosterOf(B, spin.key, gone)), five = cfg.sides[on].picks.map(id => byId[id]).filter(Boolean);
         const none = cfg.cap && !ros.some(p => C.capFits(cfg.cap, five, p));
         body = `<div class="vs-clock">ON THE CLOCK: <b>${esc(who(on))}</b> <span class="muted">(pick ${taken.length + 1} of ${2 * C.vsPer(cfg)})</span></div>
           <section class="ch-landed" style="--c1:${esc(t.colors[0])}">${logo(t, 64)}<div><div class="ch-wheel-k">THE WHEEL SAYS</div><div class="ch-landed-t">${B.era ? esc(lbl(spin.year)) + ' ' : ''}${esc(tName(t))}</div></div>
@@ -638,11 +749,11 @@
           <button type="button" class="btn btn-small" id="vsSetup">SETUP</button></div>
         ${netBar()}
         <div class="vs-sides vs-compact">${fives}</div>
-        ${clock}${body}${reactBar()}`;
+        ${bansStrip(cfg, byId)}${clock}${body}${reactBar()}`;
       bindNet(app); bindReact(app);
       // the open board: the players still left, filtered; a pick from the list
       if (cfg.board && on >= 0) {
-        const tkn = B.takenSet(taken), five = cfg.sides[on].picks.map(id => byId[id]).filter(Boolean);
+        const tkn = B.takenSet(gone), five = cfg.sides[on].picks.map(id => byId[id]).filter(Boolean);
         const fill = () => {
           const q = (VS.q || '').trim().toLowerCase();
           if (B.era) { const nb = board(cfg); if (nb.players.length !== B.players.length) { B.players = nb.players; Object.assign(B.byId, nb.byId); } }   // rosters that finished loading
@@ -702,7 +813,7 @@
           if (actor === null || left > -actor) return;
           stopTick();
           if (cfg.board) {
-            const tkn = B.takenSet(taken), five = cfg.sides[on].picks.map(id => byId[id]).filter(Boolean);
+            const tkn = B.takenSet(gone), five = cfg.sides[on].picks.map(id => byId[id]).filter(Boolean);
             const rp = B.players.filter(p => !tkn.has(B.base(p)) && C.capFits(cfg.cap, five, p)).sort((a, b) => b.ovr - a.ovr)[0];
             if (rp) { VS.cfg.sides[on].picks.push(rp.id); VS.turn = turnFor(cfg, taken.length + 1, 'spin'); push(); UI.toast('Time: ' + who(on) + ' gets ' + rp.name + '.'); draft(app); }
             return;
@@ -710,7 +821,7 @@
           if (turn.phase === 'spin' && !VS.spin) { const s2 = spinFor(cfg, B, taken, null); if (s2) { VS.spin = s2; VS.spun = VS.spun.concat([s2.key]); VS.turn = turnFor(cfg, taken.length, 'pick'); push(); draft(app); } }
           else if (turn.phase === 'pick' && VS.spin && VS.spin.pick === taken.length) {
             const five = cfg.sides[on].picks.map(id => byId[id]).filter(Boolean);
-            const pool = rosterOf(B, VS.spin.key, taken).filter(p => C.capFits(cfg.cap, five, p));
+            const pool = rosterOf(B, VS.spin.key, gone).filter(p => C.capFits(cfg.cap, five, p));
             if (!pool[0]) { VS.spin = null; VS.turn = turnFor(cfg, taken.length, 'spin'); push(); draft(app); return; }
             const rp = pool[Math.floor(Math.random() * pool.length)];
             if (rp) { VS.cfg.sides[on].picks.push(rp.id); VS.spin = null; VS.turn = turnFor(cfg, taken.length + 1, 'spin'); push(); UI.toast('Time: ' + who(on) + ' gets ' + rp.name + '.'); draft(app); }
@@ -749,7 +860,7 @@
         if (i < 0 || !canAct(i)) return;
         const p = byId[id];
         if (VS.cfg.cap && p && !C.capFits(VS.cfg.cap, VS.cfg.sides[i].picks.map(x => byId[x]).filter(Boolean), p)) { UI.toast('That contract does not fit under the cap.', 'error'); return; }
-        if (B.takenSet(taken).has(p ? B.base(p) : id)) { UI.toast('Already drafted.', 'error'); return; }
+        if (B.takenSet(gone).has(p ? B.base(p) : id)) { UI.toast('Already drafted.', 'error'); return; }
         VS.cfg.sides[i].picks.push(id);
         if (window.SFX) window.SFX.play('chime'); VS.spin = null; VS.turn = turnFor(VS.cfg, taken.length + 1, 'spin'); push();
         draft(app); window.scrollTo(0, 0);
@@ -848,7 +959,7 @@
           <div class="vs-tbl-w"><table class="vs-tbl"><thead><tr><th class="l">PLAYER</th><th>SPOT</th><th>OVR</th><th>MPG</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>3PM</th><th>FG%</th><th>3P%</th><th>FT%</th></tr></thead><tbody>${(() => { const row = p => { const l = r.lines[p.id] || {}; return `<tr><td class="l">${esc(p.name)}${p.season && !cfg.year ? ' <small class="muted">' + esc(short(p.season)) + '</small>' : ''}</td><td>${esc(p.slot || '')}</td><td>${esc(p.ovr)}</td><td>${f1(l.mpg)}</td><td>${f1(l.pts)}</td><td>${f1(l.reb)}</td><td>${f1(l.ast)}</td><td>${f1(l.stl)}</td><td>${f1(l.blk)}</td><td>${f1(l.tov)}</td><td>${f1(l.tpm)}</td><td>${f1(l.fgp)}</td><td>${f1(l.tpp)}</td><td>${f1(l.ftp)}</td></tr>`; }; return sd.five.slice().sort((a, b) => C.SLOTS.indexOf(a.slot) - C.SLOTS.indexOf(b.slot)).map(row).join('') + (sd.bench && sd.bench.length ? '<tr class="vs-bench-row"><td class="l" colspan="14">BENCH</td></tr>' + sd.bench.map(row).join('') : ''); })()}</tbody></table></div></div>`).join('')}</div></section>` : '';
       const next = shown + 1;
       const acts = done
-        ? `<button type="button" class="btn btn-share" id="vsShare">${UI.shareIcon || ''}SEND THIS TO YOUR FRIENDS</button><button type="button" class="btn sl-copy" id="vsCopy">COPY LINK</button><button type="button" class="btn btn-gold" id="vsAgain">RUN IT BACK</button><button type="button" class="btn" id="vsNew">NEW MATCHUP</button>`
+        ? `<button type="button" class="btn btn-share" id="vsShare">${UI.shareIcon || ''}SEND THIS TO YOUR FRIENDS</button><button type="button" class="btn sl-copy" id="vsCopy">COPY LINK</button><button type="button" class="btn" id="vsNew">NEW MATCHUP</button>`
         : WATCH ? `<button type="button" class="btn btn-gold" id="vsFinal">SKIP TO THE FINAL</button>`
         : `<button type="button" class="btn btn-gold btn-big" id="vsWatch">WATCH GAME ${next}</button><button type="button" class="btn" id="vsNext">SIM GAME ${next}</button><button type="button" class="btn" id="vsAll">SIM THE REST</button>`;
       app.innerHTML = `${head}${netBar()}${score}
@@ -884,7 +995,6 @@
         if (!courtCtl) el.innerHTML = '<p class="muted">The court view did not load.</p>';
       }));
       app.querySelectorAll('[data-nb]').forEach(b => b.addEventListener('click', () => { const v = +b.dataset.nb; if ((VS.cfg.noBench ? 1 : 0) === v) return; VS.cfg.noBench = v; VS.shown = 0; WATCH = 0; VS.watch = null; dropCourt(); push(); series(app); }));
-      if ($('#vsAgain')) $('#vsAgain').addEventListener('click', () => { VS.cfg.seed = Math.floor(Math.random() * 2147483646) + 1; VS.shown = 0; WATCH = 0; VS.watch = null; push(); series(app); window.scrollTo(0, 0); });
       if ($('#vsShare')) $('#vsShare').addEventListener('click', () => {
         const wi = idx(r.winner), li = 1 - wi, ws = r.wins[r.winner] + '-' + r.wins[S[li].abbr];
         const spec = { kicker: 'VERSUS | BEST OF ' + r.bestOf + ' | ' + lblC(cfg), title: who(wi).toUpperCase() + ' WINS', big: ws, gold: true,
@@ -929,6 +1039,12 @@
     }
     if (part[0] !== 'vs') { dropCourt(); stopTick(); return base.apply(this, arguments); }
     APP = app;
+    if (part[1] === 'watch' && part[2]) {   // a spectator's link: no name needed
+      VS.page = 'setup';
+      if (!(NET.role === 'watch' && NET.code === part[2].toUpperCase())) watchRoom(part[2]);
+      if (location.hash !== '#/challenge/vs') { history.replaceState(null, '', '#/challenge/vs'); }
+      return setup(app);
+    }
     if (part[1] === 'join' && part[2]) {
       VS.page = 'setup';
       if (!UI.profile.canPlay()) PEND = part[2].toUpperCase();
