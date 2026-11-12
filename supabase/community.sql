@@ -7,6 +7,7 @@ alter table public.profiles add column if not exists region text;        -- 'US'
 alter table public.profiles add column if not exists fav_era text;       -- null means "the era I play most"
 alter table public.profiles add column if not exists best_lineup jsonb;  -- { names:[...], score, era, at }
 alter table public.profiles add column if not exists best_score numeric;
+alter table public.profiles add column if not exists avatar text;       -- a team abbreviation: the logo shown as the profile picture
 
 -- ---------- series: both players report the result, it only counts when the two reports agree ----------
 create table if not exists public.series_reports (
@@ -262,7 +263,7 @@ begin
       intersect
       select case when requester = me then addressee else requester end from public.friendships where status = 'accepted' and (requester = me or addressee = me));
   end if;
-  return jsonb_build_object('username', prof.username, 'region', prof.region, 'fav_era', prof.fav_era, 'auto_era', auto, 'best_score', prof.best_score, 'best_lineup', prof.best_lineup,
+  return jsonb_build_object('username', prof.username, 'avatar', prof.avatar, 'region', prof.region, 'fav_era', prof.fav_era, 'auto_era', auto, 'best_score', prof.best_score, 'best_lineup', prof.best_lineup,
     'wins', w, 'losses', t - w, 'ratings', rat, 'most', most, 'vs', vs, 'friend', fr, 'self', me = prof.id, 'friends', nf, 'mutual', mut, 'mutual_count', nm);
 end $$;
 grant execute on function public.public_profile(text) to authenticated, anon;

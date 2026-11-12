@@ -34,6 +34,23 @@
     [['AL', 'Alabama'], ['AK', 'Alaska'], ['AZ', 'Arizona'], ['AR', 'Arkansas'], ['CA', 'California'], ['CO', 'Colorado'], ['CT', 'Connecticut'], ['DE', 'Delaware'], ['DC', 'Washington DC'], ['FL', 'Florida'], ['GA', 'Georgia'], ['HI', 'Hawaii'], ['ID', 'Idaho'], ['IL', 'Illinois'], ['IN', 'Indiana'], ['IA', 'Iowa'], ['KS', 'Kansas'], ['KY', 'Kentucky'], ['LA', 'Louisiana'], ['ME', 'Maine'], ['MD', 'Maryland'], ['MA', 'Massachusetts'], ['MI', 'Michigan'], ['MN', 'Minnesota'], ['MS', 'Mississippi'], ['MO', 'Missouri'], ['MT', 'Montana'], ['NE', 'Nebraska'], ['NV', 'Nevada'], ['NH', 'New Hampshire'], ['NJ', 'New Jersey'], ['NM', 'New Mexico'], ['NY', 'New York'], ['NC', 'North Carolina'], ['ND', 'North Dakota'], ['OH', 'Ohio'], ['OK', 'Oklahoma'], ['OR', 'Oregon'], ['PA', 'Pennsylvania'], ['RI', 'Rhode Island'], ['SC', 'South Carolina'], ['SD', 'South Dakota'], ['TN', 'Tennessee'], ['TX', 'Texas'], ['UT', 'Utah'], ['VT', 'Vermont'], ['VA', 'Virginia'], ['WA', 'Washington'], ['WV', 'West Virginia'], ['WI', 'Wisconsin'], ['WY', 'Wyoming']].map(([c, n]) => ['US-' + c, '   ' + n]),
     [['CA', 'Canada'], ['MX', 'Mexico'], ['GB', 'United Kingdom'], ['IE', 'Ireland'], ['FR', 'France'], ['DE', 'Germany'], ['ES', 'Spain'], ['IT', 'Italy'], ['PT', 'Portugal'], ['NL', 'Netherlands'], ['BE', 'Belgium'], ['CH', 'Switzerland'], ['SE', 'Sweden'], ['NO', 'Norway'], ['DK', 'Denmark'], ['FI', 'Finland'], ['PL', 'Poland'], ['GR', 'Greece'], ['TR', 'Turkey'], ['RS', 'Serbia'], ['HR', 'Croatia'], ['SI', 'Slovenia'], ['LT', 'Lithuania'], ['NG', 'Nigeria'], ['GH', 'Ghana'], ['ZA', 'South Africa'], ['EG', 'Egypt'], ['IL', 'Israel'], ['AE', 'United Arab Emirates'], ['IN', 'India'], ['PH', 'Philippines'], ['CN', 'China'], ['JP', 'Japan'], ['KR', 'South Korea'], ['AU', 'Australia'], ['NZ', 'New Zealand'], ['BR', 'Brazil'], ['AR', 'Argentina'], ['DO', 'Dominican Republic'], ['PR', 'Puerto Rico'], ['JM', 'Jamaica'], ['OTHER', 'Somewhere else']]);
   const seasonTag = se => (se ? "'" + String(se - 1).slice(2) + "-'" + String(se).slice(2) : '');
+
+  // ---------- rank tiers: Bronze to Legend, three divisions each up to Diamond (III is the lowest, I the highest). Everyone starts at 1200. ----------
+  const TIER_DEF = [['BRONZE', '#cd7f32', [0, 1100, 1150]], ['SILVER', '#c4ccd6', [1200, 1250, 1300]], ['GOLD', '#f2c230', [1350, 1400, 1450]], ['PLATINUM', '#4fd6c7', [1500, 1550, 1600]], ['DIAMOND', '#5eb8ff', [1650, 1700, 1750]]];
+  const TIER_TOP = [['MASTER', '#c47bff', 1800], ['GRANDMASTER', '#ff5d5d', 1900], ['LEGEND', '#ffb347', 2000]];
+  const ROMAN = ['III', 'II', 'I'];
+  const TIERS = [];
+  TIER_DEF.forEach(t => t[2].forEach((f, i) => TIERS.push({ name: t[0] + ' ' + ROMAN[i], base: t[0], color: t[1], floor: f })));
+  TIER_TOP.forEach(t => TIERS.push({ name: t[0], base: t[0], color: t[1], floor: t[2] }));
+  function tierOf(r) {
+    r = +r || 0;
+    let k = 0; for (let i = 0; i < TIERS.length; i++) if (r >= TIERS[i].floor) k = i;
+    const cur = TIERS[k], nxt = TIERS[k + 1] || null;
+    return Object.assign({}, cur, { idx: k, next: nxt, pct: nxt ? Math.round(100 * (r - cur.floor) / (nxt.floor - cur.floor)) : 100 });
+  }
+  const tierBadge = r => { const t = tierOf(r); return `<span class="tier" style="--tc:${t.color}">${esc(t.name)}</span>`; };
+  // a profile picture is a team logo the player picked, or the first letter of the name
+  const avatarHtml = (abbr, name, size) => abbr ? `<span class="pf-av logo" style="--sz:${size}px">${UI.logo(abbr, size)}</span>` : `<span class="pf-av" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.5)}px">${esc(String(name || '?').slice(0, 1).toUpperCase())}</span>`;
   const regionName = r => { const x = REGIONS.find(y => y[0] === r); return x ? x[1].trim() : (r || ''); };
   const NOT_SET_UP = 'The ranked boards are not switched on yet. The site owner needs to run supabase/community.sql once in the Supabase SQL editor.';
   const failMsg = e => { const m = String((e && e.message) || e); return /does not exist|schema cache|Could not find|relation .* does not exist|PGRST20/i.test(m) ? NOT_SET_UP : m; };
@@ -116,11 +133,14 @@
     };
     const show = now => {
       const b = last.before || { rating: 1200 }, d = now.rating - b.rating, won = d > 0 || (d === 0 && now.wins > (b.wins || 0));
+      const tb = tierOf(b.rating), ta = tierOf(now.rating);
       const rk = now.of ? `#${now.rank} of ${now.of} in ${esc(eraName(last.era))}` : '';
       app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">RANKED | ${esc(eraName(last.era))} | VS ${esc(last.opp || '')}</div><h1 class="ch-hero-t">${last.forfeit === 'win' ? 'WIN BY FORFEIT.' : last.forfeit === 'loss' ? 'YOU FORFEITED.' : won ? 'YOU WON.' : 'YOU LOST.'}</h1></section>
         <section class="rk-elo ${won ? 'up' : 'down'}"><small>RATING</small>
           <div class="rk-elo-n"><span class="rk-elo-from">${b.rating}</span><span class="rk-elo-arrow">${won ? '&#9650;' : '&#9660;'}</span><b id="rkEloNow">${b.rating}</b></div>
           <div class="rk-elo-d">${d > 0 ? '+' : ''}${d}</div>
+          <div class="rk-tier">${tierBadge(now.rating)}${ta.next ? `<div class="rk-bar"><i style="--w:${ta.pct}%"></i></div><small class="muted">${ta.next.floor - now.rating} POINTS TO ${esc(ta.next.name)}</small>` : '<small class="muted">THE TOP RANK</small>'}</div>
+          ${ta.idx !== tb.idx ? `<div class="rk-promo ${ta.idx > tb.idx ? 'up' : 'down'}">${ta.idx > tb.idx ? 'PROMOTED TO ' : 'DROPPED TO '}${esc(ta.name)}</div>` : ''}
           <div class="rk-elo-meta"><span>${now.wins}-${now.losses} ranked this era</span>${rk ? `<span>${rk}</span>` : ''}${b.rank && now.rank !== b.rank ? `<span>${now.rank < b.rank ? 'UP' : 'DOWN'} ${Math.abs(b.rank - now.rank)} PLACE${Math.abs(b.rank - now.rank) > 1 ? 'S' : ''}</span>` : ''}</div></section>${acts}`;
       const el = UI.$('#rkEloNow', app), t0 = Date.now(), from = b.rating, to = now.rating;
       const step = () => { if (!el.isConnected) return; const k = Math.min(1, (Date.now() - t0) / 1400); el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(step); };
@@ -179,9 +199,9 @@
     if (slow) delete CARDS[String(name).toLowerCase()];   // gave up waiting: the retry button asks again
     if (!d) return `<div class="lb-card${mine ? ' me' : ''}"><div class="lb-av">${esc(String(name).slice(0, 1).toUpperCase())}</div><b class="lb-n">${esc(name)}</b><small class="lb-sub">${mine ? 'YOU' : 'OPPONENT'}</small><small class="muted">${slow ? 'COULD NOT LOAD THE STATS.' : 'NO PROFILE NUMBERS YET'}</small>${slow ? '<button type="button" class="btn btn-small" data-lbretry="1">TRY AGAIN</button>' : ''}</div>`;
     const r = (d.ratings || []).find(x => x.era === era), m = d.most && d.most[0];
-    return `<div class="lb-card${mine ? ' me' : ''}"><div class="lb-av">${esc(String(d.username || name).slice(0, 1).toUpperCase())}</div><b class="lb-n">${esc(d.username || name)}</b>
+    return `<div class="lb-card${mine ? ' me' : ''}">${avatarHtml(d.avatar, d.username || name, 56)}<b class="lb-n">${esc(d.username || name)}</b>
       <small class="lb-sub">${mine ? 'YOU' : 'OPPONENT'}${d.region ? ' | ' + esc(regionName(d.region)) : ''}</small>
-      <div class="lb-elo"><small>${esc(eraName(era))} RATING</small><b>${r ? r.rating : 1200}</b><small>${r && r.of ? '#' + r.rank + ' of ' + r.of : 'NOT RANKED YET'}</small></div>
+      <div class="lb-elo"><small>${esc(eraName(era))} RATING</small><b>${r ? r.rating : 1200}</b>${tierBadge(r ? r.rating : 1200)}<small>${r && r.of ? '#' + r.rank + ' of ' + r.of : 'NOT RANKED YET'}</small></div>
       <div class="lb-st"><span><b>${r ? r.wins + '-' + r.losses : '0-0'}</b><small>RANKED</small></span><span><b>${(d.wins || 0) + '-' + (d.losses || 0)}</b><small>ALL SERIES</small></span><span><b>${d.friends || 0}</b><small>FRIENDS</small></span></div>
       ${m ? `<div class="lb-most"><small>MOST USED PLAYER</small><b>${esc(m.name)}</b><small>${esc(seasonTag(m.season))}</small></div>` : ''}
       ${!mine && d.vs ? `<div class="lb-h2h">YOU ${d.vs.me} - ${d.vs.them} THEM</div>` : ''}</div>`;
@@ -225,7 +245,7 @@
   };
 
   UI.userLink = (name, tab) => `<a class="u-link" href="#/u/${encodeURIComponent(name)}"${tab ? ' target="_blank" rel="noopener"' : ''}>${esc(name)}</a>`;   // a name you can click to see that player's profile
-  UI.ranked = { eraOf, lineupScore, report, started, forfeit, concede, noteForfeit, playedBefore, lobbyCard, prefetch, lobbyStart, lobbyStop, ERAS, eraName, regionName, REGIONS };
+  UI.ranked = { tierOf, tierBadge, avatarHtml, eraOf, lineupScore, report, started, forfeit, concede, noteForfeit, playedBefore, lobbyCard, prefetch, lobbyStart, lobbyStop, ERAS, eraName, regionName, REGIONS };
 
   // ---------- helpers for the pages ----------
   const eraOpts = cur => ERAS.map(e => `<option value="${e}"${e === cur ? ' selected' : ''}>${esc(eraName(e))}</option>`).join('');
@@ -237,7 +257,7 @@
     if (r.error) throw r.error;
     return r.data;
   }
-  const signInBox = what => `<div class="rk-note"><b>SIGN IN TO ${what}.</b><span class="muted"> Ranked results, rivalries and your profile live on your account.</span><button type="button" class="btn btn-gold" data-pf="open">SIGN IN OR CREATE ACCOUNT</button></div>`;
+  const signInBox = what => `<div class="rkn"><b>SIGN IN TO ${what}.</b><span class="muted"> Ranked results, rivalries and your profile live on your account.</span><button type="button" class="btn btn-gold" data-pf="open">SIGN IN OR CREATE ACCOUNT</button></div>`;
 
   // ---------- #/ranked ----------
   const RK = { open: ls.get('a13-rk-open', 'all'), era: ls.get('a13-rk-era', 'ALL'), mine: !!ls.get('a13-rk-mine', false), tab: ls.get('a13-rk-tab', 'ladder') };
@@ -286,12 +306,12 @@
       if (RK.mine) {
         const me = UI.profile.signedIn() ? await myRow() : null;
         region = (me && me.region) || '';
-        if (!region) { body.innerHTML = '<div class="rk-note"><b>NO REGION SET.</b><span class="muted"> Pick your country (or US state) on your profile to see your region.</span><a class="btn btn-gold" href="#/me">MY PROFILE</a></div>'; return; }
+        if (!region) { body.innerHTML = '<div class="rkn"><b>NO REGION SET.</b><span class="muted"> Pick your country (or US state) on your profile to see your region.</span><a class="btn btn-gold" href="#/me">MY PROFILE</a></div>'; return; }
       }
       const scope = RK.mine ? ' in ' + regionName(region) : '';
       if (RK.tab === 'ladder') {
         const rows = await UI.profile.rpc('lb_ratings', { p_era: RK.era, p_region: region || null, p_limit: 50 });
-        body.innerHTML = `<p class="muted rk-sub">${esc(eraName(RK.era))} ranked Head to Head ladder${esc(scope)}. Everyone starts at 1200.</p>` + (rows.length ? table(['#', 'PLAYER', 'RATING', 'W-L'], rows.map((r, i) => [i + 1, nameCell(r), '<b>' + r.rating + '</b>', wl(r.wins, r.losses)])) : '<p class="muted">Nobody is on this ladder yet. Win a ranked auction against a friend to be the first.</p>');
+        body.innerHTML = `<p class="muted rk-sub">${esc(eraName(RK.era))} ranked Head to Head ladder${esc(scope)}. Everyone starts at 1200.</p>` + (rows.length ? table(['#', 'PLAYER', 'RANK', 'RATING', 'W-L'], rows.map((r, i) => [i + 1, nameCell(r), tierBadge(r.rating), '<b>' + r.rating + '</b>', wl(r.wins, r.losses)])) : '<p class="muted">Nobody is on this ladder yet. Win a ranked auction against a friend to be the first.</p>');
       } else if (RK.tab === 'daily') {
         const day = today(), rows = await UI.profile.rpc('lb_daily', { p_day: day, p_era: RK.era, p_region: region || null, p_limit: 50 });
         if (!C.loaded('pool')) { try { await C.load('pool'); } catch (e) { /* the percentages stay out */ } }
@@ -385,7 +405,7 @@
       const pct = score != null && perfectScore > 0 ? Math.min(100, 100 * score / perfectScore) : null;
       app.innerHTML = `${hdr}<div class="vs-sides vs-compact">${sideBox(0, 'YOU')}${sideBox(1, 'THE HOUSE')}</div>
         <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${score == null ? '-' : score.toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div>`}<span class="muted">The house scored ${hs == null ? '-' : hs.toFixed(1)}. ${score != null && hs != null ? (score > hs ? 'You beat the house.' : score < hs ? 'The house won this one.' : 'A tie.') : ''}</span></section>
-        <div id="rkSub" class="rk-note"><span class="muted">Sending your score...</span></div>
+        <div id="rkSub" class="rkn"><span class="muted">Sending your score...</span></div>
         <div class="ch-go"><a class="btn btn-gold" href="#/ranked">SEE THE BOARD</a></div>`;
       const sub = UI.$('#rkSub', app);
       const cur = ls.get(key, {});
@@ -473,22 +493,35 @@
       const names = {};
       if (oppIds.length) { const p = await c.from('profiles').select('id,username').in('id', oppIds); (p.data || []).forEach(x => { names[x.id] = x.username; }); }
       const rivals = (riv.data || []).map(r => ({ name: names[r.a === id ? r.b : r.a] || '?', me: r.a === id ? r.a_wins : r.b_wins, them: r.a === id ? r.b_wins : r.a_wins, at: r.last_at })).sort((x, y) => (y.me + y.them) - (x.me + x.them));
+      let avatar = null;
+      try { const av = await c.from('profiles').select('avatar').eq('id', id).maybeSingle(); avatar = av.data && av.data.avatar || null; } catch (e) { /* the column arrives with the SQL */ }
       const bl = row.best_lineup, tally = {};
       (rep.data || []).forEach(x => { const l = x.lineup; if (!l || !Array.isArray(l.names)) return; l.names.forEach((n, k) => { const se = l.seasons && l.seasons[k] || 0, key = n + '|' + se; tally[key] = (tally[key] || 0) + 1; }); });
       const most = Object.keys(tally).map(k => { const [n, se] = k.split('|'); return { n, se: +se, c: tally[k] }; }).sort((x, y) => y.c - x.c || x.n.localeCompare(y.n)).slice(0, 5);
       const yr = se => (se ? "'" + String(se - 1).slice(2) + "-'" + String(se).slice(2) : '');
-      app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PROFILE</div><h1 class="ch-hero-t">${esc(row.username || UI.profile.account()).toUpperCase()}</h1>
-          <p class="ch-hero-p">${games.length ? W + '-' + L + ' in Head to Head series' + (streak > 1 ? ', ' + streak + ' ' + (games[0].won ? 'wins' : 'losses') + ' in a row' : '') + '.' : 'No series on your account yet. Play a friend in Head to Head while you are both signed in.'}</p></section>
+      app.innerHTML = `<div class="pf-head">${avatarHtml(avatar, row.username || UI.profile.account(), 72)}<section class="ch-hero"><div class="ch-hero-k">PROFILE</div><h1 class="ch-hero-t">${esc(row.username || UI.profile.account()).toUpperCase()}</h1>
+          <p class="ch-hero-p">${games.length ? W + '-' + L + ' in Head to Head series' + (streak > 1 ? ', ' + streak + ' ' + (games[0].won ? 'wins' : 'losses') + ' in a row' : '') + '.' : 'No series on your account yet. Play a friend in Head to Head while you are both signed in.'}</p></section></div>
         <div class="rk-cards"><div class="rk-card"><small>RECORD</small><b>${W}-${L}</b></div><div class="rk-card"><small>FAVORITE ERA</small><b>${fav ? esc(eraName(fav)) : '-'}</b></div><div class="rk-card pl"><small>MOST USED PLAYER</small>${most[0] ? `<b>${esc(most[0].n)}</b><span>${esc(yr(most[0].se) || 'ANY SEASON')} | ${most[0].c}x</span>` : '<b>-</b>'}</div></div>
+        <div class="ch-step"><div class="ch-step-k">PROFILE PICTURE</div>
+          <div class="pf-picks">${UI.teams().map(t => `<button type="button" class="pf-pick${avatar === t.abbr ? ' on' : ''}" data-av="${esc(t.abbr)}" title="${esc(UI.teamName(t.abbr))}">${UI.logo(t.abbr, 38)}</button>`).join('')}</div>
+          <div class="ch-go"><button type="button" class="btn btn-small" id="avClear"${avatar ? '' : ' disabled'}>USE MY INITIAL</button><span class="pf-msg" id="avMsg"></span></div></div>
         <div class="ch-step"><div class="ch-step-k">ABOUT YOU</div>
           <label class="field"><span>REGION (FOR THE REGION BOARDS)</span><select id="meRegion">${regionOpts(row.region)}</select></label>
           <label class="field"><span>FAVORITE ERA</span><select id="meFav"><option value="">${auto ? 'THE ERA I PLAY MOST (' + esc(eraName(auto)) + ')' : 'THE ERA I PLAY MOST'}</option>${eraOpts(row.fav_era || '___')}</select></label>
           <small class="muted">Your region is only what you pick here. Nothing reads your location.</small>
           <div class="ch-go"><button type="button" class="btn btn-gold" id="meSave">SAVE</button><span class="pf-msg" id="meMsg"></span></div></div>
         ${most.length ? `<div class="ch-step"><div class="ch-step-k">MOST DRAFTED</div>${table(['PLAYER', 'SEASON', 'TIMES'], most.map(m => [esc(m.n), esc(yr(m.se) || 'ANY'), '<b>' + m.c + '</b>']), true)}</div>` : ''}
-        ${rat.data && rat.data.length ? `<div class="ch-step"><div class="ch-step-k">YOUR LADDER RATINGS</div>${table(['ERA', 'RATING', 'W-L'], rat.data.slice().sort((x, y) => y.rating - x.rating).map(r => [esc(eraName(r.era)), '<b>' + r.rating + '</b>', wl(r.wins, r.losses)]), true)}</div>` : ''}
+        ${rat.data && rat.data.length ? `<div class="ch-step"><div class="ch-step-k">YOUR LADDER RATINGS</div>${table(['ERA', 'RATING', 'W-L'], rat.data.slice().sort((x, y) => y.rating - x.rating).map(r => [esc(eraName(r.era)), '<b>' + r.rating + '</b> ' + tierBadge(r.rating), wl(r.wins, r.losses)]), true)}</div>` : ''}
         <div class="ch-step"><div class="ch-step-k">RIVALRIES</div>${rivals.length ? table(['VS', 'RECORD', ''], rivals.map(r => [UI.userLink(r.name), '<b>' + r.me + '-' + r.them + '</b>', r.me > r.them ? 'YOU LEAD' : r.me < r.them ? 'THEY LEAD' : 'TIED']), true) : '<p class="muted">Your rivalries show up here: one record for each friend you play, and one series counts for each draft.</p>'}</div>
         <div class="ch-go"><a class="btn btn-gold" href="#/ranked">RANKED</a><a class="btn" href="#/challenge/vs">HEAD TO HEAD</a></div>`;
+      const setAv = async v => {
+        const m = UI.$('#avMsg', app); if (m) m.textContent = 'Saving...';
+        const u = await c.from('profiles').update({ avatar: v }).eq('id', id);
+        if (u.error) { if (m) { m.textContent = /avatar|schema cache|column/i.test(u.error.message || '') ? 'Run the latest SQL first, then this works.' : failMsg(u.error); m.className = 'pf-msg bad'; } return; }
+        mePage(app);
+      };
+      app.querySelectorAll('[data-av]').forEach(b => b.addEventListener('click', () => setAv(b.dataset.av)));
+      const ac = UI.$('#avClear', app); if (ac) ac.addEventListener('click', () => setAv(null));
       const save = UI.$('#meSave', app), msg = UI.$('#meMsg', app);
       save.addEventListener('click', async () => {
         save.disabled = true; msg.textContent = 'Saving...';
@@ -565,19 +598,19 @@
     app.innerHTML = '<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING ' + esc(name.toUpperCase()) + '...</div></section>';
     try {
       const d = await UI.profile.rpc('public_profile', { p_name: name });
-      if (!d) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PROFILE</div><h1 class="ch-hero-t">${esc(name.toUpperCase())}</h1></section><div class="rk-note"><b>${esc(name.toUpperCase())} IS A GUEST.</b><span class="muted">Guests play with a room code and a name, so they have no profile, no ladder rating and no friends list. They can make an account any time.</span></div><div class="ch-go"><a class="btn" href="#/ranked">RANKED</a><a class="btn" href="#/me">MY PROFILE</a></div>`; return; }
+      if (!d) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PROFILE</div><h1 class="ch-hero-t">${esc(name.toUpperCase())}</h1></section><div class="rkn"><b>${esc(name.toUpperCase())} IS A GUEST.</b><span class="muted">Guests play with a room code and a name, so they have no profile, no ladder rating and no friends list. They can make an account any time.</span></div><div class="ch-go"><a class="btn" href="#/ranked">RANKED</a><a class="btn" href="#/me">MY PROFILE</a></div>`; return; }
       if (d.self) { location.replace('#/me'); return; }
       const fav = d.fav_era || d.auto_era, bl = d.best_lineup, yr = se => (se ? "'" + String(se - 1).slice(2) + "-'" + String(se).slice(2) : '');
       const total = d.wins + d.losses, signed = UI.profile.signedIn();
-      const fr = !signed ? '' : d.friend === 'friends' ? '<span class="vs-fr ok">&#10003; FRIENDS</span>' : d.friend === 'sent' ? '<span class="muted">REQUEST SENT</span>' : `<button type="button" class="btn btn-gold" id="uAdd">${d.friend === 'incoming' ? 'ACCEPT FRIEND REQUEST' : 'ADD AS FRIEND'}</button>`;
-      app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PROFILE${d.region ? ' | ' + esc(regionName(d.region).toUpperCase()) : ''}</div><h1 class="ch-hero-t">${esc(d.username).toUpperCase()}</h1>
-          <p class="ch-hero-p">${total ? d.wins + '-' + d.losses + ' in Head to Head series.' : 'No series on this account yet.'}</p></section>
-        <div class="ch-go u-act">${fr}${signed ? `<a class="btn" href="#/ranked/find/ALL">PLAY RANKED</a>` : ''}</div>
+      const fr = !signed ? '' : d.friend === 'friends' ? '<span class="vs-fr ok">&#10003; YOU ARE FRIENDS</span>' : d.friend === 'sent' ? '<span class="muted">REQUEST SENT</span>' : `<button type="button" class="btn btn-gold" id="uAdd">${d.friend === 'incoming' ? 'ACCEPT FRIEND REQUEST' : 'ADD AS FRIEND'}</button>`;
+      app.innerHTML = `<div class="pf-head">${avatarHtml(d.avatar, d.username, 72)}<section class="ch-hero"><div class="ch-hero-k">PROFILE${d.region ? ' | ' + esc(regionName(d.region).toUpperCase()) : ''}</div><h1 class="ch-hero-t">${esc(d.username).toUpperCase()}</h1>
+          <p class="ch-hero-p">${total ? d.wins + '-' + d.losses + ' in Head to Head series.' : 'No series on this account yet.'}</p></section></div>
+        ${fr ? `<div class="ch-go u-act">${fr}</div>` : ''}
         <div class="rk-cards"><div class="rk-card"><small>RECORD</small><b>${d.wins}-${d.losses}</b></div><div class="rk-card"><small>FAVORITE ERA</small><b>${fav ? esc(eraName(fav)) : '-'}</b></div><div class="rk-card pl"><small>MOST USED PLAYER</small>${d.most && d.most[0] ? `<b>${esc(d.most[0].name)}</b><span>${esc(yr(d.most[0].season) || 'ANY SEASON')} | ${d.most[0].count}x</span>` : '<b>-</b>'}</div></div>
         <div class="rk-cards two"><div class="rk-card"><small>FRIENDS</small><b>${d.friends || 0}</b></div><div class="rk-card"><small>MUTUAL FRIENDS</small><b>${signed ? d.mutual_count || 0 : '-'}</b></div></div>
         ${d.mutual && d.mutual.length ? `<div class="ch-step"><div class="ch-step-k">FRIENDS YOU SHARE</div><p class="rk-lineup">${d.mutual.map(n => `<span>${UI.userLink(n)}</span>`).join('')}</p></div>` : ''}
         ${d.vs ? `<div class="ch-step"><div class="ch-step-k">YOU VS ${esc(d.username.toUpperCase())}</div><p class="rk-vs"><b>${d.vs.me}</b><span>-</span><b>${d.vs.them}</b></p><small class="muted">${d.vs.me > d.vs.them ? 'You lead the rivalry.' : d.vs.me < d.vs.them ? 'They lead the rivalry.' : 'Tied.'} One series counts for each draft.</small></div>` : ''}
-        ${d.ratings && d.ratings.length ? `<div class="ch-step"><div class="ch-step-k">LADDER RATINGS</div>${table(['ERA', 'RATING', 'RANK', 'W-L'], d.ratings.map(r => [esc(eraName(r.era)), '<b>' + r.rating + '</b>', '#' + r.rank + (r.of ? ' of ' + r.of : ''), wl(r.wins, r.losses)]), true)}</div>` : ''}
+        ${d.ratings && d.ratings.length ? `<div class="ch-step"><div class="ch-step-k">LADDER RATINGS</div>${table(['ERA', 'RATING', 'RANK', 'W-L'], d.ratings.map(r => [esc(eraName(r.era)), '<b>' + r.rating + '</b> ' + tierBadge(r.rating), '#' + r.rank + (r.of ? ' of ' + r.of : ''), wl(r.wins, r.losses)]), true)}</div>` : ''}
         ${d.most && d.most.length ? `<div class="ch-step"><div class="ch-step-k">MOST DRAFTED</div>${table(['PLAYER', 'SEASON', 'TIMES'], d.most.map(m => [esc(m.name), esc(yr(m.season) || 'ANY'), '<b>' + m.count + '</b>']), true)}</div>` : ''}
         <div class="ch-go"><a class="btn" href="#/ranked">RANKED</a><a class="btn" href="#/me">MY PROFILE</a></div>`;
       const add = UI.$('#uAdd', app);
