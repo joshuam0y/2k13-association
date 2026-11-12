@@ -333,7 +333,7 @@
     const cfg = VS.cfg, key = rkKey(cfg);
     const ok = await UI.ranked.forfeit({ key, opp: who(1 - me()), era: UI.ranked.eraOf(cfg), bestOf: cfg.bestOf || 7 });
     if (ok) { RKDONE[key] = 1; const el = document.getElementById('vsDc'); if (el) el.remove(); location.hash = '#/ranked/result'; }
-    else { DC.claimed = false; DC.at = Date.now() - GRACE + 20000; }   // could not record it: try again in 20 seconds
+    else { DC.tries = (DC.tries || 0) + 1; if (DC.tries >= 4) { RKDONE[key] = 1; const el = document.getElementById('vsDc'); if (el) el.remove(); UI.toast('Could not record the forfeit. The game was not counted.', 'error'); } else { DC.claimed = false; DC.at = Date.now() - GRACE + 20000; } }   // could not record it: try again in 20 seconds, four times
   }
   function dcTick() {
     let el = document.getElementById('vsDc');
@@ -1344,6 +1344,7 @@
         if (!window.confirm('Reset the record between ' + who(0) + ' and ' + who(1) + ' on this phone?')) return;
         const all = rivals.all(), k = pairKey(), ids = all[k] ? all[k].ids : []; all[k] = { ids }; rivals.save(all); series(app);   // keeps the ids so this series does not count again
       });
+      if ($('#vsRematch')) $('#vsRematch').addEventListener('click', () => { RM.seed = cfg.seed; RM.me = true; send({ t: 'rematch', seed: cfg.seed }); maybeRematch(); series(app); });
       if ($('#vsNew')) $('#vsNew').addEventListener('click', () => { VS.cfg = null; VS.shown = 0; VS.watch = null; VS.names = ['', '']; VS.tnames = ['', '']; go('setup'); });
       if (want && WATCH !== want) watch(want);   // the other phone pressed WATCH
     });
