@@ -735,15 +735,15 @@
       (rep.data || []).forEach(x => { const l = x.lineup; if (!l || !Array.isArray(l.names)) return; l.names.forEach((n, k) => { const se = l.seasons && l.seasons[k] || 0, key = n + '|' + se; tally[key] = (tally[key] || 0) + 1; }); });
       const most = Object.keys(tally).map(k => { const [n, se] = k.split('|'); return { n, se: +se, c: tally[k] }; }).sort((x, y) => y.c - x.c || x.n.localeCompare(y.n)).slice(0, 5);
       const yr = se => (se ? "'" + String(se - 1).slice(2) + "-'" + String(se).slice(2) : '');
-      app.innerHTML = `<div class="pf-head">${avatarHtml(avatar, row.username || UI.profile.account(), 72, curRating)}<section class="ch-hero"><div class="ch-hero-k">PROFILE</div><h1 class="ch-hero-t">${esc(row.username || UI.profile.account()).toUpperCase()}</h1>
+      app.innerHTML = `<div class="pf-head"><button type="button" class="pf-avbtn" id="avOpen" aria-label="Change profile picture">${avatarHtml(avatar, row.username || UI.profile.account(), 72, curRating)}<span class="pf-avhov"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 8h3l2-2h6l2 2h3v11H4z M12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg><small>CHANGE</small></span></button><section class="ch-hero"><div class="ch-hero-k">PROFILE</div><h1 class="ch-hero-t">${esc(row.username || UI.profile.account()).toUpperCase()}</h1>
           <p class="ch-hero-p">${games.length ? W + '-' + L + ' in Head to Head series' + (streak > 1 ? ', ' + streak + ' ' + (games[0].won ? 'wins' : 'losses') + ' in a row' : '') + '.' : 'No series on your account yet. Play a friend in Head to Head while you are both signed in.'}</p></section></div>
         <div class="rk-cards"><div class="rk-card"><small>RECORD</small><b>${W}-${L}</b></div><div class="rk-card"><small>FAVORITE ERA</small><b>${fav ? esc(eraName(fav)) : '-'}</b></div><div class="rk-card pl"><small>MOST USED PLAYER</small>${most[0] ? `<b>${esc(most[0].n)}</b><span>${esc(yr(most[0].se) || 'ANY SEASON')} | ${most[0].c}x</span>` : '<b>-</b>'}</div></div>
-        <details class="ch-step rk-det"><summary>CHANGE PROFILE PICTURE</summary>
+        <div class="rk-avpanel" id="avPanel" hidden><div class="rk-avbox"><div class="rk-avtop"><b>PROFILE PICTURE</b><button type="button" class="btn btn-small" id="avClose">CLOSE</button></div>
           <div class="ch-step-k">RANK ICONS</div>
           <div class="pf-picks"><button type="button" class="pf-pick wide${!avatar || avatar === 'rank:auto' ? ' on' : ''}" data-av="rank:auto">${iconSvg(tierOf(curRating), 38)}<small>MY RANK</small></button>${TIERS.map(t => { const lock = t.floor > peakRating; return `<button type="button" class="pf-pick${avatar === 'rank:' + t.name ? ' on' : ''}${lock ? ' lock' : ''}" data-av="rank:${esc(t.name)}"${lock ? ' disabled' : ''} title="${esc(t.name)}${lock ? ' (reach ' + t.floor + ' to unlock)' : ''}">${iconSvg(t, 38)}</button>`; }).join('')}</div>
           <div class="ch-step-k">TEAM LOGOS</div>
           <div class="pf-picks">${UI.teams().map(t => `<button type="button" class="pf-pick${avatar === t.abbr ? ' on' : ''}" data-av="${esc(t.abbr)}" title="${esc(UI.teamName(t.abbr))}">${UI.logo(t.abbr, 38)}</button>`).join('')}</div>
-          <span class="pf-msg" id="avMsg"></span></details>
+          <span class="pf-msg" id="avMsg"></span></div></div>
         <div class="ch-step"><div class="ch-step-k">ABOUT YOU</div>
           <label class="field"><span>REGION (FOR THE REGION BOARDS)</span><select id="meRegion">${regionOpts(row.region)}</select></label>
           <label class="field"><span>FAVORITE ERA</span><select id="meFav"><option value="">${auto ? 'THE ERA I PLAY MOST (' + esc(eraName(auto)) + ')' : 'THE ERA I PLAY MOST'}</option>${eraOpts(row.fav_era || '___')}</select></label>
@@ -766,6 +766,10 @@
         mePage(app);
       };
       app.querySelectorAll('[data-av]').forEach(b => b.addEventListener('click', () => setAv(b.dataset.av)));
+      const avP = UI.$('#avPanel', app), avShut = () => { avP.hidden = true; };
+      UI.$('#avOpen', app).addEventListener('click', () => { avP.hidden = false; });
+      UI.$('#avClose', app).addEventListener('click', avShut);
+      avP.addEventListener('click', e => { if (e.target === avP) avShut(); });
       const save = UI.$('#meSave', app), msg = UI.$('#meMsg', app);
       save.addEventListener('click', async () => {
         save.disabled = true; msg.textContent = 'Saving...';
