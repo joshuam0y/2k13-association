@@ -5,7 +5,7 @@ const players=Array.from({length:300},(_,i)=>({id:'p'+i,ovr:99-Math.floor(i/4)})
 for(const o of [{},{budget:30,pool:12,start:1,raise:2},{budget:10,pool:10},{budget:50,start:2,raise:1,pool:20,quality:'any'}]){
  for(const bench of [0,3]){
   for(let seed=1;seed<=60;seed++){
-    const cfg={bench,seed,auction:o};const per=C.vsPer(cfg);
+    const cfg={bench,seed,auction:o,first:seed%2};const per=C.vsPer(cfg);
     const st=C.auctionStart(cfg,players);let guard=0;const A=C.aucOpts(o);
     if(A.budget<per*A.start) continue;
     while(!st.done&&guard++<5000){ // random play
@@ -16,6 +16,7 @@ for(const o of [{},{budget:30,pool:12,start:1,raise:2},{budget:10,pool:10},{budg
       else ok(C.auctionAct(st,side,'pass'),'legal pass');
     }
     ok(st.done,'finishes');
+    ok(st.first===(seed%2),'the coin flip decides who opens first');
     ok(st.won[0].length===per&&st.won[1].length===per,'each gets '+per+' got '+st.won[0].length+'/'+st.won[1].length+' pool '+st.ids.length+' o '+JSON.stringify(o));
     ok(st.spent[0]<=A.budget&&st.spent[1]<=A.budget,'budget');
     ok(new Set(st.won[0].concat(st.won[1])).size===2*per,'no duplicate');

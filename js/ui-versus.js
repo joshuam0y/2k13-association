@@ -56,9 +56,12 @@
   const who = i => VS.names[i] || ('PLAYER ' + (i + 1));
   // ---------- the rivalry: every finished series between the same two names, kept on this phone ----------
   const RKEY = 'a13-vs-rivals';
+  // a rivalry with a guest only lasts for this session (a guest has no account to remember it by); between accounts, and on one phone, it is kept
+  const guestGame = () => online() && (!UI.profile.signedIn() || (NET.role === 'host' ? NET.peerAcct === false : NET.role === 'guest' ? VS.hostAcct === false : false));
+  const rstore = () => (guestGame() ? window.sessionStorage : window.localStorage);
   const rivals = {
-    all() { try { return JSON.parse(localStorage.getItem(RKEY) || '{}') || {}; } catch (e) { return {}; } },
-    save(v) { try { localStorage.setItem(RKEY, JSON.stringify(v)); } catch (e) { /* private mode */ } }
+    all() { try { return JSON.parse(rstore().getItem(RKEY) || '{}') || {}; } catch (e) { return {}; } },
+    save(v) { try { rstore().setItem(RKEY, JSON.stringify(v)); } catch (e) { /* private mode */ } }
   };
   const norm = s => String(s || '').trim().toUpperCase();
   const pairKey = () => [norm(who(0)), norm(who(1))].sort().join('|');
@@ -117,7 +120,7 @@
       <p class="muted">Series won. Games: ${esc(a)} ${R.games[a] || 0}, ${esc(b)} ${R.games[b] || 0}.${sw ? ' Sweeps: ' + esc(sw) + '.' : ''} ${esc(streak)}</p>
       <div class="vs-rival-log">${R.log.slice(0, 8).map(x => `<span class="${x.w === a ? 'a' : 'b'}">${esc(x.w.split(' ')[0])} ${esc(x.s)}<small>${esc(x.y ? short(x.y) : 'ALL')}</small></span>`).join('')}</div></section>`;
   }
-  const SHARED = ['year', 'skip', 'teams', 'names', 'tnames', 'opts', 'cfg', 'shown', 'watch', 'page', 'spin', 'spun', 'respins', 'turn', 'epoch', 'hostSide', 'auc', 'ready', 'watching'];
+  const SHARED = ['year', 'skip', 'teams', 'names', 'tnames', 'opts', 'cfg', 'shown', 'watch', 'page', 'spin', 'spun', 'respins', 'turn', 'epoch', 'hostSide', 'auc', 'ready', 'watching', 'hostAcct'];
   let APP = null;   // the page element the versus screens draw into
 
   // ---------- online (an encrypted relay) ----------
@@ -164,9 +167,11 @@
   function send(obj) {
     if (!NET.client || !NET.key) return;
     if (NET.role === 'watch' && obj.t !== 'watch') return;   // a spectator only listens
+    if (obj.t === 'hello') obj = Object.assign({}, obj, { acct: UI.profile.signedIn() });   // the host needs to know whether you have an account (ranked)
     seal(Object.assign({ from: NET.me, role: NET.role, ep: VS.epoch || 0 }, obj)).then(txt => { try { NET.client.publish(topic(), txt, { qos: 1 }); } catch (e) { /* reconnecting */ } }).catch(() => {});
   }
   function push() {
+    if (NET.role === 'host') VS.hostAcct = UI.profile.signedIn();
     ls.set(VS);
     if (linked()) { const s = {}; SHARED.forEach(k => { s[k] = VS[k]; }); send({ t: 'state', s }); }
   }
@@ -191,7 +196,17 @@
       return;
     }
     if (m.t === 'ping') { seen(); return; }
-    if (m.t === 'hello' && NET.role === 'host') { if (m.name) VS.names[1 - NET.side] = String(m.name).slice(0, 20); uniqNames(); seen(); push(); route(); return; }
+    if (m.t === 'hello' && NET.role === 'host') {
+      NET.peerAcct = !!m.acct;
+      if (VS.opts.ranked && VS.opts.auction && !NET.peerAcct && !VS.cfg) {   // ranked needs two accounts: a guest is turned away
+        send({ t: 'rankedonly' });
+        UI.toast((m.name ? String(m.name).slice(0, 16) : 'A guest') + ' is a guest, so they cannot play a ranked game. They were turned away.', 'error');
+        return;
+      }
+      if (m.name) VS.names[1 - NET.side] = String(m.name).slice(0, 20); uniqNames(); seen(); push(); route(); return;
+    }
+    if (m.t === 'ready' && NET.role === 'host') { VS.ready = (VS.ready || [false, false]).slice(); VS.ready[+m.i === 0 ? 0 : 1] = !!m.v; seen(); push(); route(); return; }
+    if (m.t === 'rankedonly' && NET.role === 'guest') { UI.toast('That room is ranked, so both players need an account. Sign in to join it.', 'error'); hangUp(); route(); return; }
     if (m.t === 'state' && m.s && (m.s.epoch || 0) >= (VS.epoch || 0)) {
       const prevEp = VS.epoch;
       SHARED.forEach(k => { if (k in m.s) VS[k] = m.s[k]; }); ls.set(VS);
@@ -236,7 +251,7 @@
     NET.timers.forEach(t => clearInterval(t)); NET.timers = [];
     if (UI.ranked) UI.ranked.lobbyStop();
     try { if (NET.client) NET.client.end(true); } catch (e) { /* gone */ }
-    Object.assign(NET, { role: null, code: '', status: '', err: '', client: null, key: null, peerSeen: 0 });
+    Object.assign(NET, { role: null, code: '', status: '', err: '', client: null, key: null, peerSeen: 0, peerAcct: undefined });
   }
   // connects to a relay (falling back to the next if one will not answer), joins the room, starts the pings
   function connectRoom(role, code, opt) {
@@ -467,10 +482,11 @@
   function rankedSetup(boss) {
     if (!online() || !UI.profile.signedIn() || NET.role === 'watch') return '';
     const dis = boss ? '' : ' disabled';
+    const guestPeer = linked() && NET.role === 'host' && NET.peerAcct === false;   // the other player is a guest: no ladder for this game
     return `<div><span class="ts-start-k">RANKED AND OPEN GAMES</span><div class="ch-chips">
-        ${VS.opts.auction ? `<button type="button" class="ch-chip${VS.opts.ranked ? ' on' : ''}" data-rk="ranked"${dis}>${VS.opts.ranked ? 'RANKED: ON' : 'RANKED: OFF'}</button>` : ''}
+        ${VS.opts.auction ? `<button type="button" class="ch-chip${VS.opts.ranked ? ' on' : ''}" data-rk="ranked"${dis}${guestPeer ? ' disabled' : ''}>${guestPeer ? 'RANKED: NEEDS TWO ACCOUNTS' : VS.opts.ranked ? 'RANKED: ON' : 'RANKED: OFF'}</button>` : ''}
         ${NET.role === 'host' ? `<button type="button" class="ch-chip${VS.opts.pub ? ' on' : ''}" data-rk="pub"${dis}>${VS.opts.pub ? 'OPEN GAME: LISTED' : 'OPEN GAME: PRIVATE'}</button>` : ''}</div>
-      <small class="muted">${VS.opts.ranked && VS.opts.auction ? 'Ranked has one set of rules: best of 7, a blind draft (no ratings until the series is over), a 24 second shot clock, no duplicates, just the five. An auction with a hidden pool of ten mixed players, $20 each, $1 to open, raises of $1 or more. If you both finish the series signed in, it moves your ladder rating for this era.' : VS.opts.auction ? 'Turn on ranked for a series that counts on the ladder.' : 'Ranked games are auctions. Pick the auction draft style to turn it on.'} ${VS.opts.pub ? 'Anyone can find this room under Ranked, Open games, until your friend joins.' : ''}</small></div>`;
+      <small class="muted">${guestPeer ? 'The other player is a guest. Ranked games need an account on both sides, so this one is casual.' : ''} ${VS.opts.ranked && VS.opts.auction ? 'Ranked has one set of rules: best of 7, a blind draft (no ratings until the series is over), a 24 second shot clock, no duplicates, just the five. An auction with a hidden pool of ten mixed players, $20 each, $1 to open, raises of $1 or more. If you both finish the series signed in, it moves your ladder rating for this era.' : VS.opts.auction ? 'Turn on ranked for a series that counts on the ladder.' : 'Ranked games are auctions. Pick the auction draft style to turn it on.'} ${VS.opts.pub ? 'Anyone can find this room under Ranked, Open games, until your friend joins.' : ''}</small></div>`;
   }
   function syncLobby() {
     if (!UI.ranked) return;
@@ -602,7 +618,13 @@
       }));
       app.querySelectorAll('[data-bans]').forEach(b => b.addEventListener('click', () => { VS.opts.bans = +b.dataset.bans; redraw(); }));
       app.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => { const [k, v] = b.dataset.a.split(':'); VS.opts[k] = k === 'aQ' ? v : +v; redraw(); }));
-      app.querySelectorAll('[data-ready]').forEach(b => b.addEventListener('click', () => { const i = +b.dataset.ready; if (!canAct(i)) return; VS.ready = (VS.ready || [false, false]).slice(); VS.ready[i] = !VS.ready[i]; redraw(); }));
+      app.querySelectorAll('[data-ready]').forEach(b => b.addEventListener('click', () => {
+        const i = +b.dataset.ready; if (!canAct(i)) return;
+        const v = !(VS.ready && VS.ready[i]);
+        VS.ready = (VS.ready || [false, false]).slice(); VS.ready[i] = v;
+        if (NET.role === 'guest') { ls.set(VS); send({ t: 'ready', i, v }); setup(app); }   // the guest sends only its own tap, so it cannot overwrite the host's
+        else redraw();
+      }));
       app.querySelectorAll('[data-bench]').forEach(b => b.addEventListener('click', () => { VS.opts.bench = +b.dataset.bench; redraw(); }));
       app.querySelectorAll('[data-blind]').forEach(b => b.addEventListener('click', () => { VS.opts.blind = b.dataset.blind === '1'; redraw(); }));
       app.querySelectorAll('[data-timer]').forEach(b => b.addEventListener('click', () => { VS.opts.timer = +b.dataset.timer; redraw(); }));
@@ -627,7 +649,7 @@
         if (!ch.length) { UI.toast('Switch on at least one season', 'error'); return; }
         if (VS.opts.ranked && VS.opts.auction && online()) Object.assign(VS.opts, { aBudget: 20, aStart: 1, aRaise: 1, aPool: 10, aQ: 'mixed', aShow: 0, bench: 0, bestOf: 7, blind: true, cap: 0, timer: 24, dupes: 0 });
         VS.year = ch.length === 1 ? ch[0] : 0;
-        VS.cfg = { mode: 'versus', year: VS.year, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null, bestOf: VS.opts.bestOf, blind: !VS.opts.cap && !!VS.opts.blind, cap: VS.opts.auction ? 0 : C.capFor(+VS.opts.cap || 0, VS.opts.bench), bench: +VS.opts.bench || 0, board: VS.opts.board && !VS.opts.auction ? 1 : 0, ranked: !!(VS.opts.ranked && VS.opts.auction && online() && UI.profile.signedIn()), bansN: VS.opts.auction ? 0 : +VS.opts.bans || 0, bans: [], dupes: ch.length > 1 && VS.opts.dupes ? 1 : 0, timer: VS.opts.auction && VS.opts.ranked && online() ? 24 : +VS.opts.timer || 0, era: +VS.opts.era || 2013, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
+        VS.cfg = { mode: 'versus', year: VS.year, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null, bestOf: VS.opts.bestOf, blind: !VS.opts.cap && !!VS.opts.blind, cap: VS.opts.auction ? 0 : C.capFor(+VS.opts.cap || 0, VS.opts.bench), bench: +VS.opts.bench || 0, first: Math.random() < 0.5 ? 1 : 0, board: VS.opts.board && !VS.opts.auction ? 1 : 0, ranked: !!(VS.opts.ranked && VS.opts.auction && online() && UI.profile.signedIn()), bansN: VS.opts.auction ? 0 : +VS.opts.bans || 0, bans: [], dupes: ch.length > 1 && VS.opts.dupes ? 1 : 0, timer: VS.opts.auction && VS.opts.ranked && online() ? 24 : +VS.opts.timer || 0, era: +VS.opts.era || 2013, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
           sides: [0, 1].map(i => ({ team: VS.teams[i], name: (VS.tnames[i] || '').trim() || (VS.names[i] ? VS.names[i] + "'s " + tOf(teams, VS.teams[i]).name : ''), picks: [] })) };
         VS.spin = null; VS.spun = []; VS.respins = [1, 1]; VS.shown = 0; VS.pos = ''; VS.q = ''; VS.season = ''; VS.sort = ''; VS.sw = null; VS.auc = null; VS.ready = [false, false];
         if (VS.opts.auction) {
@@ -807,8 +829,12 @@
           <div class="auc-go"><button type="button" class="btn btn-gold btn-big" id="aucRaise"${canRaise ? '' : ' disabled'}>BID ${money(AB.amt)}</button><button type="button" class="btn btn-big" id="aucPass">PASS<small>${esc(who(st.holder))} gets him for ${money(st.price)}</small></button></div></div>`
       : `<div class="auc-wait"><b>${esc(who(st.turn))} ${broke ? "can't top the bid" : 'is deciding'}...</b><span>${broke ? whyBroke(esc(who(st.turn))) + ' They can only pass. ' : ''}${esc(who(st.holder))} holds the bid at ${money(st.price)}.</span></div>`;
     const sold = st.log.slice().reverse().map(x => `<li><b>${esc(byId[x.id] ? byId[x.id].name : x.id)}${yearOf(byId[x.id])}</b><span>${esc(who(x.side))}</span><i>${money(x.price)}</i></li>`).join('');
-    const pool = A.show ? `<p class="auc-more">STILL TO COME: ${st.ids.slice(st.i + 1).map(id => esc(byId[id] ? byId[id].name + (byId[id].season ? ' ' + short(byId[id].season) : '') : id)).join(', ') || 'nobody'}</p>` : `<p class="auc-more">${left} MORE IN THE HIDDEN POOL</p>`;
-    app.innerHTML = `<div class="ch-top auc-top"><div><div class="ch-top-k">${esc(lblC(cfg))} | AUCTION | ${money(A.budget)} EACH${cfg.ranked ? ' | RANKED' : ''}</div><div class="ch-top-t">PLAYER ${st.i + 1} OF ${st.ids.length}</div></div><span class="ch-top-acts">${RULES_BTN}<button type="button" class="btn btn-small" id="vsSetup">SETUP</button></span></div>
+    // a visible pool: every player as a small card, the ones to come bright, the sold ones dimmed with who got them and for how much
+    const pool = A.show ? `<div class="auc-poolrow" aria-label="The pool">${st.ids.map((id, k) => {
+      const p = byId[id], sale = st.log.filter(x => x.id === id)[0], col = (B.teamFor(p.team, p.season).colors || ['#555'])[0], y = p.season || cfg.year;
+      return `<div class="apc${k < st.i ? ' sold' : k === st.i ? ' now' : ''}" style="--c1:${esc(col)}"><div class="apc-f">${UI.faceImg(p, col)}</div><b>${esc(p.name)}</b><small>${y ? esc(short(y)) : ''}${blind ? '' : ' | ' + esc(p.ovr)}</small>${sale ? `<em>${esc(who(sale.side))} ${sale.price ? money(sale.price) : 'FREE'}</em>` : k === st.i ? '<em>UP NOW</em>' : ''}</div>`;
+    }).join('')}</div>` : `<p class="auc-more">${left} MORE IN THE HIDDEN POOL</p>`;
+    app.innerHTML = `<div class="ch-top auc-top"><div><div class="ch-top-k">${esc(lblC(cfg))} | AUCTION | ${money(A.budget)} EACH${cfg.ranked ? ' | RANKED' : ''} | COIN FLIP: ${esc(who(cfg.first ? 1 : 0).toUpperCase())} OPENS FIRST</div><div class="ch-top-t">PLAYER ${st.i + 1} OF ${st.ids.length}</div></div><span class="ch-top-acts">${RULES_BTN}<button type="button" class="btn btn-small" id="vsSetup">SETUP</button></span></div>
       ${netBar()}${rulesBox(cfg)}
       <div class="auc">
         ${sideBox(0, 'l')}
@@ -924,7 +950,7 @@
       }
       const turn = on >= 0 && VS.turn && VS.turn.pick === taken.length ? VS.turn : null;
       const clock = turn ? `<div class="vs-timer" id="vsTimer"><i style="--w:100%"></i><span>${Math.max(0, Math.ceil((turn.until - Date.now()) / 1000))}</span></div>` : '';
-      app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(lblC(cfg))} | TWO PLAYERS | BEST OF ${cfg.bestOf || 5}${blind ? ' | BLIND' : ''}${cfg.timer ? ' | ' + cfg.timer + ' SEC CLOCK' : ''}${cfg.cap ? ' | $' + cfg.cap + 'M CAP' : ''}</div><div class="ch-top-t">THE DRAFT</div></div>
+      app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${esc(lblC(cfg))} | TWO PLAYERS | BEST OF ${cfg.bestOf || 5}${blind ? ' | BLIND' : ''} | COIN FLIP: ${esc(who(cfg.first ? 1 : 0).toUpperCase())} FIRST${cfg.timer ? ' | ' + cfg.timer + ' SEC CLOCK' : ''}${cfg.cap ? ' | $' + cfg.cap + 'M CAP' : ''}</div><div class="ch-top-t">THE DRAFT</div></div>
           <span class="ch-top-acts">${RULES_BTN}<button type="button" class="btn btn-small" id="vsSetup">SETUP</button></span></div>
         ${netBar()}${rulesBox(cfg)}
         <div class="vs-sides vs-compact">${fives}</div>

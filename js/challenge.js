@@ -270,7 +270,8 @@
   function vsPer(cfg) { return 5 + (cfg && +cfg.bench > 0 ? +cfg.bench : 0); }
   function vsOnClock(cfg) {
     var n = cfg.sides[0].picks.length + cfg.sides[1].picks.length;
-    return n >= 2 * vsPer(cfg) ? -1 : (n === 0 ? 0 : (Math.floor((n - 1) / 2) % 2 === 0 ? 1 : 0));
+    var side = n === 0 ? 0 : (Math.floor((n - 1) / 2) % 2 === 0 ? 1 : 0);
+    return n >= 2 * vsPer(cfg) ? -1 : (cfg.first ? 1 - side : side);   // cfg.first: the coin flip put side 1 on the clock first
   }
 
   // ---------- auction draft (versus): a hidden pool, bid for every player ----------
@@ -293,7 +294,7 @@
     for (;;) {
       st.i++;
       if (st.i >= st.ids.length || (aucFull(st, 0) && aucFull(st, 1))) { st.done = true; st.turn = -1; st.holder = -1; return st; }
-      var open = st.i % 2;
+      var open = (st.i + st.first) % 2;   // who opens the bidding on this player: it alternates, and the coin flip decides who is first
       if (aucFull(st, open)) {   // the opener has his five: the other side takes him free
         aucSell(st, 1 - open, 0, true); continue;
       }
@@ -307,7 +308,7 @@
     var sorted = players.slice().sort(function (a, b) { return b.ovr - a.ovr || (a.id < b.id ? -1 : 1); });
     var top = o.quality === 'stars' ? Math.max(n, 60) : o.quality === 'mixed' ? Math.max(n, 200) : sorted.length;
     var pool = shuffle(sorted.slice(0, top), rng).slice(0, n);
-    var st = { o: o, per: per, ids: pool.map(function (p) { return p.id; }), i: -1, price: o.start, holder: 0, turn: 1, spent: [0, 0], won: [[], []], log: [], done: false };
+    var st = { o: o, per: per, first: cfg.first ? 1 : 0, ids: pool.map(function (p) { return p.id; }), i: -1, price: o.start, holder: 0, turn: 1, spent: [0, 0], won: [[], []], log: [], done: false };
     return aucNext(st);
   }
   // side raises (action 'raise') or passes (action 'pass'); returns false when it is not his move
