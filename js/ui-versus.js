@@ -370,7 +370,7 @@
       if ((DC.res.me && DC.res.them) || Date.now() > DC.res.until) { DC.res.on = false; if (el) el.remove(); return; }
       if (!el) { el = document.createElement('div'); el.id = 'vsDc'; el.className = 'vs-dc'; document.body.appendChild(el); }
       const other = who(1 - me());
-      el.innerHTML = `<div class="vs-dc-box"><small>RANKED GAME PAUSED</small><h2>WELCOME BACK.</h2><p>Both players press ready and the game carries on where it stopped. ${esc(other)}: <b>${DC.res.them ? 'READY' : 'NOT YET'}</b>.</p><button type="button" class="btn btn-gold btn-big" id="vsRes"${DC.res.me ? ' disabled' : ''}>${DC.res.me ? 'WAITING...' : 'I AM READY'}</button></div>`;
+      el.innerHTML = `<div class="vs-dc-box"><small>RANKED GAME PAUSED</small><h2>WELCOME BACK.</h2><p>Both press ready to continue. ${esc(other)}: <b>${DC.res.them ? 'READY' : 'NOT YET'}</b>.</p><button type="button" class="btn btn-gold btn-big" id="vsRes"${DC.res.me ? ' disabled' : ''}>${DC.res.me ? 'WAITING...' : 'I AM READY'}</button></div>`;
       const b = el.querySelector('#vsRes'); if (b) b.addEventListener('click', () => { DC.res.me = true; send({ t: 'rresume' }); dcTick(); });
       return;
     }
@@ -379,8 +379,8 @@
     const onl = !!(NET.client && NET.client.connected), other = who(1 - me());
     if (!el) { el = document.createElement('div'); el.id = 'vsDc'; el.className = 'vs-dc'; document.body.appendChild(el); }
     el.innerHTML = onl
-      ? `<div class="vs-dc-box"><small>RANKED GAME PAUSED</small><h2>${esc(other.toUpperCase())} DISCONNECTED.</h2><p>They have <b>${mm}:${ss}</b> to get back. If they do not, you win by forfeit and the rating points are yours.</p><div class="ch-spin-ring"></div></div>`
-      : `<div class="vs-dc-box"><small>RANKED GAME PAUSED</small><h2>YOU ARE OFFLINE.</h2><p>Reconnecting on its own. Keep this page open. You can not play a ranked game while disconnected, and if you are not back in time you forfeit.</p><div class="ch-spin-ring"></div></div>`;
+      ? `<div class="vs-dc-box"><small>RANKED GAME PAUSED</small><h2>${esc(other.toUpperCase())} DISCONNECTED.</h2><p>They have <b>${mm}:${ss}</b> to return, or you win by forfeit.</p><div class="ch-spin-ring"></div></div>`
+      : `<div class="vs-dc-box"><small>RANKED GAME PAUSED</small><h2>YOU ARE OFFLINE.</h2><p>Reconnecting. Keep this page open. Not back in time means a forfeit.</p><div class="ch-spin-ring"></div></div>`;
     if (left <= 0 && onl && !DC.claimed) claimForfeit();
   }
   function netBar() {
@@ -569,7 +569,7 @@
     return `<div><span class="ts-start-k">RANKED AND OPEN GAMES</span><div class="ch-chips"><a class="ch-chip" href="#/ranked">RANKED LADDER AND FIND A MATCH</a>
         ${VS.opts.ranked && VS.opts.auction ? '<span class="ch-chip on">RANKED GAME</span>' : ''}
         ${NET.role === 'host' ? `<button type="button" class="ch-chip${VS.opts.pub ? ' on' : ''}" data-rk="pub"${dis}>${VS.opts.pub ? 'OPEN GAME: LISTED' : 'OPEN GAME: PRIVATE'}</button>` : ''}</div>
-      <small class="muted">${guestPeer ? 'The other player is a guest, so this game is casual.' : VS.opts.ranked && VS.opts.auction ? 'Ranked has one set of rules: best of 7, a blind draft, a 24 second shot clock, no duplicates, just the five. An auction with a hidden pool of ten mixed players, $20 each, $1 to open, raises of $1 or more. It moves your ladder rating for this era.' : 'This is a casual game and does not touch the ladder. To play ranked, use the Ranked tile on the main menu.'} ${VS.opts.pub ? 'Anyone can find this room under Ranked, Casual rooms, until someone joins.' : ''}</small></div>`;
+      <small class="muted">${guestPeer ? 'The other player is a guest, so this game is casual.' : VS.opts.ranked && VS.opts.auction ? 'Ranked rules are fixed. This game moves your rating.' : 'Casual: no rating. For ranked, use the Ranked tile.'} ${VS.opts.pub ? 'Listed as a casual room until someone joins.' : ''}</small></div>`;
   }
   function syncLobby() {
     if (!UI.ranked) return;
@@ -768,7 +768,7 @@
       <div class="lb-ready"><button type="button" class="btn btn-gold btn-big" data-ready="${i0}">${rdy[i0] ? 'READY: TAP TO CANCEL' : 'I AM READY'}</button>
         <span class="muted">${esc(b)}: <b>${rdy[1 - i0] ? 'READY' : 'NOT YET'}</b></span></div>
       <p class="lb-gap" id="lbGap"></p>
-      <p class="muted lb-note">An auction with a hidden pool of ten mixed players, $20 each, $1 to open, raises of $1 or more, a 24 second shot clock on every bid, then a best-of-7 series. Take a minute: nothing starts until you both press ready. Leaving before the auction costs nothing; leaving after it starts is a forfeit.</p>
+      <p class="muted lb-note">Auction: 10 hidden players, $20 each, 24 seconds a bid. Then best of 7. Nothing starts until you both press ready. Leaving now is free.</p>
       <button type="button" id="vsStart" hidden></button>${reactBar()}`;
     bindReact(app);
     if (LB.sound !== NET.code) { LB.sound = NET.code; if (window.SFX) window.SFX.play('chime'); }   // a match was found
@@ -802,8 +802,8 @@
       const el = document.getElementById('lbMsg');
       if (!el || !lobbyOn()) { clearInterval(LB.t); LB.t = null; LB.cd = 0; return; }
       const r = VS.ready || [false, false], both = r[0] && r[1], i0 = me();
-      if (!LB.loaded) { el.textContent = LB.err || 'Loading the rosters. Stay on this screen...'; LB.cd = 0; return; }
-      if (!both) { el.textContent = r[i0] ? 'Waiting for ' + who(1 - i0) + ' to press ready.' : 'Look at each other, then press ready. Nothing starts until you both do.'; LB.cd = 0; return; }
+      if (!LB.loaded) { el.textContent = LB.err || 'Loading players...'; LB.cd = 0; return; }
+      if (!both) { el.textContent = r[i0] ? 'Waiting for ' + who(1 - i0) + ' to press ready.' : 'Press ready when you are.'; LB.cd = 0; return; }
       if (!LB.cd) LB.cd = Date.now() + 4000;
       const n = Math.ceil((LB.cd - Date.now()) / 1000);
       el.textContent = 'Starting in ' + Math.max(n, 0) + '...';

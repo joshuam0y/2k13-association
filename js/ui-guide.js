@@ -256,13 +256,13 @@
         </dl>`;
   const RANKED_HELP = `<p>Ranked is a ladder for the auction draft. You need an account.</p>
         <h3>FIND A MATCH</h3>
-        <p>You are paired with whoever else is searching, the closest rating first. Look at each other's cards in the lobby, press ready, then bid on a hidden pool of ten players: $20 each, bidding opens at $1, a 24 second shot clock, five players each. Then a best of 7 series.</p>
+        <p>You get the closest rating searching now. Press ready in the lobby, then bid on ten hidden players: $20 each, bids start at $1, 24 seconds a bid, five each. Then a best of 7.</p>
         <h3>THE LADDER</h3>
-        <p>Everyone starts at 1200, the bottom of Silver. Win to climb and lose to drop. Ranks run from Bronze up through Silver, Gold, Platinum and Diamond (three divisions each), then Master, Grandmaster and Legend. Open THE RANKS on the Ranked page for the ranges.</p>
+        <p>Start at 1200, the bottom of Silver. Win to climb, lose to drop. Open THE RANKS for every range.</p>
         <h3>LEAVING</h3>
-        <p>If you disconnect, you have 90 seconds to rejoin (a banner shows a Rejoin button). If you do not, the other player wins by forfeit. Forfeit ends the game at once. Leaving the lobby before the auction costs nothing.</p>
+        <p>Disconnect and you have 90 seconds to rejoin. Miss it and you forfeit. The lobby is free to leave.</p>
         <h3>DAILY AUCTION</h3>
-        <p>A solo auction against the house with the same ten players for everyone, once a day. Your lineup is scored and shown as a percentage of a perfect five on the daily board. It does not move your rating.</p>
+        <p>A solo auction vs the house. Same ten players for everyone, once a day. Scored as a percentage of a perfect five. No rating change.</p>
         <h3>FRIENDS</h3>
         <p>Tap a name to see a profile and add a friend. Play friends in Head to Head: it is casual.</p>`;
   const HOME_HELP = `<p>Tap a tile on the main menu to start.</p>
