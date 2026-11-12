@@ -95,6 +95,18 @@
       FRC[key] = { st, at: Date.now() };
       return st;
     },
+    // removes a friend, or cancels a request you sent (or declines theirs): the row between the two of you goes
+    async removeFriend(name) {
+      const c = await getClient(), key = String(name).toLowerCase();
+      delete FRC[key];
+      const f = await c.from('profiles').select('id').ilike('username', String(name).replace(/[_%\\]/g, '\\$&')).maybeSingle();
+      if (!f.data || !USER) return false;
+      const r = await c.from('friendships').select('id').or('and(requester.eq.' + USER.id + ',addressee.eq.' + f.data.id + '),and(requester.eq.' + f.data.id + ',addressee.eq.' + USER.id + ')').limit(1);
+      if (r.error || !r.data || !r.data.length) return false;
+      const d = await c.from('friendships').delete().eq('id', r.data[0].id);
+      delete FRC[key];
+      return !d.error;
+    },
     // sends a friend request (or accepts theirs); returns the new state
     async addFriend(name) {
       const c = await getClient(), key = String(name).toLowerCase();
@@ -426,12 +438,15 @@
       const li = (x, btns) => `<li><i class="pf-dot ${P.isOnline(names[other(x)]) ? 'on' : ''}"></i><b>${UI.userLink && names[other(x)] ? UI.userLink(names[other(x)]) : esc(names[other(x)] || '?')}</b>${btns}</li>`;
       const room = roomNow();
       box.innerHTML = (inc.length ? `<div class="pf-h">REQUESTS</div><ul>${inc.map(x => li(x, `<button type="button" class="btn btn-small btn-gold" data-acc="${x.id}">ACCEPT</button><button type="button" class="btn btn-small" data-rm="${x.id}">DECLINE</button>`)).join('')}</ul>` : '')
-        + `<div class="pf-h">FRIENDS (${fr.length})</div>${fr.length ? `<ul>${fr.sort((a, b) => P.isOnline(names[other(b)]) - P.isOnline(names[other(a)])).map(x => li(x, `${P.isOnline(names[other(x)]) ? '<small class="pf-on">ONLINE</small>' : '<small class="muted">offline</small>'}${room && P.isOnline(names[other(x)]) ? `<button type="button" class="btn btn-small btn-gold" data-inv="${esc(names[other(x)])}">INVITE</button>` : ''}<button type="button" class="btn btn-small" data-rm="${x.id}" title="Remove friend">REMOVE</button>`)).join('')}</ul>` : '<p class="muted">No friends yet. Add someone by their exact username.</p>'}`
+        + `<div class="pf-h">FRIENDS (${fr.length})</div>${fr.length ? `<ul>${fr.sort((a, b) => P.isOnline(names[other(b)]) - P.isOnline(names[other(a)])).map(x => li(x, `${P.isOnline(names[other(x)]) ? '<small class="pf-on">ONLINE</small>' : '<small class="muted">offline</small>'}${room && P.isOnline(names[other(x)]) ? `<button type="button" class="btn btn-small btn-gold" data-inv="${esc(names[other(x)])}">INVITE</button>` : ''}<button type="button" class="btn btn-small" data-rm="${x.id}" title="Remove friend">UNFRIEND</button>`)).join('')}</ul>` : '<p class="muted">No friends yet. Add someone by their exact username.</p>'}`
         + (out.length ? `<div class="pf-h">SENT</div><ul>${out.map(x => li(x, `<small class="muted">waiting</small><button type="button" class="btn btn-small" data-rm="${x.id}">CANCEL</button>`)).join('')}</ul>` : '')
         + (room ? '' : '<p class="muted ch-small">To invite a friend, host a room online first (Head to Head or Tournament), then open this again.</p>');
       box.querySelectorAll('.u-link').forEach(a => a.addEventListener('click', () => { const pnl = document.getElementById('pfPanel'); if (pnl) pnl.remove(); }));
       box.querySelectorAll('[data-acc]').forEach(b => b.addEventListener('click', async () => { b.disabled = true; await c.from('friendships').update({ status: 'accepted' }).eq('id', b.dataset.acc); drawFriends(box); }));
-      box.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', async () => { b.disabled = true; await c.from('friendships').delete().eq('id', b.dataset.rm); drawFriends(box); }));
+      box.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', async () => {
+        if (b.title === 'Remove friend' && !b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'SURE?'; setTimeout(() => { if (b.isConnected) { delete b.dataset.sure; b.textContent = 'UNFRIEND'; } }, 4000); return; }   // two taps, so a stray one does not unfriend
+        b.disabled = true; await c.from('friendships').delete().eq('id', b.dataset.rm); drawFriends(box);
+      }));
       box.querySelectorAll('[data-inv]').forEach(b => b.addEventListener('click', () => sendInvite(b.dataset.inv)));
     } catch (e) { box.textContent = 'Could not load friends: ' + String((e && e.message) || e); }
   }

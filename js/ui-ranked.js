@@ -433,7 +433,7 @@
         const played = done && done.fin;
         body.innerHTML = `${TH ? `<div class="rk-theme"><small>TODAY | ${esc(TH.kind)}</small><b>${esc(TH.title)}</b><span class="muted">${esc(TH.tag)}</span></div>` : ''}<p class="muted rk-sub">Same ten players for everyone. $20, you vs the house. One try a day.</p>
           <p class="rk-streak">${streakNow().n ? '<b>' + streakNow().n + '</b> DAY DAILY STREAK' + (streakNow().done ? ' | TODAY DONE' : ' | PLAY TODAY TO KEEP IT') : 'START A DAILY STREAK: PLAY ONE A DAY'}</p>
-          <div class="ch-go">${UI.profile.signedIn() ? `<a class="btn btn-gold btn-big" href="#/ranked/daily/ALL">${played ? 'SEE TODAY\'S RESULT' : done ? 'FINISH TODAY\'S AUCTION' : 'PLAY TODAY\'S AUCTION'}</a>` : ''}</div>` +
+          <div class="ch-go">${UI.profile.signedIn() ? `<a class="btn btn-gold btn-big" href="#/ranked/daily/ALL">${played ? 'SEE TODAY\'S RESULT' : done ? 'FINISH TODAY\'S AUCTION' : 'PLAY TODAY\'S AUCTION'}</a>` : ''}<a class="btn" href="#/ranked/practice">PRACTICE ARCHIVE</a></div>` +
           (rows.length ? table(perf > 0 ? ['#', 'PLAYER', 'SCORE', 'OF PERFECT'] : ['#', 'PLAYER', 'SCORE'], rows.map((r, i) => [i + 1, nameCell(r, me), '<b>' + Number(r.score).toFixed(1) + '</b>'].concat(perf > 0 ? [pctOf(r.score)] : []))) : '<p class="muted">No scores yet today' + esc(scope) + '.</p>');
       }
     } catch (e) { body.innerHTML = '<p class="rk-err">' + esc(failMsg(e)) + '</p>'; }
@@ -485,23 +485,37 @@
   const RINGLESS = ['Charles Barkley', 'Karl Malone', 'John Stockton', 'Patrick Ewing', 'Steve Nash', 'Allen Iverson', 'Reggie Miller', 'Chris Paul', 'Carmelo Anthony', 'Tracy McGrady', 'Vince Carter', 'Dominique Wilkins', 'Elgin Baylor', 'George Gervin', 'Alex English', 'Chris Webber', 'Anfernee Hardaway', 'Tim Hardaway', 'Mitch Richmond', 'Bob Lanier', 'Pete Maravich', 'Dikembe Mutombo', 'Sidney Moncrief', 'Bernard King', 'Damian Lillard', 'Paul George', 'Elvin Hayes', 'Nate Thurmond'];
   const DECS = ['1950s', '1960s', '1970s', '1980s', '1990s', '2000s', '2010s', '2020s'];
   const labelOf = y => (y - 1) + '-' + String(y).slice(2);
+  // every theme as plain data, so a day, the archive and the casual picker all name them the same way
+  const mk = (kind, title, tag, spec) => ({ kind, title, tag, spec, key: Object.keys(spec).map(k => spec[k]).join(':') });
+  const T_CURRENT = a => mk('CURRENT TEAM', labelOf(2027) + ' ' + UI.teamName(a).toUpperCase(), "Today's roster", { t: 'season', abbr: a, year: 2027 });
+  const T_FAMOUS = f => mk('FAMOUS SEASON', labelOf(f[1]) + ' ' + (FRANCH[f[0]] || UI.teamName(f[0])).toUpperCase(), f[2], { t: 'season', abbr: f[0], year: f[1] });
+  const T_FRANCH = a => mk('ALL-TIME FRANCHISE', 'THE BEST ' + FRANCH[a].toUpperCase() + ' EVER', 'Every season counts', { t: 'franchise', abbr: a });
+  const T_DECADE = d => mk('ERA', 'THE ' + d.toUpperCase(), 'The best of one decade', { t: 'decade', d });
+  const T_STYLE = st => mk('STYLE', st[1], st[2], { t: 'style', k: st[0] });
+  const T_DRAFT = d => mk('DRAFT CLASS', 'THE CLASS OF ' + d[0], d[1], { t: 'draft', y: d[0] });
+  const T_ROOKIE = r => mk('ROOKIE YEAR', 'THE ' + labelOf(r[0]) + ' ROOKIES', r[1], { t: 'rookie', year: r[0] });
+  const T_U25 = () => mk('UNDER 25', 'THE YOUNG GUNS', 'Current players under 25', { t: 'u25' });
+  const T_RING = () => mk('RINGLESS', 'NO RING', 'The best never to win it all', { t: 'ringless' });
+  const themeCatalog = () => [].concat(MODERN.map(T_CURRENT), FAMOUS.map(T_FAMOUS), Object.keys(FRANCH).map(T_FRANCH), DECS.map(T_DECADE), STYLES.map(T_STYLE), DRAFTYRS.map(T_DRAFT), ROOKIES.map(T_ROOKIE), [T_U25(), T_RING()]);
   // what today is, from the date alone (no data needed): the kind rotates daily, the pick inside it comes from the date
   function dailyThemeInfo(day) {
     const idx = Math.floor(Date.parse(day + 'T00:00:00Z') / 86400000), kind = ((idx % 9) + 9) % 9, h = hash(day);
-    if (kind === 0) { const a = MODERN[h % MODERN.length]; return { kind: 'CURRENT TEAM', title: labelOf(2027) + ' ' + UI.teamName(a).toUpperCase(), tag: 'Today\'s roster', spec: { t: 'season', abbr: a, year: 2027 } }; }
-    if (kind === 1) { const f = FAMOUS[h % FAMOUS.length]; return { kind: 'FAMOUS SEASON', title: labelOf(f[1]) + ' ' + (FRANCH[f[0]] || UI.teamName(f[0])).toUpperCase(), tag: f[2], spec: { t: 'season', abbr: f[0], year: f[1] } }; }
-    if (kind === 2) { const ks = Object.keys(FRANCH), a = ks[h % ks.length]; return { kind: 'ALL-TIME FRANCHISE', title: 'THE BEST ' + FRANCH[a].toUpperCase() + ' EVER', tag: 'Every season counts', spec: { t: 'franchise', abbr: a } }; }
-    if (kind === 3) { const d = DECS[h % DECS.length]; return { kind: 'ERA', title: 'THE ' + d.toUpperCase(), tag: 'The best of one decade', spec: { t: 'decade', d } }; }
-    if (kind === 4) { const st = STYLES[h % STYLES.length]; return { kind: 'STYLE', title: st[1], tag: st[2], spec: { t: 'style', k: st[0] } }; }
-    if (kind === 5) { const d = DRAFTYRS[h % DRAFTYRS.length]; return { kind: 'DRAFT CLASS', title: 'THE CLASS OF ' + d[0], tag: d[1], spec: { t: 'draft', y: d[0] } }; }
-    if (kind === 6) { const r = ROOKIES[h % ROOKIES.length]; return { kind: 'ROOKIE YEAR', title: 'THE ' + labelOf(r[0]) + ' ROOKIES', tag: r[1], spec: { t: 'rookie', year: r[0] } }; }
-    if (kind === 7) return { kind: 'UNDER 25', title: 'THE YOUNG GUNS', tag: 'Current players under 25', spec: { t: 'u25' } };
-    return { kind: 'RINGLESS', title: 'NO RING', tag: 'The best never to win it all', spec: { t: 'ringless' } };
+    if (kind === 0) return T_CURRENT(MODERN[h % MODERN.length]);
+    if (kind === 1) return T_FAMOUS(FAMOUS[h % FAMOUS.length]);
+    if (kind === 2) { const ks = Object.keys(FRANCH); return T_FRANCH(ks[h % ks.length]); }
+    if (kind === 3) return T_DECADE(DECS[h % DECS.length]);
+    if (kind === 4) return T_STYLE(STYLES[h % STYLES.length]);
+    if (kind === 5) return T_DRAFT(DRAFTYRS[h % DRAFTYRS.length]);
+    if (kind === 6) return T_ROOKIE(ROOKIES[h % ROOKIES.length]);
+    if (kind === 7) return T_U25();
+    return T_RING();
   }
+  const themeLocked = key => dailyThemeInfo(today()).key === key;   // today's theme stays out of practice and the casual picker until tomorrow
   const THEME = {};
-  async function dailyTheme(day) {
-    if (THEME[day]) return THEME[day];
-    const info = dailyThemeInfo(day), sp = info.spec, top = l => l.sort((a, b) => b.ovr - a.ovr || (a.id < b.id ? -1 : 1)).slice(0, 12);
+  const BUILT = {};
+  async function buildTheme(info) {
+    if (BUILT[info.key]) return BUILT[info.key];
+    const sp = info.spec, top = l => l.sort((a, b) => b.ovr - a.ovr || (a.id < b.id ? -1 : 1)).slice(0, 12);
     let pool = [];
     const allTime = () => { const best = {}; C.allTimePool().forEach(e => { if (!best[e.base] || e.ovr > best[e.base].ovr) best[e.base] = e; }); return Object.keys(best).map(k => Object.assign({}, best[k], { id: best[k].key, team: best[k].from })); };
     if (sp.t === 'rookie') { await C.load(sp.year); pool = C.seasonData(sp.year).players.filter(x => x.rookie).map(x => Object.assign({}, x, { season: sp.year })); }
@@ -515,9 +529,15 @@
       else if (sp.t === 'ringless') { const names = new Set(RINGLESS); pool = allTime().filter(e => names.has(e.name)); }
       else { const def = STYLES.find(x => x[0] === sp.k); pool = allTime().filter(def[3]).sort((a, b) => def[4](b) - def[4](a)).slice(0, 30); }
     }
-    if (sp.t === 'style') pool = pool.slice(0, 12); else pool = top(pool);
-    if (pool.length < 10) { pool = top(allTime()); info.title = 'THE ALL-TIME GREATS'; info.tag = 'Today\'s theme had too few players'; }
-    return (THEME[day] = { info, pool });
+    pool = sp.t === 'style' ? pool.slice(0, 12) : top(pool);
+    const years = sp.t === 'season' || sp.t === 'rookie' ? [sp.year] : sp.t === 'u25' ? [2027] : [];
+    return (BUILT[info.key] = { info, pool, years });
+  }
+  async function dailyTheme(day) {
+    if (THEME[day]) return THEME[day];
+    let t = await buildTheme(dailyThemeInfo(day));
+    if (t.pool.length < 10) { await C.load('pool'); const best = {}; C.allTimePool().forEach(e => { if (!best[e.base] || e.ovr > best[e.base].ovr) best[e.base] = e; }); t = { info: Object.assign({}, t.info, { title: 'THE ALL-TIME GREATS', tag: 'Today\'s theme had too few players' }), pool: Object.keys(best).map(k => Object.assign({}, best[k], { id: best[k].key, team: best[k].from })).sort((a, b) => b.ovr - a.ovr).slice(0, 12), years: [] }; }
+    return (THEME[day] = t);
   }
   function dailyPerfect(era, day) {   // the same ten players for everyone, so one number per day
     const k = day;
@@ -542,15 +562,15 @@
     const target = st.o.start + Math.round(avg * (0.4 + 1.6 * w) - st.o.start + (rng() - 0.5) * 1.5);
     return st.price + st.o.raise <= target && C.aucCanRaise(st, 1) ? 'raise' : 'pass';
   }
-  function dailyPage(app, era) {
+  function dailyPage(app, era, pr) {   // pr: a practice round of any theme {info, n}: no board, no streak
     stopRefresh();
     era = ERAS.indexOf(era) >= 0 ? era : 'ALL';
-    if (!UI.profile.signedIn()) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">DAILY AUCTION | ${esc(eraName(era))}</div><h1 class="ch-hero-t">SIGN IN FIRST.</h1></section>${signInBox('PLAY THE DAILY AUCTION')}<div class="ch-go"><a class="btn" href="#/ranked">BACK</a></div>`; UI.profile.wire(app, () => dailyPage(app, era)); return; }
+    if (!pr && !UI.profile.signedIn()) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">DAILY AUCTION | ${esc(eraName(era))}</div><h1 class="ch-hero-t">SIGN IN FIRST.</h1></section>${signInBox('PLAY THE DAILY AUCTION')}<div class="ch-go"><a class="btn" href="#/ranked">BACK</a></div>`; UI.profile.wire(app, () => dailyPage(app, era)); return; }
     era = 'ALL';   // the daily is one theme a day, whatever era is picked above
-    const day = today(), key = 'a13-rk-d-' + day + '-ALL';
+    const day = pr ? 'practice:' + pr.info.key + ':' + pr.n : today(), key = 'a13-rk-d-' + day + '-ALL';
     if (!THEME[day]) {
-      app.innerHTML = '<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING TODAY\'S THEME...</div></section>';
-      dailyTheme(day).then(() => { if (/^#\/ranked\/daily/.test(location.hash)) dailyPage(app, era); }).catch(e => { app.innerHTML = '<p class="rk-err">' + esc(e.message || e) + '</p>'; });
+      app.innerHTML = '<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE THEME...</div></section>';
+      (pr ? buildTheme(pr.info).then(t => { THEME[day] = t; }) : dailyTheme(day)).then(() => { if (/^#\/ranked\/(daily|practice)/.test(location.hash)) dailyPage(app, era, pr); }).catch(e => { app.innerHTML = '<p class="rk-err">' + esc(e.message || e) + '</p>'; });
       return;
     }
     const pool = THEME[day].pool, byId = {};
@@ -573,8 +593,8 @@
       return `<div class="vs-side${st.turn === i ? ' on' : ''}"><div class="vs-side-h"><div><small>${name}</small><b>${money(A.budget - st.spent[i])} left</b><small class="vs-pay">${st.won[i].length} of ${per} spots</small></div></div>
         <ol class="vs-auc-won">${won.map(w => `<li>${esc(w.p ? w.p.name : '?')} <small class="muted">${money(w.price || 0)}</small></li>`).join('') || '<li class="muted">Nobody yet</li>'}</ol></div>`;
     };
-    const TH = (THEME[day] || {}).info || { title: eraName(era), kind: '' };
-    const hdr = `<div class="ch-top"><div><div class="ch-top-k">DAILY | ${esc(day)} | ${esc(TH.title)}</div><div class="ch-top-t">${st.done ? 'YOUR FIVE IS SET' : 'PLAYER ' + (st.i + 1) + ' OF ' + st.ids.length}</div></div><a class="btn btn-small" href="#/ranked">BACK</a></div>`;
+    const TH = (THEME[day] || {}).info || { title: eraName(era), kind: '' }, isPr = day.indexOf('practice:') === 0, prKey = isPr ? day.slice(9, day.lastIndexOf(':')) : '';
+    const hdr = `<div class="ch-top"><div><div class="ch-top-k">${isPr ? 'PRACTICE' : 'DAILY | ' + esc(day)} | ${esc(TH.title)}</div><div class="ch-top-t">${st.done ? 'YOUR FIVE IS SET' : 'PLAYER ' + (st.i + 1) + ' OF ' + st.ids.length}</div></div><a class="btn btn-small" href="${isPr ? '#/ranked/practice' : '#/ranked'}">BACK</a></div>`;
     if (st.done) {
       stopClock();
       const five = st.won[0].map(id => byId[id]), score = UI.ranked.lineupScore(five), houseFive = st.won[1].map(id => byId[id]), hs = UI.ranked.lineupScore(houseFive);
@@ -583,12 +603,13 @@
       app.innerHTML = `${hdr}<div class="vs-sides vs-compact">${sideBox(0, 'YOU')}${sideBox(1, 'THE HOUSE')}</div>
         <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${score == null ? '-' : score.toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div>`}<div class="rk-streak" id="rkStreak"></div><span class="muted">The house scored ${hs == null ? '-' : hs.toFixed(1)}. ${score != null && hs != null ? (score > hs ? 'You beat the house.' : score < hs ? 'The house won this one.' : 'A tie.') : ''}</span></section>
         <div id="rkSub" class="rkn"><span class="muted">Sending your score...</span></div>
-        <div class="ch-go"><a class="btn btn-gold" href="#/ranked">SEE THE BOARD</a>${pct == null ? '' : '<button type="button" class="btn" id="dlShare">SHARE YOUR SCORE</button>'}</div>`;
+        <div class="ch-go">${isPr ? `<a class="btn btn-gold" href="#/ranked/practice/${esc(prKey)}/${Date.now()}">PLAY AGAIN</a><a class="btn" href="#/ranked/practice">ARCHIVE</a>` : `<a class="btn btn-gold" href="#/ranked">SEE THE BOARD</a>${pct == null ? '' : '<button type="button" class="btn" id="dlShare">SHARE YOUR SCORE</button>'}`}</div>`;
       const dsh = UI.$('#dlShare', app);
       if (dsh) dsh.addEventListener('click', async () => { dsh.disabled = true; const r = await shareCard({ k: 'DAILY | ' + day, title: 'OF A PERFECT FIVE', color: '#d4af37', big: pct.toFixed(1) + '%', sub: TH.title, name: UI.profile.account() || '' }, 'My Starting Five daily auction: ' + pct.toFixed(1) + '% of a perfect five.'); dsh.disabled = false; if (r === 'saved') UI.toast('Saved the picture. The link is copied.'); });
       const paintStreak = () => { const sk = UI.$('#rkStreak', app), n = streakNow(); if (sk && n.n) sk.innerHTML = '<b>' + n.n + '</b> DAY DAILY STREAK' + (n.best > n.n ? ' | BEST ' + n.best : ''); };
       paintStreak();
       const sub = UI.$('#rkSub', app);
+      if (isPr) { sub.innerHTML = '<b>PRACTICE.</b> <span class="muted">Not on the board, no streak.</span>'; return; }
       const cur = ls.get(key, {});
       if (cur.sent) { sub.innerHTML = `<b>SCORE SENT.</b> <span class="muted">One try a day for each era.</span>`; return; }
       UI.profile.rpc('submit_daily', { p_day: day, p_era: era, p_score: score, p_lineup: { names: five.map(p => p.name), seasons: five.map(p => p.season || null), score, era } })
@@ -615,7 +636,7 @@
           <div class="auc-bid"><div class="auc-maxline">YOUR MAX BID IS <b>${money(max)}</b> <span>${money(A.budget - st.spent[0])} left${per - st.won[0].length > 1 ? ', keeping ' + money((per - st.won[0].length - 1) * A.start) + ' for your other ' + (per - st.won[0].length - 1) + ' open spot' + (per - st.won[0].length - 1 > 1 ? 's' : '') : ''}</span></div><div class="auc-step"><button type="button" class="btn" id="aucDown"${DB.amt - A.raise < min ? ' disabled' : ''}>&minus;</button><div class="auc-amt"><small>YOUR BID</small><b>${money(DB.amt)}</b></div><button type="button" class="btn" id="aucUp"${DB.amt + A.raise > max ? ' disabled' : ''}>+</button></div>
             <div class="auc-chips">${quick.map(x => `<button type="button" class="ch-chip${DB.amt === x.to ? ' on' : ''}" data-to="${x.to}">${x.label}</button>`).join('')}<button type="button" class="ch-chip${DB.amt === max ? ' on' : ''}" data-to="${max}"${canRaise ? '' : ' disabled'}>ALL IN ${money(max)}</button></div>
             <div class="auc-go"><button type="button" class="btn btn-gold btn-big" id="aucRaise"${mine && canRaise ? '' : ' disabled'}>BID ${money(DB.amt)}</button><button type="button" class="btn btn-big" id="aucPass"${mine ? '' : ' disabled'}>PASS<small>${st.holder === 0 ? 'You get him' : 'The house gets him'} for ${money(st.price)}</small></button></div></div>`}
-          <div class="auc-dots">${st.ids.map((id, k) => `<i class="${k < st.i ? 'sold' : k === st.i ? 'now' : ''}"></i>`).join('')}</div><p class="auc-more">${left} MORE IN THE HIDDEN POOL | ONE TRY A DAY</p>
+          <div class="auc-dots">${st.ids.map((id, k) => `<i class="${k < st.i ? 'sold' : k === st.i ? 'now' : ''}"></i>`).join('')}</div><p class="auc-more">${left} MORE IN THE HIDDEN POOL | ${isPr ? 'PRACTICE' : 'ONE TRY A DAY'}</p>
         </main>${side(1, 'r', 'THE HOUSE')}</div>`;
     const go = (a, to) => {
       const before = st.log.length;
@@ -796,7 +817,7 @@
       if (d.self) { location.replace('#/me'); return; }
       const fav = d.fav_era || d.auto_era, bl = d.best_lineup, yr = se => (se ? "'" + String(se - 1).slice(2) + "-'" + String(se).slice(2) : '');
       const total = d.wins + d.losses, signed = UI.profile.signedIn();
-      const fr = !signed ? '' : d.friend === 'friends' ? '<span class="vs-fr ok">&#10003; YOU ARE FRIENDS</span>' : d.friend === 'sent' ? '<span class="muted">REQUEST SENT</span>' : `<button type="button" class="btn btn-gold" id="uAdd">${d.friend === 'incoming' ? 'ACCEPT FRIEND REQUEST' : 'ADD AS FRIEND'}</button>`;
+      const fr = !signed ? '' : d.friend === 'friends' ? '<span class="vs-fr ok">&#10003; YOU ARE FRIENDS</span><button type="button" class="btn btn-small" id="uRm">UNFRIEND</button>' : d.friend === 'sent' ? '<span class="muted">REQUEST SENT</span><button type="button" class="btn btn-small" id="uRm">CANCEL REQUEST</button>' : `<button type="button" class="btn btn-gold" id="uAdd">${d.friend === 'incoming' ? 'ACCEPT FRIEND REQUEST' : 'ADD AS FRIEND'}</button>`;
       app.innerHTML = `<div class="pf-head">${avatarHtml(d.avatar, d.username, 72, Math.max(1200, ...(d.ratings || []).map(r => r.rating)))}<section class="ch-hero"><div class="ch-hero-k">PROFILE${d.region ? ' | ' + esc(regionName(d.region).toUpperCase()) : ''}</div><h1 class="ch-hero-t">${esc(d.username).toUpperCase()}</h1>
           <p class="ch-hero-p">${total ? d.wins + '-' + d.losses + ' in Head to Head series.' : 'No series on this account yet.'}</p></section></div>
         ${fr ? `<div class="ch-go u-act">${fr}</div>` : ''}
@@ -808,6 +829,15 @@
         ${d.ratings && d.ratings.length ? `<div class="ch-step"><div class="ch-step-k">LADDER RATINGS</div>${table(['ERA', 'RATING', 'RANK', 'W-L'], d.ratings.map(r => [esc(eraName(r.era)), '<b>' + r.rating + '</b> ' + tierBadge(r.rating), '#' + r.rank + (r.of ? ' of ' + r.of : ''), wl(r.wins, r.losses)]), true)}</div>` : ''}
         ${d.most && d.most.length ? `<div class="ch-step"><div class="ch-step-k">MOST DRAFTED</div>${table(['PLAYER', 'SEASON', 'TIMES'], d.most.map(m => [esc(m.name), esc(yr(m.season) || 'ANY'), '<b>' + m.count + '</b>']), true)}</div>` : ''}
         <div class="ch-go"><a class="btn" href="#/ranked">RANKED</a><a class="btn" href="#/me">MY PROFILE</a></div>`;
+      const urm = UI.$('#uRm', app);
+      if (urm) urm.addEventListener('click', async () => {   // two taps to unfriend (one to cancel a request)
+        const unf = d.friend === 'friends';
+        if (unf && !urm.dataset.sure) { urm.dataset.sure = '1'; urm.textContent = 'TAP AGAIN TO UNFRIEND'; setTimeout(() => { if (urm.isConnected) { delete urm.dataset.sure; urm.textContent = 'UNFRIEND'; } }, 4000); return; }
+        urm.disabled = true;
+        const ok = await UI.profile.removeFriend(d.username);
+        UI.toast(ok ? (unf ? 'Unfriended ' + d.username + '.' : 'Request cancelled.') : 'Could not do that. Try again.', ok ? undefined : 'error');
+        userPage(app, name);
+      });
       const rps = UI.$('#rpSend', app);
       if (rps) rps.addEventListener('click', async () => {
         const m = UI.$('#rpMsg', app); rps.disabled = true; m.textContent = 'Sending...';
@@ -890,7 +920,8 @@
     draw();
   }
   UI.ranked.tour = openTour;
-  UI.ranked.theme = dailyTheme; UI.ranked.themeInfo = dailyThemeInfo;   // for the theme list and checks
+  UI.ranked.theme = dailyTheme; UI.ranked.themeInfo = dailyThemeInfo;
+  UI.ranked.themeCatalog = themeCatalog; UI.ranked.themeLocked = themeLocked; UI.ranked.themeBuild = key => buildTheme(themeCatalog().find(t => t.key === key));   // for the theme list and checks
 
   // ---------- nudges: a friend or other players searching for a ranked match ----------
   const NOTE = 'a13-rk-notify';
@@ -914,12 +945,34 @@
       try { const n = new Notification('Starting Five', { body: msg + ' Tap to join.' }); n.onclick = () => { window.focus(); location.hash = '#/ranked/find/ALL'; n.close(); }; } catch (e) { /* the browser refused */ }
     } else if (!document.hidden && names.length) UI.toast(msg + ' Open Ranked to join.');
   }, 20000);
+
+  // ---------- the practice archive: any theme, no board, no streak. Today's theme stays locked until tomorrow. ----------
+  function practicePage(app) {
+    stopRefresh();
+    const cat = themeCatalog(), kinds = [...new Set(cat.map(t => t.kind))], today0 = dailyThemeInfo(today());
+    const rnd = cat.filter(t => !themeLocked(t.key));
+    app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PRACTICE</div><h1 class="ch-hero-t">THE ARCHIVE.</h1>
+        <p class="ch-hero-p">Play any theme. No board, no streak. Today's theme opens tomorrow.</p></section>
+      <div class="ch-go"><a class="btn btn-gold btn-big" href="#/ranked/practice/${esc(rnd[Math.floor(Math.random() * rnd.length)].key)}/${Date.now()}">RANDOM THEME</a><a class="btn" href="#/ranked">BACK</a></div>
+      ${kinds.map(k => `<details class="rk-det"><summary>${esc(k)} (${cat.filter(t => t.kind === k).length})</summary><div class="pr-list">${cat.filter(t => t.kind === k).map(t => themeLocked(t.key)
+        ? `<span class="pr-i lock"><b>${esc(t.title)}</b><small>TODAY'S DAILY: OPENS TOMORROW</small></span>`
+        : `<a class="pr-i" href="#/ranked/practice/${esc(t.key)}/${Date.now()}"><b>${esc(t.title)}</b><small>${esc(t.tag)}</small></a>`).join('')}</div></details>`).join('')}`;
+    void today0;
+  }
+  function practicePlay(app, key, n) {
+    const info = themeCatalog().find(t => t.key === key);
+    if (!info) { location.hash = '#/ranked/practice'; return; }
+    if (themeLocked(key)) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PRACTICE</div><h1 class="ch-hero-t">OPENS TOMORROW.</h1><p class="ch-hero-p">${esc(info.title)} is today's daily. Play it there, then practice it tomorrow.</p></section><div class="ch-go"><a class="btn btn-gold" href="#/ranked/daily/ALL">PLAY THE DAILY</a><a class="btn" href="#/ranked/practice">ARCHIVE</a></div>`; return; }
+    if (!n) { location.hash = '#/ranked/practice/' + key + '/' + Date.now(); return; }
+    return dailyPage(app, 'ALL', { info, n });
+  }
   P.u = function (app, arg) { return userPage(app, decodeURIComponent(String(arg || '').split('/')[0])); };
 
   P.ranked = function (app, arg) {
     const part = String(arg || '').split('/');
     if (part[0] === 'find') return findPage(app, part[1] ? decodeURIComponent(part[1]) : RK.era);
     if (part[0] === 'result') return resultPage(app);
+    if (part[0] === 'practice') return part[1] ? practicePlay(app, decodeURIComponent(part[1]), part[2] || '') : practicePage(app);
     if (part[0] === 'daily') return dailyPage(app, part[1] ? decodeURIComponent(part[1]) : RK.era);
     return rankedPage(app);
   };

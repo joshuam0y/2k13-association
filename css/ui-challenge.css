@@ -1091,3 +1091,12 @@
 .rk-theme { display: grid; gap: 2px; padding: 12px 14px; border: 1px solid var(--gold-dim); background: var(--bg2); margin: 8px 0; }
 .rk-theme small { font-family: var(--display); letter-spacing: .18em; font-size: 11px; color: var(--gold2); }
 .rk-theme b { font-family: var(--display); font-size: 24px; letter-spacing: .04em; }
+
+.pr-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px; margin-top: 8px; }
+.pr-i { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--line2); background: var(--bg2); color: var(--text); text-decoration: none; }
+.pr-i b { font-family: var(--display); letter-spacing: .04em; font-size: 15px; }
+.pr-i small { color: var(--muted); font-size: 12px; }
+.pr-i.lock { opacity: .45; }
+a.pr-i:hover { border-color: var(--gold); }
+
+.vs-theme { width: 100%; padding: 10px; background: var(--bg2); border: 1px solid var(--line2); color: var(--text); font-family: var(--display); letter-spacing: .06em; }
