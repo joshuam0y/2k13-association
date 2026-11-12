@@ -33,6 +33,7 @@
   const REGIONS = [['', 'NOT SET'], ['US', 'United States']].concat(
     [['AL', 'Alabama'], ['AK', 'Alaska'], ['AZ', 'Arizona'], ['AR', 'Arkansas'], ['CA', 'California'], ['CO', 'Colorado'], ['CT', 'Connecticut'], ['DE', 'Delaware'], ['DC', 'Washington DC'], ['FL', 'Florida'], ['GA', 'Georgia'], ['HI', 'Hawaii'], ['ID', 'Idaho'], ['IL', 'Illinois'], ['IN', 'Indiana'], ['IA', 'Iowa'], ['KS', 'Kansas'], ['KY', 'Kentucky'], ['LA', 'Louisiana'], ['ME', 'Maine'], ['MD', 'Maryland'], ['MA', 'Massachusetts'], ['MI', 'Michigan'], ['MN', 'Minnesota'], ['MS', 'Mississippi'], ['MO', 'Missouri'], ['MT', 'Montana'], ['NE', 'Nebraska'], ['NV', 'Nevada'], ['NH', 'New Hampshire'], ['NJ', 'New Jersey'], ['NM', 'New Mexico'], ['NY', 'New York'], ['NC', 'North Carolina'], ['ND', 'North Dakota'], ['OH', 'Ohio'], ['OK', 'Oklahoma'], ['OR', 'Oregon'], ['PA', 'Pennsylvania'], ['RI', 'Rhode Island'], ['SC', 'South Carolina'], ['SD', 'South Dakota'], ['TN', 'Tennessee'], ['TX', 'Texas'], ['UT', 'Utah'], ['VT', 'Vermont'], ['VA', 'Virginia'], ['WA', 'Washington'], ['WV', 'West Virginia'], ['WI', 'Wisconsin'], ['WY', 'Wyoming']].map(([c, n]) => ['US-' + c, '   ' + n]),
     [['CA', 'Canada'], ['MX', 'Mexico'], ['GB', 'United Kingdom'], ['IE', 'Ireland'], ['FR', 'France'], ['DE', 'Germany'], ['ES', 'Spain'], ['IT', 'Italy'], ['PT', 'Portugal'], ['NL', 'Netherlands'], ['BE', 'Belgium'], ['CH', 'Switzerland'], ['SE', 'Sweden'], ['NO', 'Norway'], ['DK', 'Denmark'], ['FI', 'Finland'], ['PL', 'Poland'], ['GR', 'Greece'], ['TR', 'Turkey'], ['RS', 'Serbia'], ['HR', 'Croatia'], ['SI', 'Slovenia'], ['LT', 'Lithuania'], ['NG', 'Nigeria'], ['GH', 'Ghana'], ['ZA', 'South Africa'], ['EG', 'Egypt'], ['IL', 'Israel'], ['AE', 'United Arab Emirates'], ['IN', 'India'], ['PH', 'Philippines'], ['CN', 'China'], ['JP', 'Japan'], ['KR', 'South Korea'], ['AU', 'Australia'], ['NZ', 'New Zealand'], ['BR', 'Brazil'], ['AR', 'Argentina'], ['DO', 'Dominican Republic'], ['PR', 'Puerto Rico'], ['JM', 'Jamaica'], ['OTHER', 'Somewhere else']]);
+  const seasonTag = se => (se ? "'" + String(se - 1).slice(2) + "-'" + String(se).slice(2) : '');
   const regionName = r => { const x = REGIONS.find(y => y[0] === r); return x ? x[1].trim() : (r || ''); };
   const NOT_SET_UP = 'The ranked boards are not switched on yet. The site owner needs to run supabase/community.sql once in the Supabase SQL editor.';
   const failMsg = e => { const m = String((e && e.message) || e); return /does not exist|schema cache|Could not find|relation .* does not exist|PGRST20/i.test(m) ? NOT_SET_UP : m; };
@@ -182,7 +183,7 @@
       <small class="lb-sub">${mine ? 'YOU' : 'OPPONENT'}${d.region ? ' | ' + esc(regionName(d.region)) : ''}</small>
       <div class="lb-elo"><small>${esc(eraName(era))} RATING</small><b>${r ? r.rating : 1200}</b><small>${r && r.of ? '#' + r.rank + ' of ' + r.of : 'NOT RANKED YET'}</small></div>
       <div class="lb-st"><span><b>${r ? r.wins + '-' + r.losses : '0-0'}</b><small>RANKED</small></span><span><b>${(d.wins || 0) + '-' + (d.losses || 0)}</b><small>ALL SERIES</small></span><span><b>${d.friends || 0}</b><small>FRIENDS</small></span></div>
-      ${m ? `<div class="lb-most"><small>MOST USED PLAYER</small><b>${esc(m.name)}</b><small>${esc(yr(m.season) || '')}</small></div>` : ''}
+      ${m ? `<div class="lb-most"><small>MOST USED PLAYER</small><b>${esc(m.name)}</b><small>${esc(seasonTag(m.season))}</small></div>` : ''}
       ${!mine && d.vs ? `<div class="lb-h2h">YOU ${d.vs.me} - ${d.vs.them} THEM</div>` : ''}</div>`;
   }
 
@@ -581,7 +582,7 @@
     if (!i || !UI.profile.signedIn()) { if (el) el.remove(); return; }
     if (!el) { el = document.createElement('div'); el.id = 'rkRejoin'; el.className = 'rk-rejoin'; document.body.appendChild(el); }
     const sec = Math.ceil(i.left / 1000);
-    el.innerHTML = '<span>RANKED GAME IN PROGRESS. GET BACK IN <b>' + Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0') + '</b> OR YOU FORFEIT.</span><button type="button" class="btn btn-small btn-gold" id="rkRejoinBtn">REJOIN NOW</button>';
+    el.innerHTML = '<span>' + (i.lobby ? 'RANKED MATCH FOUND. GET BACK IN <b>' : 'RANKED GAME IN PROGRESS. GET BACK IN <b>') + Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0') + (i.lobby ? '</b> OR YOU LOSE YOUR SPOT.</span>' : '</b> OR YOU FORFEIT.</span>') + '<button type="button" class="btn btn-small btn-gold" id="rkRejoinBtn">REJOIN NOW</button>';
     const b = el.querySelector('#rkRejoinBtn'); if (b) b.addEventListener('click', () => { UI.vsQuick.rejoin(); el.remove(); });
   }, 1000);
   P.u = function (app, arg) { return userPage(app, decodeURIComponent(String(arg || '').split('/')[0])); };

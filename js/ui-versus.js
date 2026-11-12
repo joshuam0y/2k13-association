@@ -762,7 +762,7 @@
         const rb = el && el.querySelector('[data-lbretry]');
         if (rb) rb.addEventListener('click', () => { delete LB.cards[n]; lobbyDraw(app); });   // it gave up: ask again
         else LB.cards[n] = html;
-      });
+      }).catch(() => { const el = app.querySelector('[data-lbn="' + String(n).replace(/"/g, '\\"') + '"]'); if (el) el.innerHTML = '<div class="lb-card"><div class="lb-av">' + esc(String(n).slice(0, 1).toUpperCase()) + '</div><b class="lb-n">' + esc(n) + '</b><small class="muted">NO PROFILE NUMBERS</small></div>'; });
     });
     if (!LB.loaded && !LB.loading) {   // the rosters load now, so the auction does not have to
       LB.loading = 1; LB.err = '';
@@ -812,11 +812,13 @@
     // a ranked game you dropped out of: the room and how long you still have to get back in
     rejoinInfo() {
       const r = savedRoom(); let over = ''; try { over = localStorage.getItem(OVERKEY) || ''; } catch (e) { /* private mode */ }
-      if (online() || !r || r.role === 'watch' || !VS.cfg || !VS.cfg.ranked || over === r.code + ':' + VS.cfg.seed) return null;
+      if (online() || !r || r.role === 'watch') return null;
+      const live = VS.cfg ? VS.cfg.ranked && over !== r.code + ':' + VS.cfg.seed : VS.opts.ranked && VS.opts.auction;   // a game under way, or a match found and still in its lobby
+      if (!live) return null;
       const left = GRACE - (Date.now() - (r.at || 0));
-      return left > 0 ? { code: r.code, left } : null;
+      return left > 0 ? { code: r.code, left, lobby: !VS.cfg } : null;
     },
-    rejoin() { const r = savedRoom(); if (!r || !UI.profile.canPlay()) return; connectRoom(r.role, r.code, r.role === 'host' ? { side: r.side, keep: true } : null); location.hash = '#/challenge/vs/draft'; },
+    rejoin() { const r = savedRoom(); if (!r || !UI.profile.canPlay()) return; connectRoom(r.role, r.code, r.role === 'host' ? { side: r.side, keep: true } : null); location.hash = VS.cfg ? '#/challenge/vs/draft' : '#/challenge/vs'; },
     rematch() { quickPresets(QERA); QUICK = 1; LB.cards = {}; LB.cd = 0; go('setup'); },
     status() { return { role: NET.role, status: NET.status, code: NET.code }; },
     target() { return '#/challenge/vs' + (VS.page === 'draft' ? '/draft' : VS.page === 'series' ? '/result' : ''); }
