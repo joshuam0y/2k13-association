@@ -294,11 +294,13 @@
         body.innerHTML = `<p class="muted rk-sub">${esc(eraName(RK.era))} ranked Head to Head ladder${esc(scope)}. Everyone starts at 1200.</p>` + (rows.length ? table(['#', 'PLAYER', 'RATING', 'W-L'], rows.map((r, i) => [i + 1, nameCell(r), '<b>' + r.rating + '</b>', wl(r.wins, r.losses)])) : '<p class="muted">Nobody is on this ladder yet. Win a ranked auction against a friend to be the first.</p>');
       } else if (RK.tab === 'daily') {
         const day = today(), rows = await UI.profile.rpc('lb_daily', { p_day: day, p_era: RK.era, p_region: region || null, p_limit: 50 });
+        if (!C.loaded('pool')) { try { await C.load('pool'); } catch (e) { /* the percentages stay out */ } }
+        const perf = C.loaded('pool') ? dailyPerfect(RK.era, day) : 0, pctOf = sc => (perf > 0 ? Math.min(100, 100 * Number(sc) / perf).toFixed(1) + '%' : '');
         const me = UI.profile.account(), done = ls.get('a13-rk-d-' + day + '-' + RK.era, null);
         const played = done && done.fin;
         body.innerHTML = `<p class="muted rk-sub">${esc(day)} (UTC) | ${esc(eraName(RK.era))} | ten hidden players, $20 each, you against the house. Your score is your lineup rating.</p>
           <div class="ch-go">${UI.profile.signedIn() ? `<a class="btn btn-gold btn-big" href="#/ranked/daily/${esc(RK.era)}">${played ? 'SEE TODAY\'S RESULT' : done ? 'FINISH TODAY\'S AUCTION' : 'PLAY TODAY\'S AUCTION'}</a>` : ''}</div>` +
-          (rows.length ? table(['#', 'PLAYER', 'SCORE'], rows.map((r, i) => [i + 1, nameCell(r, me), '<b>' + Number(r.score).toFixed(1) + '</b>'])) : '<p class="muted">No scores yet today' + esc(scope) + '.</p>');
+          (rows.length ? table(perf > 0 ? ['#', 'PLAYER', 'SCORE', 'OF PERFECT'] : ['#', 'PLAYER', 'SCORE'], rows.map((r, i) => [i + 1, nameCell(r, me), '<b>' + Number(r.score).toFixed(1) + '</b>'].concat(perf > 0 ? [pctOf(r.score)] : []))) : '<p class="muted">No scores yet today' + esc(scope) + '.</p>');
       }
     } catch (e) { body.innerHTML = '<p class="rk-err">' + esc(failMsg(e)) + '</p>'; }
   }
@@ -310,6 +312,26 @@
   // ---------- #/ranked/daily/ERA: today's auction against the house ----------
   const mulberry = seed => { let a = seed >>> 0; return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
   const DAILY = { budget: 20, start: 1, raise: 1, pool: 10, quality: 'stars', show: 0 };
+  // the best lineup score from any five of the day's ten players (every player free): the 100% mark of the daily
+  function perfectOf(ten, per) {
+    let best = -1;
+    const pick = (from, chosen) => {
+      if (chosen.length === per) { const sc = UI.ranked.lineupScore(chosen); if (sc != null && sc > best) best = sc; return; }
+      for (let k = from; k <= ten.length - (per - chosen.length); k++) { chosen.push(ten[k]); pick(k + 1, chosen); chosen.pop(); }
+    };
+    pick(0, []);
+    return best;
+  }
+  const PERF = {};
+  function dailyPerfect(era, day) {   // the same ten players for everyone, so one number per day and era
+    const k = day + '|' + era;
+    if (PERF[k] != null) return PERF[k];
+    const pool = poolFor(era);
+    if (pool.length < 40) return (PERF[k] = 0);
+    const st = C.auctionStart({ bench: 0, seed: hash(day + '|' + era), auction: DAILY }, pool), byId = {};
+    pool.forEach(p => { byId[p.id] = p; });
+    return (PERF[k] = perfectOf(st.ids.map(id => byId[id]).filter(Boolean), st.per));
+  }
   function poolFor(era) {
     const inEra = s => era === 'ALL' || decKey(s) === era;
     const best = {};   // one season of each player: his best in the era
@@ -359,17 +381,10 @@
     if (st.done) {
       stopClock();
       const five = st.won[0].map(id => byId[id]), score = UI.ranked.lineupScore(five), houseFive = st.won[1].map(id => byId[id]), hs = UI.ranked.lineupScore(houseFive);
-      // the perfect five: the best lineup you could have made from today's ten players if every one had been free
-      const ten = st.ids.map(id => byId[id]).filter(Boolean);
-      let perfect = null, perfectScore = -1;
-      const pick = (from, chosen) => {
-        if (chosen.length === per) { const sc = UI.ranked.lineupScore(chosen); if (sc != null && sc > perfectScore) { perfectScore = sc; perfect = chosen.slice(); } return; }
-        for (let k = from; k <= ten.length - (per - chosen.length); k++) { chosen.push(ten[k]); pick(k + 1, chosen); chosen.pop(); }
-      };
-      pick(0, []);
-      const pct = score != null && perfect && perfectScore > 0 ? Math.min(100, 100 * score / perfectScore) : null;
+      const perfectScore = dailyPerfect(era, day);
+      const pct = score != null && perfectScore > 0 ? Math.min(100, 100 * score / perfectScore) : null;
       app.innerHTML = `${hdr}<div class="vs-sides vs-compact">${sideBox(0, 'YOU')}${sideBox(1, 'THE HOUSE')}</div>
-        <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${score == null ? '-' : score.toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div><span class="muted rk-perf">Perfect five (every player free): ${esc(perfect.map(p => p.name).join(', '))} | ${perfectScore.toFixed(1)}</span>`}<span class="muted">The house scored ${hs == null ? '-' : hs.toFixed(1)}. ${score != null && hs != null ? (score > hs ? 'You beat the house.' : score < hs ? 'The house won this one.' : 'A tie.') : ''}</span></section>
+        <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${score == null ? '-' : score.toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div>`}<span class="muted">The house scored ${hs == null ? '-' : hs.toFixed(1)}. ${score != null && hs != null ? (score > hs ? 'You beat the house.' : score < hs ? 'The house won this one.' : 'A tie.') : ''}</span></section>
         <div id="rkSub" class="rk-note"><span class="muted">Sending your score...</span></div>
         <div class="ch-go"><a class="btn btn-gold" href="#/ranked">SEE THE BOARD</a></div>`;
       const sub = UI.$('#rkSub', app);
