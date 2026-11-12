@@ -198,7 +198,13 @@
     if (m.t === 'conceded' && VS.cfg && VS.cfg.ranked) { rkOver(rkKey(VS.cfg)); if (UI.ranked) UI.ranked.noteForfeit('win'); UI.toast(who(1 - me()) + ' forfeited. You win.'); const el = document.getElementById('vsDc'); if (el) el.remove(); location.hash = '#/ranked/result'; return; }
     if (m.t === 'rematch' && VS.cfg && VS.cfg.ranked && m.seed === VS.cfg.seed) { RM.seed = VS.cfg.seed; RM.them = true; maybeRematch(); route(); return; }
     if (m.t === 'rresume') { if (!DC.res.on && rkOn(VS.cfg) && !RKDONE[rkKey(VS.cfg)]) DC.res = { on: true, me: false, them: false, until: Date.now() + 60000 }; DC.res.them = true; seen(); dcTick(); return; }
-    if (m.t === 'bye') {   // the other player left: no need to wait the whole grace time for them (in a ranked game they have fifteen seconds to come back)
+    if (m.t === 'bye') {
+      if (!VS.cfg && VS.opts.ranked && VS.opts.auction && NET.role !== 'watch') {   // someone left a ranked lobby before the auction: the match is cancelled for both
+        const nm = who(1 - NET.side);
+        NET.status = 'lost'; QUICK = 0; forgetRoom(); hangUp();
+        UI.toast(nm + ' left, so the match was cancelled. Nothing was lost. Find a new one.', 'error');
+        location.hash = '#/ranked'; return;
+      }   // the other player left: no need to wait the whole grace time for them (in a ranked game they have fifteen seconds to come back)
       if (NET.status === 'connected') { NET.status = 'lost'; DC.at = Date.now() - (rkOn(VS.cfg) ? GRACE - 15000 : 0); route(); drawChat(); dcTick(); }
       return;
     }
