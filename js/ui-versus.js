@@ -195,7 +195,7 @@
       }
       return;
     }
-    if (m.t === 'conceded' && VS.cfg && VS.cfg.ranked) { RKDONE[rkKey(VS.cfg)] = 1; if (UI.ranked) UI.ranked.noteForfeit('win'); UI.toast(who(1 - me()) + ' forfeited. You win.'); const el = document.getElementById('vsDc'); if (el) el.remove(); location.hash = '#/ranked/result'; return; }
+    if (m.t === 'conceded' && VS.cfg && VS.cfg.ranked) { rkOver(rkKey(VS.cfg)); if (UI.ranked) UI.ranked.noteForfeit('win'); UI.toast(who(1 - me()) + ' forfeited. You win.'); const el = document.getElementById('vsDc'); if (el) el.remove(); location.hash = '#/ranked/result'; return; }
     if (m.t === 'rematch' && VS.cfg && VS.cfg.ranked && m.seed === VS.cfg.seed) { RM.seed = VS.cfg.seed; RM.them = true; maybeRematch(); route(); return; }
     if (m.t === 'rresume') { if (!DC.res.on && rkOn(VS.cfg) && !RKDONE[rkKey(VS.cfg)]) DC.res = { on: true, me: false, them: false, until: Date.now() + 60000 }; DC.res.them = true; seen(); dcTick(); return; }
     if (m.t === 'bye') {   // the other player left: no need to wait the whole grace time for them (in a ranked game they have fifteen seconds to come back)
@@ -309,6 +309,7 @@
         if (!NET.client || NET.code !== code) return;
         send({ t: NET.role === 'watch' ? 'watch' : NET.role === 'guest' && NET.status !== 'connected' ? 'hello' : 'ping', name: myName() });
         if (NET.role === 'host') { const nw = watchers(); if ((VS.watching || 0) !== nw) { VS.watching = nw; push(); route(); } }   // everyone sees how many are watching
+        if (NET.status === 'connected') saveRoom();   // when we were last in the game: the rejoin banner counts the grace time from here
         if (NET.status === 'connected' && Date.now() - NET.peerSeen > 15000) { NET.status = 'lost'; DC.at = Date.now(); route(); drawChat(); dcTick(); }
         else if (NET.role === 'guest' && NET.status === 'lost' && Date.now() - NET.peerSeen > 25000 && VS.cfg) becomeHost(false);
       }, 4000));
@@ -334,6 +335,8 @@
   let FF = 0;   // the first tap on Forfeit is remembered here, because the page redraws and a flag on the button would be lost
   const RKDONE = {}, DC = { at: 0, claimed: false, res: { on: false, me: false, them: false, until: 0 } }, GRACE = 90000;
   const rkKey = cfg => NET.code + ':' + cfg.seed;
+  const OVERKEY = 'a13-rk-over';
+  function rkOver(key) { RKDONE[key] = 1; try { localStorage.setItem(OVERKEY, key); } catch (e) { /* private mode */ } }
   const rkOn = cfg => !!(cfg && cfg.ranked && online() && me() !== null && me() >= 0 && UI.ranked && UI.profile.signedIn() && NET.code);
   function rkStart(cfg) { if (rkOn(cfg)) UI.ranked.started({ key: rkKey(cfg), opp: who(1 - me()), era: UI.ranked.eraOf(cfg), style: 'auction', ranked: true, bestOf: cfg.bestOf || 7 }); }
   const resOn = () => !!(DC.res.on && rkOn(VS.cfg) && NET.status === 'connected' && !RKDONE[rkKey(VS.cfg)]);
@@ -343,8 +346,8 @@
     DC.claimed = true;
     const cfg = VS.cfg, key = rkKey(cfg);
     const ok = await UI.ranked.forfeit({ key, opp: who(1 - me()), era: UI.ranked.eraOf(cfg), bestOf: cfg.bestOf || 7 });
-    if (ok) { RKDONE[key] = 1; const el = document.getElementById('vsDc'); if (el) el.remove(); location.hash = '#/ranked/result'; }
-    else { DC.tries = (DC.tries || 0) + 1; if (DC.tries >= 2) { RKDONE[key] = 1; const el = document.getElementById('vsDc'); if (el) el.remove(); location.hash = '#/ranked/result'; } else { DC.claimed = false; DC.at = Date.now() - GRACE + 15000; } }   // refused: the series may already be settled (they gave up), so the result screen checks
+    if (ok) { rkOver(key); const el = document.getElementById('vsDc'); if (el) el.remove(); location.hash = '#/ranked/result'; }
+    else { DC.tries = (DC.tries || 0) + 1; if (DC.tries >= 2) { rkOver(key); const el = document.getElementById('vsDc'); if (el) el.remove(); location.hash = '#/ranked/result'; } else { DC.claimed = false; DC.at = Date.now() - GRACE + 15000; } }   // refused: the series may already be settled (they gave up), so the result screen checks
   }
   function dcTick() {
     let el = document.getElementById('vsDc');
@@ -787,7 +790,7 @@
   async function concede() {
     const cfg = VS.cfg, key = rkKey(cfg);
     const ok = await UI.ranked.concede({ key, opp: who(1 - me()), era: UI.ranked.eraOf(cfg), bestOf: cfg.bestOf || 7 });
-    if (ok) { RKDONE[key] = 1; send({ t: 'conceded' }); const el = document.getElementById('vsDc'); if (el) el.remove(); location.hash = '#/ranked/result'; }
+    if (ok) { rkOver(key); send({ t: 'conceded' }); const el = document.getElementById('vsDc'); if (el) el.remove(); location.hash = '#/ranked/result'; }
     else UI.toast('Could not record the forfeit: ' + ((UI.ranked && UI.ranked.lastErr) || 'the server refused it') + '.', 'error');
   }
 
@@ -806,6 +809,14 @@
     host(era) { quickPresets(era); QUICK = 1; host(); },
     join(code, era) { quickPresets(era); QUICK = 1; join(code); },
     leave() { QUICK = 0; forgetRoom(); hangUp(); },
+    // a ranked game you dropped out of: the room and how long you still have to get back in
+    rejoinInfo() {
+      const r = savedRoom(); let over = ''; try { over = localStorage.getItem(OVERKEY) || ''; } catch (e) { /* private mode */ }
+      if (online() || !r || r.role === 'watch' || !VS.cfg || !VS.cfg.ranked || over === r.code + ':' + VS.cfg.seed) return null;
+      const left = GRACE - (Date.now() - (r.at || 0));
+      return left > 0 ? { code: r.code, left } : null;
+    },
+    rejoin() { const r = savedRoom(); if (!r || !UI.profile.canPlay()) return; connectRoom(r.role, r.code, r.role === 'host' ? { side: r.side, keep: true } : null); location.hash = '#/challenge/vs/draft'; },
     rematch() { quickPresets(QERA); QUICK = 1; LB.cards = {}; LB.cd = 0; go('setup'); },
     status() { return { role: NET.role, status: NET.status, code: NET.code }; },
     target() { return '#/challenge/vs' + (VS.page === 'draft' ? '/draft' : VS.page === 'series' ? '/result' : ''); }
@@ -1285,7 +1296,7 @@
       const R = done ? recordSeries(r, cfg) : null;
       if (done && online() && me() !== null && me() >= 0 && UI.ranked && UI.profile.signedIn() && NET.code) {   // both signed-in players report: the database counts it when the two agree
         const i = me(), sc = UI.ranked.lineupScore(S[i].five);
-        if (cfg.ranked) { const k = rkKey(cfg); RKDONE[k] = 1; let seenNav = false; try { seenNav = sessionStorage.getItem('a13-rk-nav-' + k); sessionStorage.setItem('a13-rk-nav-' + k, '1'); } catch (e) { /* private mode */ }
+        if (cfg.ranked) { const k = rkKey(cfg); rkOver(k); let seenNav = false; try { seenNav = sessionStorage.getItem('a13-rk-nav-' + k); sessionStorage.setItem('a13-rk-nav-' + k, '1'); } catch (e) { /* private mode */ }
           if (!seenNav) setTimeout(() => { if (location.hash.indexOf('#/challenge/vs') === 0) location.hash = '#/ranked/result'; }, 4000); }
         UI.ranked.report({ key: NET.code + ':' + cfg.seed, opp: who(1 - i), myWins: r.wins[S[i].abbr] || 0, oppWins: r.wins[S[1 - i].abbr] || 0, era: UI.ranked.eraOf(cfg), style: cfg.auction ? 'auction' : cfg.board ? 'board' : 'wheel', ranked: !!cfg.ranked, bestOf: r.bestOf,
           lineup: { names: S[i].five.map(p => p.name), seasons: S[i].five.map(p => p.season || cfg.year || null), score: sc, era: UI.ranked.eraOf(cfg) }, score: sc });

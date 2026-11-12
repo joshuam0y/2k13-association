@@ -573,6 +573,17 @@
     };
     draw(); t = setInterval(draw, 10000);
   };
+
+  // a ranked game you dropped out of: a banner on every page counts down the time left to get back in
+  setInterval(() => {
+    let el = document.getElementById('rkRejoin');
+    const i = UI.vsQuick && UI.vsQuick.rejoinInfo ? UI.vsQuick.rejoinInfo() : null;
+    if (!i || !UI.profile.signedIn()) { if (el) el.remove(); return; }
+    if (!el) { el = document.createElement('div'); el.id = 'rkRejoin'; el.className = 'rk-rejoin'; document.body.appendChild(el); }
+    const sec = Math.ceil(i.left / 1000);
+    el.innerHTML = '<span>RANKED GAME IN PROGRESS. GET BACK IN <b>' + Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0') + '</b> OR YOU FORFEIT.</span><button type="button" class="btn btn-small btn-gold" id="rkRejoinBtn">REJOIN NOW</button>';
+    const b = el.querySelector('#rkRejoinBtn'); if (b) b.addEventListener('click', () => { UI.vsQuick.rejoin(); el.remove(); });
+  }, 1000);
   P.u = function (app, arg) { return userPage(app, decodeURIComponent(String(arg || '').split('/')[0])); };
 
   P.ranked = function (app, arg) {

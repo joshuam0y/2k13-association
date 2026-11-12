@@ -997,3 +997,6 @@
 .rk-wait { font-family: var(--display); letter-spacing: .12em; font-size: 13px; color: var(--text2); margin: 6px 0; }
 .rk-wait b { color: var(--gold2); }
 .vs-casual { margin: 10px 0; display: grid; gap: 6px; }
+
+.rk-rejoin { position: fixed; left: 0; right: 0; top: env(safe-area-inset-top, 0px); z-index: 450; display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: center; align-items: center; padding: 10px 16px; background: var(--gold); color: #000; font-family: var(--display); letter-spacing: .08em; font-size: 14px; text-align: center; }
+.rk-rejoin b { font-size: 18px; }
