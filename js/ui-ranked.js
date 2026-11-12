@@ -504,6 +504,7 @@
   }
   // the first day of the daily: the archive and the casual picker only ever show themes from days that are over
   const DAILY_START = '2026-11-12';
+  const dayNo = d => Math.max(1, Math.round((Date.parse(d + 'T00:00:00Z') - Date.parse(DAILY_START + 'T00:00:00Z')) / 86400000) + 1);
   function themePast() {
     const out = [], seen = new Set(), t0 = Date.parse(DAILY_START + 'T00:00:00Z'), t1 = Date.parse(today() + 'T00:00:00Z');
     for (let t = t1 - 86400000; t >= t0; t -= 86400000) { const day = new Date(t).toISOString().slice(0, 10), info = dailyThemeInfo(day); if (!seen.has(info.key)) { seen.add(info.key); out.push(Object.assign({}, info, { day })); } }
@@ -592,7 +593,7 @@
         <ol class="vs-auc-won">${won.map(w => `<li>${esc(w.p ? w.p.name : '?')} <small class="muted">${money(w.price || 0)}</small></li>`).join('') || '<li class="muted">Nobody yet</li>'}</ol></div>`;
     };
     const TH = (THEME[day] || {}).info || { title: eraName(era), kind: '' }, isPr = day.indexOf('practice:') === 0, prKey = isPr ? day.slice(9, day.lastIndexOf(':')) : '';
-    const hdr = `<div class="ch-top"><div><div class="ch-top-k">${isPr ? 'PRACTICE' : 'DAILY | ' + esc(day)} | ${esc(TH.title)}</div><div class="ch-top-t">${st.done ? 'YOUR FIVE IS SET' : 'PLAYER ' + (st.i + 1) + ' OF ' + st.ids.length}</div></div><a class="btn btn-small" href="${isPr ? '#/daily/practice' : '#/daily'}">BACK</a></div>`;
+    const hdr = `<div class="ch-top"><div><div class="ch-top-k">${isPr ? 'PRACTICE' : 'DAILY #' + dayNo(day) + ' | ' + esc(day)} | ${esc(TH.title)}</div><div class="ch-top-t">${st.done ? 'YOUR FIVE IS SET' : 'PLAYER ' + (st.i + 1) + ' OF ' + st.ids.length}</div></div><a class="btn btn-small" href="${isPr ? '#/daily/practice' : '#/daily'}">BACK</a></div>`;
     if (st.done) {
       stopClock();
       const five = st.won[0].map(id => byId[id]), score = UI.ranked.lineupScore(five), houseFive = st.won[1].map(id => byId[id]), hs = UI.ranked.lineupScore(houseFive);
@@ -603,7 +604,7 @@
         <div id="rkSub" class="rkn"><span class="muted">Sending your score...</span></div>
         <div class="ch-go">${isPr ? `<a class="btn btn-gold" href="#/daily/practice/${esc(prKey)}/${Date.now()}">PLAY AGAIN</a><a class="btn" href="#/daily/practice">ARCHIVE</a>` : `<a class="btn btn-gold" href="#/daily">SEE THE BOARD</a>${pct == null ? '' : '<button type="button" class="btn" id="dlShare">SHARE YOUR SCORE</button>'}`}</div>`;
       const dsh = UI.$('#dlShare', app);
-      if (dsh) dsh.addEventListener('click', async () => { dsh.disabled = true; const r = await shareCard({ k: 'DAILY | ' + day, title: 'OF A PERFECT FIVE', color: '#d4af37', big: pct.toFixed(1) + '%', sub: TH.title, name: UI.profile.account() || '' }, 'My Starting Five daily auction: ' + pct.toFixed(1) + '% of a perfect five.'); dsh.disabled = false; if (r === 'saved') UI.toast('Saved the picture. The link is copied.'); });
+      if (dsh) dsh.addEventListener('click', async () => { dsh.disabled = true; const r = await shareCard({ k: 'DAILY #' + dayNo(day), title: 'OF A PERFECT FIVE', color: '#d4af37', big: pct.toFixed(1) + '%', sub: TH.title, name: UI.profile.account() || '' }, 'My Starting Five daily auction: ' + pct.toFixed(1) + '% of a perfect five.'); dsh.disabled = false; if (r === 'saved') UI.toast('Saved the picture. The link is copied.'); });
       const paintStreak = () => { const sk = UI.$('#rkStreak', app), n = streakNow(); if (sk && n.n) sk.innerHTML = '<b>' + n.n + '</b> DAY DAILY STREAK' + (n.best > n.n ? ' | BEST ' + n.best : ''); };
       paintStreak();
       const sub = UI.$('#rkSub', app);
@@ -963,7 +964,7 @@
       <div class="ch-go">${past.length ? `<a class="btn btn-gold btn-big" href="#/daily/practice/${esc(past[Math.floor(Math.random() * past.length)].key)}/${Date.now()}">RANDOM THEME</a>` : ''}<a class="btn" href="#/daily">BACK</a></div>
       <div class="pr-list">
         <span class="pr-i lock"><b>TODAY: ???</b><small>OPENS TOMORROW</small></span>
-        ${past.map(t => `<a class="pr-i" href="#/daily/practice/${esc(t.key)}/${Date.now()}"><b>${esc(t.title)}</b><small>${esc(t.kind)} | ${esc(day0(t.day))}${t.tag ? ' | ' + esc(t.tag) : ''}</small></a>`).join('')}
+        ${past.map(t => `<a class="pr-i" href="#/daily/practice/${esc(t.key)}/${Date.now()}"><b>${esc(t.title)}</b><small>DAILY #${dayNo(t.day)} | ${esc(t.kind)} | ${esc(day0(t.day))}${t.tag ? ' | ' + esc(t.tag) : ''}</small></a>`).join('')}
       </div>
       ${past.length ? '' : '<p class="muted">Nothing here yet. A theme shows up the day after it runs.</p>'}`;
   }
@@ -979,7 +980,7 @@
   async function dailyHub(app) {
     stopRefresh();
     const day = today(), signed = UI.profile.signedIn();
-    app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">DAILY | ${esc(day)}</div><h1 class="ch-hero-t">TODAY'S AUCTION.</h1>
+    app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">DAILY #${dayNo(day)} | ${esc(day)}</div><h1 class="ch-hero-t">TODAY'S AUCTION.</h1>
         <p class="ch-hero-p">One theme a day. The same ten players for everyone.</p></section><div id="dyBody"><p class="muted">Loading...</p></div>`;
     const body = UI.$('#dyBody', app);
     try {
@@ -988,7 +989,7 @@
       const perf = TH ? dailyPerfect('ALL', day) : 0, pctOf = sc => (perf > 0 ? Math.min(100, 100 * Number(sc) / perf).toFixed(1) + '%' : '');
       const me = UI.profile.account(), done = ls.get('a13-rk-d-' + day + '-T', null), played = done && done.fin, sk = streakNow();
       const left = (() => { const t = new Date().toLocaleTimeString('en-GB', Object.assign({ hour12: false }, PT)).split(':'), ms = 86400000 - ((+t[0]) * 3600 + (+t[1]) * 60 + (+t[2])) * 1000; return Math.floor(ms / 3600000) + 'H ' + (Math.floor(ms / 60000) % 60) + 'M'; })();
-      body.innerHTML = `${TH ? `<div class="rk-theme"><small>TODAY | ${esc(TH.kind)}</small><b>${esc(TH.title)}</b><span class="muted">${esc(TH.tag)}</span></div>` : ''}
+      body.innerHTML = `${TH ? `<div class="rk-theme"><small>DAILY #${dayNo(day)} | ${esc(TH.kind)}</small><b>${esc(TH.title)}</b><span class="muted">${esc(TH.tag)}</span></div>` : ''}
         <p class="rk-streak">${sk.n ? '<b>' + sk.n + '</b> DAY STREAK' + (sk.done ? ' | TODAY DONE' : ' | PLAY TODAY TO KEEP IT') : 'START A STREAK: PLAY ONE A DAY'}</p>
         <div class="ch-go"><a class="btn btn-gold btn-big" href="#/daily/play">${played ? "SEE TODAY'S RESULT" : done ? "FINISH TODAY'S AUCTION" : "PLAY TODAY'S AUCTION"}</a><a class="btn" href="#/daily/practice">PRACTICE ARCHIVE</a></div>
         ${signed ? '' : '<p class="muted rk-sub">No account needed. Sign in to put your score on the board.</p>'}
@@ -1001,8 +1002,7 @@
   P.daily = function (app, arg) {
     const part = String(arg || '').split('/');
     if (part[0] === 'play') return dailyPage(app, 'ALL');
-    if (part[0] === 'practice') { location.hash = '#/daily/' + part.join('/'); return; }
-    if (part[0] === 'practiceX') return part[1] ? practicePlay(app, decodeURIComponent(part[1]), part[2] || '') : practicePage(app);
+    if (part[0] === 'practice') return part[1] ? practicePlay(app, decodeURIComponent(part[1]), part[2] || '') : practicePage(app);
     return dailyHub(app);
   };
   P.u = function (app, arg) { return userPage(app, decodeURIComponent(String(arg || '').split('/')[0])); };
