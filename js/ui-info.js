@@ -8,36 +8,47 @@
   const P = UI.pages = UI.pages || {};
   const CONTACT_FORM = 'https://formsubmit.co/jmoy2077@gmail.com';
   const REPO = 'https://github.com/joshuam0y/starting-five';
-  const UPDATED = 'November 10, 2026';
+  const UPDATED = 'November 12, 2026';
 
   const PAGES = {
     about: ['ABOUT', `
-      <p><b>Starting Five</b> is a free basketball sim made by <b>Joshua Moy</b>. It started as a love letter to NBA 2K13 and grew into four ways to play:</p>
+      <p><b>Starting Five</b> is a free basketball sim made by <b>Joshua Moy</b>. It started as a love letter to NBA 2K13 and grew into five ways to play:</p>
       <ul><li><b>Season Mode.</b> Draft five players from any season, or from all of NBA history, and sim a full season.</li>
       <li><b>Head to Head.</b> Draft against a friend, online or on one phone, and play a series.</li>
-      <li><b>Tournament.</b> Four or eight friends draft on one device and play a bracket.</li>
+      <li><b>Ranked.</b> Find a match against another player online: an auction draft and a best of 7 series that moves a ladder from Bronze up to Legend.</li>
+      <li><b>Tournament.</b> Four or eight friends draft on one device, or each on their own phone, and play a bracket.</li>
       <li><b>The Association.</b> A full franchise sim with trades, free agency, drafts and real history.</li></ul>
       <p>Ratings are estimates built from real stats and tuned to feel like the games. Nothing here is official.</p>
-      <p>It is a hobby project. It has no ads, no accounts and no cost.</p>`],
+      <p>It is a hobby project. It has no ads and no cost. You can play without an account; an account is only needed for ranked play, friends and your profile.</p>`],
     contact: ['CONTACT', `
       <p>Found a bug, have an idea, or want something fixed? Tell me.</p>
       __FORM__
       <p><a class="btn btn-gold" href="${REPO}/issues/new" target="_blank" rel="noopener">REPORT AN ISSUE ON GITHUB</a></p>
       <p class="muted">Include the page you were on and what phone or browser you use. Please do not post personal information in a public issue.</p>`],
     faq: ['FAQ', `
-      <h3>Is it free?</h3><p>Yes. There are no ads, no accounts and no payments.</p>
-      <h3>Where is my progress saved?</h3><p>On your own device, in your browser. Clearing site data or switching browsers or phones starts you fresh. Your Association leagues live under LOAD.</p>
+      <h3>Is it free?</h3><p>Yes. There are no ads and no payments. An account is optional.</p>
+      <h3>Do I need an account?</h3><p>Only for ranked play, the daily auction board, friends and your profile. Everything else works as a guest, with just a name you pick.</p>
+      <h3>Where is my progress saved?</h3><p>Leagues, Season Mode runs and settings are saved on your own device, in your browser. Clearing site data or switching browsers or phones starts you fresh. Your Association leagues live under LOAD. If you have an account, your ranked results, rating, friends and profile are saved online with it.</p>
       <h3>How does online Head to Head work?</h3><p>One player makes a room and shares the code or link. The other opens it on their phone. Both phones stay in sync while you draft and watch.</p>
+      <h3>How does ranked work?</h3><p>Tap Ranked, then Find a match. You are paired with whoever else is searching, the closest rating first, so the higher you climb the stronger your opponents get. You bid on a hidden pool of ten players ($20 each, bidding opens at $1, a 24 second shot clock), then play a best of 7 series. Both phones report the score, and it only counts when they agree. A win raises your rating and a loss lowers it.</p>
+      <h3>What are the ranks?</h3><p>Everyone starts at 1200, the bottom of Silver. Ranks go Bronze, Silver, Gold, Platinum and Diamond (three divisions each, III lowest and I highest), then Master, Grandmaster and Legend. You can drop as well as climb.</p>
+      <h3>What if I disconnect or leave a ranked game?</h3><p>The game pauses and you have 90 seconds to get back in (a banner shows a Rejoin button). If you do not, the other player wins by forfeit. Leaving on purpose gives the other player 15 seconds, and the Forfeit button ends the game at once. Leaving the lobby before the auction starts costs nothing.</p>
+      <h3>Why can I not play the same person again?</h3><p>Each ranked matchup counts once, so ratings cannot be farmed. Find a match picks someone new first. If nobody new is searching, or you both ask for a rematch after a series, you can meet again.</p>
       <h3>Where do the ratings come from?</h3><p>They are built from real stats and fitted to the 2K13 scale. Old seasons are adjusted for the pace, rules and talent level of their era, so they are estimates.</p>
       <h3>Why does a player look different or have no photo?</h3><p>Photos come from public sources. If none is found, the site draws a face for that player.</p>
       <h3>Can I install it?</h3><p>Yes. On a phone, use Add to Home Screen in your browser. It then opens like an app.</p>
       <h3>Is it affiliated with the NBA or 2K?</h3><p>No. See the Disclaimer.</p>`],
     privacy: ['PRIVACY POLICY', `
       <p class="muted">Last updated ${UPDATED}.</p>
-      <h3>The short version</h3><p>There are no accounts, no ads and no tracking tools. I do not collect your name, email or location.</p>
+      <h3>The short version</h3><p>There are no ads and no tracking tools. You can play without an account and I collect nothing. If you make an account, I store the details listed below so ranked play, friends and profiles work. I never read your location.</p>
       <h3>What stays on your device</h3><p>Saved leagues, settings, your Head to Head rivalry record and your sound preference are stored in your browser on your own device. I never receive them. Clearing your browser data deletes them.</p>
-      <h3>Online Head to Head</h3><p>Online rooms pass messages between the two phones through public relay servers. The messages are encrypted with a key made from your room code, so the relay cannot read your picks. Anyone who has your room code can join, so share it only with your opponent. The relay servers can see your network address, as any website does.</p>
-      <h3>Other services the site loads</h3><p>The site is hosted on GitHub Pages. Player photos and team logos load from public servers such as the NBA's image server and Basketball-Reference, and a small library loads from a public code host. Those services can see your network address and the files you ask for, under their own policies. If you open the soundtrack, the music comes from Spotify or YouTube, which have their own policies and may show ads.</p>
+      <h3>Accounts</h3><p>An account is optional. If you make one I keep: your <b>email</b> and a <b>password</b> (handled by the sign-in service, which stores the password only in scrambled form; I never see it), and your <b>username</b>. Your email is used only to sign in and reset your password, and is never shown to other players. You can also choose a <b>region</b> and a <b>team logo as a profile picture</b>.</p>
+      <h3>What an account stores</h3><p>Your friends list, your ranked and Head to Head series (the opponent, the score, the date, and the five players you drafted), your ratings and rank, your rivalries, your daily auction scores, and a short timestamp that is refreshed while you are in a ranked game, which is only used to tell whether a player disconnected. Rooms that are waiting for a second player are listed for a couple of minutes and then removed.</p>
+      <h3>What other players can see</h3><p>Your username, profile picture, region, ratings and rank, win and loss record, number of friends, the friends you share with them, your most used player, your record against them, and your scores on the daily board. Nothing else.</p>
+      <h3>Guests</h3><p>A guest name is kept on your device and shown to the other player in a room. Guest rivalries only last for the browser session.</p>
+      <h3>Your data</h3><p>The account data is kept with Supabase, a hosted database service. To have your account and its data deleted, ask on the Contact page from the email you signed up with.</p>
+      <h3>Online Head to Head, tournaments and ranked rooms</h3><p>Online rooms pass messages between the phones through public relay servers. The messages are encrypted with a key made from your room code, so the relay cannot read your picks. Anyone who has your room code can join, so share it only with your opponent. The relay servers can see your network address, as any website does.</p>
+      <h3>Other services the site loads</h3><p>The site is hosted on GitHub Pages. Accounts and ranked results use Supabase. Player photos and team logos load from public servers such as the NBA's image server and Basketball-Reference, and a small library loads from a public code host. Those services can see your network address and the files you ask for, under their own policies. If you open the soundtrack, the music comes from Spotify or YouTube, which have their own policies and may show ads.</p>
       <h3>Children</h3><p>The site is a general audience sports game and does not ask for personal information from anyone.</p>
       <h3>Changes and questions</h3><p>If this changes, the date above changes. Questions go through the Contact page.</p>`],
     terms: ['TERMS OF USE', `
@@ -45,6 +56,7 @@
       <p>By using this site you agree to these terms.</p>
       <h3>Use</h3><p>The site is free to play for personal, non commercial fun. Do not try to break it, overload it or use it to harass other people, and do not resell it.</p>
       <h3>As is</h3><p>It is provided as is, with no promise that it will always work, stay online or keep your saves. Back up anything you care about. Online play depends on public relay servers that may be down.</p>
+      <h3>Accounts and fair play</h3><p>Use one account per person and a username that is not offensive or pretending to be someone else. Do not cheat: no win trading, no extra accounts to farm rating, and no exploiting bugs. Ranked results come from both players' phones, and I may remove results, reset ratings or close accounts that break these rules. In ranked, leaving or staying disconnected past the grace time is a forfeit and counts as a loss.</p>
       <h3>Not real</h3><p>Everything is a simulation. Ratings, results and stats are estimates for fun and are not real predictions or advice. Do not use it for betting.</p>
       <h3>Ownership</h3><p>The code and design are by Joshua Moy. Team names, logos, player names and photos belong to their owners (see the Disclaimer).</p>
       <h3>Changes</h3><p>I may change or remove features, and I may update these terms. Using the site after a change means you accept it.</p>`],

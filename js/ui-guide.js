@@ -246,17 +246,34 @@
           <li><b>Watch.</b> WATCH plays a game on both screens at once. Pause, play, speed and skip stay in sync.</li>
           <li><b>Box scores.</b> Every game has one, and the series box shows 3P%, steals, blocks and more. Your head to head record is kept between the two of you.</li>
         </ol>
+        <h3>ONLINE</h3>
+        <p>Online, moving the series on takes both of you: the first player to tap WATCH or SIM asks, and the other taps to agree. Head to Head is casual and never touches the ladder. For a game that counts, use Ranked.</p>
         <h3>OPTIONS</h3>
         <dl class="gd-dl">
           <dt>SEASONS</dt><dd>Switch seasons on or off by year or decade. Players only come from seasons that are on.</dd>
           <dt>SHOT CLOCK</dt><dd>24 seconds per pick, or OFF.</dd>
           <dt>SALARY CAP</dt><dd>Every player has a price. Stay under the cap for all five.</dd>
         </dl>`;
-  const HOME_HELP = `<p>Three ways to play. Tap a tile on the main menu to start.</p>
+  const RANKED_HELP = `<p>Ranked is a ladder for the auction draft. You need an account.</p>
+        <h3>FIND A MATCH</h3>
+        <p>You are paired with whoever else is searching, the closest rating first. Look at each other's cards in the lobby, press ready, then bid on a hidden pool of ten players: $20 each, bidding opens at $1, a 24 second shot clock, five players each. Then a best of 7 series.</p>
+        <h3>THE LADDER</h3>
+        <p>Everyone starts at 1200, the bottom of Silver. Win to climb and lose to drop. Ranks run from Bronze up through Silver, Gold, Platinum and Diamond (three divisions each), then Master, Grandmaster and Legend. Open THE RANKS on the Ranked page for the ranges.</p>
+        <h3>LEAVING</h3>
+        <p>If you disconnect, you have 90 seconds to rejoin (a banner shows a Rejoin button). If you do not, the other player wins by forfeit. Forfeit ends the game at once. Leaving the lobby before the auction costs nothing.</p>
+        <h3>DAILY AUCTION</h3>
+        <p>A solo auction against the house with the same ten players for everyone, once a day. Your lineup is scored and shown as a percentage of a perfect five on the daily board. It does not move your rating.</p>
+        <h3>FRIENDS</h3>
+        <p>Tap a name to see a profile and add a friend. Play friends in Head to Head: it is casual.</p>`;
+  const HOME_HELP = `<p>Tap a tile on the main menu to start.</p>
         <h3>SEASON MODE</h3>
         <p>Draft five players from one season or from all of NBA history, then sim a full season. Your five play every minute and never get hurt.</p>
         <h3>HEAD TO HEAD</h3>
-        <p>Draft against a friend, online with a room code or on one phone, and play a best of 3, 5 or 7 series.</p>
+        <p>Draft against a friend, online with a room code or on one phone, and play a best of 3, 5 or 7 series. It is casual.</p>
+        <h3>RANKED</h3>
+        <p>Find a match against another player, bid in an auction draft and climb the ladder from Bronze to Legend.</p>
+        <h3>TOURNAMENT</h3>
+        <p>Four or eight friends draft and play a bracket, on one phone or each on their own.</p>
         <h3>THE ASSOCIATION</h3>
         <p>A full franchise: run one team through trades, free agency, drafts and many seasons, from 1946-47 to today.</p>
         <h3>MORE</h3>
@@ -268,6 +285,7 @@
         <p class="muted">Open the ? on any mode for its own rules.</p>`;
   function modeOf() {
     const h = location.hash || '';
+    if (/^#\/(ranked|me|u)(\/|$)/.test(h)) return { tag: ': RANKED', body: RANKED_HELP, assoc: false };
     if (/^#\/challenge\/vs/.test(h)) return { tag: ': HEAD TO HEAD', body: VS_HELP, assoc: false };
     if (/^#\/challenge/.test(h)) return { tag: ': SEASON MODE', body: SEASON_HELP, assoc: false };
     if (document.body.classList.contains('no-assoc-nav')) return { tag: '', body: HOME_HELP, assoc: false };
