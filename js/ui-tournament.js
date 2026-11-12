@@ -23,6 +23,22 @@
   const HOOK = { pages: {} };   // filled in by the online tournament (js/ui-tournament-online.js)
   const save = () => { if (HOOK.on) { if (HOOK.save) HOOK.save(TN); } else ls.set(TN); };
   const ctl = () => !HOOK.on || !!HOOK.host;   // online, only the host runs the bracket
+  // online, moving on (sim a round, sim a series, watch, skip) takes every human still connected: the host's tap asks, the others agree
+  const gate = (key, label, fn) => {
+    if (!HOOK.on || !HOOK.host || !HOOK.humansLive || HOOK.humansLive() < 2) { fn(); return; }
+    if (TN.adv && TN.adv.key === key && TN.adv.go) { TN.adv = null; save(); fn(); return; }
+    TN.adv = { key, label, by: [HOOK.mySeat()], go: false }; save(); render();
+  };
+  const advBar = () => {
+    if (!HOOK.on || !TN.adv || TN.adv.go) return '';
+    const by = TN.adv.by || [];
+    if (HOOK.host) return `<p class="muted tn-adv">WAITING FOR EVERYONE TO AGREE: ${esc(TN.adv.label)} (${by.length} OF ${HOOK.humansLive()})</p>`;
+    return by.indexOf(HOOK.mySeat()) >= 0 ? '<p class="muted tn-adv">YOU AGREED. WAITING FOR THE OTHERS...</p>' : `<button type="button" class="btn btn-gold btn-big" id="tnAgree">AGREE: ${esc(TN.adv.label)}</button>`;
+  };
+  const advBind = app => {
+    const ag = UI.$('#tnAgree', app); if (ag) ag.addEventListener('click', () => { ag.disabled = true; HOOK.agree(TN.adv.key); });
+    if (HOOK.on && HOOK.host && TN.adv && TN.adv.go) { const b = app.querySelector('[data-adv="' + TN.adv.key + '"]'); if (b) setTimeout(() => b.click(), 60); else { TN.adv = null; save(); } }   // everyone agreed: the host's own button runs it
+  };
   let APP = null;
 
   // ---------- small helpers ----------
@@ -692,7 +708,7 @@
       const B = board(TN.cfg), cr = curRound();
       const cols = TN.rounds.map((round, r) => `<div class="tn-col"><div class="tn-col-k">${roundName(r)}<small>BEST OF ${round[0].bestOf}</small></div>
         <div class="tn-col-b">${round.map((m, i) => `<div class="tn-match${m.done ? ' done' : ''}${ready(m) && !m.done ? ' live' : ''}">${slot(m, 0, r)}${slot(m, 1, r)}
-          <div class="tn-match-a">${ready(m) && !m.done && !ctl() ? '<span class="muted">UP NEXT</span>' : ready(m) && !m.done ? `<button type="button" class="btn btn-small btn-gold" data-watch="${r}:${i}">WATCH</button><button type="button" class="btn btn-small" data-sim="${r}:${i}">SIM</button>`
+          <div class="tn-match-a">${ready(m) && !m.done && !ctl() ? '<span class="muted">UP NEXT</span>' : ready(m) && !m.done ? `<button type="button" class="btn btn-small btn-gold" data-watch="${r}:${i}" data-adv="watch:${r}:${i}">WATCH</button><button type="button" class="btn btn-small" data-sim="${r}:${i}" data-adv="sim:${r}:${i}">SIM</button>`
             : m.done ? `<button type="button" class="btn btn-small" data-open="${r}:${i}">BOX SCORES</button>` : '<span class="muted">WAITING</span>'}</div></div>`).join('')}</div></div>`).join('');
       const rosters = TN.seeds.map((p, s) => {
         const t = teamOf(p), five = TN.picks[p].map(id => B.byId[id]).filter(Boolean);
@@ -704,21 +720,22 @@
           <button type="button" class="btn btn-small" id="tnQuit">NEW</button></div>
         <div class="row-btns center ch-acts tn-acts">${over ? '<button type="button" class="btn btn-gold btn-big" id="tnCrown">THE CHAMPION</button>'
           : !ctl() ? '<p class="muted">The host runs the bracket. Everyone watches the same games.</p>'
-          : `<button type="button" class="btn btn-gold" id="tnRound">SIM ${esc(roundName(cr))}</button><button type="button" class="btn" id="tnAll">SIM THE WHOLE THING</button>`}</div>
+          : `<button type="button" class="btn btn-gold" id="tnRound" data-adv="round${cr}">SIM ${esc(roundName(cr))}</button><button type="button" class="btn" id="tnAll" data-adv="all">SIM THE WHOLE THING</button>`}${advBar()}</div>
         <div class="tn-bracket" style="--rounds:${TN.rounds.length}">${cols}</div>
         <section class="tn-rosters">${UI.header('THE FIVES', 'Tap to open')}${rosters}</section>`;
       UI.$('#tnQuit', app).addEventListener('click', quit);
       const crown = UI.$('#tnCrown', app); if (crown) crown.addEventListener('click', () => go('champ'));
       const simRound = () => { TN.rounds[curRound()].forEach((m, i) => simMatch(curRound(), i)); };
       const after = () => { save(); if (TN.champ >= 0) { if (window.SFX) window.SFX.play('crowd'); go('champ'); } else bracketPage(app); };
-      const rd = UI.$('#tnRound', app); if (rd) rd.addEventListener('click', () => { const r = curRound(); TN.rounds[r].forEach((m, i) => simMatch(r, i)); after(); });
-      const al = UI.$('#tnAll', app); if (al) al.addEventListener('click', () => { let g = 0; while (TN.champ < 0 && g++ < 10) simRound(); after(); });
+      const rd = UI.$('#tnRound', app); if (rd) rd.addEventListener('click', () => gate('round' + curRound(), 'SIM ' + roundName(curRound()), () => { const r = curRound(); TN.rounds[r].forEach((m, i) => simMatch(r, i)); after(); }));
+      const al = UI.$('#tnAll', app); if (al) al.addEventListener('click', () => gate('all', 'SIM THE WHOLE THING', () => { let g = 0; while (TN.champ < 0 && g++ < 10) simRound(); after(); }));
       const pr = s => s.split(':').map(Number);
-      app.querySelectorAll('[data-sim]').forEach(b => b.addEventListener('click', () => { const [r, i] = pr(b.dataset.sim); simMatch(r, i); after(); }));
+      app.querySelectorAll('[data-sim]').forEach(b => b.addEventListener('click', () => { const [r, i] = pr(b.dataset.sim); gate(b.dataset.adv, 'SIM A SERIES', () => { simMatch(r, i); after(); }); }));
       app.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => { const [r, i] = pr(b.dataset.open); TN.cur = { r, i }; WATCH = 0; go('match'); }));
-      app.querySelectorAll('[data-watch]').forEach(b => b.addEventListener('click', () => {
+      app.querySelectorAll('[data-watch]').forEach(b => b.addEventListener('click', () => gate(b.dataset.adv, 'WATCH A SERIES', () => {
         const [r, i] = pr(b.dataset.watch); TN.cur = { r, i }; WATCH = (TN.rounds[r][i].shown || 0) + 1; AUTO = true; TN.watch = { r, i, n: WATCH }; go('match');
-      }));
+      })));
+      advBind(app);
     });
   }
 
@@ -766,12 +783,12 @@
       const acts = !ctl() && !done ? '<p class="muted">The host runs the games. Everyone watches together.</p>'
         : done
         ? `<button type="button" class="btn btn-gold btn-big" id="tnBack">${final ? 'THE CHAMPION' : 'BACK TO THE BRACKET'}</button>`
-        : WATCH ? '<button type="button" class="btn btn-gold" id="tnFinal">SKIP TO THE END OF THIS GAME</button>'
-        : `<button type="button" class="btn btn-gold btn-big" id="tnWatch">WATCH GAME ${next}</button><button type="button" class="btn" id="tnNext">SIM GAME ${next}</button>${res.bestOf > 1 ? '<button type="button" class="btn" id="tnRest">SIM THE REST</button>' : ''}<button type="button" class="btn" id="tnBack">BRACKET</button>`;
+        : WATCH ? '<button type="button" class="btn btn-gold" id="tnFinal" data-adv="mf">SKIP TO THE END OF THIS GAME</button>'
+        : `<button type="button" class="btn btn-gold btn-big" id="tnWatch" data-adv="mw${next}">WATCH GAME ${next}</button><button type="button" class="btn" id="tnNext" data-adv="mn${next}">SIM GAME ${next}</button>${res.bestOf > 1 ? '<button type="button" class="btn" id="tnRest" data-adv="mr">SIM THE REST</button>' : ''}<button type="button" class="btn" id="tnBack">BRACKET</button>`;
       const lines = done ? `<section class="vs-box">${UI.header('SERIES BOX', 'Per game')}<div class="vs-sides">${S.map(sd => { const p = pOf(sd.abbr); return `<div class="vs-res" style="--c1:${esc((sd.team.colors || ['#333'])[0])}"><div class="vs-side-h">${logo(sd.team, 32)}<div><small>${esc(nm(p))}</small><b>${esc(sd.team.name)}</b></div></div>
           <div class="vs-tbl-w"><table class="vs-tbl"><thead><tr><th class="l">PLAYER</th><th>SPOT</th><th class="tn-ovr">OVR</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>3PM</th><th>FG%</th><th>3P%</th><th>FT%</th></tr></thead><tbody>${(() => { const row = q => { const l = res.lines[q.id] || {}; return `<tr><td class="l">${esc(q.name)}${q.season && !TN.cfg.year ? ' <small class="muted">' + esc(short(q.season)) + '</small>' : ''}</td><td>${esc(q.slot || '')}</td><td class="tn-ovr">${esc(q.ovr)}</td><td>${f1(l.pts)}</td><td>${f1(l.reb)}</td><td>${f1(l.ast)}</td><td>${f1(l.stl)}</td><td>${f1(l.blk)}</td><td>${f1(l.tov)}</td><td>${f1(l.tpm)}</td><td>${f1(l.fgp)}</td><td>${f1(l.tpp)}</td><td>${f1(l.ftp)}</td></tr>`; }; return sd.five.slice().sort((a, b) => C.SLOTS.indexOf(a.slot) - C.SLOTS.indexOf(b.slot)).map(row).join('') + (sd.bench && sd.bench.length ? '<tr class="vs-bench-row"><td class="l" colspan="13">BENCH</td></tr>' + sd.bench.map(row).join('') : ''); })()}</tbody></table></div></div>`; }).join('')}</div></section>` : '';
       app.innerHTML = `${head}${score}${WATCH ? '<div class="ct-host" id="vsCourt"></div>' : ''}
-        <div class="row-btns center ch-acts vs-acts">${acts}</div>
+        <div class="row-btns center ch-acts vs-acts">${acts}${done ? '' : advBar()}</div>
         ${games ? `<ol class="vs-glist">${games}</ol>` : ''}${lines}`;
       const $ = id => UI.$(id, app);
       const mountCourt = (el, g, onEnd) => {
@@ -793,10 +810,11 @@
         if (courtCtl && UI.extras && typeof UI.extras.onLeave === 'function') UI.extras.onLeave(dropCourt);
         if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
       };
-      if ($('#tnWatch')) $('#tnWatch').addEventListener('click', () => watch(next));
-      if ($('#tnNext')) $('#tnNext').addEventListener('click', () => reveal(next));
-      if ($('#tnRest')) $('#tnRest').addEventListener('click', () => reveal(res.games.length));
-      if ($('#tnFinal')) $('#tnFinal').addEventListener('click', () => reveal(WATCH));
+      if ($('#tnWatch')) $('#tnWatch').addEventListener('click', () => gate('mw' + next, 'WATCH GAME ' + next, () => watch(next)));
+      if ($('#tnNext')) $('#tnNext').addEventListener('click', () => gate('mn' + next, 'SIM GAME ' + next, () => reveal(next)));
+      if ($('#tnRest')) $('#tnRest').addEventListener('click', () => gate('mr', 'SIM THE REST', () => reveal(res.games.length)));
+      if ($('#tnFinal')) $('#tnFinal').addEventListener('click', () => gate('mf', 'SKIP TO THE END OF THIS GAME', () => reveal(WATCH)));
+      advBind(app);
       if ($('#tnBack')) $('#tnBack').addEventListener('click', () => { WATCH = 0; go(done && final && TN.champ >= 0 ? 'champ' : 'bracket'); });
       app.querySelectorAll('[data-rewatch]').forEach(b => b.addEventListener('click', () => {
         const g = res.games[+b.dataset.rewatch - 1], el = document.createElement('div');

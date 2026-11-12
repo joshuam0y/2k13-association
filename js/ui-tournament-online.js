@@ -15,7 +15,7 @@
   const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081'];
   const SPIN_MS = 4700;
   const ERAS = [[2013, 'MODERN'], [2003, '2000S'], [1993, '1990S'], [1985, '1980S'], [1975, '1970S'], [1965, '1960S'], [1955, '1950S']];   // the rules a mixed-seasons game plays by: pace, the three-point line (none before 1979-80), shooting
-  const SHARED = ['page', 'n', 'humans', 'names', 'ai', 'seats', 'live', 'opts', 'skip', 'cfg', 'teams', 'picks', 'seeds', 'rounds', 'cur', 'champ', 'rating', 'watch', 'spins', 'respins', 'spun', 'clk', 'lock', 'auc', 'watching', 'hnow', 'epoch', 'hostCid'];
+  const SHARED = ['page', 'n', 'humans', 'names', 'ai', 'seats', 'live', 'opts', 'skip', 'cfg', 'teams', 'picks', 'seeds', 'rounds', 'cur', 'champ', 'rating', 'watch', 'spins', 'respins', 'spun', 'clk', 'lock', 'auc', 'adv', 'watching', 'hnow', 'epoch', 'hostCid'];
   const store = k => ({
     get() { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } },
     set(v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode */ } },
@@ -375,6 +375,13 @@
   const banning = t => !!(t.cfg && (t.cfg.bansN || 0) > 0 && (t.cfg.bans || []).length < t.seats.length * t.cfg.bansN);
   function hostAct(seat, a) {
     const t = TN(), cfg = t.cfg;
+    if (a && a.k === 'adv') {   // a player agrees to move the bracket on; when every connected human has, the host's page runs it
+      if (!t.adv || t.adv.key !== a.key || seat < 0 || seat >= t.seats.length) return;
+      if (t.adv.by.indexOf(seat) < 0) t.adv.by.push(seat);
+      const need = t.seats.map((c, i) => i).filter(i => t.seats[i] === CID || Date.now() - (SEEN[t.seats[i]] || 0) < 15000);
+      if (need.every(i => t.adv.by.indexOf(i) >= 0)) t.adv.go = true;
+      afterChange(); push(); return;
+    }
     if (a && a.k === 'ban') {   // the ban round: humans take turns
       if (t.page !== 'draft' || !banning(t) || seat !== (cfg.bans || []).length % t.seats.length) return;
       const B = A.board(cfg), p = B.byId[a.id];
@@ -529,6 +536,9 @@
   };
   HOOK.save = () => { if (NET.role === 'host') { saveHost(); push(); } };
   HOOK.court = (n, k, v) => send({ t: 'court', n, k, v });
+  HOOK.mySeat = () => mySeat();
+  HOOK.humansLive = () => TN().seats.filter(c => c === CID || Date.now() - (SEEN[c] || 0) < 15000).length;
+  HOOK.agree = key => act({ k: 'adv', key });
   HOOK.pages.entry = app => entry(app);
   HOOK.pages.lobby = app => lobby(app);
   HOOK.pages.draft = app => draft(app);

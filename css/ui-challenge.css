@@ -1000,3 +1000,5 @@
 
 .rk-rejoin { position: fixed; left: 0; right: 0; top: env(safe-area-inset-top, 0px); z-index: 450; display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: center; align-items: center; padding: 10px 16px; background: var(--gold); color: #000; font-family: var(--display); letter-spacing: .08em; font-size: 14px; text-align: center; }
 .rk-rejoin b { font-size: 18px; }
+
+.tn-adv { width: 100%; text-align: center; font-family: var(--display); letter-spacing: .1em; font-size: 13px; margin: 6px 0; }
