@@ -993,6 +993,12 @@
     rkStart(cfg);
     stopTick();
     const st = VS.auc, A = st.o, per = st.per, byId = B.byId, blind = !!cfg.blind;
+    const wk = st.ids.slice(0, 3).join(',') + '|' + (cfg.first ? 1 : 0);   // the wheel spins once per auction, before the first player goes up
+    if (UI.spinWheel && VS.wheelKey !== wk && !st.log.length && st.i <= 0 && !st.done) {
+      VS.wheelKey = wk;
+      UI.spinWheel(app, { title: 'WHO OPENS THE BIDDING?', names: [who(0), who(1)], winner: cfg.first ? 1 : 0, colors: ['#d4af37', '#3d78d6'], onDone: () => { if (cfg.timer && VS.auc) VS.auc.until = Date.now() + cfg.timer * 1000; if (/^#\/(challenge\/vs|ranked)/.test(location.hash)) auctionPage(app, cfg, B); } });
+      return;
+    }
     const cur = byId[st.ids[st.i]], money = n => '$' + n, tm = B.teamFor(cur.team, cur.season);
     const yearOf = p => { const y = p && (p.season || cfg.year); return y ? ' <small class="auc-yr">' + esc(short(y)) + '</small>' : ''; };
     const left = st.ids.length - st.i - 1;
