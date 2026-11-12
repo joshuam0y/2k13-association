@@ -252,7 +252,7 @@
               <small class="muted">${o.bans ? 'Before the draft, each player bans ' + o.bans + ' player' + (o.bans > 1 ? 's' : '') + ' in turn. Banned players are off the wheel and the board.' : 'Nobody is banned.'}</small></div>`}
             ${o.bench ? `<div><span class="ts-start-k">IN THE GAMES</span><div class="ch-chips"><button type="button" class="ch-chip${!o.noBench ? ' on' : ''}" data-nb="0">BENCH PLAYS</button><button type="button" class="ch-chip${o.noBench ? ' on' : ''}" data-nb="1">STARTERS ONLY</button></div>
               <small class="muted">${o.noBench ? 'All eight are drafted, but only the five starters play, all 48 minutes.' : 'The bench subs in during the games.'}</small></div>` : ''}
-            <div><span class="ts-start-k">SALARY CAP</span><div class="ch-chips">${UI.challengeCap.CAPS.map(v => `<button type="button" class="ch-chip${(o.cap || 0) === v ? ' on' : ''}" data-cap="${v}">${v ? '$' + v + 'M' : 'OFF'}</button>`).join('')}</div></div>
+            ${o.auction ? '' : `<div><span class="ts-start-k">SALARY CAP</span><div class="ch-chips">${UI.challengeCap.CAPS.map(v => `<button type="button" class="ch-chip${(o.cap || 0) === v ? ' on' : ''}" data-cap="${v}">${v ? '$' + v + 'M' : 'OFF'}</button>`).join('')}</div></div>`}
           </div></div>
         <div class="ch-go"><button type="button" class="btn btn-gold btn-big" id="tnStart">START THE DRAFT</button><a class="btn" href="#/challenge/tournament/online">PLAY ONLINE</a><a class="btn" href="#/home">HOME</a></div>
       </div>`;
@@ -305,6 +305,7 @@
         if (cfg.auction) {   // one entry for each player, his best season (every season of him with duplicates on); bidding is public, so there is no pass-the-phone screen
           const B0 = board(cfg), best = {};
           B0.players.concat(B0.extra || []).forEach(p => { const k = B0.base(p); if (!best[k] || p.ovr > best[k].ovr) best[k] = p; });
+          cfg.first = Math.floor(Math.random() * TN.n);   // who opens the bidding, then round the table: the wheel shows it
           TN.auc = C.auctionNStart(cfg, TN.n, Object.keys(best).map(k => best[k]));
           C.auctionNRunAI(TN.auc, B0.byId, Math.random, i => i < hum());
           TN.auc.until = cfg.timer && !TN.auc.done ? Date.now() + cfg.timer * 1000 : null;
@@ -445,8 +446,16 @@
     }
   }
   // hot-seat auction: AI teams bid on their own, a human's turn waits for a tap
+  let WKH = '';   // the pick order wheel spins once per auction
   function aucHS(app, cfg, B) {
     const st = TN.auc;
+    const wk = st.ids.slice(0, 3).join(',') + '|' + cfg.first + '|' + TN.n;
+    if (UI.spinWheel && WKH !== wk && st.i <= 0 && !st.log.length && !st.done) {
+      WKH = wk;
+      const f = (cfg.first || 0) % TN.n, order = TN.names.map((_, k) => TN.names[(f + k) % TN.n]);
+      UI.spinWheel(app, { title: 'PICK ORDER', names: TN.names, winner: f, after: 'Order: ' + order.join(', '), onDone: () => { if (cfg.timer && TN.auc === st) st.until = Date.now() + cfg.timer * 1000; if (TN.auc === st && TN.page === 'draft') aucHS(app, cfg, B); } });
+      return;
+    }
     const step = () => {
       C.auctionNRunAI(st, B.byId, Math.random, i => i < humDone());
       if (st.done) { finishAuc(app, cfg, B); return; }
