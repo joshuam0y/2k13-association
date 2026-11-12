@@ -345,6 +345,20 @@
   // ---------- the draft: pass the phone, one player at a time ----------
   const ANIM = {};   // spins already animated on this page load
   let TICK = null, CLOCK = null;
+  // the rules of this tournament, for the RULES button
+  function rulesBox(cfg) {
+    const o = TN.opts, per5 = per(), li = t => '<li>' + t + '</li>', hh = humDone();
+    const rows = [li(`<b>The bracket:</b> ${TN.n} teams, single elimination (${rounds()} rounds). Every series is best of ${o.bestOf || 1}${o.seeding === 'rating' ? ', seeded by team rating' : ', seeded at random'}.`),
+      li(`<b>The draft:</b> everyone drafts ${per5} players${cfg.bench ? ' (the first five start, the last ' + cfg.bench + ' come off the bench)' : ''}. ${cfg.board ? 'Open board: pick anyone left.' : 'The wheel picks a team and a season, and you take one player from it.'}${hh > 1 ? (o.order === 'all' ? ' Everybody drafts at the same time.' : ' Players take turns.') : ''}${TN.n > hh ? ' Empty seats are AI teams that draft for themselves.' : ''}`),
+      li(cfg.timer ? `<b>Shot clock:</b> ${cfg.timer} seconds a pick. Run out and ${cfg.board ? 'you get the best player left' : 'the wheel spins for you, or you get a random player from the team it lands on'}.` : '<b>No shot clock.</b>'),
+      li(`<b>The games:</b> ${cfg.bench && !cfg.noBench ? 'starters play about 34 minutes and the bench the rest' : 'all five play the full 48 minutes'}, so positions and fit count.`)];
+    if (cfg.cap) rows.push(li(`<b>Salary cap:</b> every player costs from $1 to $45 by rating. Your whole roster has to fit under $${cfg.cap}M.`));
+    if (o.ratings === false) rows.push(li('<b>Blind:</b> no ratings until the games are played.'));
+    if (!cfg.year || (cfg.seasons && cfg.seasons.length > 1)) rows.push(li(cfg.dupes ? '<b>Duplicates on:</b> the same player can be drafted from different seasons.' : '<b>No duplicates:</b> a player is gone once taken, whatever the season.'));
+    return `<div class="vs-rulesbox" id="tnRulesBox" hidden><b>THE RULES</b><ul>${rows.join('')}</ul></div>`;
+  }
+  const RULES_BTN = '<button type="button" class="btn btn-small" id="tnRules">RULES</button>';
+  const bindRules = app => { const rb = UI.$('#tnRules', app); if (rb) rb.addEventListener('click', () => { const bx = UI.$('#tnRulesBox', app); if (bx) bx.hidden = !bx.hidden; }); };
   function stopTick() { if (TICK) { clearInterval(TICK); TICK = null; } }
   function draft(app) {
     if (UI.challengeWheel.busy && UI.challengeWheel.busy()) return;   // a spin is running: its landing redraws the page
@@ -390,7 +404,8 @@
           <ul class="ch-list">${ros.map(p => playerRow(p, B, UI.challengeCap.btn(cfg.cap, five, p, `<button type="button" class="btn btn-small btn-gold" data-add="${esc(p.id)}">TAKE</button>`))).join('')}</ul>`;
       }
       const fit = five.length ? UI.challengeFit(C.lineupFit(five.slice(0, 5)), { compact: true, title: (nm(w) + "'s lineup").toUpperCase() }) : '';
-      app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${meta}</div><div class="ch-top-t">THE DRAFT</div></div><button type="button" class="btn btn-small" id="tnQuit">QUIT</button></div>
+      app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">${meta}</div><div class="ch-top-t">THE DRAFT</div></div><span class="ch-top-acts">${RULES_BTN}<button type="button" class="btn btn-small" id="tnQuit">QUIT</button></span></div>
+        ${rulesBox(cfg)}
         <div class="tn-dots">${TN.names.slice(0, humDone()).map((_, i) => `<i class="${i < w ? 'done' : i === w ? 'on' : ''}" title="${esc(nm(i))}"></i>`).join('')}</div>
         <div class="vs-side tn-me" style="--c1:${esc(t.colors[0])}"><div class="vs-side-h">${logo(t, 36)}<div><small>${esc(nm(w))} | PLAYER ${w + 1} OF ${humDone()}</small><b>${esc(tName(t))}</b>${cfg.cap ? ' <small class="vs-pay">' + UI.challengeCap.money(C.capState(cfg.cap, five).spent) + ' of $' + cfg.cap + 'M</small>' : ''}</div></div>
           ${UI.swapOl(per(), i => (five[i] ? esc(five[i].name) + ' <small class="muted">' + esc(C.posLabel(five[i])) + (B.era && five[i].season ? ' ' + short(five[i].season) : '') + '</small> <b class="' + UI.ovrClass(five[i].ovr) + '">' + esc(five[i].ovr) + '</b>' : '<span class="muted">-</span>'), TN.sw != null ? TN.sw : null, !!cfg.bench && five.length > 5)}</div>
@@ -398,6 +413,7 @@
         ${cfg.timer && !TN.lineup ? `<div class="vs-timer" id="vsTimer"><i style="--w:100%"></i><span>${cfg.timer}</span></div>` : ''}
         ${body}${fit}`;
       UI.$('#tnQuit', app).addEventListener('click', quit);
+      bindRules(app);
       const doSpin = avoid => {
         const s = spinFor(cfg, B, flat(), avoid);
         if (!s) return null;

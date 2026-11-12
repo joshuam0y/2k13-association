@@ -117,7 +117,7 @@
       <p class="muted">Series won. Games: ${esc(a)} ${R.games[a] || 0}, ${esc(b)} ${R.games[b] || 0}.${sw ? ' Sweeps: ' + esc(sw) + '.' : ''} ${esc(streak)}</p>
       <div class="vs-rival-log">${R.log.slice(0, 8).map(x => `<span class="${x.w === a ? 'a' : 'b'}">${esc(x.w.split(' ')[0])} ${esc(x.s)}<small>${esc(x.y ? short(x.y) : 'ALL')}</small></span>`).join('')}</div></section>`;
   }
-  const SHARED = ['year', 'skip', 'teams', 'names', 'tnames', 'opts', 'cfg', 'shown', 'watch', 'page', 'spin', 'spun', 'respins', 'turn', 'epoch', 'hostSide', 'auc', 'ready'];
+  const SHARED = ['year', 'skip', 'teams', 'names', 'tnames', 'opts', 'cfg', 'shown', 'watch', 'page', 'spin', 'spun', 'respins', 'turn', 'epoch', 'hostSide', 'auc', 'ready', 'watching'];
   let APP = null;   // the page element the versus screens draw into
 
   // ---------- online (an encrypted relay) ----------
@@ -181,7 +181,7 @@
   }
   function onMsg(m) {
     if (!m || typeof m !== 'object' || m.from === NET.me) return;
-    if (m.t === 'watch') { if (NET.role === 'host') { const fresh = !SPEC[m.from] || Date.now() - SPEC[m.from] > 12000; SPEC[m.from] = Date.now(); if (fresh) { push(); route(); } } return; }
+    if (m.t === 'watch') { if (NET.role === 'host') { const fresh = !SPEC[m.from] || Date.now() - SPEC[m.from] > 12000; SPEC[m.from] = Date.now(); if (fresh) { VS.watching = watchers(); push(); route(); } } return; }
     if (m.role === NET.role) {   // a third phone with our role, or two hosts after a handover: the newer epoch keeps the room
       if (NET.role === 'host' && (m.ep || 0) !== undefined) {
         const mine = VS.epoch || 0, theirs = m.ep || 0;
@@ -271,6 +271,7 @@
       NET.timers.push(setInterval(() => {
         if (!NET.client || NET.code !== code) return;
         send({ t: NET.role === 'watch' ? 'watch' : NET.role === 'guest' && NET.status !== 'connected' ? 'hello' : 'ping', name: myName() });
+        if (NET.role === 'host') { const nw = watchers(); if ((VS.watching || 0) !== nw) { VS.watching = nw; push(); route(); } }   // everyone sees how many are watching
         if (NET.status === 'connected' && Date.now() - NET.peerSeen > 15000) { NET.status = 'lost'; route(); drawChat(); }
         else if (NET.role === 'guest' && NET.status === 'lost' && Date.now() - NET.peerSeen > 25000 && VS.cfg) becomeHost(false);
       }, 4000));
@@ -292,7 +293,7 @@
   const watchLink = () => location.origin + location.pathname + '#/challenge/vs/watch/' + NET.code;
   function netBar() {
     if (!online()) return '';
-    if (NET.role === 'watch') return `<div class="vs-net ${NET.status}"><span class="vs-net-dot"></span><span>${NET.status === 'connected' ? 'Watching room <b>' + esc(NET.code) + '</b>: <b>' + esc(who(0)) + '</b> vs <b>' + esc(who(1)) + '</b>. You see everything live.' : NET.status === 'error-wait' || NET.status === 'error' ? esc(NET.err) : 'Joining room <b>' + esc(NET.code) + '</b> to watch...'}</span><button type="button" class="btn btn-small" id="vsLeave">LEAVE</button></div>`;
+    if (NET.role === 'watch') return `<div class="vs-net ${NET.status}"><span class="vs-net-dot"></span><span>${NET.status === 'connected' ? 'Watching room <b>' + esc(NET.code) + '</b>: <b>' + esc(who(0)) + '</b> vs <b>' + esc(who(1)) + '</b>. You see everything live.' + ((VS.watching || 0) ? ' <span class="vs-spec">&#128065; ' + VS.watching + ' WATCHING</span>' : '') : NET.status === 'error-wait' || NET.status === 'error' ? esc(NET.err) : 'Joining room <b>' + esc(NET.code) + '</b> to watch...'}</span><button type="button" class="btn btn-small" id="vsLeave">LEAVE</button></div>`;
     const st = NET.status, other = who(1 - NET.side);
     const msg = st === 'connected' ? `Connected with <b>${UI.userLink ? UI.userLink(other, true) : esc(other)}</b>. You are ${esc(who(me()))}.`
       : st === 'waiting' ? `Room <b>${esc(NET.code)}</b>: send your friend the link, then wait here.`
@@ -302,7 +303,8 @@
       : st === 'error-wait' ? esc(NET.err) : esc(NET.err || 'Not connected.');
     return `<div class="vs-net ${st}"><span class="vs-net-dot"></span><span>${msg}</span>
       ${st === 'waiting' ? `<button type="button" class="btn btn-small" id="vsCopy">COPY LINK</button>` : ''}
-      ${NET.role === 'host' && (st === 'waiting' || st === 'connected') ? `<button type="button" class="btn btn-small" id="vsCopyWatch">COPY WATCH LINK</button>${watchers() ? `<span class="vs-spec">${watchers()} WATCHING</span>` : ''}` : ''}
+      ${NET.role === 'host' && (st === 'waiting' || st === 'connected') ? `<button type="button" class="btn btn-small" id="vsCopyWatch">COPY WATCH LINK</button>` : ''}
+      ${st === 'connected' && (VS.watching || 0) ? `<span class="vs-spec">&#128065; ${VS.watching} WATCHING</span>` : ''}
       ${NET.role === 'host' && st === 'connected' ? `<button type="button" class="btn btn-small" id="vsHand">MAKE ${esc(who(1 - NET.side).toUpperCase())} HOST</button>` : ''}
       ${st === 'connected' && me() !== null && me() >= 0 && UI.profile.signedIn() ? '<span class="vs-fr" id="vsFriend"></span>' : ''}
       ${st === 'lost' || st === 'error' ? `<button type="button" class="btn btn-small" id="vsRetry">${NET.role === 'host' ? 'NEW ROOM' : 'TRY AGAIN'}</button>` : ''}
@@ -799,7 +801,7 @@
       ? `<div class="auc-bid"><div class="auc-broke"><b>YOU CAN'T TOP ${money(st.price)}</b><span>${whyBroke('You')} Pass, and ${esc(who(st.holder))} gets him.</span></div>
           <div class="auc-go"><button type="button" class="btn btn-big" disabled>BID<small>can't top ${money(st.price)}</small></button><button type="button" class="btn btn-gold btn-big" id="aucPass">PASS<small>${esc(who(st.holder))} gets him for ${money(st.price)}</small></button></div></div>`
       : mineTurn
-      ? `<div class="auc-bid"><div class="auc-step"><button type="button" class="btn" id="aucDown" aria-label="Lower the bid"${AB.amt - A.raise < min ? ' disabled' : ''}>&minus;</button><div class="auc-amt"><small>YOUR BID</small><b id="aucAmt">${money(AB.amt)}</b></div><button type="button" class="btn" id="aucUp" aria-label="Raise the bid"${AB.amt + A.raise > max ? ' disabled' : ''}>+</button></div>
+      ? `<div class="auc-bid"><div class="auc-maxline">YOUR MAX BID IS <b>${money(max)}</b> <span>${money(have)} left${reserve ? ', keeping ' + money(reserve) + ' for your other ' + (reserve / A.start) + ' open spot' + (reserve / A.start > 1 ? 's' : '') : ''}</span></div><div class="auc-step"><button type="button" class="btn" id="aucDown" aria-label="Lower the bid"${AB.amt - A.raise < min ? ' disabled' : ''}>&minus;</button><div class="auc-amt"><small>YOUR BID</small><b id="aucAmt">${money(AB.amt)}</b></div><button type="button" class="btn" id="aucUp" aria-label="Raise the bid"${AB.amt + A.raise > max ? ' disabled' : ''}>+</button></div>
           <div class="auc-chips">${quick.map(x => `<button type="button" class="ch-chip${AB.amt === x.to ? ' on' : ''}" data-to="${x.to}">${x.label}</button>`).join('')}<button type="button" class="ch-chip${AB.amt === max ? ' on' : ''}" data-to="${max}"${canRaise ? '' : ' disabled'}>ALL IN ${money(max)}</button></div>
           <div class="auc-go"><button type="button" class="btn btn-gold btn-big" id="aucRaise"${canRaise ? '' : ' disabled'}>BID ${money(AB.amt)}</button><button type="button" class="btn btn-big" id="aucPass">PASS<small>${esc(who(st.holder))} gets him for ${money(st.price)}</small></button></div></div>`
       : `<div class="auc-wait"><b>${esc(who(st.turn))} ${broke ? "can't top the bid" : 'is deciding'}...</b><span>${broke ? whyBroke(esc(who(st.turn))) + ' They can only pass. ' : ''}${esc(who(st.holder))} holds the bid at ${money(st.price)}.</span></div>`;
