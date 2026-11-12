@@ -1032,13 +1032,13 @@
   function oddsHtml(r) {
     if (!ODDS || ODDS.key !== r.when) return '';
     const o = ODDS, n = o.rows.length;
-    const avgW = n ? o.rows.reduce((s, x) => s + x.w, 0) / n : 0;
+    const avgW = n ? o.rows.reduce((s, x) => s + x.w, 0) / n : 0, avgL = n ? o.rows.reduce((s, x) => s + x.l, 0) / n : 0;
     const best = n ? o.rows.slice().sort((a, b) => b.w - a.w)[0] : null, worst = n ? o.rows.slice().sort((a, b) => a.w - b.w)[0] : null;
     const titles = o.rows.filter(x => x.exit === 'champion').length;
     const counts = {};
     o.rows.forEach(x => { counts[x.exit] = (counts[x.exit] || 0) + 1; });
     return `<section class="ch-odds">${UI.header('TEN MORE SEASONS', n < o.total ? 'Simming ' + (n + 1) + ' of ' + o.total + '...' : 'Same five, new luck')}
-      <div class="ch-odds-g"><span><b>${titles}</b><small>TITLES</small></span><span><b>${n ? Math.round(avgW) + '-' + (82 - Math.round(avgW)) : '-'}</b><small>AVERAGE</small></span>
+      <div class="ch-odds-g"><span><b>${titles}</b><small>TITLES</small></span><span><b>${n ? Math.round(avgW) + '-' + Math.round(avgL) : '-'}</b><small>AVERAGE</small></span>
         <span><b>${best ? best.w + '-' + best.l : '-'}</b><small>BEST</small></span><span><b>${worst ? worst.w + '-' + worst.l : '-'}</b><small>WORST</small></span></div>
       <div class="ch-bar"><i style="width:${(n / o.total * 100).toFixed(0)}%"></i></div>
       <ul class="ch-odds-l">${['champion', 'finals', 'conf', 'semis', 'first', 'missed'].filter(k => counts[k]).map(k => `<li><b>${counts[k]}</b> ${esc(EXIT[k].toLowerCase())}</li>`).join('')}</ul></section>`;
@@ -1047,7 +1047,8 @@
     if (ODDS && ODDS.key === r.when && ODDS.rows.length < ODDS.total) return;
     ODDS = { key: r.when, total: 10, rows: [], ch: null, r };
     const btn = UI.$('#chOdds');
-    if (btn) btn.disabled = true;
+    if (btn) { btn.disabled = true; btn.textContent = 'SIMMING 1 OF 10...'; }
+    const bx = UI.$('#chOddsBox'); if (bx) { bx.innerHTML = oddsHtml(r); bx.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
     loadFor(r.cfg).then(oddsTick).catch(e => { ODDS = null; if (btn) btn.disabled = false; UI.toast(e && e.message ? e.message : String(e), 'error'); });
   }
   function oddsTick() {
@@ -1064,8 +1065,9 @@
     } catch (e) { console.warn('[challenge] odds failed', e); ODDS = null; return; }
     const box = UI.$('#chOddsBox');
     if (box) box.innerHTML = oddsHtml(o.r);
-    if (o.rows.length < o.total) setTimeout(oddsTick, 0);
-    else { const btn = UI.$('#chOdds'); if (btn) btn.disabled = false; }
+    const ob = UI.$('#chOdds');
+    if (o.rows.length < o.total) { if (ob) ob.textContent = 'SIMMING ' + (o.rows.length + 1) + ' OF ' + o.total + '...'; setTimeout(oddsTick, 0); }
+    else if (ob) { ob.disabled = false; ob.textContent = 'SIM 10 MORE AGAIN'; }
   }
 
   function share(r) {

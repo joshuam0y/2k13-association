@@ -682,3 +682,18 @@
 .vs-auc-log ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 13px; }
 .vs-auc-log li small { display: inline; margin-left: 6px; color: var(--gold); }
 @media (max-width: 560px) { .vs-auc-bid b { font-size: 32px; } }
+
+/* result-screen buttons on a phone: the share pill never goes blank or gets clipped, the rest sit in a tidy two-column grid */
+.btn-share, .btn-share:hover:not(:disabled), .btn-share:focus, .btn-share:active { color: #000; }   /* .btn:hover turns the text gold, which was gold on gold after a tap */
+.btn-share:hover:not(:disabled), .btn-share:active { background: var(--gold2); border-color: transparent; }
+.btn-share { box-sizing: border-box; height: auto; padding: 12px 20px; line-height: 1.15; text-align: center; white-space: normal; overflow: visible; }
+.btn.sl-copy { display: block; width: 100%; max-width: 520px; margin: 6px auto 0; text-align: center; }
+.ch-acts, .vs-acts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: stretch; }
+.ch-acts .btn, .vs-acts .btn { box-sizing: border-box; min-height: 48px; padding: 10px 8px; white-space: normal; line-height: 1.15; text-align: center; display: flex; align-items: center; justify-content: center; min-width: 0; }
+.ch-acts .btn-gold, .ch-acts .btn-big, .ch-acts .btn-share, .vs-acts .btn-gold, .vs-acts .btn-big, .vs-acts .btn-share { grid-column: 1 / -1; }
+.ch-acts .btn-share, .vs-acts .btn-share { margin: 0; max-width: none; }
+.vs-acts .sl-copy, .ch-acts .sl-copy { margin: 0; max-width: none; width: auto; }
+/* ten more seasons */
+#chOdds { white-space: normal; }
+.ch-odds { margin-top: 10px; }
+.ch-odds .ch-bar { margin: 8px 0 10px; }
