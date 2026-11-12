@@ -62,7 +62,8 @@
         <div class="mm-grid">
           ${UI.tile('#/challenge', 'draft', 'SEASON MODE', { cls: 'mt-hero mt-challenge mt-hot', disabled: !engineOk, sub: engineOk ? 'PICK FIVE, SIM A SEASON' : 'SIM ENGINE NOT LOADED' })}
           ${UI.tile('#/challenge/vs', 'draft', 'HEAD TO HEAD', { cls: 'mt-hero mt-versus mt-hot', disabled: !engineOk, sub: 'UNRANKED: A FRIEND, ONLINE OR ONE PHONE' })}
-          ${UI.tile('#/ranked', 'draft', 'RANKED', { cls: 'mt-hero mt-versus mt-ranked mt-hot', disabled: !engineOk, sub: (() => { const d = UI.ranked && UI.ranked.dailyToday ? UI.ranked.dailyToday() : null; if (!d) return 'FIND A MATCH, CLIMB THE LADDER'; return d.done ? 'DAILY DONE' + (d.n ? ' | STREAK ' + d.n : '') + ' | ' + d.info.title : 'TODAY: ' + d.info.title + (d.n ? ' | STREAK ' + d.n : ''); })() })}
+          ${UI.tile('#/ranked', 'draft', 'RANKED', { cls: 'mt-hero mt-versus mt-ranked mt-hot', disabled: !engineOk, sub: 'FIND A MATCH, CLIMB THE LADDER' })}
+          ${UI.tile('#/daily', 'draft', 'DAILY', { cls: 'mt-hero mt-versus mt-ranked', disabled: !engineOk, sub: (() => { const d = UI.ranked && UI.ranked.dailyToday ? UI.ranked.dailyToday() : null; if (!d) return 'A NEW THEME EVERY DAY'; return d.done ? 'DONE' + (d.n ? ' | STREAK ' + d.n : '') + ' | ' + d.info.title : 'TODAY: ' + d.info.title + (d.n ? ' | STREAK ' + d.n : ''); })() })}
           ${UI.tile('#/new', 'ball', 'THE ASSOCIATION', { cls: 'mt-assoc', disabled: !engineOk, sub: 'A FULL FRANCHISE' })}
           ${cont}
           ${UI.tile('#/challenge/tournament', 'draft', 'TOURNAMENT', { cls: 'mt-tn', disabled: !engineOk, sub: '4 OR 8 FRIENDS, ONE PHONE, ONE BRACKET' })}

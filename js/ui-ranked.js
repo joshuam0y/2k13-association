@@ -343,13 +343,12 @@
   const signInBox = what => `<div class="rkn"><b>SIGN IN TO ${what}.</b><span class="muted"> Ranked results, rivalries and your profile live on your account.</span><button type="button" class="btn btn-gold" data-pf="open">SIGN IN OR CREATE ACCOUNT</button></div>`;
 
   // ---------- #/ranked ----------
-  const RK = { open: ls.get('a13-rk-open', 'all'), era: ls.get('a13-rk-era', 'ALL'), mine: !!ls.get('a13-rk-mine', false), tab: ls.get('a13-rk-tab', 'ladder') };
+  const RK = { open: ls.get('a13-rk-open', 'all'), era: ls.get('a13-rk-era', 'ALL'), mine: !!ls.get('a13-rk-mine', false) };
   let REFRESH = null;
   let CNT = null;
   function stopRefresh() { if (REFRESH) { clearInterval(REFRESH); REFRESH = null; } if (CNT) { clearInterval(CNT); CNT = null; } }
   function rankedPage(app) {
     stopRefresh();
-    if (RK.tab === 'games') RK.tab = 'ladder';   // casual rooms live in Head to Head now
     const signed = UI.profile.signedIn();
     app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">RANKED | ${esc(seasonLine())}</div><h1 class="ch-hero-t">THE BOARDS.</h1>
         <p class="ch-hero-p">Win ranked auctions to climb. Play the daily for a score.</p></section>
@@ -369,14 +368,12 @@
       <details class="rk-det rk-ranks"><summary>THE RANKS</summary>
         <p class="muted">Everyone starts at 1200, the bottom of Silver. Divisions run III (lowest) to I. ${esc(seasonLine())}.</p>
         <div class="rk-rk">${TIERS.map((t, i) => `<span class="rk-rk-i"><span class="tier" style="--tc:${t.color}">${iconSvg(t, 16)}${esc(t.name)}</span><small>${t.floor ? t.floor + (TIERS[i + 1] ? ' TO ' + (TIERS[i + 1].floor - 1) : ' AND UP') : 'UNDER ' + TIERS[i + 1].floor}</small></span>`).join('')}</div></details>
-      <div class="ch-chips rk-tabs"><button type="button" class="ch-chip${RK.tab === 'ladder' ? ' on' : ''}" data-tab="ladder">LADDER</button><button type="button" class="ch-chip${RK.tab === 'daily' ? ' on' : ''}" data-tab="daily">DAILY AUCTION</button></div>
       <div id="rkBody" class="rk-body"><p class="muted">Loading...</p></div>
       <div class="ch-go"><a class="btn" href="#/me">MY PROFILE</a><a class="btn" href="#/challenge/vs">HEAD TO HEAD</a></div>`;
     UI.profile.wire(app, () => rankedPage(app));
     const fb = UI.$('#rkFind', app); if (fb) fb.addEventListener('click', () => { location.hash = '#/ranked/find/' + 'ALL'; });
     const era = UI.$('#rkEra', app); era.addEventListener('change', () => { RK.era = era.value; ls.set('a13-rk-era', RK.era); rankedPage(app); });
     app.querySelectorAll('[data-scope]').forEach(b => b.addEventListener('click', () => { RK.mine = b.dataset.scope === '1'; ls.set('a13-rk-mine', RK.mine); rankedPage(app); }));
-    app.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => { RK.tab = b.dataset.tab; ls.set('a13-rk-tab', RK.tab); rankedPage(app); }));
     fill(app);
     const counts = async () => {   // how many are online in each mode
       const el = UI.$('#rkCnt', app);
@@ -402,8 +399,7 @@
     if (mine) ratingNow('ALL').then(r => {   // your rank, how far to the next one, and your streak
       const t = tierOf(r.rating), sk = streakNow();
       mine.innerHTML = `<div class="rk-mine-t">${tierIcon(r.rating, 56)}${tierBadge(r.rating)}<b>${r.rating}</b><small>${r.games ? r.wins + '-' + r.losses + ' RANKED' : 'NO RANKED GAMES YET'}${r.of ? ' | #' + r.rank + ' OF ' + r.of : ''}</small></div>
-        ${t.next ? `<div class="rk-bar wide"><i style="--w:${t.pct}%"></i></div><small class="muted">${t.next.floor - r.rating} POINTS TO ${esc(t.next.name)}</small>` : '<small class="muted">THE TOP RANK</small>'}
-        <small class="muted rk-mine-s">DAILY STREAK ${sk.n}${sk.done ? ' | TODAY DONE' : ' | TODAY NOT PLAYED'}</small>`;
+        ${t.next ? `<div class="rk-bar wide"><i style="--w:${t.pct}%"></i></div><small class="muted">${t.next.floor - r.rating} POINTS TO ${esc(t.next.name)}</small>` : '<small class="muted">THE TOP RANK</small>'}`;
     }).catch(() => { mine.remove(); });
   }
   const wl = (w, l) => w + '-' + l;
@@ -418,24 +414,13 @@
         if (!region) { body.innerHTML = '<div class="rkn"><b>NO REGION SET.</b><span class="muted"> Pick your country (or US state) on your profile to see your region.</span><a class="btn btn-gold" href="#/me">MY PROFILE</a></div>'; return; }
       }
       const scope = RK.mine ? ' in ' + regionName(region) : '';
-      if (RK.tab === 'ladder') {
+      {
         const rows = await UI.profile.rpc('lb_ratings', { p_era: RK.era, p_region: region || null, p_limit: 100 }), meName = UI.profile.account();
         const tbl = f => { const l = rows.map((r, i) => [i + 1, r]).filter(x => !f || x[1].username.toLowerCase().indexOf(f) >= 0); return l.length ? table(['#', 'PLAYER', 'RANK', 'RATING', 'W-L'], l.map(([i, r]) => [i, nameCell(r, meName), tierBadge(r.rating), '<b>' + r.rating + '</b>', wl(r.wins, r.losses)])) : '<p class="muted">Nobody by that name on this ladder.</p>'; };
         body.innerHTML = `<p class="muted rk-sub">${esc(eraName(RK.era))} ladder${esc(scope)}. Everyone starts at 1200.</p>` + (rows.length ? `<div class="rk-search"><input id="rkSearch" maxlength="16" placeholder="FIND A PLAYER" autocomplete="off" autocapitalize="off" spellcheck="false">${meName && rows.some(r => r.username === meName) ? '<button type="button" class="btn btn-small" id="rkFindMe">FIND ME</button>' : ''}</div><div id="rkLadder">${tbl('')}</div>` : '<p class="muted">Nobody is on this ladder yet. Win a ranked auction to be the first.</p>');
         const se = UI.$('#rkSearch', body), lad = UI.$('#rkLadder', body);
         if (se) se.addEventListener('input', () => { lad.innerHTML = tbl(se.value.trim().toLowerCase()); });
         const fm = UI.$('#rkFindMe', body); if (fm) fm.addEventListener('click', () => { se.value = ''; lad.innerHTML = tbl(''); const row = [...lad.querySelectorAll('tr')].find(t => t.innerText.indexOf('YOU') >= 0); if (row) { row.scrollIntoView({ block: 'center', behavior: 'smooth' }); row.classList.add('rk-me'); } });
-      } else if (RK.tab === 'daily') {
-        const day = today(), rows = await UI.profile.rpc('lb_daily', { p_day: day, p_era: 'ALL', p_region: region || null, p_limit: 50 });
-        let TH = null; try { await dailyTheme(day); TH = THEME[day].info; } catch (e) { /* the theme stays out */ }
-        const perf = TH ? dailyPerfect('ALL', day) : 0, pctOf = sc => (perf > 0 ? Math.min(100, 100 * Number(sc) / perf).toFixed(1) + '%' : '');
-        const me = UI.profile.account(), done = ls.get('a13-rk-d-' + day + '-ALL', null);
-        const played = done && done.fin;
-        body.innerHTML = `${TH ? `<div class="rk-theme"><small>TODAY | ${esc(TH.kind)}</small><b>${esc(TH.title)}</b><span class="muted">${esc(TH.tag)}</span></div>` : ''}<p class="muted rk-sub">Same ten players for everyone. $20, you vs the house. One try a day.</p>
-          <p class="rk-streak">${streakNow().n ? '<b>' + streakNow().n + '</b> DAY DAILY STREAK' + (streakNow().done ? ' | TODAY DONE' : ' | PLAY TODAY TO KEEP IT') : 'START A DAILY STREAK: PLAY ONE A DAY'}</p>
-          <div class="rk-theme lock"><small>TOMORROW</small><b>???</b><span class="muted">Opens in ${(() => { const n = new Date(), ms = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + 1) - n.getTime(), hh = Math.floor(ms / 3600000), mm = Math.floor(ms / 60000) % 60; return hh + 'H ' + mm + 'M'; })()}</span></div>
-          <div class="ch-go">${UI.profile.signedIn() ? `<a class="btn btn-gold btn-big" href="#/ranked/daily/ALL">${played ? 'SEE TODAY\'S RESULT' : done ? 'FINISH TODAY\'S AUCTION' : 'PLAY TODAY\'S AUCTION'}</a>` : ''}<a class="btn" href="#/ranked/practice">PRACTICE ARCHIVE</a></div>` +
-          (rows.length ? table(perf > 0 ? ['#', 'PLAYER', 'SCORE', 'OF PERFECT'] : ['#', 'PLAYER', 'SCORE'], rows.map((r, i) => [i + 1, nameCell(r, me), '<b>' + Number(r.score).toFixed(1) + '</b>'].concat(perf > 0 ? [pctOf(r.score)] : []))) : '<p class="muted">No scores yet today' + esc(scope) + '.</p>');
       }
     } catch (e) { body.innerHTML = '<p class="rk-err">' + esc(failMsg(e)) + '</p>'; }
   }
@@ -573,12 +558,11 @@
   function dailyPage(app, era, pr) {   // pr: a practice round of any theme {info, n}: no board, no streak
     stopRefresh();
     era = ERAS.indexOf(era) >= 0 ? era : 'ALL';
-    if (!pr && !UI.profile.signedIn()) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">DAILY AUCTION | ${esc(eraName(era))}</div><h1 class="ch-hero-t">SIGN IN FIRST.</h1></section>${signInBox('PLAY THE DAILY AUCTION')}<div class="ch-go"><a class="btn" href="#/ranked">BACK</a></div>`; UI.profile.wire(app, () => dailyPage(app, era)); return; }
     era = 'ALL';   // the daily is one theme a day, whatever era is picked above
     const day = pr ? 'practice:' + pr.info.key + ':' + pr.n : today(), key = 'a13-rk-d-' + day + '-ALL';
     if (!THEME[day]) {
       app.innerHTML = '<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE THEME...</div></section>';
-      (pr ? buildTheme(pr.info).then(t => { THEME[day] = t; }) : dailyTheme(day)).then(() => { if (/^#\/ranked\/(daily|practice)/.test(location.hash)) dailyPage(app, era, pr); }).catch(e => { app.innerHTML = '<p class="rk-err">' + esc(e.message || e) + '</p>'; });
+      (pr ? buildTheme(pr.info).then(t => { THEME[day] = t; }) : dailyTheme(day)).then(() => { if (/^#\/daily/.test(location.hash)) dailyPage(app, era, pr); }).catch(e => { app.innerHTML = '<p class="rk-err">' + esc(e.message || e) + '</p>'; });
       return;
     }
     const pool = THEME[day].pool, byId = {};
@@ -602,7 +586,7 @@
         <ol class="vs-auc-won">${won.map(w => `<li>${esc(w.p ? w.p.name : '?')} <small class="muted">${money(w.price || 0)}</small></li>`).join('') || '<li class="muted">Nobody yet</li>'}</ol></div>`;
     };
     const TH = (THEME[day] || {}).info || { title: eraName(era), kind: '' }, isPr = day.indexOf('practice:') === 0, prKey = isPr ? day.slice(9, day.lastIndexOf(':')) : '';
-    const hdr = `<div class="ch-top"><div><div class="ch-top-k">${isPr ? 'PRACTICE' : 'DAILY | ' + esc(day)} | ${esc(TH.title)}</div><div class="ch-top-t">${st.done ? 'YOUR FIVE IS SET' : 'PLAYER ' + (st.i + 1) + ' OF ' + st.ids.length}</div></div><a class="btn btn-small" href="${isPr ? '#/ranked/practice' : '#/ranked'}">BACK</a></div>`;
+    const hdr = `<div class="ch-top"><div><div class="ch-top-k">${isPr ? 'PRACTICE' : 'DAILY | ' + esc(day)} | ${esc(TH.title)}</div><div class="ch-top-t">${st.done ? 'YOUR FIVE IS SET' : 'PLAYER ' + (st.i + 1) + ' OF ' + st.ids.length}</div></div><a class="btn btn-small" href="${isPr ? '#/daily/practice' : '#/daily'}">BACK</a></div>`;
     if (st.done) {
       stopClock();
       const five = st.won[0].map(id => byId[id]), score = UI.ranked.lineupScore(five), houseFive = st.won[1].map(id => byId[id]), hs = UI.ranked.lineupScore(houseFive);
@@ -611,13 +595,18 @@
       app.innerHTML = `${hdr}<div class="vs-sides vs-compact">${sideBox(0, 'YOU')}${sideBox(1, 'THE HOUSE')}</div>
         <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${score == null ? '-' : score.toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div>`}<div class="rk-streak" id="rkStreak"></div><span class="muted">The house scored ${hs == null ? '-' : hs.toFixed(1)}. ${score != null && hs != null ? (score > hs ? 'You beat the house.' : score < hs ? 'The house won this one.' : 'A tie.') : ''}</span></section>
         <div id="rkSub" class="rkn"><span class="muted">Sending your score...</span></div>
-        <div class="ch-go">${isPr ? `<a class="btn btn-gold" href="#/ranked/practice/${esc(prKey)}/${Date.now()}">PLAY AGAIN</a><a class="btn" href="#/ranked/practice">ARCHIVE</a>` : `<a class="btn btn-gold" href="#/ranked">SEE THE BOARD</a>${pct == null ? '' : '<button type="button" class="btn" id="dlShare">SHARE YOUR SCORE</button>'}`}</div>`;
+        <div class="ch-go">${isPr ? `<a class="btn btn-gold" href="#/daily/practice/${esc(prKey)}/${Date.now()}">PLAY AGAIN</a><a class="btn" href="#/daily/practice">ARCHIVE</a>` : `<a class="btn btn-gold" href="#/daily">SEE THE BOARD</a>${pct == null ? '' : '<button type="button" class="btn" id="dlShare">SHARE YOUR SCORE</button>'}`}</div>`;
       const dsh = UI.$('#dlShare', app);
       if (dsh) dsh.addEventListener('click', async () => { dsh.disabled = true; const r = await shareCard({ k: 'DAILY | ' + day, title: 'OF A PERFECT FIVE', color: '#d4af37', big: pct.toFixed(1) + '%', sub: TH.title, name: UI.profile.account() || '' }, 'My Starting Five daily auction: ' + pct.toFixed(1) + '% of a perfect five.'); dsh.disabled = false; if (r === 'saved') UI.toast('Saved the picture. The link is copied.'); });
       const paintStreak = () => { const sk = UI.$('#rkStreak', app), n = streakNow(); if (sk && n.n) sk.innerHTML = '<b>' + n.n + '</b> DAY DAILY STREAK' + (n.best > n.n ? ' | BEST ' + n.best : ''); };
       paintStreak();
       const sub = UI.$('#rkSub', app);
       if (isPr) { sub.innerHTML = '<b>PRACTICE.</b> <span class="muted">Not on the board, no streak.</span>'; return; }
+      if (!UI.profile.signedIn()) {   // anyone can play; an account only puts the score on the board
+        sub.innerHTML = '<b>YOUR SCORE IS SAVED ON THIS DEVICE.</b> <span class="muted">Sign in to put it on the board.</span><button type="button" class="btn btn-gold" data-pf="open">SIGN IN</button>';
+        UI.profile.wire(app, () => dailyPage(app, era));
+        return;
+      }
       const cur = ls.get(key, {});
       if (cur.sent) { sub.innerHTML = `<b>SCORE SENT.</b> <span class="muted">One try a day for each era.</span>`; return; }
       UI.profile.rpc('submit_daily', { p_day: day, p_era: era, p_score: score, p_lineup: { names: five.map(p => p.name), seasons: five.map(p => p.season || null), score, era } })
@@ -961,28 +950,59 @@
     const past = themePast(), day0 = d => new Date(d + 'T12:00:00Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' }).toUpperCase();
     app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PRACTICE</div><h1 class="ch-hero-t">THE ARCHIVE.</h1>
         <p class="ch-hero-p">Past dailies only. No board, no streak.</p></section>
-      <div class="ch-go">${past.length ? `<a class="btn btn-gold btn-big" href="#/ranked/practice/${esc(past[Math.floor(Math.random() * past.length)].key)}/${Date.now()}">RANDOM THEME</a>` : ''}<a class="btn" href="#/ranked">BACK</a></div>
+      <div class="ch-go">${past.length ? `<a class="btn btn-gold btn-big" href="#/daily/practice/${esc(past[Math.floor(Math.random() * past.length)].key)}/${Date.now()}">RANDOM THEME</a>` : ''}<a class="btn" href="#/daily">BACK</a></div>
       <div class="pr-list">
         <span class="pr-i lock"><b>TODAY: ???</b><small>OPENS TOMORROW</small></span>
-        ${past.map(t => `<a class="pr-i" href="#/ranked/practice/${esc(t.key)}/${Date.now()}"><b>${esc(t.title)}</b><small>${esc(t.kind)} | ${esc(day0(t.day))}${t.tag ? ' | ' + esc(t.tag) : ''}</small></a>`).join('')}
+        ${past.map(t => `<a class="pr-i" href="#/daily/practice/${esc(t.key)}/${Date.now()}"><b>${esc(t.title)}</b><small>${esc(t.kind)} | ${esc(day0(t.day))}${t.tag ? ' | ' + esc(t.tag) : ''}</small></a>`).join('')}
       </div>
       ${past.length ? '' : '<p class="muted">Nothing here yet. A theme shows up the day after it runs.</p>'}`;
   }
   function practicePlay(app, key, n) {
     const info = themePast().find(t => t.key === key) || (themeLocked(key) ? themeCatalog().find(t => t.key === key) : null);
-    if (!info) { location.hash = '#/ranked/practice'; return; }
-    if (themeLocked(key)) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PRACTICE</div><h1 class="ch-hero-t">OPENS TOMORROW.</h1><p class="ch-hero-p">This is today's daily. Play it there, then practice it tomorrow.</p></section><div class="ch-go"><a class="btn btn-gold" href="#/ranked/daily/ALL">PLAY THE DAILY</a><a class="btn" href="#/ranked/practice">ARCHIVE</a></div>`; return; }
-    if (!n) { location.hash = '#/ranked/practice/' + key + '/' + Date.now(); return; }
+    if (!info) { location.hash = '#/daily/practice'; return; }
+    if (themeLocked(key)) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PRACTICE</div><h1 class="ch-hero-t">OPENS TOMORROW.</h1><p class="ch-hero-p">This is today's daily. Play it there, then practice it tomorrow.</p></section><div class="ch-go"><a class="btn btn-gold" href="#/daily/play">PLAY THE DAILY</a><a class="btn" href="#/daily/practice">ARCHIVE</a></div>`; return; }
+    if (!n) { location.hash = '#/daily/practice/' + key + '/' + Date.now(); return; }
     return dailyPage(app, 'ALL', { info, n });
   }
+
+  // ---------- #/daily: today's theme, the board and the practice archive. No account needed to play; an account puts the score on the board. ----------
+  async function dailyHub(app) {
+    stopRefresh();
+    const day = today(), signed = UI.profile.signedIn();
+    app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">DAILY | ${esc(day)}</div><h1 class="ch-hero-t">TODAY'S AUCTION.</h1>
+        <p class="ch-hero-p">One theme a day. The same ten players for everyone.</p></section><div id="dyBody"><p class="muted">Loading...</p></div>`;
+    const body = UI.$('#dyBody', app);
+    try {
+      let TH = null; try { await dailyTheme(day); TH = THEME[day].info; } catch (e) { /* the theme card stays out */ }
+      let rows = []; try { rows = (await UI.profile.rpc('lb_daily', { p_day: day, p_era: 'ALL', p_region: null, p_limit: 100 })) || []; } catch (e) { rows = null; }
+      const perf = TH ? dailyPerfect('ALL', day) : 0, pctOf = sc => (perf > 0 ? Math.min(100, 100 * Number(sc) / perf).toFixed(1) + '%' : '');
+      const me = UI.profile.account(), done = ls.get('a13-rk-d-' + day + '-ALL', null), played = done && done.fin, sk = streakNow();
+      const left = (() => { const n = new Date(), ms = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + 1) - n.getTime(); return Math.floor(ms / 3600000) + 'H ' + (Math.floor(ms / 60000) % 60) + 'M'; })();
+      body.innerHTML = `${TH ? `<div class="rk-theme"><small>TODAY | ${esc(TH.kind)}</small><b>${esc(TH.title)}</b><span class="muted">${esc(TH.tag)}</span></div>` : ''}
+        <p class="rk-streak">${sk.n ? '<b>' + sk.n + '</b> DAY STREAK' + (sk.done ? ' | TODAY DONE' : ' | PLAY TODAY TO KEEP IT') : 'START A STREAK: PLAY ONE A DAY'}</p>
+        <div class="ch-go"><a class="btn btn-gold btn-big" href="#/daily/play">${played ? "SEE TODAY'S RESULT" : done ? "FINISH TODAY'S AUCTION" : "PLAY TODAY'S AUCTION"}</a><a class="btn" href="#/daily/practice">PRACTICE ARCHIVE</a></div>
+        ${signed ? '' : '<p class="muted rk-sub">No account needed. Sign in to put your score on the board.</p>'}
+        <div class="rk-theme lock"><small>TOMORROW</small><b>???</b><span class="muted">Opens in ${left}</span></div>
+        <div class="ch-step-k">TODAY'S BOARD</div>` +
+        (rows && rows.length ? table(perf > 0 ? ['#', 'PLAYER', 'SCORE', 'OF PERFECT'] : ['#', 'PLAYER', 'SCORE'], rows.map((x, i) => [i + 1, nameCell(x, me), '<b>' + Number(x.score).toFixed(1) + '</b>'].concat(perf > 0 ? [pctOf(x.score)] : []))) : '<p class="muted">No scores yet today.</p>') +
+        '<div class="ch-go"><a class="btn" href="#/ranked">RANKED</a></div>';
+    } catch (e) { body.innerHTML = '<p class="rk-err">' + esc(failMsg(e)) + '</p>'; }
+  }
+  P.daily = function (app, arg) {
+    const part = String(arg || '').split('/');
+    if (part[0] === 'play') return dailyPage(app, 'ALL');
+    if (part[0] === 'practice') { location.hash = '#/daily/' + part.join('/'); return; }
+    if (part[0] === 'practiceX') return part[1] ? practicePlay(app, decodeURIComponent(part[1]), part[2] || '') : practicePage(app);
+    return dailyHub(app);
+  };
   P.u = function (app, arg) { return userPage(app, decodeURIComponent(String(arg || '').split('/')[0])); };
 
   P.ranked = function (app, arg) {
     const part = String(arg || '').split('/');
     if (part[0] === 'find') return findPage(app, part[1] ? decodeURIComponent(part[1]) : RK.era);
     if (part[0] === 'result') return resultPage(app);
-    if (part[0] === 'practice') return part[1] ? practicePlay(app, decodeURIComponent(part[1]), part[2] || '') : practicePage(app);
-    if (part[0] === 'daily') return dailyPage(app, part[1] ? decodeURIComponent(part[1]) : RK.era);
+    if (part[0] === 'practice') { location.hash = '#/daily/' + part.join('/'); return; }
+    if (part[0] === 'daily') { location.hash = '#/daily/play'; return; }
     return rankedPage(app);
   };
   P.me = function (app) { return mePage(app); };

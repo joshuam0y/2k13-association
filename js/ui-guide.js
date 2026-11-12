@@ -261,10 +261,15 @@
         <p>Start at 1200, the bottom of Silver. Win to climb, lose to drop. Open THE RANKS for every range.</p>
         <h3>LEAVING</h3>
         <p>Disconnect and you have 90 seconds to rejoin. Miss it and you forfeit. The lobby is free to leave.</p>
-        <h3>DAILY AUCTION</h3>
-        <p>A solo auction vs the house with a new theme each day: a current team, a famous season, a franchise's best ever, a decade or a type of player. Same ten players for everyone, once a day. Scored as a percentage of a perfect five. No rating change.</p>
         <h3>FRIENDS</h3>
         <p>Tap a name to see a profile and add a friend. Play friends in Head to Head: it is casual.</p>`;
+  const DAILY_HELP = `<p>A solo auction against the house, with a new theme every day. No account needed.</p>
+        <h3>THE DAILY</h3>
+        <p>One theme a day: a current team, a famous season, a franchise, a decade, a draft class, a rookie year, a type of player, the best under 25, or the best never to win a ring. All ten players come from it. $20, bids start at $1, 24 seconds a bid, five each. One try a day.</p>
+        <h3>SCORE</h3>
+        <p>Your five is scored as a percentage of the best five in the pool. An account puts that score on today's board. Your streak counts days in a row on this device.</p>
+        <h3>PRACTICE</h3>
+        <p>Replay any past theme any time. It never touches the board or your streak. Today's theme opens tomorrow.</p>`;
   const HOME_HELP = `<p>Tap a tile on the main menu to start.</p>
         <h3>SEASON MODE</h3>
         <p>Draft five players from one season or from all of NBA history, then sim a full season. Your five play every minute and never get hurt.</p>
@@ -272,6 +277,8 @@
         <p>Draft against a friend, online with a room code or on one phone, and play a best of 3, 5 or 7 series. It is casual.</p>
         <h3>RANKED</h3>
         <p>Find a match against another player, bid in an auction draft and climb the ladder from Bronze to Legend.</p>
+        <h3>DAILY</h3>
+        <p>A new theme every day. A solo auction against the house. No account needed.</p>
         <h3>TOURNAMENT</h3>
         <p>Four or eight friends draft and play a bracket, on one phone or each on their own.</p>
         <h3>THE ASSOCIATION</h3>
@@ -284,6 +291,7 @@
         <p class="muted">Open the ? on any mode for its own rules.</p>`;
   function modeOf() {
     const h = location.hash || '';
+    if (/^#\/daily(\/|$)/.test(h)) return { tag: ': DAILY', body: DAILY_HELP, assoc: false };
     if (/^#\/(ranked|me|u)(\/|$)/.test(h)) return { tag: ': RANKED', body: RANKED_HELP, assoc: false };
     if (/^#\/challenge\/vs/.test(h)) return { tag: ': HEAD TO HEAD', body: VS_HELP, assoc: false };
     if (/^#\/challenge/.test(h)) return { tag: ': SEASON MODE', body: SEASON_HELP, assoc: false };

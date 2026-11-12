@@ -12,9 +12,10 @@
 
   const PAGES = {
     about: ['ABOUT', `
-      <p><b>Starting Five</b> is a free basketball sim made by <b>Joshua Moy</b>. It started as a love letter to NBA 2K13 and grew into five ways to play:</p>
+      <p><b>Starting Five</b> is a free basketball sim made by <b>Joshua Moy</b>. It started as a love letter to NBA 2K13 and grew into six ways to play:</p>
       <ul><li><b>Season Mode.</b> Draft five players from any season, or from all of NBA history, and sim a full season.</li>
       <li><b>Head to Head.</b> Draft against a friend, online or on one phone, and play a series.</li>
+      <li><b>Daily.</b> A new theme every day, like the 2014-15 Hawks or the best centers ever. A solo auction against the house, no account needed.</li>
       <li><b>Ranked.</b> Find a match against another player online: an auction draft and a best of 7 series that moves a ladder from Bronze up to Legend.</li>
       <li><b>Tournament.</b> Four or eight friends draft on one device, or each on their own phone, and play a bracket.</li>
       <li><b>The Association.</b> A full franchise sim with trades, free agency, drafts and real history.</li></ul>
@@ -27,7 +28,7 @@
       <p class="muted">Include the page you were on and what phone or browser you use. Please do not post personal information in a public issue.</p>`],
     faq: ['FAQ', `
       <h3>Is it free?</h3><p>Yes. There are no ads and no payments. An account is optional.</p>
-      <h3>Do I need an account?</h3><p>Only for ranked play, the daily auction board, friends and your profile. Everything else works as a guest, with just a name you pick.</p>
+      <h3>Do I need an account?</h3><p>Only for ranked play, getting your daily score on the board, friends and your profile. The daily, practice and everything else work as a guest.</p>
       <h3>Where is my progress saved?</h3><p>Leagues, Season Mode runs and settings are saved on your own device, in your browser. Clearing site data or switching browsers or phones starts you fresh. Your Association leagues live under LOAD. If you have an account, your ranked results, rating, friends and profile are saved online with it.</p>
       <h3>How does online Head to Head work?</h3><p>One player makes a room and shares the code or link. The other opens it on their phone. Both phones stay in sync while you draft and watch.</p>
       <h3>How does ranked work?</h3><p>Tap Ranked, then Find a match. You are paired with the closest rating searching, so higher ranks face tougher players. Bid on ten hidden players ($20 each, 24 seconds a bid), then play a best of 7. A win raises your rating, a loss lowers it.</p>
