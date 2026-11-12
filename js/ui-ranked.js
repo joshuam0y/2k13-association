@@ -480,16 +480,23 @@
     ['SMALL', 'SMALL BALL', 'Six foot four and under', e => e.ht && e.ht <= 76 && e.ovr >= 80, e => e.ovr],
     ['TALL', 'THE TALL ONES', 'Seven feet and up', e => e.ht && e.ht >= 84 && e.ovr >= 80, e => e.ovr]
   ];
+  const DRAFTYRS = [[1996, 'Kobe, Iverson and Nash'], [1999, 'Brand, Francis, Odom and Marion'], [2003, 'LeBron, Melo, Bosh and Wade'], [2008, 'Rose, Westbrook and Love'], [2009, 'Harden, Curry and DeRozan'], [2011, 'Kyrie, Kawhi and Klay'], [2016, 'Simmons, Ingram, Murray and Siakam'], [2017, 'Tatum, Mitchell, Fox and Adebayo']];
+  const ROOKIES = [[1985, 'Jordan, Olajuwon and Barkley arrive'], [1997, "Iverson's first year"], [2000, 'Brand and Francis share the award'], [2004, "LeBron's first year"], [2010, 'Curry and Tyreke Evans'], [2011, 'Griffin and Wall'], [2013, 'Lillard and Anthony Davis'], [2018, 'Simmons, Mitchell and Tatum'], [2019, 'Luka and Trae'], [2020, 'Ja and Zion']];
+  const RINGLESS = ['Charles Barkley', 'Karl Malone', 'John Stockton', 'Patrick Ewing', 'Steve Nash', 'Allen Iverson', 'Reggie Miller', 'Chris Paul', 'Carmelo Anthony', 'Tracy McGrady', 'Vince Carter', 'Dominique Wilkins', 'Elgin Baylor', 'George Gervin', 'Alex English', 'Chris Webber', 'Anfernee Hardaway', 'Tim Hardaway', 'Mitch Richmond', 'Bob Lanier', 'Pete Maravich', 'Dikembe Mutombo', 'Sidney Moncrief', 'Bernard King', 'Damian Lillard', 'Paul George', 'Elvin Hayes', 'Nate Thurmond'];
   const DECS = ['1950s', '1960s', '1970s', '1980s', '1990s', '2000s', '2010s', '2020s'];
   const labelOf = y => (y - 1) + '-' + String(y).slice(2);
   // what today is, from the date alone (no data needed): the kind rotates daily, the pick inside it comes from the date
   function dailyThemeInfo(day) {
-    const idx = Math.floor(Date.parse(day + 'T00:00:00Z') / 86400000), kind = ((idx % 5) + 5) % 5, h = hash(day);
+    const idx = Math.floor(Date.parse(day + 'T00:00:00Z') / 86400000), kind = ((idx % 9) + 9) % 9, h = hash(day);
     if (kind === 0) { const a = MODERN[h % MODERN.length]; return { kind: 'CURRENT TEAM', title: labelOf(2027) + ' ' + UI.teamName(a).toUpperCase(), tag: 'Today\'s roster', spec: { t: 'season', abbr: a, year: 2027 } }; }
     if (kind === 1) { const f = FAMOUS[h % FAMOUS.length]; return { kind: 'FAMOUS SEASON', title: labelOf(f[1]) + ' ' + (FRANCH[f[0]] || UI.teamName(f[0])).toUpperCase(), tag: f[2], spec: { t: 'season', abbr: f[0], year: f[1] } }; }
     if (kind === 2) { const ks = Object.keys(FRANCH), a = ks[h % ks.length]; return { kind: 'ALL-TIME FRANCHISE', title: 'THE BEST ' + FRANCH[a].toUpperCase() + ' EVER', tag: 'Every season counts', spec: { t: 'franchise', abbr: a } }; }
     if (kind === 3) { const d = DECS[h % DECS.length]; return { kind: 'ERA', title: 'THE ' + d.toUpperCase(), tag: 'The best of one decade', spec: { t: 'decade', d } }; }
-    const st = STYLES[h % STYLES.length]; return { kind: 'STYLE', title: st[1], tag: st[2], spec: { t: 'style', k: st[0] } };
+    if (kind === 4) { const st = STYLES[h % STYLES.length]; return { kind: 'STYLE', title: st[1], tag: st[2], spec: { t: 'style', k: st[0] } }; }
+    if (kind === 5) { const d = DRAFTYRS[h % DRAFTYRS.length]; return { kind: 'DRAFT CLASS', title: 'THE CLASS OF ' + d[0], tag: d[1], spec: { t: 'draft', y: d[0] } }; }
+    if (kind === 6) { const r = ROOKIES[h % ROOKIES.length]; return { kind: 'ROOKIE YEAR', title: 'THE ' + labelOf(r[0]) + ' ROOKIES', tag: r[1], spec: { t: 'rookie', year: r[0] } }; }
+    if (kind === 7) return { kind: 'UNDER 25', title: 'THE YOUNG GUNS', tag: 'Current players under 25', spec: { t: 'u25' } };
+    return { kind: 'RINGLESS', title: 'NO RING', tag: 'The best never to win it all', spec: { t: 'ringless' } };
   }
   const THEME = {};
   async function dailyTheme(day) {
@@ -497,11 +504,15 @@
     const info = dailyThemeInfo(day), sp = info.spec, top = l => l.sort((a, b) => b.ovr - a.ovr || (a.id < b.id ? -1 : 1)).slice(0, 12);
     let pool = [];
     const allTime = () => { const best = {}; C.allTimePool().forEach(e => { if (!best[e.base] || e.ovr > best[e.base].ovr) best[e.base] = e; }); return Object.keys(best).map(k => Object.assign({}, best[k], { id: best[k].key, team: best[k].from })); };
-    if (sp.t === 'season') { await C.load(sp.year); pool = C.seasonData(sp.year).players.filter(x => x.team === sp.abbr).map(x => Object.assign({}, x, { season: sp.year })); }
+    if (sp.t === 'rookie') { await C.load(sp.year); pool = C.seasonData(sp.year).players.filter(x => x.rookie).map(x => Object.assign({}, x, { season: sp.year })); }
+    else if (sp.t === 'u25') { await C.load(2027); pool = C.seasonData(2027).players.filter(x => x.age < 25).map(x => Object.assign({}, x, { season: 2027 })); }
+    else if (sp.t === 'season') { await C.load(sp.year); pool = C.seasonData(sp.year).players.filter(x => x.team === sp.abbr).map(x => Object.assign({}, x, { season: sp.year })); }
     else {
       await C.load('pool');
       if (sp.t === 'franchise') { const best = {}; C.allTimePool().filter(e => e.from === sp.abbr).forEach(e => { if (!best[e.base] || e.ovr > best[e.base].ovr) best[e.base] = e; }); pool = Object.keys(best).map(k => Object.assign({}, best[k], { id: best[k].key, team: best[k].from })); }
       else if (sp.t === 'decade') pool = allTime().filter(e => decKey(e.season) === sp.d);
+      else if (sp.t === 'draft') { const R = (window.DRAFT_RESULTS || {})[sp.y], D = (window.DRAFTS || {})[sp.y], ids = new Set(R ? R.map(r => r[1]) : (D || []).map(r => r.id)); pool = allTime().filter(e => ids.has(e.base)); }
+      else if (sp.t === 'ringless') { const names = new Set(RINGLESS); pool = allTime().filter(e => names.has(e.name)); }
       else { const def = STYLES.find(x => x[0] === sp.k); pool = allTime().filter(def[3]).sort((a, b) => def[4](b) - def[4](a)).slice(0, 30); }
     }
     if (sp.t === 'style') pool = pool.slice(0, 12); else pool = top(pool);
@@ -879,6 +890,7 @@
     draw();
   }
   UI.ranked.tour = openTour;
+  UI.ranked.theme = dailyTheme; UI.ranked.themeInfo = dailyThemeInfo;   // for the theme list and checks
 
   // ---------- nudges: a friend or other players searching for a ranked match ----------
   const NOTE = 'a13-rk-notify';
