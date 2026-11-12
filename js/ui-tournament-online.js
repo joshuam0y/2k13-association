@@ -623,7 +623,7 @@
             <div><span class="ts-start-k">SEEDING</span><div class="ch-chips">${chips([['random', 'RANDOM'], ['rating', 'BY TEAM RATING']], o.seeding, 'seed')}</div></div>
             <div><span class="ts-start-k">SHOT CLOCK</span><div class="ch-chips">${chips([[24, '24 SEC'], [0, 'OFF']], o.timer ? 24 : 0, 'timer')}</div></div>
             <div><span class="ts-start-k">RATINGS</span><div class="ch-chips">${[[true, 'ON'], [false, 'OFF']].map(([v, l]) => `<button type="button" class="ch-chip${(o.ratings !== false) === v ? ' on' : ''}" data-rate="${v}"${ds}>${l}</button>`).join('')}</div></div>
-            <div><span class="ts-start-k">SALARY CAP</span><div class="ch-chips">${UI.challengeCap.CAPS.map(v => `<button type="button" class="ch-chip${(o.cap || 0) === v ? ' on' : ''}" data-cap="${v}"${ds}>${v ? '$' + v + 'M' : 'OFF'}</button>`).join('')}</div></div>
+            ${o.auction ? '' : `<div><span class="ts-start-k">SALARY CAP</span><div class="ch-chips">${UI.challengeCap.CAPS.map(v => `<button type="button" class="ch-chip${(o.cap || 0) === v ? ' on' : ''}" data-cap="${v}"${ds}>${v ? '$' + v + 'M' : 'OFF'}</button>`).join('')}</div></div>`}
           </div></div>
         <div class="ch-go">${host ? `<button type="button" class="btn btn-gold btn-big" id="tnGo"${t.seats.length >= 2 && NET.status === 'ready' ? '' : ' disabled'}>${t.seats.length >= 2 ? 'START THE DRAFT' : 'WAITING FOR A FRIEND'}</button>` : '<p class="muted">Waiting for the host to start.</p>'}<a class="btn" href="#/home">HOME</a></div>
       </div>`;
