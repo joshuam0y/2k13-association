@@ -159,9 +159,19 @@
   }
   function noteForfeit(v) { const cur = lastGet(); if (cur) { cur.forfeit = v; lastSet(cur); } }
   // the lobby card of one player: rating and place on this era's ladder, records, friends, most used player, your record against them
+  // a profile is fetched once and kept for a minute, and it is started early (while searching, or the moment an opponent connects) so the lobby cards are already there
+  const CARDS = {};
+  function cardData(name) {
+    const k = String(name).toLowerCase(), c = CARDS[k];
+    if (c && Date.now() - c.at < 60000) return c.p;
+    const p = Promise.resolve(UI.profile.rpc('public_profile', { p_name: name })).catch(() => null);
+    CARDS[k] = { at: Date.now(), p };
+    return p;
+  }
+  const prefetch = name => { if (name && UI.profile.signedIn()) cardData(name); };
   async function lobbyCard(name, era, mine) {
     let d = null;
-    try { d = await UI.profile.rpc('public_profile', { p_name: name }); } catch (e) { /* shown without the numbers */ }
+    try { d = await cardData(name); } catch (e) { /* shown without the numbers */ }
     if (!d) return `<div class="lb-card${mine ? ' me' : ''}"><div class="lb-av">${esc(String(name).slice(0, 1).toUpperCase())}</div><b class="lb-n">${esc(name)}</b><small class="lb-sub">${mine ? 'YOU' : 'OPPONENT'}</small><small class="muted">NO PROFILE NUMBERS YET</small></div>`;
     const r = (d.ratings || []).find(x => x.era === era), m = d.most && d.most[0];
     return `<div class="lb-card${mine ? ' me' : ''}"><div class="lb-av">${esc(String(d.username || name).slice(0, 1).toUpperCase())}</div><b class="lb-n">${esc(d.username || name)}</b>
@@ -210,7 +220,7 @@
   };
 
   UI.userLink = (name, tab) => `<a class="u-link" href="#/u/${encodeURIComponent(name)}"${tab ? ' target="_blank" rel="noopener"' : ''}>${esc(name)}</a>`;   // a name you can click to see that player's profile
-  UI.ranked = { eraOf, lineupScore, report, started, forfeit, concede, noteForfeit, playedBefore, lobbyCard, lobbyStart, lobbyStop, ERAS, eraName, regionName, REGIONS };
+  UI.ranked = { eraOf, lineupScore, report, started, forfeit, concede, noteForfeit, playedBefore, lobbyCard, prefetch, lobbyStart, lobbyStop, ERAS, eraName, regionName, REGIONS };
 
   // ---------- helpers for the pages ----------
   const eraOpts = cur => ERAS.map(e => `<option value="${e}"${e === cur ? ' selected' : ''}>${esc(eraName(e))}</option>`).join('');
@@ -231,6 +241,7 @@
   function stopRefresh() { if (REFRESH) { clearInterval(REFRESH); REFRESH = null; } if (CNT) { clearInterval(CNT); CNT = null; } }
   function rankedPage(app) {
     stopRefresh();
+    if (RK.tab === 'games') RK.tab = 'ladder';   // casual rooms live in Head to Head now
     const signed = UI.profile.signedIn();
     app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">RANKED</div><h1 class="ch-hero-t">THE BOARDS.</h1>
         <p class="ch-hero-p">Every era has its own ladder. Win ranked Head to Head auctions to climb it, or play today's daily auction (the same pool for everyone) and see where your lineup lands.</p></section>
@@ -245,7 +256,7 @@
           <li>The winner climbs that era's ladder and the loser drops (everyone starts at 1200; beating a higher rated player is worth more).</li>
           <li>The result only counts when both phones report the same score, so nobody can fake a win.</li>
           <li>Want to play a friend instead? Use Head to Head: it is casual and never touches the ladder.</li></ol></details></section>
-      <div class="ch-chips rk-tabs"><button type="button" class="ch-chip${RK.tab === 'ladder' ? ' on' : ''}" data-tab="ladder">LADDER</button><button type="button" class="ch-chip${RK.tab === 'daily' ? ' on' : ''}" data-tab="daily">DAILY AUCTION</button><button type="button" class="ch-chip${RK.tab === 'games' ? ' on' : ''}" data-tab="games">CASUAL ROOMS</button></div>
+      <div class="ch-chips rk-tabs"><button type="button" class="ch-chip${RK.tab === 'ladder' ? ' on' : ''}" data-tab="ladder">LADDER</button><button type="button" class="ch-chip${RK.tab === 'daily' ? ' on' : ''}" data-tab="daily">DAILY AUCTION</button></div>
       <div id="rkBody" class="rk-body"><p class="muted">Loading...</p></div>
       <div class="ch-go"><a class="btn" href="#/me">MY PROFILE</a><a class="btn" href="#/challenge/vs">HEAD TO HEAD</a></div>`;
     UI.profile.wire(app, () => rankedPage(app));
@@ -283,12 +294,6 @@
         body.innerHTML = `<p class="muted rk-sub">${esc(day)} (UTC) | ${esc(eraName(RK.era))} | ten hidden players, $20 each, you against the house. Your score is your lineup rating.</p>
           <div class="ch-go">${UI.profile.signedIn() ? `<a class="btn btn-gold btn-big" href="#/ranked/daily/${esc(RK.era)}">${played ? 'SEE TODAY\'S RESULT' : done ? 'FINISH TODAY\'S AUCTION' : 'PLAY TODAY\'S AUCTION'}</a>` : ''}</div>` +
           (rows.length ? table(['#', 'PLAYER', 'SCORE'], rows.map((r, i) => [i + 1, nameCell(r, me), '<b>' + Number(r.score).toFixed(1) + '</b>'])) : '<p class="muted">No scores yet today' + esc(scope) + '.</p>');
-      } else {
-        const all = await UI.profile.rpc('lobby_list');
-        const mine = UI.profile.account(), signed = UI.profile.signedIn();
-        const rows = (all || []).filter(r => !r.ranked);   // ranked is only the ladder: waiting ranked searchers are never listed
-        body.innerHTML = `<p class="muted rk-sub">Casual rooms waiting for a second player right now. They never touch the ladder and guests can join. The list updates every few seconds.</p>` + (rows.length ? table(['HOST', 'ERA', 'STYLE', ''], rows.map(r => [UI.userLink(r.host_name), esc(eraName(r.era)), esc(String(r.style).toUpperCase()), r.host_name === mine ? '<span class="muted">YOU</span>' : `<a class="btn btn-small btn-gold" href="#/challenge/vs/join/${esc(r.code)}">JOIN</a>`]), true) : '<p class="muted">No casual rooms open right now. Host one from Head to Head and tick "Open game" to list it here.</p>');
-        if (!REFRESH) REFRESH = setInterval(() => { if (!/^#\/ranked/.test(location.hash) || RK.tab !== 'games') { stopRefresh(); return; } fill(app); }, 10000);
       }
     } catch (e) { body.innerHTML = '<p class="rk-err">' + esc(failMsg(e)) + '</p>'; }
   }
@@ -498,6 +503,7 @@
         const st = UI.vsQuick.status();
         if (st.status === 'connected') { try { const w = waits(); w.push(Date.now() - F.start); localStorage.setItem(WAITS, JSON.stringify(w.slice(-8))); } catch (e) { /* private mode */ } stopFind(); location.hash = UI.vsQuick.target(); return; }
         UI.profile.rpc('queue_ping').catch(() => {});   // counts you as searching
+        if (!F.warm) { F.warm = 1; prefetch(me); }
         if (Date.now() - F.countAt > 6000) { F.countAt = Date.now(); UI.profile.rpc('online_counts').then(d => { if (d) F.others = Math.max(0, (d.searching || 0) - 1); }).catch(() => {}); }
         const rows = await UI.profile.rpc('lobby_list');
         const cand = [];
@@ -505,6 +511,7 @@
         for (const r of all) { if (!(await playedBefore(r.host_name))) cand.push(r); }   // new opponents first
         if (!cand.length) all.forEach(r => cand.push(r));   // nobody new is searching: you both searched, so a rematch is fine
         if (F.rating == null) { try { F.rating = (await ratingNow(era)).rating; } catch (e) { F.rating = 1200; } }
+        all.slice(0, 4).forEach(r => prefetch(r.host_name));   // their cards are ready before the match
         cand.sort((a, b) => Math.abs((a.rating || 1200) - F.rating) - Math.abs((b.rating || 1200) - F.rating));   // whoever is online, the closest rating first
         if (!st.role) {
           if (cand[0]) { UI.vsQuick.join(cand[0].code, era); F.joinedAt = Date.now(); say('OPPONENT FOUND.', 'Connecting to ' + cand[0].host_name + '...'); }
@@ -548,6 +555,20 @@
       if (add) add.addEventListener('click', () => { add.disabled = true; UI.profile.addFriend(d.username).then(st => { UI.toast(st === 'friends' ? 'You are now friends with ' + d.username + '.' : 'Friend request sent to ' + d.username + '.'); userPage(app, name); }).catch(() => { add.disabled = false; UI.toast('Could not send the request.', 'error'); }); });
     } catch (e) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PROFILE</div><h1 class="ch-hero-t">${esc(name.toUpperCase())}</h1></section><p class="rk-err">${esc(failMsg(e))}</p>`; }
   }
+
+  // the casual rooms list, shown on the Head to Head page: open games waiting for a second player (ranked searches are never listed)
+  UI.ranked.casualRooms = function (box) {
+    let t = null;
+    const draw = async () => {
+      if (!box.isConnected) { clearInterval(t); return; }
+      try {
+        const rows = ((await UI.profile.rpc('lobby_list')) || []).filter(r => !r.ranked), mine = UI.profile.account();
+        box.innerHTML = '<div class="ts-start-k">CASUAL ROOMS</div><small class="muted">Open games waiting for a second player. They never touch the ladder, and guests can join.</small>' +
+          (rows.length ? table(['HOST', 'ERA', 'STYLE', ''], rows.map(r => [UI.userLink(r.host_name), esc(eraName(r.era)), esc(String(r.style).toUpperCase()), r.host_name === mine ? '<span class="muted">YOU</span>' : `<a class="btn btn-small btn-gold" href="#/challenge/vs/join/${esc(r.code)}">JOIN</a>`]), true) : '<p class="muted">No casual rooms open right now. Host online and tick Open game to list yours here.</p>');
+      } catch (e) { box.innerHTML = ''; }
+    };
+    draw(); t = setInterval(draw, 10000);
+  };
   P.u = function (app, arg) { return userPage(app, decodeURIComponent(String(arg || '').split('/')[0])); };
 
   P.ranked = function (app, arg) {

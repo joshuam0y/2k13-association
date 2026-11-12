@@ -206,6 +206,7 @@
         UI.toast((m.name ? String(m.name).slice(0, 16) : 'A guest') + ' is a guest, so they cannot play a ranked game. They were turned away.', 'error');
         return;
       }
+      if (VS.opts.ranked && VS.opts.auction && m.name && UI.ranked && UI.ranked.prefetch) UI.ranked.prefetch(String(m.name).slice(0, 20));   // start loading their lobby card right away
       if (VS.opts.ranked && VS.opts.auction && !VS.cfg && !QUICK && m.name && UI.ranked && UI.ranked.playedBefore) {   // each ranked matchup counts once
         const nm = String(m.name).slice(0, 20);
         UI.ranked.playedBefore(nm).then(pb => {
@@ -579,6 +580,7 @@
               <button type="button" class="ch-seg-b${NET.role === 'host' ? ' on' : ''}" data-net="host"><b>HOST ONLINE</b><small>Get a room code for your friend</small></button>
               <button type="button" class="ch-seg-b${NET.role === 'guest' ? ' on' : ''}" data-net="join"><b>JOIN ONLINE</b><small>Enter your friend's code</small></button></div>
             ${!online() && savedRoom() ? `<div class="vs-join"><button type="button" class="btn btn-gold" id="vsRejoin">REJOIN ROOM ${esc(savedRoom().code)}${savedRoom().role === 'watch' ? ' (WATCHING)' : ''}</button><button type="button" class="btn btn-small" id="vsForget">FORGET IT</button></div>` : ''}
+            ${!online() || (NET.role === 'guest' && !linked()) ? '<div id="vsCasual" class="vs-casual"></div>' : ''}
             ${NET.role === 'guest' && !linked() ? `<div class="vs-join"><label class="field"><span>ROOM CODE</span><input id="vsCode" maxlength="5" placeholder="ABCDE" value="${esc(NET.code)}" autocomplete="off" autocapitalize="characters"></label><button type="button" class="btn btn-gold" id="vsJoin">JOIN</button><button type="button" class="btn" id="vsWatchBtn">WATCH INSTEAD</button></div>` : ''}
           </div>
           <details class="ch-step vs-det" data-det="s2"${opened('s2')}><summary class="ch-step-k">2 | THE SEASON <em>${esc(seasonSum)}</em></summary><div class="row-btns vs-seas-all"><button type="button" class="btn btn-small${!VS.skip.length ? ' on' : ''}" data-seas="all"${dis(boss)}>ALL</button><button type="button" class="btn btn-small" data-seas="none"${dis(boss)}>CLEAR</button>${DECADES().length > 1 ? DECADES().map(d => { const ys = ALL_YEARS.filter(y => decOf(y) === d), n = ys.filter(y => VS.skip.indexOf(y) < 0).length; return `<button type="button" class="btn btn-small${n === ys.length ? ' on' : n ? ' part' : ''}" data-dec="${d}"${dis(boss)}>${d}s</button>`; }).join('') : ''}<span class="muted">${chosen().length} of ${ALL_YEARS.length} on</span></div>
@@ -636,6 +638,7 @@
         tick();
       }));
       if (lobbyOn()) lobbyDraw(app);   // a ranked game opens on the lobby, not on the setup page
+      const cz = UI.$('#vsCasual', app); if (cz && UI.ranked && UI.ranked.casualRooms) UI.ranked.casualRooms(cz);
       bindNet(app);
       syncLobby();
       if (lobbyOn()) lobbyRun(app);
