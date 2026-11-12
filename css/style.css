@@ -909,6 +909,7 @@ html { scroll-padding-bottom: calc(var(--mb-h, var(--bar-h)) + 12px); }
 .share-prev img, .share-prev canvas { width: 100%; height: auto; display: block; }
 /* Draft Challenge and Versus side by side on the home screen */
 .mm-grid .mt-challenge, .mm-grid .mt-versus { grid-column: span 1; }
+.mm-grid .mt-ranked { border-color: var(--gold); background: radial-gradient(300px 200px at 80% 10%, rgba(255, 200, 60, .18), transparent 70%), linear-gradient(180deg, #14110a 0%, #050505 100%); }
 .mm-grid .mt-versus { border-color: var(--gold-dim); background: radial-gradient(300px 200px at 80% 10%, rgba(95, 211, 138, .16), transparent 70%), linear-gradient(180deg, #0c140f 0%, #050505 100%); }
 
 /* playing hurt and in-season form badges (UI.injuryBadge) */

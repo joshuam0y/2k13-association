@@ -483,7 +483,7 @@
     if (!online() || !UI.profile.signedIn() || NET.role === 'watch') return '';
     const dis = boss ? '' : ' disabled';
     const guestPeer = linked() && NET.role === 'host' && NET.peerAcct === false;   // the other player is a guest: no ladder for this game
-    return `<div><span class="ts-start-k">RANKED AND OPEN GAMES</span><div class="ch-chips">
+    return `<div><span class="ts-start-k">RANKED AND OPEN GAMES</span><div class="ch-chips"><a class="ch-chip" href="#/ranked">RANKED LADDER AND FIND A MATCH</a>
         ${VS.opts.auction ? `<button type="button" class="ch-chip${VS.opts.ranked ? ' on' : ''}" data-rk="ranked"${dis}${guestPeer ? ' disabled' : ''}>${guestPeer ? 'RANKED: NEEDS TWO ACCOUNTS' : VS.opts.ranked ? 'RANKED: ON' : 'RANKED: OFF'}</button>` : ''}
         ${NET.role === 'host' ? `<button type="button" class="ch-chip${VS.opts.pub ? ' on' : ''}" data-rk="pub"${dis}>${VS.opts.pub ? 'OPEN GAME: LISTED' : 'OPEN GAME: PRIVATE'}</button>` : ''}</div>
       <small class="muted">${guestPeer ? 'The other player is a guest. Ranked games need an account on both sides, so this one is casual.' : ''} ${VS.opts.ranked && VS.opts.auction ? 'Ranked has one set of rules: best of 7, a blind draft (no ratings until the series is over), a 24 second shot clock, no duplicates, just the five. An auction with a hidden pool of ten mixed players, $20 each, $1 to open, raises of $1 or more. If you both finish the series signed in, it moves your ladder rating for this era.' : VS.opts.auction ? 'Turn on ranked for a series that counts on the ladder.' : 'Ranked games are auctions. Pick the auction draft style to turn it on.'} ${VS.opts.pub ? 'Anyone can find this room under Ranked, Open games, until your friend joins.' : ''}</small></div>`;
