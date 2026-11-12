@@ -470,7 +470,7 @@
     return `<div><span class="ts-start-k">RANKED AND OPEN GAMES</span><div class="ch-chips">
         ${VS.opts.auction ? `<button type="button" class="ch-chip${VS.opts.ranked ? ' on' : ''}" data-rk="ranked"${dis}>${VS.opts.ranked ? 'RANKED: ON' : 'RANKED: OFF'}</button>` : ''}
         ${NET.role === 'host' ? `<button type="button" class="ch-chip${VS.opts.pub ? ' on' : ''}" data-rk="pub"${dis}>${VS.opts.pub ? 'OPEN GAME: LISTED' : 'OPEN GAME: PRIVATE'}</button>` : ''}</div>
-      <small class="muted">${VS.opts.ranked && VS.opts.auction ? 'Ranked uses the standard rules ($20 each, $1 to open, any raise, ten stars in the pool, 24 second shot clock, best of 5, just the five). If you both finish the series signed in, it moves your ladder rating for this era.' : VS.opts.auction ? 'Turn on ranked for a series that counts on the ladder.' : 'Ranked games are auctions. Pick the auction draft style to turn it on.'} ${VS.opts.pub ? 'Anyone can find this room under Ranked, Open games, until your friend joins.' : ''}</small></div>`;
+      <small class="muted">${VS.opts.ranked && VS.opts.auction ? 'Ranked has one set of rules: best of 7, a blind draft (no ratings until the series is over), a 24 second shot clock, no duplicates, just the five. An auction with a hidden pool of ten mixed players, $20 each, $1 to open, raises of $1 or more. If you both finish the series signed in, it moves your ladder rating for this era.' : VS.opts.auction ? 'Turn on ranked for a series that counts on the ladder.' : 'Ranked games are auctions. Pick the auction draft style to turn it on.'} ${VS.opts.pub ? 'Anyone can find this room under Ranked, Open games, until your friend joins.' : ''}</small></div>`;
   }
   function syncLobby() {
     if (!UI.ranked) return;
@@ -494,6 +494,7 @@
       const ch0 = chosen(), seasonSum = !ch0.length ? 'NONE PICKED' : ch0.length === ALL_YEARS.length ? 'EVERY SEASON' : lblC({ year: ch0.length === 1 ? ch0[0] : 0, seasons: ch0.length > 1 ? ch0 : null });
       const rulesSum = ['BEST OF ' + VS.opts.bestOf, VS.opts.auction ? 'AUCTION' : VS.opts.board ? 'OPEN BOARD' : 'WHEEL', VS.opts.bench ? '8-MAN' : 'JUST THE FIVE'].concat(VS.opts.ranked && VS.opts.auction ? ['RANKED'] : [], VS.opts.cap && !VS.opts.auction ? ['$' + VS.opts.cap + 'M CAP'] : [], VS.opts.timer ? ['24 SEC CLOCK'] : [], VS.opts.bans && !VS.opts.auction ? [VS.opts.bans + ' BAN' + (VS.opts.bans > 1 ? 'S' : '') + ' EACH'] : []).join(' | ');
       const opened = k => (VS.det && VS.det[k] ? ' open' : '');
+      const lockR = !!(VS.opts.ranked && VS.opts.auction && online());   // ranked has one set of rules: they cannot be changed, and the 24 second shot clock is always on
       if (me() !== null && me() >= 0 && UI.profile.name() && VS.names[me()] !== UI.profile.name()) { VS.names[me()] = UI.profile.name(); if (NET.role === 'guest') send({ t: 'hello', name: VS.names[me()] }); else { uniqNames(); push(); } }   // online, your name is your account
       if (QUICK && NET.role === 'host' && linked() && !VS.cfg) VS.ready = [true, true];   // quick match: nobody has to press anything
       const ready = !online() || linked();
@@ -514,22 +515,22 @@
             <div class="vs-seas">${C.SEASONS.map(s => `<button type="button" class="ch-chip${VS.skip.indexOf(s.year) < 0 ? ' on' : ''}" data-yr="${s.year}"${dis(boss)}>${esc(s.label)}</button>`).join('')}</div>
             <small class="muted">${!chosen().length ? 'Pick at least one season.' : chosen().length === 1 ? 'One season: the whole ' + esc(lbl(chosen()[0])) + ' league.' : 'Every spin lands on a team and a season from the ones on. Nobody can be drafted twice, even from different seasons. Tap a season to switch it off.'}</small></details>
           <details class="ch-step vs-det" data-det="s3"${opened('s3')}><summary class="ch-step-k">3 | THE RULES <em>${esc(rulesSum)}</em></summary>
-            <div class="vs-rules"><div><span class="ts-start-k">SERIES</span><div class="ch-chips">${[3, 5, 7].map(n => `<button type="button" class="ch-chip${VS.opts.bestOf === n ? ' on' : ''}" data-bo="${n}"${dis(boss)}>BEST OF ${n}</button>`).join('')}</div></div>
-              <div><span class="ts-start-k">SHOT CLOCK</span><div class="ch-chips">${[[24, '24 SEC'], [0, 'OFF']].map(([v, l]) => `<button type="button" class="ch-chip${(VS.opts.timer || 0) === v ? ' on' : ''}" data-timer="${v}"${dis(boss)}>${l}</button>`).join('')}</div>
+            <div class="vs-rules"><div><span class="ts-start-k">SERIES</span><div class="ch-chips">${[3, 5, 7].map(n => `<button type="button" class="ch-chip${VS.opts.bestOf === n ? ' on' : ''}" data-bo="${n}"${dis(boss && !lockR)}>BEST OF ${n}</button>`).join('')}</div></div>
+              <div><span class="ts-start-k">SHOT CLOCK</span><div class="ch-chips">${(lockR ? [[24, '24 SEC']] : [[24, '24 SEC'], [0, 'OFF']]).map(([v, l]) => `<button type="button" class="ch-chip${(VS.opts.timer || 0) === v ? ' on' : ''}" data-timer="${v}"${dis(boss && !lockR)}>${l}</button>`).join('')}</div>
                 <small class="muted">${VS.opts.timer ? 'Run out of time and the wheel spins for you, or you get the best player on its team.' : 'No clock.'}</small></div>
-              ${chosen().length === 1 ? '' : `<div><span class="ts-start-k">GAME RULES</span><div class="ch-chips">${ERAS.map(([v, l]) => `<button type="button" class="ch-chip${(VS.opts.era || 2013) === v ? ' on' : ''}" data-era="${v}"${dis(boss)}>${l}</button>`).join('')}</div></div>`}
-              <div><span class="ts-start-k">BLIND DRAFT</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.blind ? ' on' : ''}" data-blind="0"${dis(boss)}>OFF</button><button type="button" class="ch-chip${VS.opts.blind ? ' on' : ''}" data-blind="1"${dis(boss)}>ON</button></div>
+              ${chosen().length === 1 ? '' : `<div><span class="ts-start-k">GAME RULES</span><div class="ch-chips">${ERAS.map(([v, l]) => `<button type="button" class="ch-chip${(VS.opts.era || 2013) === v ? ' on' : ''}" data-era="${v}"${dis(boss && !lockR)}>${l}</button>`).join('')}</div></div>`}
+              <div><span class="ts-start-k">BLIND DRAFT</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.blind ? ' on' : ''}" data-blind="0"${dis(boss && !lockR)}>OFF</button><button type="button" class="ch-chip${VS.opts.blind ? ' on' : ''}" data-blind="1"${dis(boss && !lockR)}>ON</button></div>
                 <small class="muted">${VS.opts.cap ? 'Off with a salary cap: the prices give the ratings away.' : VS.opts.blind ? 'No ratings and no fit grades until the series is over: pick on what you know.' : 'Ratings and fit grades show while you draft.'}</small></div>
-              ${chosen().length === 1 ? '' : `<div><span class="ts-start-k">SAME PLAYER TWICE</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.dupes ? ' on' : ''}" data-dupes="0"${dis(boss)}>NO DUPLICATES</button><button type="button" class="ch-chip${VS.opts.dupes ? ' on' : ''}" data-dupes="1"${dis(boss)}>DUPLICATES ON</button></div>
+              ${chosen().length === 1 ? '' : `<div><span class="ts-start-k">SAME PLAYER TWICE</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.dupes ? ' on' : ''}" data-dupes="0"${dis(boss && !lockR)}>NO DUPLICATES</button><button type="button" class="ch-chip${VS.opts.dupes ? ' on' : ''}" data-dupes="1"${dis(boss && !lockR)}>DUPLICATES ON</button></div>
                 <small class="muted">${VS.opts.dupes ? 'The same player can be drafted from different seasons, so you can stack every Giannis. Only that exact season is gone once taken.' : 'A player is gone for good once taken, whatever the season.'}</small></div>`}
-              <div><span class="ts-start-k">DRAFT STYLE</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.board && !VS.opts.auction ? ' on' : ''}" data-board="0"${dis(boss)}>THE WHEEL</button><button type="button" class="ch-chip${VS.opts.board && !VS.opts.auction ? ' on' : ''}" data-board="1"${dis(boss)}>OPEN BOARD</button><button type="button" class="ch-chip${VS.opts.auction ? ' on' : ''}" data-board="2"${dis(boss)}>AUCTION</button></div>
+              <div><span class="ts-start-k">DRAFT STYLE</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.board && !VS.opts.auction ? ' on' : ''}" data-board="0"${dis(boss && !lockR)}>THE WHEEL</button><button type="button" class="ch-chip${VS.opts.board && !VS.opts.auction ? ' on' : ''}" data-board="1"${dis(boss && !lockR)}>OPEN BOARD</button><button type="button" class="ch-chip${VS.opts.auction ? ' on' : ''}" data-board="2"${dis(boss && !lockR)}>AUCTION</button></div>
                 <small class="muted">${VS.opts.auction ? 'A hidden pool of players goes up one at a time. Start at the opening price and take turns raising, or pass and let the other side have him. Everyone has the same money.' : VS.opts.board ? 'No wheel: take turns picking anyone left from the whole board. Drafted players come off it.' : 'Every pick comes from the team the wheel lands on.'}</small></div>
               ${rankedSetup(boss)}
-              ${VS.opts.auction ? aucSetup(boss && !(VS.opts.ranked && online())) : `<div><span class="ts-start-k">BANS</span><div class="ch-chips">${[[0, 'NONE'], [1, '1 EACH'], [2, '2 EACH']].map(([v, l]) => `<button type="button" class="ch-chip${(VS.opts.bans || 0) === v ? ' on' : ''}" data-bans="${v}"${dis(boss)}>${l}</button>`).join('')}</div>
+              ${VS.opts.auction ? aucSetup(boss && !(VS.opts.ranked && online())) : `<div><span class="ts-start-k">BANS</span><div class="ch-chips">${[[0, 'NONE'], [1, '1 EACH'], [2, '2 EACH']].map(([v, l]) => `<button type="button" class="ch-chip${(VS.opts.bans || 0) === v ? ' on' : ''}" data-bans="${v}"${dis(boss && !lockR)}>${l}</button>`).join('')}</div>
                 <small class="muted">${VS.opts.bans ? 'Before the draft you take turns banning players. A banned player is off the wheel and the board for both of you.' : 'Nobody is banned.'}</small></div>`}
-              <div><span class="ts-start-k">BENCH</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.bench ? ' on' : ''}" data-bench="0"${dis(boss)}>JUST THE FIVE</button><button type="button" class="ch-chip${VS.opts.bench ? ' on' : ''}" data-bench="3"${dis(boss)}>8-MAN: +3 BENCH</button></div>
+              <div><span class="ts-start-k">BENCH</span><div class="ch-chips"><button type="button" class="ch-chip${!VS.opts.bench ? ' on' : ''}" data-bench="0"${dis(boss && !lockR)}>JUST THE FIVE</button><button type="button" class="ch-chip${VS.opts.bench ? ' on' : ''}" data-bench="3"${dis(boss && !lockR)}>8-MAN: +3 BENCH</button></div>
                 <small class="muted">${VS.opts.bench ? 'Everyone drafts eight. The first five start, the last three come off the bench (with a salary cap the cap grows to cover all eight).' : 'Five players each, all 48 minutes.'}</small></div>
-              ${VS.opts.auction ? '' : `<div><span class="ts-start-k">SALARY CAP</span><div class="ch-chips">${UI.challengeCap.CAPS.map(v => `<button type="button" class="ch-chip${(VS.opts.cap || 0) === v ? ' on' : ''}" data-cap="${v}"${dis(boss)}>${v ? '$' + v + 'M' : 'OFF'}</button>`).join('')}</div>
+              ${VS.opts.auction ? '' : `<div><span class="ts-start-k">SALARY CAP</span><div class="ch-chips">${UI.challengeCap.CAPS.map(v => `<button type="button" class="ch-chip${(VS.opts.cap || 0) === v ? ' on' : ''}" data-cap="${v}"${dis(boss && !lockR)}>${v ? '$' + v + 'M' : 'OFF'}</button>`).join('')}</div>
                 <small class="muted">${VS.opts.cap ? 'Every player has a price from his rating (a 99 is $45M, the minimum $1M). Both rosters must fit under $' + C.capFor(VS.opts.cap, VS.opts.bench) + 'M.' : 'No cap: take anyone.'}</small></div></div>`}</details>
           <div class="vs-players">${[0, 1].map(i => `<div class="ch-step vs-pl"><div class="ch-step-k">PLAYER ${i + 1}${me() === i ? ' (YOU)' : ''}</div>
             <label class="field"><span>NAME</span><input data-name="${i}" name="p${i}-${Date.now()}" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="20" placeholder="Player ${i + 1}" value="${esc(VS.names[i] || '')}"${online() ? ' readonly' : dis(canAct(i))}></label>
@@ -596,7 +597,7 @@
       app.querySelectorAll('[data-board]').forEach(b => b.addEventListener('click', () => { const v = +b.dataset.board; VS.opts.board = v === 1 ? 1 : 0; VS.opts.auction = v === 2 ? 1 : 0; if (v === 2) VS.opts.cap = 0; redraw(); }));
       app.querySelectorAll('[data-rk]').forEach(b => b.addEventListener('click', () => {
         const k = b.dataset.rk; VS.opts[k] = VS.opts[k] ? 0 : 1;
-        if (k === 'ranked' && VS.opts.ranked) Object.assign(VS.opts, { aBudget: 20, aStart: 1, aRaise: 1, aPool: 10, aQ: 'stars', aShow: 0, bench: 0, bestOf: 5, blind: false, cap: 0, timer: 24, dupes: 0 });
+        if (k === 'ranked' && VS.opts.ranked) Object.assign(VS.opts, { aBudget: 20, aStart: 1, aRaise: 1, aPool: 10, aQ: 'mixed', aShow: 0, bench: 0, bestOf: 7, blind: true, cap: 0, timer: 24, dupes: 0 });
         redraw(); syncLobby();
       }));
       app.querySelectorAll('[data-bans]').forEach(b => b.addEventListener('click', () => { VS.opts.bans = +b.dataset.bans; redraw(); }));
@@ -624,7 +625,7 @@
         uniqNames();
         const ch = chosen();
         if (!ch.length) { UI.toast('Switch on at least one season', 'error'); return; }
-        if (VS.opts.ranked && VS.opts.auction && online()) Object.assign(VS.opts, { aBudget: 20, aStart: 1, aRaise: 1, aPool: 10, aQ: 'stars', aShow: 0, bench: 0, bestOf: 5, blind: false, cap: 0, timer: 24, dupes: 0 });
+        if (VS.opts.ranked && VS.opts.auction && online()) Object.assign(VS.opts, { aBudget: 20, aStart: 1, aRaise: 1, aPool: 10, aQ: 'mixed', aShow: 0, bench: 0, bestOf: 7, blind: true, cap: 0, timer: 24, dupes: 0 });
         VS.year = ch.length === 1 ? ch[0] : 0;
         VS.cfg = { mode: 'versus', year: VS.year, seasons: ch.length > 1 && ch.length < ALL_YEARS.length ? ch : null, bestOf: VS.opts.bestOf, blind: !VS.opts.cap && !!VS.opts.blind, cap: VS.opts.auction ? 0 : C.capFor(+VS.opts.cap || 0, VS.opts.bench), bench: +VS.opts.bench || 0, board: VS.opts.board && !VS.opts.auction ? 1 : 0, ranked: !!(VS.opts.ranked && VS.opts.auction && online() && UI.profile.signedIn()), bansN: VS.opts.auction ? 0 : +VS.opts.bans || 0, bans: [], dupes: ch.length > 1 && VS.opts.dupes ? 1 : 0, timer: VS.opts.auction && VS.opts.ranked && online() ? 24 : +VS.opts.timer || 0, era: +VS.opts.era || 2013, injuries: false, seed: Math.floor(Math.random() * 2147483646) + 1,
           sides: [0, 1].map(i => ({ team: VS.teams[i], name: (VS.tnames[i] || '').trim() || (VS.names[i] ? VS.names[i] + "'s " + tOf(teams, VS.teams[i]).name : ''), picks: [] })) };
@@ -651,7 +652,7 @@
   function quickPresets(era) {
     VS.skip = era === 'ALL' ? [] : ALL_YEARS.filter(y => decKeyY(y) !== era);
     const ch = chosen(); VS.year = ch.length === 1 ? ch[0] : 0;
-    Object.assign(VS.opts, { auction: 1, board: 0, ranked: 1, pub: 1, aBudget: 20, aStart: 1, aRaise: 1, aPool: 10, aQ: 'stars', aShow: 0, bench: 0, bestOf: 5, blind: false, cap: 0, bans: 0, timer: 24, dupes: 0 });
+    Object.assign(VS.opts, { auction: 1, board: 0, ranked: 1, pub: 1, aBudget: 20, aStart: 1, aRaise: 1, aPool: 10, aQ: 'mixed', aShow: 0, bench: 0, bestOf: 7, blind: true, cap: 0, bans: 0, timer: 24, dupes: 0 });
     VS.cfg = null; VS.auc = null; VS.page = 'setup'; VS.ready = [false, false]; VS.names = ['', '']; VS.tnames = ['', '']; VS.spin = null; VS.shown = 0;
   }
   UI.vsQuick = {
@@ -738,7 +739,7 @@
     if (cfg.cap) rows.push(li(`<b>Salary cap:</b> every player costs from ${m(1)} to ${m(45)} by rating. Your whole roster has to fit under ${m(cfg.cap)}M.`));
     if (cfg.blind) rows.push(li('<b>Blind draft:</b> no ratings or fit grades until the series is over.'));
     if (cfg.seasons && cfg.seasons.length > 1 || !cfg.year) rows.push(li(cfg.dupes ? '<b>Duplicates on:</b> the same player can be drafted from different seasons.' : '<b>No duplicates:</b> a player is gone once he is taken, whatever the season.'));
-    if (cfg.ranked) rows.push(li('<b>Ranked:</b> the standard rules above, set for every ranked game: an auction, best of 5, 24 second shot clock, just the five, ten stars from one era.'));
+    if (cfg.ranked) rows.push(li('<b>Ranked:</b> one set of rules for every ranked game: an auction with a hidden pool of ten mixed players from one era, $20 each, bidding opens at $1 and goes up $1 or more, blind draft (no ratings until the series is over), 24 second shot clock, no duplicates, just the five, best of 7.'));
     return `<div class="vs-rulesbox" id="vsRulesBox" hidden><b>THE RULES</b><ul>${rows.join('')}</ul></div>`;
   }
   const RULES_BTN = '<button type="button" class="btn btn-small" id="vsRules">RULES</button>';
@@ -1096,6 +1097,7 @@
       const need = [...new Set(cfg.sides[0].picks.concat(cfg.sides[1].picks).map(k => +String(k).split('@')[1]).filter(y => y && y !== 2013 && !C.loaded(y)))];
       if (need.length) { app.innerHTML = '<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE ROSTERS...</div></section>'; Promise.all(need.map(y => C.load(y))).then(() => series(app)).catch(e => UI.toast(e.message || 'Rosters did not load', 'error')); return; }
     }
+    if (cfg.ranked && online() && me() !== null && me() >= 0 && UI.ranked && UI.profile.signedIn() && NET.code) UI.ranked.started({ key: NET.code + ':' + cfg.seed, opp: who(1 - me()), era: UI.ranked.eraOf(cfg), style: 'auction', ranked: true, bestOf: cfg.bestOf || 7 });
     loadThen(app, cfg.year, () => {
       let r;
       try { r = runFor(cfg); } catch (e) { app.innerHTML = UI.empty('COULD NOT PLAY IT', esc(e.message || e), '<div class="row-btns"><a class="btn" href="#/challenge/vs">BACK</a></div>'); return; }

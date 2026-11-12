@@ -47,6 +47,15 @@
     } catch (e) { REPORTED[info.key] = 0; console.warn('[ranked] could not report the series:', failMsg(e)); }
   }
 
+  // a ranked series that both phones started: if one player then leaves without reporting, the other player's result still counts after a while
+  const STARTED = {};
+  async function started(info) {
+    if (!UI.profile.signedIn() || STARTED[info.key]) return;
+    STARTED[info.key] = 1;
+    try { await UI.profile.rpc('start_series', { p_key: info.key, p_opp: info.opp, p_era: info.era, p_style: info.style, p_ranked: !!info.ranked, p_best_of: info.bestOf }); }
+    catch (e) { STARTED[info.key] = 0; console.warn('[ranked] could not log the start:', failMsg(e)); }
+  }
+
   // ---------- an open game: listed while the room waits ----------
   let LOB = null;
   function lobbyStop() {
@@ -85,7 +94,7 @@
   };
 
   UI.userLink = (name, tab) => `<a class="u-link" href="#/u/${encodeURIComponent(name)}"${tab ? ' target="_blank" rel="noopener"' : ''}>${esc(name)}</a>`;   // a name you can click to see that player's profile
-  UI.ranked = { eraOf, lineupScore, report, lobbyStart, lobbyStop, ERAS, eraName, regionName, REGIONS };
+  UI.ranked = { eraOf, lineupScore, report, started, lobbyStart, lobbyStop, ERAS, eraName, regionName, REGIONS };
 
   // ---------- helpers for the pages ----------
   const eraOpts = cur => ERAS.map(e => `<option value="${e}"${e === cur ? ' selected' : ''}>${esc(eraName(e))}</option>`).join('');
@@ -112,8 +121,8 @@
       <section class="rk-how"><div class="rk-how-t"><b>PLAY A RANKED MATCH</b><span class="muted">No code, no friend needed. Pick an era, and you are paired with whoever else is looking.</span></div>
         <div class="rk-find"><label class="field"><span>ERA</span><select id="rkFindEra">${eraOpts(RK.era)}</select></label><button type="button" class="btn btn-gold btn-big" id="rkFind"${signed ? '' : ' disabled'}>FIND A MATCH</button></div>
         <details class="rk-det"><summary>HOW RANKED WORKS</summary><ol>
-          <li>You and one other signed-in player bid on a hidden pool of ten stars from that era. You each get $20, bidding opens at $1 and goes up $1 at a time. Whoever passes lets the other have the player. Each of you ends with five.</li>
-          <li>Your five play a best-of-5 series, all five on the floor for 48 minutes.</li>
+          <li>You and one other signed-in player bid on a hidden pool of ten players from that era, a mix of stars and role players. It is a blind draft: no ratings until the series is over. You each get $20, bidding opens at $1 and goes up by $1 or more. Whoever passes lets the other have the player. Each of you ends with five, and every pick has a 24 second shot clock.</li>
+          <li>Your five play a best-of-7 series, all five on the floor for 48 minutes. No duplicates: a player is gone once taken.</li>
           <li>The winner climbs that era's ladder and the loser drops (everyone starts at 1200; beating a higher rated player is worth more).</li>
           <li>The result only counts when both phones report the same score, so nobody can fake a win.</li>
           <li>Want to play a friend instead? Host a Head to Head room, choose the auction and switch Ranked on.</li></ol></details></section>
@@ -382,7 +391,7 @@
     app.innerHTML = '<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING ' + esc(name.toUpperCase()) + '...</div></section>';
     try {
       const d = await UI.profile.rpc('public_profile', { p_name: name });
-      if (!d) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PROFILE</div><h1 class="ch-hero-t">NO ACCOUNT.</h1><p class="ch-hero-p">Nobody has an account named ${esc(name)}. They may be playing as a guest.</p></section><div class="ch-go"><a class="btn" href="#/ranked">RANKED</a></div>`; return; }
+      if (!d) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PROFILE</div><h1 class="ch-hero-t">${esc(name.toUpperCase())}</h1></section><div class="rk-note"><b>${esc(name.toUpperCase())} IS A GUEST.</b><span class="muted">Guests play with a room code and a name, so they have no profile, no ladder rating and no friends list. They can make an account any time.</span></div><div class="ch-go"><a class="btn" href="#/ranked">RANKED</a><a class="btn" href="#/me">MY PROFILE</a></div>`; return; }
       if (d.self) { location.replace('#/me'); return; }
       const fav = d.fav_era || d.auto_era, bl = d.best_lineup, yr = se => (se ? "'" + String(se - 1).slice(2) + "-'" + String(se).slice(2) : '');
       const total = d.wins + d.losses, signed = UI.profile.signedIn();
@@ -391,8 +400,10 @@
           <p class="ch-hero-p">${total ? d.wins + '-' + d.losses + ' in Head to Head series.' : 'No series on this account yet.'}</p></section>
         <div class="ch-go u-act">${fr}${signed ? `<a class="btn" href="#/ranked/find/${esc(fav || RK.era)}">PLAY RANKED</a>` : ''}</div>
         <div class="rk-cards"><div class="rk-card"><small>RECORD</small><b>${d.wins}-${d.losses}</b></div><div class="rk-card"><small>FAVORITE ERA</small><b>${fav ? esc(eraName(fav)) : '-'}</b></div><div class="rk-card"><small>BEST LINEUP</small><b>${d.best_score != null ? Number(d.best_score).toFixed(1) : '-'}</b></div></div>
+        <div class="rk-cards two"><div class="rk-card"><small>FRIENDS</small><b>${d.friends || 0}</b></div><div class="rk-card"><small>MUTUAL FRIENDS</small><b>${signed ? d.mutual_count || 0 : '-'}</b></div></div>
+        ${d.mutual && d.mutual.length ? `<div class="ch-step"><div class="ch-step-k">FRIENDS YOU SHARE</div><p class="rk-lineup">${d.mutual.map(n => `<span>${UI.userLink(n)}</span>`).join('')}</p></div>` : ''}
         ${d.vs ? `<div class="ch-step"><div class="ch-step-k">YOU VS ${esc(d.username.toUpperCase())}</div><p class="rk-vs"><b>${d.vs.me}</b><span>-</span><b>${d.vs.them}</b></p><small class="muted">${d.vs.me > d.vs.them ? 'You lead the rivalry.' : d.vs.me < d.vs.them ? 'They lead the rivalry.' : 'Tied.'} One series counts for each draft.</small></div>` : ''}
-        ${d.ratings && d.ratings.length ? `<div class="ch-step"><div class="ch-step-k">LADDER RATINGS</div>${table(['ERA', 'RATING', 'W-L'], d.ratings.map(r => [esc(eraName(r.era)), '<b>' + r.rating + '</b>', wl(r.wins, r.losses)]), true)}</div>` : ''}
+        ${d.ratings && d.ratings.length ? `<div class="ch-step"><div class="ch-step-k">LADDER RATINGS</div>${table(['ERA', 'RATING', 'RANK', 'W-L'], d.ratings.map(r => [esc(eraName(r.era)), '<b>' + r.rating + '</b>', '#' + r.rank + (r.of ? ' of ' + r.of : ''), wl(r.wins, r.losses)]), true)}</div>` : ''}
         ${d.most && d.most.length ? `<div class="ch-step"><div class="ch-step-k">MOST DRAFTED</div>${table(['PLAYER', 'SEASON', 'TIMES'], d.most.map(m => [esc(m.name), esc(yr(m.season) || 'ANY'), '<b>' + m.count + '</b>']), true)}</div>` : ''}
         ${bl && bl.names ? `<div class="ch-step"><div class="ch-step-k">BEST LINEUP</div><p class="rk-lineup">${bl.names.map((n, k) => `<span>${esc(n)}${bl.seasons && bl.seasons[k] ? ' <small class="muted">' + esc(yr(bl.seasons[k])) + '</small>' : ''}</span>`).join('')}</p><small class="muted">Score ${Number(bl.score || d.best_score).toFixed(1)}${bl.era ? ' | ' + esc(eraName(bl.era)) : ''}</small></div>` : ''}
         <div class="ch-go"><a class="btn" href="#/ranked">RANKED</a><a class="btn" href="#/me">MY PROFILE</a></div>`;

@@ -917,3 +917,4 @@
 .auc-side.broke .auc-cash { color: #e88a8a; }
 .auc-broke.ok { border-color: var(--gold); background: rgba(212, 175, 55, .08); }
 .auc-broke.ok b { color: var(--gold2); }
+.rk-cards.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }

@@ -51,6 +51,13 @@ create table if not exists public.lobbies (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.ranked_starts (
+  key text not null, uid uuid not null, opp uuid not null,
+  era text not null, style text not null default 'auction', ranked boolean not null default true, best_of int not null default 7,
+  created_at timestamptz not null default now(),
+  primary key (key, uid)
+);
+alter table public.ranked_starts enable row level security;
 alter table public.series_reports enable row level security;
 alter table public.series enable row level security;
 alter table public.rivalries enable row level security;
@@ -112,6 +119,7 @@ returns boolean language plpgsql security definer set search_path = public as $$
 declare me uuid := auth.uid(); oid uuid;
 begin
   if me is null then return false; end if;
+  perform public.settle_abandoned();
   select id into oid from public.profiles where lower(username) = lower(p_opp);
   if oid is null or oid = me then return false; end if;
   if p_my_wins < 0 or p_opp_wins < 0 or p_my_wins > 4 or p_opp_wins > 4 then return false; end if;
@@ -125,12 +133,15 @@ end $$;
 -- ---------- leaderboards ----------
 create or replace function public.lb_ratings(p_era text, p_region text default null, p_limit int default 50)
 returns table (username text, region text, rating int, games int, wins int, losses int)
-language sql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public as $$
+begin
+  perform public.settle_abandoned();
+  return query
   select p.username, p.region, r.rating, r.games, r.wins, r.losses
   from public.ratings r join public.profiles p on p.id = r.user_id
   where r.era = p_era and r.games > 0 and (p_region is null or p_region = '' or p.region = p_region or p.region like p_region || '-%')
-  order by r.rating desc, r.games desc limit least(greatest(p_limit, 1), 100)
-$$;
+  order by r.rating desc, r.games desc limit least(greatest(p_limit, 1), 100);
+end $$;
 
 create or replace function public.lb_daily(p_day date, p_era text, p_region text default null, p_limit int default 50)
 returns table (username text, region text, score numeric, lineup jsonb)
@@ -181,28 +192,74 @@ grant execute on function public.lb_ratings(text, text, int) to authenticated, a
 grant execute on function public.lb_daily(date, text, text, int) to authenticated, anon;
 revoke execute on function public.finalize_series(text) from public, anon, authenticated;
 
+-- ---------- a ranked series that one player walks away from ----------
+-- Both phones log the start when the draft is done. If one player then reports the result and the other never does (left, closed the app),
+-- the result counts after 15 minutes: leaving does not save you from a loss. Runs whenever the ladder or a profile is read, or a result is reported.
+create or replace function public.start_series(p_key text, p_opp text, p_era text, p_style text, p_ranked boolean, p_best_of int) returns boolean
+language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); oid uuid;
+begin
+  if me is null then return false; end if;
+  select id into oid from public.profiles where lower(username) = lower(p_opp);
+  if oid is null or oid = me then return false; end if;
+  insert into public.ranked_starts (key, uid, opp, era, style, ranked, best_of)
+    values (p_key, me, oid, p_era, coalesce(p_style, 'auction'), coalesce(p_ranked, false), coalesce(p_best_of, 7)) on conflict do nothing;
+  return true;
+end $$;
+
+create or replace function public.settle_abandoned() returns void
+language plpgsql security definer set search_path = public as $$
+declare r record;
+begin
+  for r in
+    select rp.key, rp.reporter, rp.opp, rp.my_wins, rp.opp_wins, rp.era, rp.style, rp.ranked, rp.best_of
+    from public.series_reports rp
+    where not exists (select 1 from public.series s where s.key = rp.key)
+      and not exists (select 1 from public.series_reports o where o.key = rp.key and o.reporter = rp.opp)
+      and exists (select 1 from public.ranked_starts a where a.key = rp.key and a.uid = rp.reporter and a.opp = rp.opp and a.created_at < now() - interval '15 minutes')
+      and exists (select 1 from public.ranked_starts b where b.key = rp.key and b.uid = rp.opp and b.opp = rp.reporter)
+  loop
+    insert into public.series_reports (key, reporter, opp, my_wins, opp_wins, era, style, ranked, best_of)
+      values (r.key, r.opp, r.reporter, r.opp_wins, r.my_wins, r.era, r.style, r.ranked, r.best_of) on conflict do nothing;
+    perform public.finalize_series(r.key);
+  end loop;
+end $$;
+grant execute on function public.start_series(text, text, text, text, boolean, int) to authenticated;
+revoke execute on function public.settle_abandoned() from public, anon, authenticated;
+
 -- ---------- viewing another player's profile: only totals, never their private rows ----------
 create or replace function public.public_profile(p_name text) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare prof public.profiles; me uuid := auth.uid(); w int; t int; auto text; rat jsonb; most jsonb; vs jsonb; fr text; ua uuid; ub uuid;
+declare prof public.profiles; me uuid := auth.uid(); w int; t int; auto text; rat jsonb; most jsonb; vs jsonb; fr text; ua uuid; ub uuid; nf int; nm int := 0; mut jsonb := '[]'::jsonb;
 begin
+  perform public.settle_abandoned();
   select * into prof from public.profiles where lower(username) = lower(p_name);
   if prof.id is null then return null; end if;
   select count(*) filter (where (p1 = prof.id and w1 > w2) or (p2 = prof.id and w2 > w1)), count(*) into w, t from public.series where p1 = prof.id or p2 = prof.id;
   select era into auto from public.series where p1 = prof.id or p2 = prof.id group by era order by count(*) desc, era limit 1;
-  select coalesce(jsonb_agg(jsonb_build_object('era', era, 'rating', rating, 'games', games, 'wins', wins, 'losses', losses) order by rating desc), '[]'::jsonb) into rat from public.ratings where user_id = prof.id and games > 0;
-  select coalesce(jsonb_agg(jsonb_build_object('name', nm, 'season', se, 'count', c) order by c desc, nm), '[]'::jsonb) into most from (
-    select n.value as nm, coalesce(nullif(s.value, 'null')::int, 0) as se, count(*) as c
+  -- ratings with their place on each era's ladder
+  select coalesce(jsonb_agg(jsonb_build_object('era', r.era, 'rating', r.rating, 'games', r.games, 'wins', r.wins, 'losses', r.losses,
+      'rank', (select count(*) + 1 from public.ratings r2 where r2.era = r.era and r2.games > 0 and r2.rating > r.rating),
+      'of', (select count(*) from public.ratings r3 where r3.era = r.era and r3.games > 0)) order by r.rating desc), '[]'::jsonb) into rat
+    from public.ratings r where r.user_id = prof.id and r.games > 0;
+  select coalesce(jsonb_agg(jsonb_build_object('name', nm2, 'season', se, 'count', c) order by c desc, nm2), '[]'::jsonb) into most from (
+    select n.value as nm2, coalesce(nullif(s.value, 'null')::int, 0) as se, count(*) as c
     from public.series_reports r
     cross join lateral jsonb_array_elements_text(coalesce(r.lineup -> 'names', '[]'::jsonb)) with ordinality as n(value, ord)
     left join lateral jsonb_array_elements_text(coalesce(r.lineup -> 'seasons', '[]'::jsonb)) with ordinality as s(value, ord) on s.ord = n.ord
-    where r.reporter = prof.id group by 1, 2 order by c desc, nm limit 5) x;
+    where r.reporter = prof.id group by 1, 2 order by c desc, nm2 limit 5) x;
+  -- friends: how many they have, and the ones you share
+  select count(*) into nf from public.friendships where status = 'accepted' and (requester = prof.id or addressee = prof.id);
   if me is not null and me <> prof.id then
     ua := least(me, prof.id); ub := greatest(me, prof.id);
     select jsonb_build_object('me', case when me = ua then a_wins else b_wins end, 'them', case when me = ua then b_wins else a_wins end) into vs from public.rivalries where a = ua and b = ub;
     select case when f.status = 'accepted' then 'friends' when f.requester = me then 'sent' else 'incoming' end into fr from public.friendships f where (f.requester = me and f.addressee = prof.id) or (f.requester = prof.id and f.addressee = me) limit 1;
+    select count(*), coalesce(jsonb_agg(u.username order by u.username), '[]'::jsonb) into nm, mut from public.profiles u where u.id in (
+      select case when requester = prof.id then addressee else requester end from public.friendships where status = 'accepted' and (requester = prof.id or addressee = prof.id)
+      intersect
+      select case when requester = me then addressee else requester end from public.friendships where status = 'accepted' and (requester = me or addressee = me));
   end if;
   return jsonb_build_object('username', prof.username, 'region', prof.region, 'fav_era', prof.fav_era, 'auto_era', auto, 'best_score', prof.best_score, 'best_lineup', prof.best_lineup,
-    'wins', w, 'losses', t - w, 'ratings', rat, 'most', most, 'vs', vs, 'friend', fr, 'self', me = prof.id);
+    'wins', w, 'losses', t - w, 'ratings', rat, 'most', most, 'vs', vs, 'friend', fr, 'self', me = prof.id, 'friends', nf, 'mutual', mut, 'mutual_count', nm);
 end $$;
 grant execute on function public.public_profile(text) to authenticated, anon;
