@@ -616,7 +616,7 @@
         const shut = () => { ov.remove(); window.removeEventListener('hashchange', shut); };
         window.addEventListener('hashchange', shut);
         ov.querySelector('#popClose').addEventListener('click', shut);
-        ov.querySelector('#popShare').addEventListener('click', async () => { const b = ov.querySelector('#popShare'); await doShare(b); b.textContent = 'COPIED'; b.disabled = true; setTimeout(shut, 1100); });
+        ov.querySelector('#popShare').addEventListener('click', async () => { const b = ov.querySelector('#popShare'); b.disabled = true; try { await doShare(b); } catch (e) { /* closes anyway */ } b.textContent = 'COPIED'; b.disabled = true; setTimeout(shut, 1000); });
       }
       const paintStreak = () => { const sk = UI.$('#rkStreak', app), n = streakNow(); if (sk && n.n) sk.innerHTML = '<b>' + n.n + '</b> DAY DAILY STREAK' + (n.best > n.n ? ' | BEST ' + n.best : ''); };
       paintStreak();
