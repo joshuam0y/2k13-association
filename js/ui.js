@@ -45,9 +45,9 @@
       ['rookies', 'Rookies'], ['progress', 'Progression'], ['gleague', 'G League']]],
     ['SEASON', [['season', 'Schedule'], ['standings', 'Standings'], ['stats', 'Stats'], ['leaders', 'Leaders'], ['playoffs', 'Playoffs'], ['allstar', 'All-Star'], ['live', 'Watch Live'], ['share', 'Share Season']]],
     ['LEAGUE', [['league', 'League Home'], ['news', 'News'], ['news/transactions', 'Transactions'], ['awards', 'Awards'], ['awardshow', 'Awards Show'],
-      ['history', 'History'], ['records', 'Records'], ['retirements', 'Retirements'], ['classes', 'Draft Classes'], ['teams', 'All Teams']]],
+      ['history', 'History'], ['records', 'Records'], ['retirements', 'Retirements'], ['classes', 'Draft Classes'], ['top20', 'Top 20 by Season'], ['teams', 'All Teams']]],
     ['MODES', [['daily', 'Daily'], ['ranked', 'Ranked'], ['challenge/vs', 'Head to Head'], ['challenge', 'Season Mode'], ['new', 'New League'], ['challenge/tournament', 'Tournament'], ['challenge/tournament/online', 'Online Tournament'], ['fantasy', 'Fantasy Draft']]],
-    ['GAME', [['saves', 'Saves'], ['settings', 'Settings'], ['commish', 'Commissioner']]],
+    ['GAME', [['me', 'My Profile'], ['saves', 'Saves'], ['settings', 'Settings'], ['commish', 'Commissioner']]],
     ['INFO', [['about', 'About'], ['faq', 'FAQ'], ['contact', 'Contact'], ['privacy', 'Privacy'], ['terms', 'Terms'], ['disclaimer', 'Disclaimer']]]
   ];
   function buildExtraNav() {
@@ -57,7 +57,7 @@
     const listed = {};
     const groups = MENU.map(([title, items]) => [title, items.filter(([r]) => has(r))]).filter(g => g[1].length);
     groups.forEach(g => g[1].forEach(([r]) => { listed[r.split('/')[0]] = true; }));
-    const rest = UI.extraPages().filter(x => !listed[x.route] && x.route !== 'watch').map(x => [x.route, x.label]);
+    const rest = UI.extraPages().filter(x => !listed[x.route] && x.route !== 'watch' && x.route !== 'u').map(x => [x.route, x.label]);
     if (rest.length) groups.push(['MORE', rest]);
     const more = document.createElement('details');
     more.className = 'navmore';

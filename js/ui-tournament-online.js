@@ -661,6 +661,7 @@
       if (!c.length) { UI.toast('Switch on at least one season', 'error'); return; }
       const year = c.length === 1 ? c[0] : 0;
       const cfg = { mode: 'versus', year, seasons: c.length > 1 && c.length < A.ALL_YEARS.length ? c : null, bestOf: o.bestOf, blind: false, cap: o.auction ? 0 : C.capFor(+o.cap || 0, o.bench), timer: o.timer ? 24 : 0, turns: (o.order || 'turns') === 'turns' && !o.auction, era: +o.era || 2013, injuries: false, board: o.board && !o.auction ? 1 : 0, auction: o.auction ? { budget: o.aBudget || 20, start: 1, raise: 1, pool: t.n * (5 + (+o.bench || 0)), quality: o.aQ || 'mixed', show: o.aShow ? 1 : 0 } : null, first: Math.floor(Math.random() * t.n), bansN: o.auction ? 0 : +o.bans || 0, bans: [], dupes: year === 0 && o.dupes ? 1 : 0, bench: +o.bench || 0, noBench: !!(o.bench && o.noBench), seed: Math.floor(Math.random() * 2147483646) + 1 };
+      if (cfg.auction) cfg.first = Math.floor(Math.random() * t.n);   // who opens the bidding, then round the table: the wheel shows it
       A.ensure(app, cfg, () => {
         const d = C.seasonData(year || 2013), hn = t.seats.length, bots = A.shuffle(A.CPU_NAMES.slice());
         t.cfg = cfg;
@@ -706,7 +707,15 @@
     }));
   }
   // ---------- the auction: every team bids, round the table ----------
+  let WK = '';   // the pick order wheel spins once per auction
   function aucPage(app, t, cfg, B) {
+    const wk = t.auc.ids.slice(0, 3).join(',') + '|' + cfg.first + '|' + t.n;
+    if (UI.spinWheel && WK !== wk && t.auc.i <= 0 && !t.auc.log.length && !t.auc.done) {
+      WK = wk;
+      const f = (cfg.first || 0) % t.n, order = t.names.map((_, k) => t.names[(f + k) % t.n]);
+      UI.spinWheel(app, { title: 'PICK ORDER', names: t.names, winner: f, after: 'Order: ' + order.join(', '), onDone: () => { if (cfg.timer && TN().auc === t.auc) t.auc.until = Date.now() + cfg.timer * 1000; if (/#\/challenge\/tournament\/online/.test(location.hash)) aucPage(app, t, cfg, B); } });
+      return;
+    }
     A.aucView(app, { t, cfg, B, st: t.auc, w: mySeat(), now: () => Date.now() + OFF, still: () => TN().auc === t.auc && /#\/challenge\/tournament\/online/.test(location.hash),
       act: (a, to) => act({ k: 'auc', a, to }), redraw: () => aucPage(app, t, cfg, B) });
   }

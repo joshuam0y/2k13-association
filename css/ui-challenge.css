@@ -1141,3 +1141,4 @@ a.pr-i:hover { border-color: var(--gold); }
 .wh-r { margin: 0; font-family: var(--display); font-size: 28px; letter-spacing: .06em; min-height: 36px; color: var(--muted); }
 .wh-r.on { color: var(--gold); animation: whPop .4s ease-out; }
 @keyframes whPop { from { transform: scale(.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.wh-o { margin: 0; max-width: 90vw; }

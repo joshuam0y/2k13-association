@@ -353,20 +353,20 @@
 
   // a wheel that decides who opens the bidding: it always lands on o.winner (the result is already set, so everyone sees the same spin)
   UI.spinWheel = function (app, o) {
-    const names = o.names, n = names.length, segs = n * Math.ceil(8 / n), seg = 360 / segs, cols = o.colors || ['#d4af37', '#3d78d6', '#3f9d57', '#9b4fd6'];
+    const names = o.names, n = names.length, segs = n * Math.ceil(8 / n), seg = 360 / segs, cols = o.colors || ['#d4af37', '#3d78d6', '#3f9d57', '#9b4fd6', '#d1503f', '#2fa6a0', '#e0802d', '#c9568f'];
     const pool = []; for (let k = 0; k < segs; k++) if (k % n === o.winner) pool.push(k);
     const k0 = pool[Math.floor(Math.random() * pool.length)], center = (k0 + 0.5) * seg, jitter = (Math.random() - 0.5) * seg * 0.6;
     const rot = 360 * 5 + (360 - center) + jitter;
     const grad = Array.from({ length: segs }, (_, k) => cols[(k % n) % cols.length] + ' ' + k * seg + 'deg ' + (k + 1) * seg + 'deg').join(', ');
     app.innerHTML = `<section class="wh"><small class="wh-k">${esc(o.title || 'WHO GOES FIRST?')}</small>
       <div class="wh-box"><i class="wh-pin"></i><div class="wh-wheel" id="whW" style="background: conic-gradient(${grad})">${Array.from({ length: segs }, (_, k) => `<span style="--a:${(k + 0.5) * seg}deg">${esc(String(names[k % n]).slice(0, 9).toUpperCase())}</span>`).join('')}<b class="wh-hub"></b></div></div>
-      <h2 class="wh-r" id="whR">SPINNING...</h2>
+      <h2 class="wh-r" id="whR">SPINNING...</h2><p class="muted wh-o" id="whO"></p>
       <div class="ch-go"><button type="button" class="btn" id="whSkip">SKIP</button></div></section>`;
     let done = false, timers = [];
     const finish = () => { if (done) return; done = true; timers.forEach(clearTimeout); o.onDone && o.onDone(); };
     const wEl = UI.$('#whW', app);
     requestAnimationFrame(() => requestAnimationFrame(() => { wEl.style.transition = 'transform 4.4s cubic-bezier(.12,.62,.12,1)'; wEl.style.transform = 'rotate(' + rot + 'deg)'; }));
-    timers.push(setTimeout(() => { const r = UI.$('#whR', app); if (r) { r.textContent = String(names[o.winner]).toUpperCase() + ' OPENS FIRST'; r.classList.add('on'); } if (window.SFX) window.SFX.play('chime'); }, 4500));
+    timers.push(setTimeout(() => { const r = UI.$('#whR', app); if (r) { r.textContent = String(names[o.winner]).toUpperCase() + ' OPENS FIRST'; r.classList.add('on'); } const q = UI.$('#whO', app); if (q && o.after) q.textContent = o.after; if (window.SFX) window.SFX.play('chime'); }, 4500));
     timers.push(setTimeout(finish, 6000));
     UI.$('#whSkip', app).addEventListener('click', finish);
   };
