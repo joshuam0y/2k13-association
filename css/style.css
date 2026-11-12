@@ -992,3 +992,5 @@ body.ct-full-on .mb-pill { display: none; }
 .ts-tag.tier-declining { border-color: #8a5a3a; color: #e0b08a; }
 .ts-tag.tier-young, .ts-tag.tier-building { border-color: #3f6d7d; color: #8fcde0; }
 .ts-tag.tier-retooling { border-color: #6d6d78; color: var(--muted); }
+
+.mm-ver { text-align: center; font-size: 11px; letter-spacing: .18em; margin: 6px 0 14px; font-family: var(--display); }
