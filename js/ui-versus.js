@@ -751,7 +751,13 @@
       <button type="button" id="vsStart" hidden></button>`;
     [[a, 1], [b, 0]].forEach(([n, mine]) => {
       if (LB.cards[n]) return;
-      UI.ranked.lobbyCard(n, era, mine).then(html => { LB.cards[n] = html; const el = app.querySelector('[data-lbn="' + String(n).replace(/"/g, '\\"') + '"]'); if (el) el.innerHTML = html; });
+      UI.ranked.lobbyCard(n, era, mine).then(html => {
+        const el = app.querySelector('[data-lbn="' + String(n).replace(/"/g, '\\"') + '"]');
+        if (el) el.innerHTML = html;
+        const rb = el && el.querySelector('[data-lbretry]');
+        if (rb) rb.addEventListener('click', () => { delete LB.cards[n]; lobbyDraw(app); });   // it gave up: ask again
+        else LB.cards[n] = html;
+      });
     });
     if (!LB.loaded && !LB.loading) {   // the rosters load now, so the auction does not have to
       LB.loading = 1; LB.err = '';

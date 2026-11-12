@@ -171,8 +171,10 @@
   const prefetch = name => { if (name && UI.profile.signedIn()) cardData(name); };
   async function lobbyCard(name, era, mine) {
     let d = null;
-    try { d = await cardData(name); } catch (e) { /* shown without the numbers */ }
-    if (!d) return `<div class="lb-card${mine ? ' me' : ''}"><div class="lb-av">${esc(String(name).slice(0, 1).toUpperCase())}</div><b class="lb-n">${esc(name)}</b><small class="lb-sub">${mine ? 'YOU' : 'OPPONENT'}</small><small class="muted">NO PROFILE NUMBERS YET</small></div>`;
+    let slow = false;
+    try { d = await Promise.race([cardData(name), new Promise(r => setTimeout(() => { slow = true; r(null); }, 6000))]); } catch (e) { /* shown without the numbers */ }
+    if (slow) delete CARDS[String(name).toLowerCase()];   // gave up waiting: the retry button asks again
+    if (!d) return `<div class="lb-card${mine ? ' me' : ''}"><div class="lb-av">${esc(String(name).slice(0, 1).toUpperCase())}</div><b class="lb-n">${esc(name)}</b><small class="lb-sub">${mine ? 'YOU' : 'OPPONENT'}</small><small class="muted">${slow ? 'COULD NOT LOAD THE STATS.' : 'NO PROFILE NUMBERS YET'}</small>${slow ? '<button type="button" class="btn btn-small" data-lbretry="1">TRY AGAIN</button>' : ''}</div>`;
     const r = (d.ratings || []).find(x => x.era === era), m = d.most && d.most[0];
     return `<div class="lb-card${mine ? ' me' : ''}"><div class="lb-av">${esc(String(d.username || name).slice(0, 1).toUpperCase())}</div><b class="lb-n">${esc(d.username || name)}</b>
       <small class="lb-sub">${mine ? 'YOU' : 'OPPONENT'}${d.region ? ' | ' + esc(regionName(d.region)) : ''}</small>
