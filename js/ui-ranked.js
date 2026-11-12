@@ -152,10 +152,12 @@
   async function concede(info) {
     if (!UI.profile.signedIn()) return false;
     try {
+      UI.ranked.lastErr = '';
       const ok = await UI.profile.rpc('concede_series', { p_key: info.key });
+      if (!ok) UI.ranked.lastErr = 'both phones need to have logged the game start (it starts when the auction opens)';
       if (ok) { const cur = lastGet() || { key: info.key, era: info.era, opp: info.opp, bestOf: info.bestOf, before: { rating: 1200, games: 0 }, at: Date.now() }; cur.forfeit = 'loss'; lastSet(cur); }
       return !!ok;
-    } catch (e) { console.warn('[ranked] could not record the forfeit:', failMsg(e)); return false; }
+    } catch (e) { UI.ranked.lastErr = failMsg(e); console.warn('[ranked] could not record the forfeit:', failMsg(e)); return false; }
   }
   function noteForfeit(v) { const cur = lastGet(); if (cur) { cur.forfeit = v; lastSet(cur); } }
   // the lobby card of one player: rating and place on this era's ladder, records, friends, most used player, your record against them

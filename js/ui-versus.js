@@ -331,6 +331,7 @@
   const joinLink = () => location.origin + location.pathname + '#/challenge/vs/join/' + NET.code;
   const watchLink = () => location.origin + location.pathname + '#/challenge/vs/watch/' + NET.code;
   // ---------- ranked: the series is logged when the auction starts; a player who stays gone past the grace time forfeits ----------
+  let FF = 0;   // the first tap on Forfeit is remembered here, because the page redraws and a flag on the button would be lost
   const RKDONE = {}, DC = { at: 0, claimed: false, res: { on: false, me: false, them: false, until: 0 } }, GRACE = 90000;
   const rkKey = cfg => NET.code + ':' + cfg.seed;
   const rkOn = cfg => !!(cfg && cfg.ranked && online() && me() !== null && me() >= 0 && UI.ranked && UI.profile.signedIn() && NET.code);
@@ -381,7 +382,7 @@
       ${NET.role === 'host' && st === 'connected' ? `<button type="button" class="btn btn-small" id="vsHand">MAKE ${esc(who(1 - NET.side).toUpperCase())} HOST</button>` : ''}
       ${st === 'connected' && me() !== null && me() >= 0 && UI.profile.signedIn() ? '<span class="vs-fr" id="vsFriend"></span>' : ''}
       ${st === 'lost' || st === 'error' ? `<button type="button" class="btn btn-small" id="vsRetry">${NET.role === 'host' ? 'NEW ROOM' : 'TRY AGAIN'}</button>` : ''}
-      ${rkOn(VS.cfg) && !RKDONE[rkKey(VS.cfg)] ? '<button type="button" class="btn btn-small btn-danger" id="vsForfeit">FORFEIT</button>' : ''}
+      ${rkOn(VS.cfg) && !RKDONE[rkKey(VS.cfg)] ? '<button type="button" class="btn btn-small btn-danger" id="vsForfeit">' + (Date.now() < FF ? 'TAP AGAIN TO FORFEIT' : 'FORFEIT') + '</button>' : ''}
       ${rkOn(VS.cfg) && !RKDONE[rkKey(VS.cfg)] ? '' : '<button type="button" class="btn btn-small" id="vsLeave">LEAVE</button>'}</div>`;   // no Leave in a live ranked game: it would count as a forfeit, so only the two-tap Forfeit is there
   }
   // next to the other player: add as a friend, or that you already are
@@ -414,8 +415,9 @@
     if (cw) cw.addEventListener('click', async () => { try { await navigator.clipboard.writeText(watchLink()); UI.toast('Watch link copied. Anyone with it can watch.'); } catch (e) { UI.toast(watchLink()); } });
     const lv = UI.$('#vsLeave', app); if (lv) lv.addEventListener('click', () => { forgetRoom(); hangUp(); route(); });
     const ff = UI.$('#vsForfeit', app); if (ff) ff.addEventListener('click', () => {   // two taps, so a stray tap never costs rating
-      if (!ff.dataset.sure) { ff.dataset.sure = '1'; ff.textContent = 'TAP AGAIN TO FORFEIT'; setTimeout(() => { if (ff.isConnected) { delete ff.dataset.sure; ff.textContent = 'FORFEIT'; } }, 4000); return; }
-      concede();
+      if (Date.now() < FF) { FF = 0; ff.textContent = 'FORFEITING...'; ff.disabled = true; concede().then(() => { if (ff.isConnected) { ff.disabled = false; ff.textContent = 'FORFEIT'; } }); return; }
+      FF = Date.now() + 6000; ff.textContent = 'TAP AGAIN TO FORFEIT';
+      setTimeout(() => { if (ff.isConnected && Date.now() >= FF) ff.textContent = 'FORFEIT'; }, 6100);
     });
   }
 
@@ -786,7 +788,7 @@
     const cfg = VS.cfg, key = rkKey(cfg);
     const ok = await UI.ranked.concede({ key, opp: who(1 - me()), era: UI.ranked.eraOf(cfg), bestOf: cfg.bestOf || 7 });
     if (ok) { RKDONE[key] = 1; send({ t: 'conceded' }); const el = document.getElementById('vsDc'); if (el) el.remove(); location.hash = '#/ranked/result'; }
-    else UI.toast('Could not record the forfeit. Check your connection and try again.', 'error');
+    else UI.toast('Could not record the forfeit: ' + ((UI.ranked && UI.ranked.lastErr) || 'the server refused it') + '.', 'error');
   }
 
   // ---------- quick match: ranked with no code (the finder lives in js/ui-ranked.js) ----------
