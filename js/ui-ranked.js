@@ -359,8 +359,17 @@
     if (st.done) {
       stopClock();
       const five = st.won[0].map(id => byId[id]), score = UI.ranked.lineupScore(five), houseFive = st.won[1].map(id => byId[id]), hs = UI.ranked.lineupScore(houseFive);
+      // the perfect five: the best lineup you could have made from today's ten players if every one had been free
+      const ten = st.ids.map(id => byId[id]).filter(Boolean);
+      let perfect = null, perfectScore = -1;
+      const pick = (from, chosen) => {
+        if (chosen.length === per) { const sc = UI.ranked.lineupScore(chosen); if (sc != null && sc > perfectScore) { perfectScore = sc; perfect = chosen.slice(); } return; }
+        for (let k = from; k <= ten.length - (per - chosen.length); k++) { chosen.push(ten[k]); pick(k + 1, chosen); chosen.pop(); }
+      };
+      pick(0, []);
+      const pct = score != null && perfect && perfectScore > 0 ? Math.min(100, 100 * score / perfectScore) : null;
       app.innerHTML = `${hdr}<div class="vs-sides vs-compact">${sideBox(0, 'YOU')}${sideBox(1, 'THE HOUSE')}</div>
-        <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${score == null ? '-' : score.toFixed(1)}</b><span class="muted">The house scored ${hs == null ? '-' : hs.toFixed(1)}. ${score != null && hs != null ? (score > hs ? 'You beat the house.' : score < hs ? 'The house won this one.' : 'A tie.') : ''}</span></section>
+        <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${score == null ? '-' : score.toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div><span class="muted rk-perf">Perfect five (every player free): ${esc(perfect.map(p => p.name).join(', '))} | ${perfectScore.toFixed(1)}</span>`}<span class="muted">The house scored ${hs == null ? '-' : hs.toFixed(1)}. ${score != null && hs != null ? (score > hs ? 'You beat the house.' : score < hs ? 'The house won this one.' : 'A tie.') : ''}</span></section>
         <div id="rkSub" class="rk-note"><span class="muted">Sending your score...</span></div>
         <div class="ch-go"><a class="btn btn-gold" href="#/ranked">SEE THE BOARD</a></div>`;
       const sub = UI.$('#rkSub', app);

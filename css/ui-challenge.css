@@ -1002,3 +1002,7 @@
 .rk-rejoin b { font-size: 18px; }
 
 .tn-adv { width: 100%; text-align: center; font-family: var(--display); letter-spacing: .1em; font-size: 13px; margin: 6px 0; }
+
+.rk-pct { font-family: var(--display); letter-spacing: .1em; font-size: 16px; color: var(--text2); }
+.rk-pct b { font-size: 34px; color: var(--gold2); }
+.rk-perf { font-size: 13px; display: block; }
