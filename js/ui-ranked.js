@@ -28,7 +28,9 @@
     const f = C.lineupFit(five), avg = five.reduce((s, p) => s + (p.baseOvr != null ? p.baseOvr : (p.ovr || 0)), 0) / five.length;
     return Math.round((avg + (f.team || 0) * 0.6) * 10) / 10;
   }
-  const today = () => new Date().toISOString().slice(0, 10);
+  // the daily turns over at midnight Pacific for everyone
+  const PT = { timeZone: 'America/Los_Angeles' };
+  const today = () => new Date().toLocaleDateString('en-CA', PT);
   const hash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) || 1; };
   const REGIONS = [['', 'NOT SET'], ['US', 'United States']].concat(
     [['AL', 'Alabama'], ['AK', 'Alaska'], ['AZ', 'Arizona'], ['AR', 'Arkansas'], ['CA', 'California'], ['CO', 'Colorado'], ['CT', 'Connecticut'], ['DE', 'Delaware'], ['DC', 'Washington DC'], ['FL', 'Florida'], ['GA', 'Georgia'], ['HI', 'Hawaii'], ['ID', 'Idaho'], ['IL', 'Illinois'], ['IN', 'Indiana'], ['IA', 'Iowa'], ['KS', 'Kansas'], ['KY', 'Kentucky'], ['LA', 'Louisiana'], ['ME', 'Maine'], ['MD', 'Maryland'], ['MA', 'Massachusetts'], ['MI', 'Michigan'], ['MN', 'Minnesota'], ['MS', 'Mississippi'], ['MO', 'Missouri'], ['MT', 'Montana'], ['NE', 'Nebraska'], ['NV', 'Nevada'], ['NH', 'New Hampshire'], ['NJ', 'New Jersey'], ['NM', 'New Mexico'], ['NY', 'New York'], ['NC', 'North Carolina'], ['ND', 'North Dakota'], ['OH', 'Ohio'], ['OK', 'Oklahoma'], ['OR', 'Oregon'], ['PA', 'Pennsylvania'], ['RI', 'Rhode Island'], ['SC', 'South Carolina'], ['SD', 'South Dakota'], ['TN', 'Tennessee'], ['TX', 'Texas'], ['UT', 'Utah'], ['VT', 'Vermont'], ['VA', 'Virginia'], ['WA', 'Washington'], ['WV', 'West Virginia'], ['WI', 'Wisconsin'], ['WY', 'Wyoming']].map(([c, n]) => ['US-' + c, '   ' + n]),
@@ -985,7 +987,7 @@
       let rows = []; try { rows = (await UI.profile.rpc('lb_daily', { p_day: day, p_era: 'ALL', p_region: null, p_limit: 100 })) || []; } catch (e) { rows = null; }
       const perf = TH ? dailyPerfect('ALL', day) : 0, pctOf = sc => (perf > 0 ? Math.min(100, 100 * Number(sc) / perf).toFixed(1) + '%' : '');
       const me = UI.profile.account(), done = ls.get('a13-rk-d-' + day + '-T', null), played = done && done.fin, sk = streakNow();
-      const left = (() => { const n = new Date(), ms = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + 1) - n.getTime(); return Math.floor(ms / 3600000) + 'H ' + (Math.floor(ms / 60000) % 60) + 'M'; })();
+      const left = (() => { const t = new Date().toLocaleTimeString('en-GB', Object.assign({ hour12: false }, PT)).split(':'), ms = 86400000 - ((+t[0]) * 3600 + (+t[1]) * 60 + (+t[2])) * 1000; return Math.floor(ms / 3600000) + 'H ' + (Math.floor(ms / 60000) % 60) + 'M'; })();
       body.innerHTML = `${TH ? `<div class="rk-theme"><small>TODAY | ${esc(TH.kind)}</small><b>${esc(TH.title)}</b><span class="muted">${esc(TH.tag)}</span></div>` : ''}
         <p class="rk-streak">${sk.n ? '<b>' + sk.n + '</b> DAY STREAK' + (sk.done ? ' | TODAY DONE' : ' | PLAY TODAY TO KEEP IT') : 'START A STREAK: PLAY ONE A DAY'}</p>
         <div class="ch-go"><a class="btn btn-gold btn-big" href="#/daily/play">${played ? "SEE TODAY'S RESULT" : done ? "FINISH TODAY'S AUCTION" : "PLAY TODAY'S AUCTION"}</a><a class="btn" href="#/daily/practice">PRACTICE ARCHIVE</a></div>

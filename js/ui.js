@@ -46,7 +46,7 @@
     ['SEASON', [['season', 'Schedule'], ['standings', 'Standings'], ['stats', 'Stats'], ['leaders', 'Leaders'], ['playoffs', 'Playoffs'], ['allstar', 'All-Star'], ['live', 'Watch Live'], ['share', 'Share Season']]],
     ['LEAGUE', [['league', 'League Home'], ['news', 'News'], ['news/transactions', 'Transactions'], ['awards', 'Awards'], ['awardshow', 'Awards Show'],
       ['history', 'History'], ['records', 'Records'], ['retirements', 'Retirements'], ['classes', 'Draft Classes'], ['teams', 'All Teams']]],
-    ['MODES', [['new', 'New League'], ['challenge', 'Season Mode'], ['challenge/vs', 'Head to Head'], ['challenge/tournament', 'Tournament'], ['challenge/tournament/online', 'Online Tournament'], ['ranked', 'Ranked'], ['daily', 'Daily'], ['fantasy', 'Fantasy Draft']]],
+    ['MODES', [['daily', 'Daily'], ['ranked', 'Ranked'], ['challenge/vs', 'Head to Head'], ['challenge', 'Season Mode'], ['new', 'New League'], ['challenge/tournament', 'Tournament'], ['challenge/tournament/online', 'Online Tournament'], ['fantasy', 'Fantasy Draft']]],
     ['GAME', [['saves', 'Saves'], ['settings', 'Settings'], ['commish', 'Commissioner']]],
     ['INFO', [['about', 'About'], ['faq', 'FAQ'], ['contact', 'Contact'], ['privacy', 'Privacy'], ['terms', 'Terms'], ['disclaimer', 'Disclaimer']]]
   ];

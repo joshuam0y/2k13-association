@@ -169,7 +169,7 @@ declare me uuid := auth.uid(); n int;
 begin
   if me is null or p_score is null or p_score < 0 or p_score > 130 then return false; end if;
   if p_pct is not null and (p_pct < 0 or p_pct > 100) then p_pct := null; end if;
-  if abs(p_day - (now() at time zone 'utc')::date) > 1 then return false; end if;
+  if abs(p_day - (now() at time zone 'America/Los_Angeles')::date) > 1 then return false; end if;
   insert into public.daily_scores (day, era, user_id, score, lineup, pct) values (p_day, p_era, me, p_score, p_lineup, p_pct) on conflict do nothing;
   get diagnostics n = row_count;
   return n > 0;
@@ -278,7 +278,7 @@ begin
   with d as (select distinct day from public.daily_scores where user_id = prof.id), g as (select day, day - (row_number() over (order by day))::int as grp from d)
     select coalesce(max(c), 0) into bs from (select count(*) c from g group by grp) x;
   with d as (select distinct day from public.daily_scores where user_id = prof.id), g as (select day, day - (row_number() over (order by day))::int as grp from d)
-    select coalesce(count(*), 0) into cs from g where grp = (select grp from g where day >= current_date - 1 order by day desc limit 1);
+    select coalesce(count(*), 0) into cs from g where grp = (select grp from g where day >= (now() at time zone 'America/Los_Angeles')::date - 1 order by day desc limit 1);
   return jsonb_build_object('daily', dp || jsonb_build_object('best_streak', bs, 'streak', cs), 'username', prof.username, 'avatar', prof.avatar, 'region', prof.region, 'fav_era', prof.fav_era, 'auto_era', auto, 'best_score', prof.best_score, 'best_lineup', prof.best_lineup,
     'wins', w, 'losses', t - w, 'ratings', rat, 'most', most, 'vs', vs, 'friend', fr, 'self', me = prof.id, 'friends', nf, 'mutual', mut, 'mutual_count', nm);
 end $$;
