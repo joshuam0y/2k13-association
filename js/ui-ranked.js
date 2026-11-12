@@ -726,7 +726,7 @@
       const names = {};
       if (oppIds.length) { const p = await c.from('profiles').select('id,username').in('id', oppIds); (p.data || []).forEach(x => { names[x.id] = x.username; }); }
       const rivals = (riv.data || []).map(r => ({ name: names[r.a === id ? r.b : r.a] || '?', me: r.a === id ? r.a_wins : r.b_wins, them: r.a === id ? r.b_wins : r.a_wins, at: r.last_at })).sort((x, y) => (y.me + y.them) - (x.me + x.them));
-      const curRating = Math.max(1200, ...(rat.data || []).map(r => r.rating)), peakRating = Math.max(curRating, ...(rat.data || []).map(r => r.peak || 0));
+      const allRow = (rat.data || []).find(r => r.era === 'ALL'), curRating = allRow ? allRow.rating : 1200, peakRating = Math.max(curRating, ...(rat.data || []).map(r => r.peak || 0));
       let myDaily = null;
       try { const pp = await UI.profile.rpc('public_profile', { p_name: row.username || UI.profile.account() }); myDaily = pp && pp.daily; } catch (e) { /* before the latest SQL */ }
       let avatar = null;
@@ -854,7 +854,7 @@
       const fav = d.fav_era || d.auto_era, bl = d.best_lineup, yr = se => (se ? "'" + String(se - 1).slice(2) + "-'" + String(se).slice(2) : '');
       const total = d.wins + d.losses, signed = UI.profile.signedIn();
       const fr = !signed ? '' : d.friend === 'friends' ? '<span class="vs-fr ok">&#10003; YOU ARE FRIENDS</span><button type="button" class="btn btn-small" id="uRm">UNFRIEND</button>' : d.friend === 'sent' ? '<span class="muted">REQUEST SENT</span><button type="button" class="btn btn-small" id="uRm">CANCEL REQUEST</button>' : `<button type="button" class="btn btn-gold" id="uAdd">${d.friend === 'incoming' ? 'ACCEPT FRIEND REQUEST' : 'ADD AS FRIEND'}</button>`;
-      app.innerHTML = `<div class="pf-head">${avatarHtml(d.avatar, d.username, 72, Math.max(1200, ...(d.ratings || []).map(r => r.rating)))}<section class="ch-hero"><div class="ch-hero-k">PROFILE${d.region ? ' | ' + esc(regionName(d.region).toUpperCase()) : ''}</div><h1 class="ch-hero-t">${esc(d.username).toUpperCase()}</h1>
+      app.innerHTML = `<div class="pf-head">${avatarHtml(d.avatar, d.username, 72, ((d.ratings || []).find(r => r.era === 'ALL') || { rating: 1200 }).rating)}<section class="ch-hero"><div class="ch-hero-k">PROFILE${d.region ? ' | ' + esc(regionName(d.region).toUpperCase()) : ''}</div><h1 class="ch-hero-t">${esc(d.username).toUpperCase()}</h1>
           <p class="ch-hero-p">${total ? d.wins + '-' + d.losses + ' in Head to Head series.' : 'No series on this account yet.'}</p></section></div>
         ${fr ? `<div class="ch-go u-act">${fr}</div>` : ''}
         ${signed && !d.self ? `<details class="rk-det rk-report"><summary>REPORT THIS PLAYER</summary><div class="rk-report-b"><select id="rpWhy"><option>OFFENSIVE NAME OR PICTURE</option><option>CHEATING OR WIN TRADING</option><option>HARASSMENT</option><option>OTHER</option></select><button type="button" class="btn btn-small" id="rpSend">SEND REPORT</button><span class="pf-msg" id="rpMsg"></span></div></details>` : ''}
