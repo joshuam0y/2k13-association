@@ -112,9 +112,12 @@
 
   // ---------- the daily streak: counted from the daily auctions you finished on this device (so earlier plays count too) ----------
   const dayBefore = d => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() - 1); return x.toISOString().slice(0, 10); };
+  // a daily save belongs to the account that played it (guests share one), so a second account on the same device plays its own
+  const acctSfx = () => (UI.profile.signedIn() && UI.profile.account() ? '-' + String(UI.profile.account()).toLowerCase() : '');
+  const dKey = day => 'a13-rk-d-' + day + '-T' + acctSfx();
   function dailyDays() {
     const days = new Set();
-    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i), m = /^a13-rk-d-(\d{4}-\d\d-\d\d)-T$/.exec(k || ''); if (m) { const v = JSON.parse(localStorage.getItem(k) || 'null'); if (v && (v.fin || v.sent)) days.add(m[1]); } } } catch (e) { /* private mode */ }
+    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i), m = /^a13-rk-d-(\d{4}-\d\d-\d\d)-T(-.+)?$/.exec(k || ''); if (m && (m[2] || '') === acctSfx()) { const v = JSON.parse(localStorage.getItem(k) || 'null'); if (v && (v.fin || v.sent)) days.add(m[1]); } } } catch (e) { /* private mode */ }
     return days;
   }
   const streakBump = () => {};   // nothing to store: the finished auctions are the record
@@ -581,7 +584,7 @@
     stopRefresh();
     era = ERAS.indexOf(era) >= 0 ? era : 'ALL';
     era = 'ALL';   // the daily is one theme a day, whatever era is picked above
-    const day = pr ? 'practice:' + pr.info.key + ':' + pr.n : today(), key = 'a13-rk-d-' + day + '-T';
+    const day = pr ? 'practice:' + pr.info.key + ':' + pr.n : today(), key = dKey(day);
     if (!THEME[day]) {
       app.innerHTML = '<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE THEME...</div></section>';
       (pr ? buildTheme(pr.info).then(t => { THEME[day] = t; }) : dailyTheme(day)).then(() => { if (/^#\/daily/.test(location.hash)) dailyPage(app, era, pr); }).catch(e => { app.innerHTML = '<p class="rk-err">' + esc(e.message || e) + '</p>'; });
@@ -591,6 +594,10 @@
     pool.forEach(p => { byId[p.id] = p; });
     const cfg = { bench: 0, seed: hash(day + '|' + era), auction: DAILY };
     let saved = ls.get(key, null), st;
+    if (!saved && !pr && acctSfx()) {   // a game played as a guest today moves to the account that signs in first
+      const gk = 'a13-rk-d-' + day + '-T', g = ls.get(gk, null);
+      if (g && g.st) { saved = Object.assign({}, g, { sent: false }); ls.set(key, saved); try { localStorage.removeItem(gk); } catch (e) { /* private mode */ } }
+    }
     if (saved && saved.st) st = saved.st;
     else { st = C.auctionStart(cfg, pool); }
     const rng = mulberry(hash(day + era + 'house'));
@@ -1042,7 +1049,7 @@
       try { st = await UI.profile.rpc('daily_stats', { p_day: day }); } catch (e) { /* before the latest SQL */ }
       if (yday >= DAILY_START) { try { yst = await UI.profile.rpc('daily_stats', { p_day: yday }); } catch (e) { /* before the latest SQL */ } }
       const perf = TH ? dailyPerfect('ALL', day) : 0, pctOf = sc => (perf > 0 ? Math.min(100, 100 * Number(sc) / perf).toFixed(1) + '%' : '');
-      const me = UI.profile.account(), done = ls.get('a13-rk-d-' + day + '-T', null), played = done && done.fin, sk = streakNow();
+      const me = UI.profile.account(), done = ls.get(dKey(day), null), played = done && done.fin, sk = streakNow();
       const left = (() => { const t = new Date().toLocaleTimeString('en-GB', Object.assign({ hour12: false }, PT)).split(':'), ms = 86400000 - ((+t[0]) * 3600 + (+t[1]) * 60 + (+t[2])) * 1000; return Math.floor(ms / 3600000) + 'H ' + (Math.floor(ms / 60000) % 60) + 'M'; })();
       const avgOf = x => x.avg_pct != null ? x.avg_pct + '%' : x.avg_score;
       const statLine = st && st.played ? `<p class="rk-stat"><b>${st.played}</b> PLAYED TODAY | AVERAGE <b>${avgOf(st)}</b>${st.best_pct != null ? ' | BEST <b>' + st.best_pct + '%</b>' : ''}</p>` : '';
