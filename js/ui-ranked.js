@@ -281,6 +281,9 @@
           <li>The winner climbs that era's ladder and the loser drops (everyone starts at 1200; beating a higher rated player is worth more).</li>
           <li>The result only counts when both phones report the same score, so nobody can fake a win.</li>
           <li>Want to play a friend instead? Use Head to Head: it is casual and never touches the ladder.</li></ol></details></section>
+      <details class="rk-det rk-ranks"><summary>THE RANKS</summary>
+        <p class="muted">Everyone starts at 1200, which is the bottom of Silver. Win and you climb; lose enough and you drop into Bronze. Each rank up to Diamond has three divisions (III is the lowest, I the highest).</p>
+        <div class="rk-rk">${TIERS.map((t, i) => `<span class="rk-rk-i"><span class="tier" style="--tc:${t.color}">${esc(t.name)}</span><small>${t.floor ? t.floor + (TIERS[i + 1] ? ' TO ' + (TIERS[i + 1].floor - 1) : ' AND UP') : 'UNDER ' + TIERS[i + 1].floor}</small></span>`).join('')}</div></details>
       <div class="ch-chips rk-tabs"><button type="button" class="ch-chip${RK.tab === 'ladder' ? ' on' : ''}" data-tab="ladder">LADDER</button><button type="button" class="ch-chip${RK.tab === 'daily' ? ' on' : ''}" data-tab="daily">DAILY AUCTION</button></div>
       <div id="rkBody" class="rk-body"><p class="muted">Loading...</p></div>
       <div class="ch-go"><a class="btn" href="#/me">MY PROFILE</a><a class="btn" href="#/challenge/vs">HEAD TO HEAD</a></div>`;
