@@ -262,7 +262,7 @@
         <h3>LEAVING</h3>
         <p>Disconnect and you have 90 seconds to rejoin. Miss it and you forfeit. The lobby is free to leave.</p>
         <h3>DAILY AUCTION</h3>
-        <p>A solo auction vs the house. Same ten players for everyone, once a day. Scored as a percentage of a perfect five. No rating change.</p>
+        <p>A solo auction vs the house with a new theme each day: a current team, a famous season, a franchise's best ever, a decade or a type of player. Same ten players for everyone, once a day. Scored as a percentage of a perfect five. No rating change.</p>
         <h3>FRIENDS</h3>
         <p>Tap a name to see a profile and add a friend. Play friends in Head to Head: it is casual.</p>`;
   const HOME_HELP = `<p>Tap a tile on the main menu to start.</p>

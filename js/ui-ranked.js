@@ -426,14 +426,14 @@
         if (se) se.addEventListener('input', () => { lad.innerHTML = tbl(se.value.trim().toLowerCase()); });
         const fm = UI.$('#rkFindMe', body); if (fm) fm.addEventListener('click', () => { se.value = ''; lad.innerHTML = tbl(''); const row = [...lad.querySelectorAll('tr')].find(t => t.innerText.indexOf('YOU') >= 0); if (row) { row.scrollIntoView({ block: 'center', behavior: 'smooth' }); row.classList.add('rk-me'); } });
       } else if (RK.tab === 'daily') {
-        const day = today(), rows = await UI.profile.rpc('lb_daily', { p_day: day, p_era: RK.era, p_region: region || null, p_limit: 50 });
-        if (!C.loaded('pool')) { try { await C.load('pool'); } catch (e) { /* the percentages stay out */ } }
-        const perf = C.loaded('pool') ? dailyPerfect(RK.era, day) : 0, pctOf = sc => (perf > 0 ? Math.min(100, 100 * Number(sc) / perf).toFixed(1) + '%' : '');
-        const me = UI.profile.account(), done = ls.get('a13-rk-d-' + day + '-' + RK.era, null);
+        const day = today(), rows = await UI.profile.rpc('lb_daily', { p_day: day, p_era: 'ALL', p_region: region || null, p_limit: 50 });
+        let TH = null; try { await dailyTheme(day); TH = THEME[day].info; } catch (e) { /* the theme stays out */ }
+        const perf = TH ? dailyPerfect('ALL', day) : 0, pctOf = sc => (perf > 0 ? Math.min(100, 100 * Number(sc) / perf).toFixed(1) + '%' : '');
+        const me = UI.profile.account(), done = ls.get('a13-rk-d-' + day + '-ALL', null);
         const played = done && done.fin;
-        body.innerHTML = `<p class="muted rk-sub">Same ten players for everyone. $20, you vs the house. One try a day.</p>
+        body.innerHTML = `${TH ? `<div class="rk-theme"><small>TODAY | ${esc(TH.kind)}</small><b>${esc(TH.title)}</b><span class="muted">${esc(TH.tag)}</span></div>` : ''}<p class="muted rk-sub">Same ten players for everyone. $20, you vs the house. One try a day.</p>
           <p class="rk-streak">${streakNow().n ? '<b>' + streakNow().n + '</b> DAY DAILY STREAK' + (streakNow().done ? ' | TODAY DONE' : ' | PLAY TODAY TO KEEP IT') : 'START A DAILY STREAK: PLAY ONE A DAY'}</p>
-          <div class="ch-go">${UI.profile.signedIn() ? `<a class="btn btn-gold btn-big" href="#/ranked/daily/${esc(RK.era)}">${played ? 'SEE TODAY\'S RESULT' : done ? 'FINISH TODAY\'S AUCTION' : 'PLAY TODAY\'S AUCTION'}</a>` : ''}</div>` +
+          <div class="ch-go">${UI.profile.signedIn() ? `<a class="btn btn-gold btn-big" href="#/ranked/daily/ALL">${played ? 'SEE TODAY\'S RESULT' : done ? 'FINISH TODAY\'S AUCTION' : 'PLAY TODAY\'S AUCTION'}</a>` : ''}</div>` +
           (rows.length ? table(perf > 0 ? ['#', 'PLAYER', 'SCORE', 'OF PERFECT'] : ['#', 'PLAYER', 'SCORE'], rows.map((r, i) => [i + 1, nameCell(r, me), '<b>' + Number(r.score).toFixed(1) + '</b>'].concat(perf > 0 ? [pctOf(r.score)] : []))) : '<p class="muted">No scores yet today' + esc(scope) + '.</p>');
       }
     } catch (e) { body.innerHTML = '<p class="rk-err">' + esc(failMsg(e)) + '</p>'; }
@@ -457,13 +457,64 @@
     return best;
   }
   const PERF = {};
-  function dailyPerfect(era, day) {   // the same ten players for everyone, so one number per day and era
-    const k = day + '|' + era;
+
+  // ---------- daily themes: every day is one theme, strictly (all ten players come from it): a current team, a famous season, a franchise's best ever, a decade, or a type of player ----------
+  const FAMOUS = [
+    ['CHI', 1996, 'The 72 win team'], ['GSW', 2016, '73 wins and a Finals heartbreak'], ['BOS', 1986, 'Bird, McHale and Parish'], ['LAL', 2001, 'Shaq, Kobe and a 15-1 playoff run'],
+    ['SAS', 2014, 'Beautiful basketball'], ['MIA', 2013, '27 wins in a row'], ['CLE', 2016, 'Down 3-1 and back'], ['ATL', 2015, '60 wins and no superstar'],
+    ['DET', 2004, 'Five starters, one ring'], ['PHI', 2001, 'Iverson carries a city'], ['DAL', 2011, "Dirk's ring"], ['BOS', 2008, 'The Big Three'],
+    ['MIL', 2021, 'Giannis closes it out'], ['DEN', 2023, 'Jokic wins it all'], ['TOR', 2019, 'Kawhi and the shot'], ['SAC', 2002, 'So close'],
+    ['PHX', 2005, 'Seven seconds or less'], ['UTA', 1998, 'Stockton to Malone'], ['HOU', 1995, 'Clutch City'], ['IND', 2000, 'Reggie reaches the Finals'],
+    ['SEA', 1996, 'The Glove and the Reign Man'], ['ORL', 1995, 'Shaq and Penny'], ['OKC', 2012, 'Durant, Westbrook and Harden'], ['POR', 2000, 'Almost'], ['NYK', 1999, 'The eighth seed in the Finals']
+  ];
+  const FRANCH = { BOS: 'Boston Celtics', LAL: 'Los Angeles Lakers', CHI: 'Chicago Bulls', GSW: 'Golden State Warriors', NYK: 'New York Knicks', PHI: 'Philadelphia 76ers', DET: 'Detroit Pistons', SAS: 'San Antonio Spurs', HOU: 'Houston Rockets', MIA: 'Miami Heat', DAL: 'Dallas Mavericks', DEN: 'Denver Nuggets', MIL: 'Milwaukee Bucks', POR: 'Portland Trail Blazers', UTA: 'Utah Jazz', ATL: 'Atlanta Hawks', IND: 'Indiana Pacers', CLE: 'Cleveland Cavaliers', PHX: 'Phoenix Suns', SEA: 'Seattle SuperSonics' };
+  const MODERN = ['ATL', 'BOS', 'BKN', 'CHA', 'CHI', 'CLE', 'DAL', 'DEN', 'DET', 'GSW', 'HOU', 'IND', 'LAC', 'LAL', 'MEM', 'MIA', 'MIL', 'MIN', 'NOH', 'NYK', 'OKC', 'ORL', 'PHI', 'PHX', 'POR', 'SAC', 'SAS', 'TOR', 'UTA', 'WAS'];
+  const STYLES = [
+    ['PG', 'POINT GUARDS', 'Run the show', e => String(e.pos).split('-')[0] === 'PG', e => e.ovr],
+    ['SG', 'SHOOTING GUARDS', 'Buckets', e => String(e.pos).split('-')[0] === 'SG', e => e.ovr],
+    ['SF', 'WINGS', 'Do it all', e => String(e.pos).split('-')[0] === 'SF', e => e.ovr],
+    ['PF', 'POWER FORWARDS', 'Bruisers and stretch bigs', e => String(e.pos).split('-')[0] === 'PF', e => e.ovr],
+    ['C', 'CENTERS', 'Own the paint', e => String(e.pos).split('-')[0] === 'C', e => e.ovr],
+    ['SNIPE', 'SNIPERS', 'The best pure shooters ever', e => e.ovr >= 85 && e.attrs, e => (e.attrs.three || 0) * 2 + (e.attrs.ft || 0) + e.ovr * 0.2],
+    ['BLOCK', 'RIM PROTECTORS', 'Nothing comes through', e => e.ovr >= 85 && e.attrs, e => (e.attrs.block || 0) * 2 + (e.attrs.intD || 0) + e.ovr * 0.2],
+    ['SMALL', 'SMALL BALL', 'Six foot four and under', e => e.ht && e.ht <= 76 && e.ovr >= 80, e => e.ovr],
+    ['TALL', 'THE TALL ONES', 'Seven feet and up', e => e.ht && e.ht >= 84 && e.ovr >= 80, e => e.ovr]
+  ];
+  const DECS = ['1950s', '1960s', '1970s', '1980s', '1990s', '2000s', '2010s', '2020s'];
+  const labelOf = y => (y - 1) + '-' + String(y).slice(2);
+  // what today is, from the date alone (no data needed): the kind rotates daily, the pick inside it comes from the date
+  function dailyThemeInfo(day) {
+    const idx = Math.floor(Date.parse(day + 'T00:00:00Z') / 86400000), kind = ((idx % 5) + 5) % 5, h = hash(day);
+    if (kind === 0) { const a = MODERN[h % MODERN.length]; return { kind: 'CURRENT TEAM', title: labelOf(2027) + ' ' + UI.teamName(a).toUpperCase(), tag: 'Today\'s roster', spec: { t: 'season', abbr: a, year: 2027 } }; }
+    if (kind === 1) { const f = FAMOUS[h % FAMOUS.length]; return { kind: 'FAMOUS SEASON', title: labelOf(f[1]) + ' ' + (FRANCH[f[0]] || UI.teamName(f[0])).toUpperCase(), tag: f[2], spec: { t: 'season', abbr: f[0], year: f[1] } }; }
+    if (kind === 2) { const ks = Object.keys(FRANCH), a = ks[h % ks.length]; return { kind: 'ALL-TIME FRANCHISE', title: 'THE BEST ' + FRANCH[a].toUpperCase() + ' EVER', tag: 'Every season counts', spec: { t: 'franchise', abbr: a } }; }
+    if (kind === 3) { const d = DECS[h % DECS.length]; return { kind: 'ERA', title: 'THE ' + d.toUpperCase(), tag: 'The best of one decade', spec: { t: 'decade', d } }; }
+    const st = STYLES[h % STYLES.length]; return { kind: 'STYLE', title: st[1], tag: st[2], spec: { t: 'style', k: st[0] } };
+  }
+  const THEME = {};
+  async function dailyTheme(day) {
+    if (THEME[day]) return THEME[day];
+    const info = dailyThemeInfo(day), sp = info.spec, top = l => l.sort((a, b) => b.ovr - a.ovr || (a.id < b.id ? -1 : 1)).slice(0, 12);
+    let pool = [];
+    const allTime = () => { const best = {}; C.allTimePool().forEach(e => { if (!best[e.base] || e.ovr > best[e.base].ovr) best[e.base] = e; }); return Object.keys(best).map(k => Object.assign({}, best[k], { id: best[k].key, team: best[k].from })); };
+    if (sp.t === 'season') { await C.load(sp.year); pool = C.seasonData(sp.year).players.filter(x => x.team === sp.abbr).map(x => Object.assign({}, x, { season: sp.year })); }
+    else {
+      await C.load('pool');
+      if (sp.t === 'franchise') { const best = {}; C.allTimePool().filter(e => e.from === sp.abbr).forEach(e => { if (!best[e.base] || e.ovr > best[e.base].ovr) best[e.base] = e; }); pool = Object.keys(best).map(k => Object.assign({}, best[k], { id: best[k].key, team: best[k].from })); }
+      else if (sp.t === 'decade') pool = allTime().filter(e => decKey(e.season) === sp.d);
+      else { const def = STYLES.find(x => x[0] === sp.k); pool = allTime().filter(def[3]).sort((a, b) => def[4](b) - def[4](a)).slice(0, 30); }
+    }
+    if (sp.t === 'style') pool = pool.slice(0, 12); else pool = top(pool);
+    if (pool.length < 10) { pool = top(allTime()); info.title = 'THE ALL-TIME GREATS'; info.tag = 'Today\'s theme had too few players'; }
+    return (THEME[day] = { info, pool });
+  }
+  function dailyPerfect(era, day) {   // the same ten players for everyone, so one number per day
+    const k = day;
     if (PERF[k] != null) return PERF[k];
-    const pool = poolFor(era);
-    if (pool.length < 40) return (PERF[k] = 0);
-    const st = C.auctionStart({ bench: 0, seed: hash(day + '|' + era), auction: DAILY }, pool), byId = {};
-    pool.forEach(p => { byId[p.id] = p; });
+    const T = THEME[day];
+    if (!T) return 0;
+    const st = C.auctionStart({ bench: 0, seed: hash(day + '|ALL'), auction: DAILY }, T.pool), byId = {};
+    T.pool.forEach(p => { byId[p.id] = p; });
     return (PERF[k] = perfectOf(st.ids.map(id => byId[id]).filter(Boolean), st.per));
   }
   function poolFor(era) {
@@ -484,15 +535,15 @@
     stopRefresh();
     era = ERAS.indexOf(era) >= 0 ? era : 'ALL';
     if (!UI.profile.signedIn()) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">DAILY AUCTION | ${esc(eraName(era))}</div><h1 class="ch-hero-t">SIGN IN FIRST.</h1></section>${signInBox('PLAY THE DAILY AUCTION')}<div class="ch-go"><a class="btn" href="#/ranked">BACK</a></div>`; UI.profile.wire(app, () => dailyPage(app, era)); return; }
-    const day = today(), key = 'a13-rk-d-' + day + '-' + era;
-    if (!C.loaded('pool')) {   // the all-time pool loads on demand
-      app.innerHTML = '<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE PLAYERS...</div></section>';
-      C.load('pool').then(() => { if (/^#\/ranked\/daily/.test(location.hash)) dailyPage(app, era); }).catch(e => { app.innerHTML = '<p class="rk-err">' + esc(e.message || e) + '</p>'; });
+    era = 'ALL';   // the daily is one theme a day, whatever era is picked above
+    const day = today(), key = 'a13-rk-d-' + day + '-ALL';
+    if (!THEME[day]) {
+      app.innerHTML = '<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING TODAY\'S THEME...</div></section>';
+      dailyTheme(day).then(() => { if (/^#\/ranked\/daily/.test(location.hash)) dailyPage(app, era); }).catch(e => { app.innerHTML = '<p class="rk-err">' + esc(e.message || e) + '</p>'; });
       return;
     }
-    const pool = poolFor(era), byId = {};
+    const pool = THEME[day].pool, byId = {};
     pool.forEach(p => { byId[p.id] = p; });
-    if (pool.length < 40) { app.innerHTML = '<p class="rk-err">That era has too few players for an auction.</p>'; return; }
     const cfg = { bench: 0, seed: hash(day + '|' + era), auction: DAILY };
     let saved = ls.get(key, null), st;
     if (saved && saved.st) st = saved.st;
@@ -511,7 +562,8 @@
       return `<div class="vs-side${st.turn === i ? ' on' : ''}"><div class="vs-side-h"><div><small>${name}</small><b>${money(A.budget - st.spent[i])} left</b><small class="vs-pay">${st.won[i].length} of ${per} spots</small></div></div>
         <ol class="vs-auc-won">${won.map(w => `<li>${esc(w.p ? w.p.name : '?')} <small class="muted">${money(w.price || 0)}</small></li>`).join('') || '<li class="muted">Nobody yet</li>'}</ol></div>`;
     };
-    const hdr = `<div class="ch-top"><div><div class="ch-top-k">DAILY AUCTION | ${esc(day)} | ${esc(eraName(era))}</div><div class="ch-top-t">${st.done ? 'YOUR FIVE IS SET' : 'PLAYER ' + (st.i + 1) + ' OF ' + st.ids.length}</div></div><a class="btn btn-small" href="#/ranked">BACK</a></div>`;
+    const TH = (THEME[day] || {}).info || { title: eraName(era), kind: '' };
+    const hdr = `<div class="ch-top"><div><div class="ch-top-k">DAILY | ${esc(day)} | ${esc(TH.title)}</div><div class="ch-top-t">${st.done ? 'YOUR FIVE IS SET' : 'PLAYER ' + (st.i + 1) + ' OF ' + st.ids.length}</div></div><a class="btn btn-small" href="#/ranked">BACK</a></div>`;
     if (st.done) {
       stopClock();
       const five = st.won[0].map(id => byId[id]), score = UI.ranked.lineupScore(five), houseFive = st.won[1].map(id => byId[id]), hs = UI.ranked.lineupScore(houseFive);
@@ -522,7 +574,7 @@
         <div id="rkSub" class="rkn"><span class="muted">Sending your score...</span></div>
         <div class="ch-go"><a class="btn btn-gold" href="#/ranked">SEE THE BOARD</a>${pct == null ? '' : '<button type="button" class="btn" id="dlShare">SHARE YOUR SCORE</button>'}</div>`;
       const dsh = UI.$('#dlShare', app);
-      if (dsh) dsh.addEventListener('click', async () => { dsh.disabled = true; const r = await shareCard({ k: 'DAILY AUCTION | ' + day, title: 'OF A PERFECT FIVE', color: '#d4af37', big: pct.toFixed(1) + '%', sub: 'LINEUP SCORE ' + score.toFixed(1) + ' | ' + eraName(era).toUpperCase(), name: UI.profile.account() || '' }, 'My Starting Five daily auction: ' + pct.toFixed(1) + '% of a perfect five.'); dsh.disabled = false; if (r === 'saved') UI.toast('Saved the picture. The link is copied.'); });
+      if (dsh) dsh.addEventListener('click', async () => { dsh.disabled = true; const r = await shareCard({ k: 'DAILY | ' + day, title: 'OF A PERFECT FIVE', color: '#d4af37', big: pct.toFixed(1) + '%', sub: TH.title, name: UI.profile.account() || '' }, 'My Starting Five daily auction: ' + pct.toFixed(1) + '% of a perfect five.'); dsh.disabled = false; if (r === 'saved') UI.toast('Saved the picture. The link is copied.'); });
       const paintStreak = () => { const sk = UI.$('#rkStreak', app), n = streakNow(); if (sk && n.n) sk.innerHTML = '<b>' + n.n + '</b> DAY DAILY STREAK' + (n.best > n.n ? ' | BEST ' + n.best : ''); };
       paintStreak();
       const sub = UI.$('#rkSub', app);

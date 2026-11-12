@@ -1087,3 +1087,7 @@
 .pf-pick.wide { grid-column: span 2; grid-auto-flow: column; gap: 6px; }
 .pf-pick small { font-family: var(--display); letter-spacing: .1em; font-size: 10px; color: var(--muted); }
 .ch-step.rk-det summary { margin-bottom: 10px; }
+
+.rk-theme { display: grid; gap: 2px; padding: 12px 14px; border: 1px solid var(--gold-dim); background: var(--bg2); margin: 8px 0; }
+.rk-theme small { font-family: var(--display); letter-spacing: .18em; font-size: 11px; color: var(--gold2); }
+.rk-theme b { font-family: var(--display); font-size: 24px; letter-spacing: .04em; }
