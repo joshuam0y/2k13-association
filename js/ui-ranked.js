@@ -127,9 +127,21 @@
     return { n, done, best: Math.max(best, n) };
   }
   // the daily record on a profile: how many played, the average and best percentage of a perfect five, and the streaks
+  const MILES = [3, 7, 30, 100];   // streak milestones
+  const sqB = pc => pc == null ? 'bp' : pc >= 95 ? 'b5' : pc >= 85 ? 'b4' : pc >= 70 ? 'b3' : pc >= 50 ? 'b2' : 'b1';
   const dailyBlock = dd => !dd || !dd.played ? '' : `<div class="ch-step"><div class="ch-step-k">DAILY AUCTION</div>
       <div class="rk-cards"><div class="rk-card"><small>PLAYED</small><b>${dd.played}</b></div><div class="rk-card"><small>AVERAGE</small><b>${dd.avg_pct != null ? dd.avg_pct + '%' : '-'}</b></div><div class="rk-card"><small>BEST</small><b>${dd.best_pct != null ? dd.best_pct + '%' : '-'}</b></div></div>
-      <div class="rk-cards two"><div class="rk-card"><small>STREAK</small><b>${dd.streak || 0}</b></div><div class="rk-card"><small>BEST STREAK</small><b>${dd.best_streak || 0}</b></div></div></div>`;
+      <div class="rk-cards two"><div class="rk-card"><small>STREAK</small><b>${dd.streak || 0}</b></div><div class="rk-card"><small>BEST STREAK</small><b>${dd.best_streak || 0}</b></div></div>
+      <div class="dh-miles">${MILES.map(m => `<span class="dh-m${(dd.best_streak || 0) >= m ? ' on' : ''}">${m} DAY</span>`).join('')}</div><div class="dh" data-dh></div></div>`;
+  // the last 30 days as squares, colored by the percentage of a perfect five
+  async function fillHist(app, name) {
+    const box = app.querySelector('[data-dh]'); if (!box || !name) return;
+    let rows = []; try { rows = (await UI.profile.rpc('daily_history', { p_name: name })) || []; } catch (e) { return; }
+    const by = {}; let top = -1; rows.forEach(r => { by[String(r.day).slice(0, 10)] = r; if (r.pct != null && Number(r.pct) > top) top = Number(r.pct); });
+    const days = []; for (let d = today(), i = 0; i < 30 && d >= DAILY_START; i++, d = dayBefore(d)) days.unshift(d);
+    box.innerHTML = '<div class="ch-step-k">LAST 30 DAYS</div><div class="dh-grid">' + days.map(k => { const r = by[k], pc = r && r.pct != null ? Number(r.pct) : null;
+      return `<i class="dh-s ${r ? sqB(pc) : ''}${pc != null && pc === top ? ' best' : ''}" title="${k}${r ? ': ' + (pc != null ? pc.toFixed(1) + '%' : Number(r.score).toFixed(1)) : ''}"></i>`; }).join('') + '</div>';
+  }
   const regionName = r => { const x = REGIONS.find(y => y[0] === r); return x ? x[1].trim() : (r || ''); };
   const NOT_SET_UP = 'The ranked boards are not switched on yet. The site owner needs to run supabase/community.sql once in the Supabase SQL editor.';
   const failMsg = e => { const m = String((e && e.message) || e); return /does not exist|schema cache|Could not find|relation .* does not exist|PGRST20/i.test(m) ? NOT_SET_UP : m; };
@@ -603,7 +615,7 @@
       const perfectScore = dailyPerfect(era, day);
       const pct = score != null && perfectScore > 0 ? Math.min(100, 100 * score / perfectScore) : null;
       app.innerHTML = `${hdr}<div class="vs-sides vs-compact">${sideBox(0, 'YOU')}${sideBox(1, 'THE HOUSE')}</div>
-        <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${score == null ? '-' : score.toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div>`}<div class="rk-streak" id="rkStreak"></div><span class="muted">The house scored ${hs == null ? '-' : hs.toFixed(1)}. ${score != null && hs != null ? (score > hs ? 'You beat the house.' : score < hs ? 'The house won this one.' : 'A tie.') : ''}</span></section>
+        <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${score == null ? '-' : score.toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div>`}<div class="rk-streak" id="rkStreak"></div><div class="rk-std" id="rkStd"></div><span class="muted">The house scored ${hs == null ? '-' : hs.toFixed(1)}. ${score != null && hs != null ? (score > hs ? 'You beat the house.' : score < hs ? 'The house won this one.' : 'A tie.') : ''}</span></section>
         <div id="rkSub" class="rkn"><span class="muted">Sending your score...</span></div>
         <div class="ch-go">${isPr ? `<a class="btn btn-gold" href="#/daily/practice/${esc(prKey)}/${Date.now()}">PLAY AGAIN</a><a class="btn" href="#/daily/practice">ARCHIVE</a>` : `<a class="btn btn-gold" href="#/daily">SEE THE BOARD</a>${pct == null ? '' : '<button type="button" class="btn" id="dlShare">SHARE YOUR SCORE</button>'}`}</div>`;
       const dsh = UI.$('#dlShare', app);
@@ -611,8 +623,9 @@
       if (dsh) dsh.addEventListener('click', () => doShare(dsh));
       if (!isPr && pct != null) {   // the result pops up with the share button every time this screen opens
         const ov = document.createElement('div'); ov.className = 'rk-tour';
-        ov.innerHTML = `<div class="rk-tour-b"><small>DAILY #${dayNo(day)} | ${esc(TH.title)}</small><h2 class="rk-pop-n">${pct.toFixed(1)}%</h2><p>OF A PERFECT FIVE | LINEUP SCORE ${score.toFixed(1)}</p><div class="rk-tour-go"><button type="button" class="btn btn-gold btn-big" id="popShare">SHARE YOUR SCORE</button><button type="button" class="btn" id="popClose">CLOSE</button></div></div>`;
+        ov.innerHTML = `<div class="rk-tour-b"><small>DAILY #${dayNo(day)} | ${esc(TH.title)}</small><h2 class="rk-pop-n">${pct.toFixed(1)}%</h2><p>OF A PERFECT FIVE | LINEUP SCORE ${score.toFixed(1)}</p><p class="rk-pop-m" id="popMile"></p><p class="rk-pop-s" id="popStd"></p><div class="rk-tour-go"><button type="button" class="btn btn-gold btn-big" id="popShare">SHARE YOUR SCORE</button><button type="button" class="btn" id="popClose">CLOSE</button></div></div>`;
         document.body.appendChild(ov);
+        { const n = streakNow().n; if (MILES.includes(n)) ov.querySelector('#popMile').textContent = n + ' DAY STREAK'; }
         const shut = () => { ov.remove(); window.removeEventListener('hashchange', shut); };
         window.addEventListener('hashchange', shut);
         ov.querySelector('#popClose').addEventListener('click', shut);
@@ -620,6 +633,14 @@
       }
       const paintStreak = () => { const sk = UI.$('#rkStreak', app), n = streakNow(); if (sk && n.n) sk.innerHTML = '<b>' + n.n + '</b> DAY DAILY STREAK' + (n.best > n.n ? ' | BEST ' + n.best : ''); };
       paintStreak();
+      const showStd = async () => {   // where you finished and the average, once the score is on the board
+        if (isPr || !UI.profile.signedIn()) return;
+        let t = null; try { t = await UI.profile.rpc('daily_stats', { p_day: day }); } catch (e) { return; }
+        if (!t || !t.rank) return;
+        const beat = t.played > 1 ? Math.round(100 * t.below / (t.played - 1)) : null, avg = t.avg_pct != null ? t.avg_pct + '%' : t.avg_score;
+        const line = '#' + t.rank + ' OF ' + t.played + (beat != null ? ' | YOU BEAT ' + beat + '% OF PLAYERS' : '') + ' | AVERAGE ' + avg;
+        const a = UI.$('#rkStd', app), b = document.getElementById('popStd'); if (a) a.textContent = line; if (b) b.textContent = line;
+      };
       const sub = UI.$('#rkSub', app);
       if (isPr) { sub.innerHTML = '<b>PRACTICE.</b> <span class="muted">Not on the board, no streak.</span>'; return; }
       if (!UI.profile.signedIn()) {   // anyone can play; an account only puts the score on the board
@@ -628,9 +649,9 @@
         return;
       }
       const cur = ls.get(key, {});
-      if (cur.sent) { sub.innerHTML = `<b>SCORE SENT.</b> <span class="muted">One try a day for each era.</span>`; return; }
+      if (cur.sent) { sub.innerHTML = `<b>SCORE SENT.</b> <span class="muted">One try a day for each era.</span>`; showStd(); return; }
       UI.profile.rpc('submit_daily', { p_day: day, p_era: era, p_score: score, p_lineup: { names: five.map(p => p.name), seasons: five.map(p => p.season || null), score, era }, p_pct: pct == null ? null : Math.round(pct * 100) / 100 })
-        .then(ok => { streakBump(day); paintStreak(); ls.set(key, Object.assign(cur, { st, fin: true, sent: true, score })); sub.innerHTML = ok ? '<b>SCORE SENT.</b> <span class="muted">You are on today\'s board.</span>' : '<b>ALREADY ON THE BOARD.</b> <span class="muted">One score a day for each era.</span>'; })
+        .then(ok => { streakBump(day); paintStreak(); ls.set(key, Object.assign(cur, { st, fin: true, sent: true, score })); sub.innerHTML = ok ? '<b>SCORE SENT.</b> <span class="muted">You are on today\'s board.</span>' : '<b>ALREADY ON THE BOARD.</b> <span class="muted">One score a day for each era.</span>'; showStd(); })
         .catch(e => { sub.innerHTML = '<span class="rk-err">' + esc(failMsg(e)) + '</span>'; });
       return;
     }
@@ -759,6 +780,7 @@
         }).join('')}</div></div>` : ''}
         <div class="ch-step"><div class="ch-step-k">RIVALRIES</div>${rivals.length ? table(['VS', 'RECORD', ''], rivals.map(r => [UI.userLink(r.name), '<b>' + r.me + '-' + r.them + '</b>', r.me > r.them ? 'YOU LEAD' : r.me < r.them ? 'THEY LEAD' : 'TIED']), true) : '<p class="muted">Your rivalries show up here: one record for each friend you play, and one series counts for each draft.</p>'}</div>
         <div class="ch-go"><a class="btn btn-gold" href="#/ranked">RANKED</a><a class="btn" href="#/challenge/vs">HEAD TO HEAD</a></div>`;
+      fillHist(app, row.username || UI.profile.account());
       const setAv = async v => {
         const m = UI.$('#avMsg', app); if (m) m.textContent = 'Saving...';
         const u = await c.from('profiles').update({ avatar: v }).eq('id', id);
@@ -866,6 +888,7 @@
         ${d.ratings && d.ratings.length ? `<div class="ch-step"><div class="ch-step-k">LADDER RATINGS</div>${table(['ERA', 'RATING', 'RANK', 'W-L'], d.ratings.map(r => [esc(eraName(r.era)), '<b>' + r.rating + '</b> ' + tierBadge(r.rating), '#' + r.rank + (r.of ? ' of ' + r.of : ''), wl(r.wins, r.losses)]), true)}</div>` : ''}
         ${d.most && d.most.length ? `<div class="ch-step"><div class="ch-step-k">MOST DRAFTED</div>${table(['PLAYER', 'SEASON', 'TIMES'], d.most.map(m => [esc(m.name), esc(yr(m.season) || 'ANY'), '<b>' + m.count + '</b>']), true)}</div>` : ''}
         <div class="ch-go"><a class="btn" href="#/ranked">RANKED</a><a class="btn" href="#/me">MY PROFILE</a></div>`;
+      fillHist(app, d.username);
       const urm = UI.$('#uRm', app);
       if (urm) urm.addEventListener('click', async () => {   // two taps to unfriend (one to cancel a request)
         const unf = d.friend === 'friends';
@@ -1015,17 +1038,45 @@
     try {
       let TH = null; try { await dailyTheme(day); TH = THEME[day].info; } catch (e) { /* the theme card stays out */ }
       let rows = []; try { rows = (await UI.profile.rpc('lb_daily', { p_day: day, p_era: 'ALL', p_region: null, p_limit: 100 })) || []; } catch (e) { rows = null; }
+      let st = null, yst = null; const yday = dayBefore(day);
+      try { st = await UI.profile.rpc('daily_stats', { p_day: day }); } catch (e) { /* before the latest SQL */ }
+      if (yday >= DAILY_START) { try { yst = await UI.profile.rpc('daily_stats', { p_day: yday }); } catch (e) { /* before the latest SQL */ } }
       const perf = TH ? dailyPerfect('ALL', day) : 0, pctOf = sc => (perf > 0 ? Math.min(100, 100 * Number(sc) / perf).toFixed(1) + '%' : '');
       const me = UI.profile.account(), done = ls.get('a13-rk-d-' + day + '-T', null), played = done && done.fin, sk = streakNow();
       const left = (() => { const t = new Date().toLocaleTimeString('en-GB', Object.assign({ hour12: false }, PT)).split(':'), ms = 86400000 - ((+t[0]) * 3600 + (+t[1]) * 60 + (+t[2])) * 1000; return Math.floor(ms / 3600000) + 'H ' + (Math.floor(ms / 60000) % 60) + 'M'; })();
+      const avgOf = x => x.avg_pct != null ? x.avg_pct + '%' : x.avg_score;
+      const statLine = st && st.played ? `<p class="rk-stat"><b>${st.played}</b> PLAYED TODAY | AVERAGE <b>${avgOf(st)}</b>${st.best_pct != null ? ' | BEST <b>' + st.best_pct + '%</b>' : ''}</p>` : '';
+      const yest = yst && yst.played ? `<div class="rk-theme"><small>YESTERDAY | DAILY #${dayNo(yday)}</small><b>${esc(yst.winner || '')} WON${yst.winner_pct != null ? ' WITH ' + yst.winner_pct + '%' : ''}</b><span class="muted">${yst.played} played | average ${avgOf(yst)}</span></div>` : '';
       body.innerHTML = `${TH ? `<div class="rk-theme"><small>DAILY #${dayNo(day)} | ${esc(TH.kind)}</small><b>${esc(TH.title)}</b><span class="muted">${esc(TH.tag)}</span></div>` : ''}
         <p class="rk-streak">${sk.n ? '<b>' + sk.n + '</b> DAY STREAK' + (sk.done ? ' | TODAY DONE' : ' | PLAY TODAY TO KEEP IT') : 'START A STREAK: PLAY ONE A DAY'}</p>
         <div class="ch-go"><a class="btn btn-gold btn-big" href="#/daily/play">${played ? "SEE TODAY'S RESULT" : done ? "FINISH TODAY'S AUCTION" : "PLAY TODAY'S AUCTION"}</a><a class="btn" href="#/daily/practice">PRACTICE ARCHIVE</a></div>
         ${signed ? '' : '<p class="muted rk-sub">No account needed. Sign in to put your score on the board.</p>'}
+        ${yest}
         <div class="rk-theme lock"><small>TOMORROW</small><b>???</b><span class="muted">Opens in ${left}</span></div>
-        <div class="ch-step-k">TODAY'S BOARD</div>` +
-        (rows && rows.length ? table(perf > 0 ? ['#', 'PLAYER', 'SCORE', 'OF PERFECT'] : ['#', 'PLAYER', 'SCORE'], rows.map((x, i) => [i + 1, nameCell(x, me), '<b>' + Number(x.score).toFixed(1) + '</b>'].concat(perf > 0 ? [pctOf(x.score)] : []))) : '<p class="muted">No scores yet today.</p>') +
-        '<div class="ch-go"><a class="btn" href="#/ranked">RANKED</a></div>';
+        ${statLine}
+        <div class="rk-bt" id="dyTabs"><button type="button" class="btn btn-small btn-gold" data-bt="today">TODAY</button><button type="button" class="btn btn-small" data-bt="friends">FRIENDS</button><button type="button" class="btn btn-small" data-bt="week">THIS WEEK</button></div>
+        <div id="dyBoard"></div>
+        <div class="ch-go"><a class="btn" href="#/ranked">RANKED</a></div>`;
+      const board = UI.$('#dyBoard', app), msg = t => '<p class="muted">' + t + '</p>';
+      const todayTbl = list => list && list.length ? table(perf > 0 ? ['#', 'PLAYER', 'SCORE', 'OF PERFECT'] : ['#', 'PLAYER', 'SCORE'], list.map((x, i) => [i + 1, nameCell(x, me), '<b>' + Number(x.score).toFixed(1) + '</b>'].concat(perf > 0 ? [pctOf(x.score)] : []))) : '';
+      const show = async kind => {
+        app.querySelectorAll('#dyTabs [data-bt]').forEach(b => b.classList.toggle('btn-gold', b.dataset.bt === kind));
+        if (kind === 'today') { board.innerHTML = todayTbl(rows) || msg('No scores yet today.'); return; }
+        if (kind === 'friends') {
+          if (!signed) { board.innerHTML = msg('Sign in to see how your friends did.'); return; }
+          board.innerHTML = msg('Loading...');
+          let fr = null; try { fr = ((await UI.profile.rpc('my_friends')) || []).map(x => x.username); } catch (e) { fr = null; }
+          if (!fr) { board.innerHTML = msg('Friends boards arrive with the latest SQL.'); return; }
+          const set = new Set(fr.concat(me || [])), list = (rows || []).filter(r => set.has(r.username));
+          board.innerHTML = todayTbl(list) || msg(fr.length ? 'None of your friends have played today.' : 'No friends yet. Add some from their profiles.');
+          return;
+        }
+        board.innerHTML = msg('Loading...');
+        let wk = null; try { wk = (await UI.profile.rpc('lb_daily_week', { p_limit: 50 })) || []; } catch (e) { wk = null; }
+        board.innerHTML = !wk ? msg('The weekly board arrives with the latest SQL.') : wk.length ? table(['#', 'PLAYER', 'DAYS', 'AVERAGE', 'TOTAL'], wk.map((x, i) => [i + 1, nameCell(x, me), x.days, x.avg_pct + '%', '<b>' + x.total + '</b>'])) + '<p class="muted rk-sub">Monday to Sunday, Pacific. Percentages added up.</p>' : msg('No scores this week yet.');
+      };
+      app.querySelectorAll('#dyTabs [data-bt]').forEach(b => b.addEventListener('click', () => show(b.dataset.bt)));
+      show('today');
     } catch (e) { body.innerHTML = '<p class="rk-err">' + esc(failMsg(e)) + '</p>'; }
   }
   P.daily = function (app, arg) {

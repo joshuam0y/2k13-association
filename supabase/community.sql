@@ -204,6 +204,51 @@ grant execute on function public.lobby_down(text) to authenticated;
 grant execute on function public.lobby_list() to authenticated, anon;
 grant execute on function public.lb_ratings(text, text, int) to authenticated, anon;
 grant execute on function public.lb_daily(date, text, text, int) to authenticated, anon;
+
+-- the daily in numbers: how many played, the average, the winner and (for you) where you finished
+create or replace function public.daily_stats(p_day date) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); n int; avgp numeric; avgs numeric; bestp numeric; mine numeric; rk int; below int; wn text; ws numeric; wp numeric;
+begin
+  select count(*), round(avg(pct), 1), round(avg(score), 1), max(pct) into n, avgp, avgs, bestp from public.daily_scores where day = p_day and era = 'ALL';
+  select score into mine from public.daily_scores where day = p_day and era = 'ALL' and user_id = me;
+  if mine is not null then
+    select count(*) + 1 into rk from public.daily_scores where day = p_day and era = 'ALL' and score > mine;
+    select count(*) into below from public.daily_scores where day = p_day and era = 'ALL' and score < mine;
+  end if;
+  select p.username, d.score, d.pct into wn, ws, wp from public.daily_scores d join public.profiles p on p.id = d.user_id
+    where d.day = p_day and d.era = 'ALL' order by d.score desc, d.created_at asc limit 1;
+  return jsonb_build_object('played', n, 'avg_pct', avgp, 'avg_score', avgs, 'best_pct', bestp, 'rank', rk, 'below', below, 'winner', wn, 'winner_score', ws, 'winner_pct', wp);
+end $$;
+grant execute on function public.daily_stats(date) to authenticated, anon;
+
+-- a player's last 30 days of dailies (the squares on a profile)
+create or replace function public.daily_history(p_name text) returns table (day date, score numeric, pct numeric)
+language sql security definer set search_path = public as $$
+  select d.day, d.score, d.pct from public.daily_scores d join public.profiles p on p.id = d.user_id
+  where lower(p.username) = lower(p_name) and d.era = 'ALL' and d.day >= (now() at time zone 'America/Los_Angeles')::date - 29
+  order by d.day
+$$;
+grant execute on function public.daily_history(text) to authenticated, anon;
+
+-- this week (Monday to Sunday, Pacific): the dailies played and the percentages added up
+create or replace function public.lb_daily_week(p_limit int default 50) returns table (username text, region text, days int, avg_pct numeric, total numeric)
+language sql security definer set search_path = public as $$
+  select p.username, p.region, count(*)::int, round(avg(d.pct), 1), round(sum(d.pct), 1)
+  from public.daily_scores d join public.profiles p on p.id = d.user_id
+  where d.era = 'ALL' and d.pct is not null and d.day >= date_trunc('week', now() at time zone 'America/Los_Angeles')::date
+  group by p.username, p.region order by sum(d.pct) desc, count(*) asc, p.username limit least(greatest(p_limit, 1), 100)
+$$;
+grant execute on function public.lb_daily_week(int) to authenticated, anon;
+
+-- the usernames of your friends
+create or replace function public.my_friends() returns table (username text)
+language sql security definer set search_path = public as $$
+  select p.username from public.profiles p where p.id in (
+    select case when requester = auth.uid() then addressee else requester end from public.friendships
+    where status = 'accepted' and (requester = auth.uid() or addressee = auth.uid()))
+$$;
+grant execute on function public.my_friends() to authenticated;
 revoke execute on function public.finalize_series(text) from public, anon, authenticated;
 
 -- ---------- a ranked series that one player walks away from ----------
