@@ -768,7 +768,8 @@
       <div class="lb-ready"><button type="button" class="btn btn-gold btn-big" data-ready="${i0}">${rdy[i0] ? 'READY: TAP TO CANCEL' : 'I AM READY'}</button>
         <span class="muted">${esc(b)}: <b>${rdy[1 - i0] ? 'READY' : 'NOT YET'}</b></span></div>
       <p class="muted lb-note">An auction with a hidden pool of ten mixed players, $20 each, $1 to open, raises of $1 or more, a 24 second shot clock on every bid, then a best-of-7 series. Take a minute: nothing starts until you both press ready. Leaving before the auction costs nothing; leaving after it starts is a forfeit.</p>
-      <button type="button" id="vsStart" hidden></button>`;
+      <button type="button" id="vsStart" hidden></button>${reactBar()}`;
+    bindReact(app);
     [[a, 1], [b, 0]].forEach(([n, mine]) => {
       if (LB.cards[n]) return;
       UI.ranked.lobbyCard(n, era, mine).then(html => {

@@ -63,7 +63,7 @@
         <div class="mm-grid">
           ${UI.tile('#/challenge', 'draft', 'SEASON MODE', { cls: 'mt-hero mt-challenge mt-hot', disabled: !engineOk, sub: engineOk ? 'PICK FIVE, SIM A SEASON' : 'SIM ENGINE NOT LOADED' })}
           ${UI.tile('#/challenge/vs', 'draft', 'HEAD TO HEAD', { cls: 'mt-hero mt-versus mt-hot', disabled: !engineOk, sub: 'UNRANKED: A FRIEND, ONLINE OR ONE PHONE' })}
-          ${UI.tile('#/ranked', 'draft', 'RANKED', { cls: 'mt-hero mt-versus mt-ranked mt-hot', disabled: !engineOk, sub: 'FIND A MATCH, CLIMB THE LADDER' })}
+          ${UI.tile('#/ranked', 'draft', 'RANKED', { cls: 'mt-hero mt-versus mt-ranked mt-hot', disabled: !engineOk, sub: (() => { const k = UI.ranked && UI.ranked.streak ? UI.ranked.streak() : null; return k && k.n ? 'DAILY STREAK ' + k.n + (k.done ? ' | TODAY DONE' : ' | PLAY TODAY') : 'FIND A MATCH, CLIMB THE LADDER'; })() })}
           ${UI.tile('#/new', 'ball', 'THE ASSOCIATION', { cls: 'mt-assoc', disabled: !engineOk, sub: 'A FULL FRANCHISE' })}
           ${cont}
           ${UI.tile('#/challenge/tournament', 'draft', 'TOURNAMENT', { cls: 'mt-tn', disabled: !engineOk, sub: '4 OR 8 FRIENDS, ONE PHONE, ONE BRACKET' })}

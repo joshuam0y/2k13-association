@@ -29,6 +29,8 @@ create table if not exists public.series (
   era text not null, style text not null, ranked boolean not null, best_of int not null,
   created_at timestamptz not null default now()
 );
+alter table public.series add column if not exists d1 int;   -- rating change of p1 and p2 in this series (ranked only)
+alter table public.series add column if not exists d2 int;
 create table if not exists public.rivalries (
   a uuid not null, b uuid not null,        -- a < b
   a_wins int not null default 0, b_wins int not null default 0,
@@ -82,7 +84,7 @@ grant select on public.ratings to anon;
 create or replace function public.finalize_series(p_key text) returns void
 language plpgsql security definer set search_path = public as $$
 declare r1 public.series_reports; r2 public.series_reports; n int; ua uuid; ub uuid; aw int; bw int;
-        ra int; rb int; ea numeric; sa numeric; k int := 32;
+        ra int; rb int; na int; nb int; ea numeric; sa numeric; k int := 32;
 begin
   select * into r1 from public.series_reports where key = p_key order by id limit 1;
   select * into r2 from public.series_reports where key = p_key and reporter <> r1.reporter order by id limit 1;
@@ -107,8 +109,10 @@ begin
     select rating into rb from public.ratings where user_id = r2.reporter and era = r1.era;
     ea := 1 / (1 + power(10, (rb - ra) / 400.0));
     sa := case when r1.my_wins > r1.opp_wins then 1 else 0 end;
-    update public.ratings set rating = round(ra + k * (sa - ea)), games = games + 1, wins = wins + sa::int, losses = losses + (1 - sa)::int, updated_at = now() where user_id = r1.reporter and era = r1.era;
-    update public.ratings set rating = round(rb + k * ((1 - sa) - (1 - ea))), games = games + 1, wins = wins + (1 - sa)::int, losses = losses + sa::int, updated_at = now() where user_id = r2.reporter and era = r1.era;
+    na := round(ra + k * (sa - ea)); nb := round(rb + k * ((1 - sa) - (1 - ea)));
+    update public.ratings set rating = na, games = games + 1, wins = wins + sa::int, losses = losses + (1 - sa)::int, updated_at = now() where user_id = r1.reporter and era = r1.era;
+    update public.ratings set rating = nb, games = games + 1, wins = wins + (1 - sa)::int, losses = losses + sa::int, updated_at = now() where user_id = r2.reporter and era = r1.era;
+    update public.series set d1 = na - ra, d2 = nb - rb where key = p_key;
   end if;
   -- each player's best lineup so far
   update public.profiles p set best_score = r1.score, best_lineup = r1.lineup where p.id = r1.reporter and r1.score is not null and (p.best_score is null or r1.score > p.best_score);
@@ -343,3 +347,21 @@ language sql security definer set search_path = public as $$
     'casual', (select count(*) from public.lobbies where not ranked and updated_at > now() - interval '90 seconds'))
 $$;
 grant execute on function public.online_counts() to authenticated, anon;
+
+-- ---------- which of your friends are searching for a ranked match right now ----------
+create or replace function public.friends_searching() returns table (username text)
+language sql security definer set search_path = public as $$
+  select p.username from public.ranked_presence q join public.profiles p on p.id = q.uid
+  where q.key = 'queue' and q.seen_at > now() - interval '25 seconds' and q.uid <> auth.uid()
+    and exists (select 1 from public.friendships f where f.status = 'accepted'
+      and ((f.requester = auth.uid() and f.addressee = q.uid) or (f.addressee = auth.uid() and f.requester = q.uid)))
+$$;
+grant execute on function public.friends_searching() to authenticated;
+
+-- ---------- ending a season (run by hand when you decide to; nothing calls it) ----------
+-- select public.reset_season(0.5);  pulls every rating halfway back to 1200 and clears the win and loss counts.
+create or replace function public.reset_season(p_keep numeric default 0.5) returns void
+language sql security definer set search_path = public as $$
+  update public.ratings set rating = round(1200 + (rating - 1200) * p_keep), games = 0, wins = 0, losses = 0, updated_at = now()
+$$;
+revoke execute on function public.reset_season(numeric) from public, anon, authenticated;

@@ -51,6 +51,47 @@
   const tierBadge = r => { const t = tierOf(r); return `<span class="tier" style="--tc:${t.color}">${esc(t.name)}</span>`; };
   // a profile picture is a team logo the player picked, or the first letter of the name
   const avatarHtml = (abbr, name, size) => abbr ? `<span class="pf-av logo" style="--sz:${size}px">${UI.logo(abbr, size)}</span>` : `<span class="pf-av" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.5)}px">${esc(String(name || '?').slice(0, 1).toUpperCase())}</span>`;
+
+  // ---------- seasons: no end date yet (the game has not launched), so the ladder just keeps going. When a season ends, supabase/community.sql has reset_season() to pull ratings back toward 1200. ----------
+  const SEASON = { n: 1, name: 'SEASON 1', ends: null };
+  const seasonLine = () => SEASON.ends ? SEASON.name + ' ENDS ' + SEASON.ends : SEASON.name + ' | NO END DATE YET';
+
+  // ---------- share cards: a picture of a rank, a result or a daily score ----------
+  function cardCanvas(o) {
+    const c = document.createElement('canvas'); c.width = 1080; c.height = 1350;
+    const g = c.getContext('2d'), F = 'Oswald, Impact, "Arial Narrow", sans-serif', col = o.color || '#d4af37';
+    g.fillStyle = '#0a0a0a'; g.fillRect(0, 0, 1080, 1350);
+    const rg = g.createRadialGradient(540, 620, 40, 540, 620, 760); rg.addColorStop(0, col + '66'); rg.addColorStop(1, '#0a0a0a00'); g.fillStyle = rg; g.fillRect(0, 0, 1080, 1350);
+    g.strokeStyle = col; g.lineWidth = 6; g.strokeRect(40, 40, 1000, 1270);
+    g.textAlign = 'center';
+    g.fillStyle = '#d4af37'; g.font = '700 56px ' + F; g.fillText('STARTING FIVE', 540, 140);
+    g.fillStyle = '#9a9a9a'; g.font = '500 40px ' + F; g.fillText(o.k || '', 540, 240);
+    g.fillStyle = col; g.font = '700 118px ' + F; g.fillText(o.title || '', 540, 520);
+    g.fillStyle = '#ffffff'; g.font = '700 230px ' + F; g.fillText(o.big || '', 540, 810);
+    g.fillStyle = '#bdbdbd'; g.font = '500 48px ' + F; g.fillText(o.sub || '', 540, 905);
+    g.fillStyle = '#ffffff'; g.font = '700 64px ' + F; g.fillText(String(o.name || '').toUpperCase(), 540, 1070);
+    g.fillStyle = '#7a7a7a'; g.font = '500 36px ' + F; g.fillText(location.host + location.pathname.replace(/index\.html$/, ''), 540, 1250);
+    return c;
+  }
+  async function shareCard(o, text) {
+    const c = cardCanvas(o), blob = await new Promise(r => c.toBlob(r, 'image/png')), file = new File([blob], 'starting-five.png', { type: 'image/png' });
+    try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text, url: location.origin + location.pathname }); return 'shared'; } } catch (e) { if (e && e.name === 'AbortError') return 'cancelled'; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'starting-five.png'; document.body.appendChild(a); a.click(); a.remove();
+    try { if (navigator.clipboard) await navigator.clipboard.writeText(text + ' ' + location.origin + location.pathname); } catch (e) { /* no clipboard */ }
+    return 'saved';
+  }
+
+  // ---------- the daily streak (kept on this device) ----------
+  const STK = 'a13-rk-streak';
+  const dayBefore = d => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() - 1); return x.toISOString().slice(0, 10); };
+  const streakGet = () => { try { return JSON.parse(localStorage.getItem(STK) || '{}'); } catch (e) { return {}; } };
+  function streakBump(day) {
+    const s0 = streakGet(); if (s0.last === day) return s0;
+    const n = s0.last === dayBefore(day) ? (s0.n || 0) + 1 : 1, o = { last: day, n, best: Math.max(s0.best || 0, n) };
+    try { localStorage.setItem(STK, JSON.stringify(o)); } catch (e) { /* private mode */ }
+    return o;
+  }
+  function streakNow() { const s0 = streakGet(), d = today(), alive = s0.last === d || s0.last === dayBefore(d); return { n: alive ? (s0.n || 0) : 0, done: s0.last === d, best: s0.best || 0 }; }
   const regionName = r => { const x = REGIONS.find(y => y[0] === r); return x ? x[1].trim() : (r || ''); };
   const NOT_SET_UP = 'The ranked boards are not switched on yet. The site owner needs to run supabase/community.sql once in the Supabase SQL editor.';
   const failMsg = e => { const m = String((e && e.message) || e); return /does not exist|schema cache|Could not find|relation .* does not exist|PGRST20/i.test(m) ? NOT_SET_UP : m; };
@@ -140,8 +181,18 @@
           <div class="rk-elo-n"><span class="rk-elo-from">${b.rating}</span><span class="rk-elo-arrow">${won ? '&#9650;' : '&#9660;'}</span><b id="rkEloNow">${b.rating}</b></div>
           <div class="rk-elo-d">${d > 0 ? '+' : ''}${d}</div>
           <div class="rk-tier">${tierBadge(now.rating)}${ta.next ? `<div class="rk-bar"><i style="--w:${ta.pct}%"></i></div><small class="muted">${ta.next.floor - now.rating} POINTS TO ${esc(ta.next.name)}</small>` : '<small class="muted">THE TOP RANK</small>'}</div>
-          ${ta.idx !== tb.idx ? `<div class="rk-promo ${ta.idx > tb.idx ? 'up' : 'down'}">${ta.idx > tb.idx ? 'PROMOTED TO ' : 'DROPPED TO '}${esc(ta.name)}</div>` : ''}
+          ${ta.idx !== tb.idx ? `<div class="rk-promo ${ta.idx > tb.idx ? 'up' : 'down'}">${ta.idx > tb.idx ? 'RANK UNLOCKED: ' : 'DROPPED TO '}${esc(ta.name)}</div>` : ''}
+          <button type="button" class="btn btn-small${ta.idx > tb.idx ? ' btn-gold' : ''}" id="rkShare">${ta.idx > tb.idx ? 'SHARE YOUR NEW RANK' : 'SHARE THIS RESULT'}</button>
           <div class="rk-elo-meta"><span>${now.wins}-${now.losses} ranked this era</span>${rk ? `<span>${rk}</span>` : ''}${b.rank && now.rank !== b.rank ? `<span>${now.rank < b.rank ? 'UP' : 'DOWN'} ${Math.abs(b.rank - now.rank)} PLACE${Math.abs(b.rank - now.rank) > 1 ? 'S' : ''}</span>` : ''}</div></section>${acts}`;
+      const shareBtn = UI.$('#rkShare', app);
+      if (shareBtn) shareBtn.addEventListener('click', async () => {
+        const up = ta.idx > tb.idx, me0 = UI.profile.account() || '';
+        const o = up ? { k: 'RANK UNLOCKED', title: ta.name, color: ta.color, big: String(now.rating), sub: 'RATING | ' + eraName(last.era).toUpperCase(), name: me0 }
+          : { k: (won ? 'RANKED WIN' : 'RANKED RESULT') + ' | VS ' + String(last.opp || '').toUpperCase(), title: ta.name, color: ta.color, big: (d > 0 ? '+' : '') + d, sub: 'NOW ' + now.rating + ' RATING', name: me0 };
+        shareBtn.disabled = true;
+        const r = await shareCard(o, up ? 'I just reached ' + ta.name + ' in Starting Five.' : 'My Starting Five ranked result: ' + (d > 0 ? '+' : '') + d + ' rating.');
+        shareBtn.disabled = false; if (r === 'saved') UI.toast('Saved the picture. The link is copied.');
+      });
       const el = UI.$('#rkEloNow', app), t0 = Date.now(), from = b.rating, to = now.rating;
       const step = () => { if (!el.isConnected) return; const k = Math.min(1, (Date.now() - t0) / 1400); el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(step); };
       requestAnimationFrame(step);
@@ -245,7 +296,7 @@
   };
 
   UI.userLink = (name, tab) => `<a class="u-link" href="#/u/${encodeURIComponent(name)}"${tab ? ' target="_blank" rel="noopener"' : ''}>${esc(name)}</a>`;   // a name you can click to see that player's profile
-  UI.ranked = { tierOf, tierBadge, avatarHtml, eraOf, lineupScore, report, started, forfeit, concede, noteForfeit, playedBefore, lobbyCard, prefetch, lobbyStart, lobbyStop, ERAS, eraName, regionName, REGIONS };
+  UI.ranked = { streak: streakNow, tierOf, tierBadge, avatarHtml, eraOf, lineupScore, report, started, forfeit, concede, noteForfeit, playedBefore, lobbyCard, prefetch, lobbyStart, lobbyStop, ERAS, eraName, regionName, REGIONS };
 
   // ---------- helpers for the pages ----------
   const eraOpts = cur => ERAS.map(e => `<option value="${e}"${e === cur ? ' selected' : ''}>${esc(eraName(e))}</option>`).join('');
@@ -268,13 +319,14 @@
     stopRefresh();
     if (RK.tab === 'games') RK.tab = 'ladder';   // casual rooms live in Head to Head now
     const signed = UI.profile.signedIn();
-    app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">RANKED</div><h1 class="ch-hero-t">THE BOARDS.</h1>
+    app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">RANKED | ${esc(seasonLine())}</div><h1 class="ch-hero-t">THE BOARDS.</h1>
         <p class="ch-hero-p">Every era has its own ladder. Win ranked Head to Head auctions to climb it, or play today's daily auction (the same pool for everyone) and see where your lineup lands.</p></section>
-      ${signed ? '' : signInBox('PLAY RANKED')}
+      ${signed ? '<section class="rk-mine" id="rkMine"></section>' : signInBox('PLAY RANKED')}
       <div class="rk-ctl"><label class="field"><span>ERA</span><select id="rkEra">${eraOpts(RK.era)}</select></label>
         <div class="ch-chips rk-scope"><button type="button" class="ch-chip${!RK.mine ? ' on' : ''}" data-scope="0">GLOBAL</button><button type="button" class="ch-chip${RK.mine ? ' on' : ''}" data-scope="1">MY REGION</button></div></div>
       <section class="rk-how"><div class="rk-how-t"><b>PLAY A RANKED MATCH</b><span class="muted">No code, no friend needed. You are paired with whoever is online and searching, the closest rating first. All-time pool.</span><span class="rk-cnt" id="rkCnt"></span></div>
         <div class="rk-find"><button type="button" class="btn btn-gold btn-big" id="rkFind"${signed ? '' : ' disabled'}>FIND A MATCH</button></div>
+        <div class="rk-notify" id="rkNotify"></div>
         <details class="rk-det"><summary>HOW RANKED WORKS</summary><ol>
           <li>You and one other signed-in player bid on a hidden pool of ten players from that era, a mix of stars and role players. It is a blind draft: no ratings until the series is over. You each get $20, bidding opens at $1 and goes up by $1 or more. Whoever passes lets the other have the player. Each of you ends with five, and every pick has a 24 second shot clock.</li>
           <li>Your five play a best-of-7 series, all five on the floor for 48 minutes. No duplicates: a player is gone once taken.</li>
@@ -282,7 +334,7 @@
           <li>The result only counts when both phones report the same score, so nobody can fake a win.</li>
           <li>Want to play a friend instead? Use Head to Head: it is casual and never touches the ladder.</li></ol></details></section>
       <details class="rk-det rk-ranks"><summary>THE RANKS</summary>
-        <p class="muted">Everyone starts at 1200, which is the bottom of Silver. Win and you climb; lose enough and you drop into Bronze. Each rank up to Diamond has three divisions (III is the lowest, I the highest).</p>
+        <p class="muted">Everyone starts at 1200, which is the bottom of Silver. Win and you climb; lose enough and you drop into Bronze. Each rank up to Diamond has three divisions (III is the lowest, I the highest). ${esc(seasonLine())}: when a season ends, ratings are pulled back toward 1200 and a new one starts.</p>
         <div class="rk-rk">${TIERS.map((t, i) => `<span class="rk-rk-i"><span class="tier" style="--tc:${t.color}">${esc(t.name)}</span><small>${t.floor ? t.floor + (TIERS[i + 1] ? ' TO ' + (TIERS[i + 1].floor - 1) : ' AND UP') : 'UNDER ' + TIERS[i + 1].floor}</small></span>`).join('')}</div></details>
       <div class="ch-chips rk-tabs"><button type="button" class="ch-chip${RK.tab === 'ladder' ? ' on' : ''}" data-tab="ladder">LADDER</button><button type="button" class="ch-chip${RK.tab === 'daily' ? ' on' : ''}" data-tab="daily">DAILY AUCTION</button></div>
       <div id="rkBody" class="rk-body"><p class="muted">Loading...</p></div>
@@ -299,6 +351,25 @@
       try { const d = await UI.profile.rpc('online_counts'); el.textContent = d ? 'ONLINE NOW: ' + d.searching + ' SEARCHING FOR RANKED | ' + d.ranked + ' IN RANKED GAMES | ' + d.casual + ' CASUAL ROOMS OPEN' : ''; } catch (e) { /* the SQL is not run yet */ }
     };
     counts(); CNT = setInterval(counts, 10000);
+    const nt = UI.$('#rkNotify', app);
+    if (nt && 'Notification' in window) {
+      const paintN = () => {
+        const on = UI.ranked.notify.enabled();
+        nt.innerHTML = `<button type="button" class="btn btn-small${on ? ' btn-gold' : ''}" id="rkNote">${on ? 'NOTIFICATIONS ON' : 'NOTIFY ME WHEN SOMEONE IS SEARCHING'}</button>`;
+        UI.$('#rkNote', nt).addEventListener('click', async () => {
+          if (UI.ranked.notify.enabled()) UI.ranked.notify.disable(); else { const r = await UI.ranked.notify.enable(); if (r !== 'granted') UI.toast('Allow notifications in your browser to turn this on.', 'error'); }
+          paintN();
+        });
+      };
+      paintN();
+    }
+    const mine = UI.$('#rkMine', app);
+    if (mine) ratingNow('ALL').then(r => {   // your rank, how far to the next one, and your streak
+      const t = tierOf(r.rating), sk = streakNow();
+      mine.innerHTML = `<div class="rk-mine-t">${tierBadge(r.rating)}<b>${r.rating}</b><small>${r.games ? r.wins + '-' + r.losses + ' RANKED' : 'NO RANKED GAMES YET'}${r.of ? ' | #' + r.rank + ' OF ' + r.of : ''}</small></div>
+        ${t.next ? `<div class="rk-bar wide"><i style="--w:${t.pct}%"></i></div><small class="muted">${t.next.floor - r.rating} POINTS TO ${esc(t.next.name)}</small>` : '<small class="muted">THE TOP RANK</small>'}
+        <small class="muted rk-mine-s">DAILY STREAK ${sk.n}${sk.done ? ' | TODAY DONE' : ' | TODAY NOT PLAYED'}</small>`;
+    }).catch(() => { mine.remove(); });
   }
   const wl = (w, l) => w + '-' + l;
   async function fill(app) {
@@ -322,6 +393,7 @@
         const me = UI.profile.account(), done = ls.get('a13-rk-d-' + day + '-' + RK.era, null);
         const played = done && done.fin;
         body.innerHTML = `<p class="muted rk-sub">${esc(day)} (UTC) | ${esc(eraName(RK.era))} | ten hidden players, $20 each, you against the house. Your score is your lineup rating.</p>
+          <p class="rk-streak">${streakNow().n ? '<b>' + streakNow().n + '</b> DAY DAILY STREAK' + (streakNow().done ? ' | TODAY DONE' : ' | PLAY TODAY TO KEEP IT') : 'START A DAILY STREAK: PLAY ONE A DAY'}</p>
           <div class="ch-go">${UI.profile.signedIn() ? `<a class="btn btn-gold btn-big" href="#/ranked/daily/${esc(RK.era)}">${played ? 'SEE TODAY\'S RESULT' : done ? 'FINISH TODAY\'S AUCTION' : 'PLAY TODAY\'S AUCTION'}</a>` : ''}</div>` +
           (rows.length ? table(perf > 0 ? ['#', 'PLAYER', 'SCORE', 'OF PERFECT'] : ['#', 'PLAYER', 'SCORE'], rows.map((r, i) => [i + 1, nameCell(r, me), '<b>' + Number(r.score).toFixed(1) + '</b>'].concat(perf > 0 ? [pctOf(r.score)] : []))) : '<p class="muted">No scores yet today' + esc(scope) + '.</p>');
       }
@@ -407,14 +479,18 @@
       const perfectScore = dailyPerfect(era, day);
       const pct = score != null && perfectScore > 0 ? Math.min(100, 100 * score / perfectScore) : null;
       app.innerHTML = `${hdr}<div class="vs-sides vs-compact">${sideBox(0, 'YOU')}${sideBox(1, 'THE HOUSE')}</div>
-        <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${score == null ? '-' : score.toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div>`}<span class="muted">The house scored ${hs == null ? '-' : hs.toFixed(1)}. ${score != null && hs != null ? (score > hs ? 'You beat the house.' : score < hs ? 'The house won this one.' : 'A tie.') : ''}</span></section>
+        <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${score == null ? '-' : score.toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div>`}<div class="rk-streak" id="rkStreak"></div><span class="muted">The house scored ${hs == null ? '-' : hs.toFixed(1)}. ${score != null && hs != null ? (score > hs ? 'You beat the house.' : score < hs ? 'The house won this one.' : 'A tie.') : ''}</span></section>
         <div id="rkSub" class="rkn"><span class="muted">Sending your score...</span></div>
-        <div class="ch-go"><a class="btn btn-gold" href="#/ranked">SEE THE BOARD</a></div>`;
+        <div class="ch-go"><a class="btn btn-gold" href="#/ranked">SEE THE BOARD</a>${pct == null ? '' : '<button type="button" class="btn" id="dlShare">SHARE YOUR SCORE</button>'}</div>`;
+      const dsh = UI.$('#dlShare', app);
+      if (dsh) dsh.addEventListener('click', async () => { dsh.disabled = true; const r = await shareCard({ k: 'DAILY AUCTION | ' + day, title: 'OF A PERFECT FIVE', color: '#d4af37', big: pct.toFixed(1) + '%', sub: 'LINEUP SCORE ' + score.toFixed(1) + ' | ' + eraName(era).toUpperCase(), name: UI.profile.account() || '' }, 'My Starting Five daily auction: ' + pct.toFixed(1) + '% of a perfect five.'); dsh.disabled = false; if (r === 'saved') UI.toast('Saved the picture. The link is copied.'); });
+      const paintStreak = () => { const sk = UI.$('#rkStreak', app), n = streakNow(); if (sk && n.n) sk.innerHTML = '<b>' + n.n + '</b> DAY DAILY STREAK' + (n.best > n.n ? ' | BEST ' + n.best : ''); };
+      paintStreak();
       const sub = UI.$('#rkSub', app);
       const cur = ls.get(key, {});
       if (cur.sent) { sub.innerHTML = `<b>SCORE SENT.</b> <span class="muted">One try a day for each era.</span>`; return; }
       UI.profile.rpc('submit_daily', { p_day: day, p_era: era, p_score: score, p_lineup: { names: five.map(p => p.name), seasons: five.map(p => p.season || null), score, era } })
-        .then(ok => { ls.set(key, Object.assign(cur, { st, fin: true, sent: true, score })); sub.innerHTML = ok ? '<b>SCORE SENT.</b> <span class="muted">You are on today\'s board.</span>' : '<b>ALREADY ON THE BOARD.</b> <span class="muted">One score a day for each era.</span>'; })
+        .then(ok => { streakBump(day); paintStreak(); ls.set(key, Object.assign(cur, { st, fin: true, sent: true, score })); sub.innerHTML = ok ? '<b>SCORE SENT.</b> <span class="muted">You are on today\'s board.</span>' : '<b>ALREADY ON THE BOARD.</b> <span class="muted">One score a day for each era.</span>'; })
         .catch(e => { sub.innerHTML = '<span class="rk-err">' + esc(failMsg(e)) + '</span>'; });
       return;
     }
@@ -480,10 +556,11 @@
       const c = await UI.profile.client(), id = UI.profile.userId();
       if (!c || !id) throw new Error('Could not reach the account service.');
       const row = await myRow();
-      const ser = await c.from('series').select('p1,p2,w1,w2,era,style,ranked,created_at').order('created_at', { ascending: false }).limit(300);
+      let ser = await c.from('series').select('key,p1,p2,w1,w2,d1,d2,era,style,ranked,created_at').order('created_at', { ascending: false }).limit(300);
+      if (ser.error) ser = await c.from('series').select('p1,p2,w1,w2,era,style,ranked,created_at').order('created_at', { ascending: false }).limit(300);   // before the rating change columns exist
       const rat = await c.from('ratings').select('era,rating,games,wins,losses').eq('user_id', id);
       const riv = await c.from('rivalries').select('a,b,a_wins,b_wins,last_at');
-      const rep = await c.from('series_reports').select('lineup').order('created_at', { ascending: false }).limit(500);   // your own reports: the lineups you drafted
+      const rep = await c.from('series_reports').select('key,lineup').order('created_at', { ascending: false }).limit(500);   // your own reports: the lineups you drafted
       const missing = [ser, rat, riv].find(x => x.error);
       if (missing) throw missing.error;
       const games = (ser.data || []).map(s => ({ won: (s.p1 === id ? s.w1 > s.w2 : s.w2 > s.w1), era: s.era, at: s.created_at, ranked: s.ranked }));
@@ -492,7 +569,7 @@
       const count = {}; games.forEach(g => { count[g.era] = (count[g.era] || 0) + 1; });
       const auto = Object.keys(count).sort((a, b) => count[b] - count[a])[0] || null;
       const fav = row.fav_era || auto;
-      const oppIds = (riv.data || []).map(r => (r.a === id ? r.b : r.a));
+      const oppIds = [...new Set((riv.data || []).map(r => (r.a === id ? r.b : r.a)).concat((ser.data || []).map(x => (x.p1 === id ? x.p2 : x.p1))))];
       const names = {};
       if (oppIds.length) { const p = await c.from('profiles').select('id,username').in('id', oppIds); (p.data || []).forEach(x => { names[x.id] = x.username; }); }
       const rivals = (riv.data || []).map(r => ({ name: names[r.a === id ? r.b : r.a] || '?', me: r.a === id ? r.a_wins : r.b_wins, them: r.a === id ? r.b_wins : r.a_wins, at: r.last_at })).sort((x, y) => (y.me + y.them) - (x.me + x.them));
@@ -515,6 +592,11 @@
           <div class="ch-go"><button type="button" class="btn btn-gold" id="meSave">SAVE</button><span class="pf-msg" id="meMsg"></span></div></div>
         ${most.length ? `<div class="ch-step"><div class="ch-step-k">MOST DRAFTED</div>${table(['PLAYER', 'SEASON', 'TIMES'], most.map(m => [esc(m.n), esc(yr(m.se) || 'ANY'), '<b>' + m.c + '</b>']), true)}</div>` : ''}
         ${rat.data && rat.data.length ? `<div class="ch-step"><div class="ch-step-k">YOUR LADDER RATINGS</div>${table(['ERA', 'RATING', 'W-L'], rat.data.slice().sort((x, y) => y.rating - x.rating).map(r => [esc(eraName(r.era)), '<b>' + r.rating + '</b> ' + tierBadge(r.rating), wl(r.wins, r.losses)]), true)}</div>` : ''}
+        ${(ser.data || []).length ? `<div class="ch-step"><div class="ch-step-k">MATCH HISTORY</div><div class="hist-l">${(ser.data || []).slice(0, 15).map(x => {
+          const mine = x.p1 === id, mw = mine ? x.w1 : x.w2, tw = mine ? x.w2 : x.w1, won = mw > tw, dd = mine ? x.d1 : x.d2, who = names[mine ? x.p2 : x.p1] || '?';
+          const lu = ((rep.data || []).find(r => r.key && r.key === x.key) || {}).lineup;
+          return `<details class="hist"><summary><span class="hist-r ${won ? 'w' : 'l'}">${won ? 'W' : 'L'}</span><b>${mw}-${tw}</b><span class="hist-v">${UI.userLink(who)}</span>${x.ranked ? '<span class="rk-tag">RANKED</span>' : '<span class="rk-tag dim">CASUAL</span>'}${dd != null ? `<span class="hist-d ${dd >= 0 ? 'w' : 'l'}">${dd > 0 ? '+' : ''}${dd}</span>` : ''}<small>${esc(String(x.created_at || '').slice(0, 10))}</small></summary>${lu && Array.isArray(lu.names) ? `<p class="muted">${esc(lu.names.join(', '))}</p>` : '<p class="muted">No lineup saved for this one.</p>'}</details>`;
+        }).join('')}</div></div>` : ''}
         <div class="ch-step"><div class="ch-step-k">RIVALRIES</div>${rivals.length ? table(['VS', 'RECORD', ''], rivals.map(r => [UI.userLink(r.name), '<b>' + r.me + '-' + r.them + '</b>', r.me > r.them ? 'YOU LEAD' : r.me < r.them ? 'THEY LEAD' : 'TIED']), true) : '<p class="muted">Your rivalries show up here: one record for each friend you play, and one series counts for each draft.</p>'}</div>
         <div class="ch-go"><a class="btn btn-gold" href="#/ranked">RANKED</a><a class="btn" href="#/challenge/vs">HEAD TO HEAD</a></div>`;
       const setAv = async v => {
@@ -555,7 +637,7 @@
     const paint = () => {   // how long you have been looking, how many others are, and how long it usually takes
       const el = UI.$('#fgInfo', app); if (!el || FIND !== F) return;
       const w = waits(), avg = w.length ? Math.round(w.reduce((a, b) => a + b, 0) / w.length / 1000) : 0;
-      el.innerHTML = 'WAITING <b>' + mmss(Date.now() - F.start) + '</b>' + (F.others == null ? '' : ' | <b>' + F.others + '</b> OTHER' + (F.others === 1 ? '' : 'S') + ' SEARCHING NOW') + (avg ? ' | USUALLY ABOUT <b>' + (avg < 60 ? avg + ' SEC' : Math.round(avg / 60) + ' MIN') + '</b>' : ' | NO ESTIMATE YET');
+      el.innerHTML = 'WAITING <b>' + mmss(Date.now() - F.start) + '</b>' + (F.others == null ? '' : ' | <b>' + F.others + '</b> OTHER' + (F.others === 1 ? '' : 'S') + ' SEARCHING NOW') + (F.win == null ? '' : F.win === Infinity ? ' | <b>ANY RATING</b>' : ' | WITHIN <b>' + F.win + '</b> RATING POINTS') + (avg ? ' | USUALLY ABOUT <b>' + (avg < 60 ? avg + ' SEC' : Math.round(avg / 60) + ' MIN') + '</b>' : ' | NO ESTIMATE YET');
     };
     F.t2 = setInterval(paint, 1000); paint();
     const say = (t, p) => { const a = UI.$('#fgT', app), b = UI.$('#fgP', app); if (a) a.textContent = t; if (b && p) b.textContent = p; };
@@ -577,7 +659,10 @@
         if (!cand.length) all.forEach(r => cand.push(r));   // nobody new is searching: you both searched, so a rematch is fine
         if (F.rating == null) { try { F.rating = (await ratingNow(era)).rating; } catch (e) { F.rating = 1200; } }
         all.slice(0, 4).forEach(r => prefetch(r.host_name));   // their cards are ready before the match
+        const waited = Date.now() - F.start, win = waited > 60000 ? Infinity : 150 + 100 * Math.floor(waited / 10000);   // starts within 150 rating points and widens every ten seconds; after a minute anyone will do
+        F.win = win;
         cand.sort((a, b) => Math.abs((a.rating || 1200) - F.rating) - Math.abs((b.rating || 1200) - F.rating));   // whoever is online, the closest rating first
+        for (let i = cand.length - 1; i >= 0; i--) if (Math.abs((cand[i].rating || 1200) - F.rating) > win) cand.splice(i, 1);   // outside the window for now
         if (!st.role) {
           if (cand[0]) { UI.vsQuick.join(cand[0].code, era); F.joinedAt = Date.now(); say('OPPONENT FOUND.', 'Connecting to ' + cand[0].host_name + '...'); }
           else { UI.vsQuick.host(era); say('WAITING FOR AN OPPONENT.', 'You are listed for a ranked ' + eraName(era) + ' match. This screen pairs you the moment someone else looks.'); }
@@ -645,6 +730,29 @@
     el.innerHTML = '<span>' + (i.lobby ? 'RANKED MATCH FOUND. GET BACK IN <b>' : 'RANKED GAME IN PROGRESS. GET BACK IN <b>') + Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0') + (i.lobby ? '</b> OR YOU LOSE YOUR SPOT.</span>' : '</b> OR YOU FORFEIT.</span>') + '<button type="button" class="btn btn-small btn-gold" id="rkRejoinBtn">REJOIN NOW</button>';
     const b = el.querySelector('#rkRejoinBtn'); if (b) b.addEventListener('click', () => { UI.vsQuick.rejoin(); el.remove(); });
   }, 1000);
+
+  // ---------- nudges: a friend or other players searching for a ranked match ----------
+  const NOTE = 'a13-rk-notify';
+  UI.ranked.notify = {
+    enabled() { try { return localStorage.getItem(NOTE) === '1' && 'Notification' in window && Notification.permission === 'granted'; } catch (e) { return false; } },
+    async enable() { if (!('Notification' in window)) return 'unsupported'; const p = await Notification.requestPermission(); try { localStorage.setItem(NOTE, p === 'granted' ? '1' : '0'); } catch (e) { /* private mode */ } return p; },
+    disable() { try { localStorage.setItem(NOTE, '0'); } catch (e) { /* private mode */ } }
+  };
+  let LASTNUDGE = { key: '', at: 0 };
+  setInterval(async () => {
+    if (!UI.profile.signedIn() || FIND) return;
+    if (document.hidden && !UI.ranked.notify.enabled()) return;
+    let fr = [], d = null;
+    try { fr = (await UI.profile.rpc('friends_searching')) || []; d = await UI.profile.rpc('online_counts'); } catch (e) { return; }
+    const names = fr.map(x => x.username), others = d ? (d.searching || 0) : 0;
+    const key = names.length ? 'f:' + names.join(',') : others ? 'o' : '';
+    if (!key || (LASTNUDGE.key === key && Date.now() - LASTNUDGE.at < 10 * 60000)) return;
+    LASTNUDGE = { key, at: Date.now() };
+    const msg = names.length ? names.join(', ') + (names.length > 1 ? ' are' : ' is') + ' searching for a ranked match.' : others + (others > 1 ? ' players are' : ' player is') + ' searching for a ranked match.';
+    if (document.hidden && UI.ranked.notify.enabled()) {
+      try { const n = new Notification('Starting Five', { body: msg + ' Tap to join.' }); n.onclick = () => { window.focus(); location.hash = '#/ranked/find/ALL'; n.close(); }; } catch (e) { /* the browser refused */ }
+    } else if (!document.hidden && names.length) UI.toast(msg + ' Open Ranked to join.');
+  }, 20000);
   P.u = function (app, arg) { return userPage(app, decodeURIComponent(String(arg || '').split('/')[0])); };
 
   P.ranked = function (app, arg) {
