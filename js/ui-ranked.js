@@ -714,7 +714,7 @@
     stopClock();
     CLOCK = setInterval(() => {
       const el = UI.$('#vsTimer', app);
-      if (!el || !/^#\/ranked\/daily/.test(location.hash)) { stopClock(); return; }
+      if (!el || !/^#\/daily/.test(location.hash)) { stopClock(); return; }
       const lf = st.until - Date.now();
       el.querySelector('span').textContent = Math.max(0, Math.ceil(lf / 1000));
       el.querySelector('i').style.setProperty('--w', Math.max(0, Math.min(100, 100 * lf / (DAILY_CLOCK * 1000))) + '%');
@@ -1103,5 +1103,5 @@
     return rankedPage(app);
   };
   P.me = function (app) { return mePage(app); };
-  window.addEventListener('hashchange', () => { if (!/^#\/ranked/.test(location.hash)) { stopRefresh(); stopFind(); } });
+  window.addEventListener('hashchange', () => { if (!/^#\/(ranked|daily)/.test(location.hash)) { stopRefresh(); stopFind(); } });
 })();
