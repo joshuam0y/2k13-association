@@ -70,7 +70,7 @@
       tx: 'The NBA expands to 30 teams: the Charlotte Bobcats join for 2004-05.'
     }
   };
-  var PROTECT = 8, ROSTER = 14, CAP_PICK = 5;
+  var PROTECTN = 8, ROSTERN = 14, PROTECT = PROTECTN, ROSTER = ROSTERN, CAP_PICK = 5;
   var OFFSEASON_AFTER_DRAFT = { resign: 1, freeAgency: 1, training: 1 };
 
   function isExpanded(state) { return !!(state && state.teams && TEAMS.every(function (t) { return state.teams[t.abbr]; })); }
@@ -120,8 +120,10 @@
     return t;
   }
 
-  function expansionDraft(state, Y, rng, NEW) {
-    NEW = NEW || TEAMS;
+  // opt (the old leagues, js/expansion.js applyMoves): protect, roster (players each new team takes) and perTeam (most a team can lose)
+  function expansionDraft(state, Y, rng, NEW, opt) {
+    NEW = NEW || TEAMS; opt = opt || {};
+    var PROTECT = opt.protect || PROTECTN, ROSTER = opt.roster || ROSTERN, PER = opt.perTeam || 1;
     var news = [], picks = [], byTeam = {}, protectedBy = {};
     Object.keys(state.teams).forEach(function (a) { if (NEW.every(function (t) { return t.abbr !== a; })) byTeam[a] = []; });
     var owner = {};
@@ -139,7 +141,7 @@
     if (order.length === 2 && rng() < 0.5) order.reverse();
     for (var round = 0; round < ROSTER; round++) {
       order.forEach(function (abbr) {
-        var cand = pool.filter(function (p) { return !lost[owner[p.id]]; });
+        var cand = pool.filter(function (p) { return (lost[owner[p.id]] || 0) < PER; });
         if (!cand.length) return;
         // a little need: no more than five of one position group
         var have = picks.filter(function (x) { return x.to === abbr; }).map(function (x) { return x.p; });
@@ -150,7 +152,7 @@
           return (value(y, Y) - ny) - (value(x, Y) - nx);
         });
         var p = cand[0], from = owner[p.id];
-        lost[from] = true;
+        lost[from] = (lost[from] || 0) + 1;
         pool.splice(pool.indexOf(p), 1);
         if (state.teams[from] && Array.isArray(state.teams[from].rotation)) state.teams[from].rotation = state.teams[from].rotation.filter(function (id) { return id !== p.id; });
         if (p.team === 'FA') {
@@ -171,7 +173,7 @@
     news.forEach(function (p) {
       var to = picks.filter(function (x) { return x.p === p; })[0].to;
       addNews(state, fullName(state, to) + ' take ' + p.name + ' in the expansion draft',
-        'Your front office protected eight players. ' + p.name + ' was left unprotected and ' + (p.team === 'FA' ? 'his free agent rights go to the ' : 'joins the ') + fullName(state, to) + '.', [p.id]);
+        'Your front office protected ' + PROTECT + ' players. ' + p.name + ' was left unprotected and ' + (p.team === 'FA' ? 'his free agent rights go to the ' : 'joins the ') + fullName(state, to) + '.', [p.id]);
       var FA = mod('FA');
       if (FA && FA.userLog) { try { FA.userLog(state, 'Lost ' + p.name + ' to the ' + fullName(state, to) + ' in the expansion draft', [p.id]); } catch (e) { /* log only */ } }
     });
@@ -203,6 +205,60 @@
     addNews(state, H.headline, H.body, []);
     addTx(state, H.tx, []);
     return picks;
+  }
+
+  // The real changes for season Y (data/historic-moves.js): teams that move or rename, realignment, teams that fold
+  // (their players become free agents) and teams that join (they build from an expansion draft). Runs in the summer
+  // before Y for an Association that opened earlier. Returns the number of changes, or 0.
+  function applyMoves(state, Y) {
+    var M = root && root.HISTORIC_MOVES && root.HISTORIC_MOVES[Y];
+    if (!M || !state || !state.teams) return 0;
+    state.historic = state.historic || {};
+    if (state.historic['m' + Y]) return 0;
+    state.historic['m' + Y] = Y;
+    var n = 0, label = (Y - 1) + '-' + String(Y).slice(2);
+    Object.keys(M.rename || {}).forEach(function (a) {
+      var t = state.teams[a], r = M.rename[a];
+      if (!t) return;
+      t.city = r.city; t.name = r.name; if (r.colors && r.colors.length) t.colors = r.colors.slice();
+      addTx(state, 'The ' + r.from + ' become the ' + (r.city + ' ' + r.name).trim() + '.', []); n++;
+    });
+    Object.keys(M.align || {}).forEach(function (a) { var t = state.teams[a]; if (t) { t.conf = M.align[a][0]; t.div = M.align[a][1]; } });
+    // folds: players to the free agents, picks gone, the coach out of work
+    (M.fold || []).forEach(function (a) {
+      var t = state.teams[a];
+      if (!t) return;
+      if (a === state.userTeam) { addNews(state, 'The league keeps your franchise alive', 'The ' + fullName(state, a) + ' were due to fold for ' + label + ', but stay in the league.', []); return; }
+      var name = fullName(state, a);
+      Object.keys(state.players).forEach(function (id) {
+        var p = state.players[id];
+        if (p.team !== a) return;
+        p.lastTeam = a; p.team = 'FA'; p.contract = { salaries: [], option: null, options: [], rookie: false, twoWay: false, signedYear: null }; p.yearsWithTeam = 0;
+        if (state.fa && state.fa.rights) delete state.fa.rights[id];
+        state.events = (state.events || []).filter(function (e) { return !(e && e.playerId === id); });
+      });
+      if (state.fa && state.fa.rights) Object.keys(state.fa.rights).forEach(function (id) { var x = state.fa.rights[id]; if (x && x.team === a) delete state.fa.rights[id]; });
+      Object.keys(state.teams).forEach(function (b) { state.teams[b].picks = (state.teams[b].picks || []).filter(function (pk) { return pk.original !== a; }); });
+      Object.keys(state.coaches || {}).forEach(function (id) { var c = state.coaches[id]; if (c && c.team === a) c.team = null; });
+      delete state.teams[a];
+      addTx(state, 'The ' + name + ' fold. Their players are free agents.', []); n++;
+    });
+    var NEW = (M.add || []).filter(function (t0) { return !state.teams[t0.abbr]; });
+    if (NEW.length) {
+      NEW.forEach(function (t0) { state.teams[t0.abbr] = makeTeam(t0, Y); });
+      var C = mod('COACH');
+      if (C && C.init) { try { C.init(state); } catch (e) { /* coaches are cosmetic */ } }
+      var D = mod('DRAFT');
+      if (D && D.ensurePicks) D.ensurePicks(state, 7, Y);
+      var have = Object.keys(state.teams).length - NEW.length;
+      var roster = Y < 1960 ? 8 : Y < 1970 ? 9 : 11;
+      expansionDraft(state, Y, seeded(state, 'moves' + Y), NEW, { protect: Y < 1960 ? 5 : 6, roster: roster, perTeam: Math.max(1, Math.ceil(roster * NEW.length / Math.max(1, have))) });
+      state.expansion = state.expansion || {};
+      state.expansion.capDraft = Y; state.expansion.capPick = CAP_PICK; state.expansion.capTeams = NEW.map(function (t) { return t.abbr; });
+      n += NEW.length;
+    }
+    if (n) { addNews(state, M.headline, M.body, []); addTx(state, M.tx, []); }
+    return n || 1;
   }
 
   // The expansion itself (the new teams' first season is Y)
@@ -251,7 +307,7 @@
     return true;
   }
 
-  var EXPANSION = { addTeams: addTeams, applyPending: applyPending, applyHistoric: applyHistoric, HISTORIC: HISTORIC, isExpanded: isExpanded, TEAMS: TEAMS, ALIGN: ALIGN, PROTECT: PROTECT, ROSTER: ROSTER, CAP_PICK: CAP_PICK };
+  var EXPANSION = { addTeams: addTeams, applyPending: applyPending, applyHistoric: applyHistoric, applyMoves: applyMoves, HISTORIC: HISTORIC, isExpanded: isExpanded, TEAMS: TEAMS, ALIGN: ALIGN, PROTECT: PROTECT, ROSTER: ROSTER, CAP_PICK: CAP_PICK };
   if (root) root.EXPANSION = EXPANSION;
   if (typeof module !== 'undefined' && module.exports) module.exports = EXPANSION;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

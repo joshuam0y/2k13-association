@@ -938,6 +938,8 @@
         var H = W.EXPANSION.HISTORIC[k];
         if (state.startYear <= H.after && state.year === H.after && !state.teams[H.teams[0].abbr]) safe("expansion " + k, function () { W.EXPANSION.applyHistoric(state, k); });
       });
+      // the old leagues (1947-48 to 1987-88): teams that move, fold or join, and realignments, from data/historic-moves.js
+      if (mod("EXPANSION") && W.EXPANSION.applyMoves && state.startYear && state.startYear <= state.year) safe("moves", function () { W.EXPANSION.applyMoves(state, state.year + 1); });
     } else if (phase === "resign") {
       // real-life mode: the summer's real trades and signings before the AI's free agency
       if (state.realLife && mod("REALLIFE")) safe("realLife", function () { W.REALLIFE.applyUntil(state, state.year + "-09-30"); });

@@ -154,7 +154,7 @@
   }
   const ready = m => m.a >= 0 && m.b >= 0;
   function curRound() { for (let r = 0; r < TN.rounds.length; r++) if (TN.rounds[r].some(m => !m.done)) return r; return TN.rounds.length - 1; }
-  const matchCfg = m => ({ mode: 'versus', year: TN.cfg.year, seasons: TN.cfg.seasons, era: TN.cfg.era || 2013, bestOf: m.bestOf, blind: false, cap: TN.cfg.cap, bench: TN.cfg.bench || 0, timer: 0, injuries: false, seed: m.seed,
+  const matchCfg = m => ({ mode: 'versus', year: TN.cfg.year, seasons: TN.cfg.seasons, era: TN.cfg.era || 2013, bestOf: m.bestOf, blind: false, cap: TN.cfg.cap, bench: TN.cfg.bench || 0, noBench: !!TN.cfg.noBench, timer: 0, injuries: false, seed: m.seed,
     sides: [m.a, m.b].map(i => ({ team: TN.teams[i], name: nm(i), picks: TN.picks[i] })) });
   const RUNS = {};   // match key -> the series with its play-by-play (deterministic from the seed)
   function run(m) {
@@ -229,6 +229,8 @@
               <small class="muted">${o.board ? 'No wheel: take turns picking anyone left on the board. Every season you picked loads in, so anyone who ever played can go.' : 'Every pick comes from the team the wheel lands on.'}</small></div>
             <div><span class="ts-start-k">BENCH</span><div class="ch-chips"><button type="button" class="ch-chip${!o.bench ? ' on' : ''}" data-bench="0">JUST THE FIVE</button><button type="button" class="ch-chip${o.bench ? ' on' : ''}" data-bench="3">8-MAN: +3 BENCH</button></div>
               <small class="muted">${o.bench ? 'Everyone drafts eight. The first five start, the last three come off the bench.' + (o.cap ? ' The cap grows to $' + C.capFor(o.cap, o.bench) + 'M to cover all eight.' : '') : 'Five players each, all 48 minutes.'}</small></div>
+            ${o.bench ? `<div><span class="ts-start-k">IN THE GAMES</span><div class="ch-chips"><button type="button" class="ch-chip${!o.noBench ? ' on' : ''}" data-nb="0">BENCH PLAYS</button><button type="button" class="ch-chip${o.noBench ? ' on' : ''}" data-nb="1">STARTERS ONLY</button></div>
+              <small class="muted">${o.noBench ? 'All eight are drafted, but only the five starters play, all 48 minutes.' : 'The bench subs in during the games.'}</small></div>` : ''}
             <div><span class="ts-start-k">SALARY CAP</span><div class="ch-chips">${UI.challengeCap.CAPS.map(v => `<button type="button" class="ch-chip${(o.cap || 0) === v ? ' on' : ''}" data-cap="${v}">${v ? '$' + v + 'M' : 'OFF'}</button>`).join('')}</div></div>
           </div></div>
         <div class="ch-go"><button type="button" class="btn btn-gold btn-big" id="tnStart">START THE DRAFT</button><a class="btn" href="#/challenge/tournament/online">PLAY ONLINE</a><a class="btn" href="#/home">HOME</a></div>
@@ -256,12 +258,13 @@
     app.querySelectorAll('[data-dupes]').forEach(b => b.addEventListener('click', () => { o.dupes = +b.dataset.dupes; redraw(); }));
     app.querySelectorAll('[data-board]').forEach(b => b.addEventListener('click', () => { o.board = +b.dataset.board; redraw(); }));
     app.querySelectorAll('[data-bench]').forEach(b => b.addEventListener('click', () => { o.bench = +b.dataset.bench; redraw(); }));
+    app.querySelectorAll('[data-nb]').forEach(b => b.addEventListener('click', () => { o.noBench = +b.dataset.nb; redraw(); }));
     UI.$('#tnStart', app).addEventListener('click', () => {
       readNames();
       const c = chosen();
       if (!c.length) { UI.toast('Switch on at least one season', 'error'); return; }
       const year = c.length === 1 ? c[0] : 0;
-      const cfg = { mode: 'versus', year, seasons: c.length > 1 && c.length < ALL_YEARS.length ? c : null, bestOf: o.bestOf, blind: false, cap: C.capFor(+o.cap || 0, o.bench), timer: o.timer ? 24 : 0, era: +o.era || 2013, injuries: false, board: o.board ? 1 : 0, dupes: year === 0 && o.dupes ? 1 : 0, bench: +o.bench || 0, seed: Math.floor(Math.random() * 2147483646) + 1 };
+      const cfg = { mode: 'versus', year, seasons: c.length > 1 && c.length < ALL_YEARS.length ? c : null, bestOf: o.bestOf, blind: false, cap: C.capFor(+o.cap || 0, o.bench), timer: o.timer ? 24 : 0, era: +o.era || 2013, injuries: false, board: o.board ? 1 : 0, dupes: year === 0 && o.dupes ? 1 : 0, bench: +o.bench || 0, noBench: !!(o.bench && o.noBench), seed: Math.floor(Math.random() * 2147483646) + 1 };
       ensure(app, cfg, () => {
         const d = C.seasonData(year || 2013);
         TN.cfg = cfg;

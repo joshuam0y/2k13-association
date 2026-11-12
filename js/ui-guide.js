@@ -258,7 +258,7 @@
         <h3>HEAD TO HEAD</h3>
         <p>Draft against a friend, online with a room code or on one phone, and play a best of 3, 5 or 7 series.</p>
         <h3>THE ASSOCIATION</h3>
-        <p>A full franchise: run one team through trades, free agency, drafts and many seasons, from 1976-77 to today.</p>
+        <p>A full franchise: run one team through trades, free agency, drafts and many seasons, from 1946-47 to today.</p>
         <h3>MORE</h3>
         <dl class="gd-dl">
           <dt>CONTINUE / LOAD</dt><dd>Pick up an Association league where you left off.</dd>

@@ -82,7 +82,7 @@ fs.readdirSync("data").filter(f => /^start-\d{4}\.js$/.test(f)).forEach(f => {
   try { s = L.newLeague(D.teams[0].abbr, { seed: Y, start: Y }); for (let d = 0; d < 7; d++) { s.events.forEach(e => (e.resolved = true)); L.clearResolved(s); L.advance(s, { days: 1 }); } } catch (e) { err = e; }
   const sizes = s ? Object.keys(s.teams).map(a => Object.values(s.players).filter(p => p.team === a && !(p.stashedUntil > s.year)).length) : [];
   const games = s ? Object.values(s.season.standings).reduce((n, x) => n + x.w + x.l, 0) / 2 : 0;
-  ok(!err && sizes.every(n => n >= 10 && n <= 16) && games > 20, D.label + ": " + (err ? "ERROR " + err.message : sizes.length + " teams, " + Math.min.apply(null, sizes) + " to " + Math.max.apply(null, sizes) + " players, " + games + " games in the first week"));
+  ok(!err && sizes.every(n => n >= (Y < 1977 ? 8 : 10) && n <= 16) && games > (D.teams.length < 20 ? 5 : 20), D.label + ": " + (err ? "ERROR " + err.message : sizes.length + " teams, " + Math.min.apply(null, sizes) + " to " + Math.max.apply(null, sizes) + " players, " + games + " games in the first week"));
 });
 // the 2011-12 lockout: the real 66-game schedule from Christmas Day
 {

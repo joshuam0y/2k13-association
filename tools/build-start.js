@@ -16,6 +16,7 @@ const FIRST = 1947, LAST = 2004;
 run('data/targets.js');
 // 2003-04 comes from the real 2004 start file (its first-year players are the ones with no career before it)
 function era(y) {
+  if (y < FIRST) return null;
   if (y === 2004) {
     if (!global.START_LEAGUES || !global.START_LEAGUES[2004]) run('data/start-2004.js');
     if (!global.__e2004) {
@@ -52,7 +53,10 @@ function realContract(id, Y, team) {
 }
 const CAREER_KEYS = ['g', 'mpg', 'pts', 'reb', 'ast', 'stl', 'blk', 'fgp', 'tpp', 'ftp'];
 
-const AB = { NJN: 'BKN', CHH: 'NOH', VAN: 'MEM', NYN: 'BKN', WSB: 'WAS', BUF: 'LAC', SDC: 'LAC', NOJ: 'UTA', KCK: 'SAC' };   // franchises under the abbreviation the Association uses
+// the old leagues' moves and renames keep one abbreviation a franchise (the Lakers are LAL from Minneapolis on); data/historic-moves.js (tools/build-moves.js) changes the city and name when they moved
+const AB = { NJN: 'BKN', CHH: 'NOH', VAN: 'MEM', NYN: 'BKN', WSB: 'WAS', BUF: 'LAC', SDC: 'LAC', NOJ: 'UTA', KCK: 'SAC',
+  PHW: 'GSW', SFW: 'GSW', MNL: 'LAL', ROC: 'SAC', CIN: 'SAC', KCO: 'SAC', SYR: 'PHI', FTW: 'DET', MLH: 'ATL', STL: 'ATL', TRI: 'ATL',
+  CHP: 'WAS', CHZ: 'WAS', BAL: 'WAS', CAP: 'WAS', SDR: 'HOU' };   // franchises under the abbreviation the Association uses
 const ab = a => AB[a] || a;
 function build(Y) {
   const d = era(Y);

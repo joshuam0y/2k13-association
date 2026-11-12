@@ -1222,10 +1222,11 @@
   }
   // leagues under 29 teams (the 1970s to 1990s): everyone plays everyone base times, the rest against the nearest teams on a
   // shuffled circle, so each team plays 82 (one short when the maths needs an odd number of extra games)
-  function anyMatchups(abbrs, rng) {
+  function anyMatchups(abbrs, rng, G) {
+    G = G || 82;
     var order = abbrs.slice();
     for (var k = order.length - 1; k > 0; k--) { var r = Math.floor(rng() * (k + 1)); var tmp = order[k]; order[k] = order[r]; order[r] = tmp; }
-    var N = order.length, base = Math.floor(82 / (N - 1)), rest = 82 - base * (N - 1), extra = {}, games = [];
+    var N = order.length, base = Math.floor(G / (N - 1)), rest = G - base * (N - 1), extra = {}, games = [];
     for (var d = 1; d <= Math.floor(rest / 2); d++) extra[d] = true;
     if (rest % 2 && N % 2 === 0) extra[N / 2] = true;
     for (var i = 0; i < N; i++) for (var j = i + 1; j < N; j++) {
@@ -1235,8 +1236,8 @@
     }
     return games;
   }
-  function buildMatchups(teams, rng) {
-    if (teams.length < 29) return anyMatchups(teams.map(function (t) { return t.abbr; }), rng);
+  function buildMatchups(teams, rng, G) {
+    if (teams.length < 29 || (G && G !== 82)) return anyMatchups(teams.map(function (t) { return t.abbr; }), rng, G);
     if (teams.length !== 30 && teams.length !== 32 && teams.length >= 29) return circleMatchups(teams.map(function (t) { return t.abbr; }), rng);
     var confs = {};
     teams.forEach(function (t) {
@@ -1440,6 +1441,18 @@
     return { w: 0, l: 0, confW: 0, confL: 0, divW: 0, divL: 0, streak: 0, home: [0, 0], away: [0, 0], pf: 0, pa: 0, last10: [] };
   }
 
+  // games each team played in the real seasons before the 82 game schedule (1967-68 on); the modern ones keep their own rules
+  var OLD_GAMES = { 1947: 60, 1948: 48, 1949: 60, 1950: 68, 1951: 66, 1952: 66, 1953: 70, 1954: 72, 1955: 72, 1956: 72, 1957: 72, 1958: 72, 1959: 72, 1960: 75, 1961: 79, 1962: 80, 1963: 80, 1964: 80, 1965: 80, 1966: 80, 1967: 81 };
+  function oldGames(year) { return OLD_GAMES[year] || 0; }
+  // teams in the playoffs a conference: 8 with a normal league, 4 or 2 for the small leagues of the old days
+  function playoffTeams(teams) {
+    var n = teams.length;
+    if (n >= 28) return 8;
+    var cs = {}; teams.forEach(function (t) { cs[t.conf] = (cs[t.conf] || 0) + 1; });
+    var small = Math.min.apply(null, Object.keys(cs).map(function (k) { return cs[k]; }).concat([8]));
+    return n >= 20 && small >= 8 ? 8 : small >= 4 && n >= 12 ? 4 : 2;
+  }
+
   function newSeason(league, opts) {
     opts = opts || {};
     league = league || globalLeague();
@@ -1452,7 +1465,8 @@
     // real dates and games when data/schedules.js has the season (opts.realSchedule === false to generate)
     var days = opts.realSchedule === false || opts.startDate || opts.endDate ? null : realSchedule(year, teams);
     var realSched = !!days;
-    if (!days) days = buildSchedule(teams, rng, start, end);
+    var G = opts.games || oldGames(year);
+    if (!days) days = buildSchedule(teams, rng, start, end, G && G !== 82 ? anyMatchups(teams.map(function (t) { return t.abbr; }), rng, G) : null);
     var standings = {};
     teams.forEach(function (t) { standings[t.abbr] = newStanding(); });
     var injuries = {};
@@ -1478,6 +1492,8 @@
       order: [],
       norms: norms,
       realSchedule: realSched,
+      playoffK: playoffTeams(teams),
+      seasonGames: G && G !== 82 ? G : undefined,
       // Play-In Tournament (2020-21 on): CBA.rules(year).playIn when the league passes rules, opts.playIn overrides
       playIn: opts.playIn != null ? !!opts.playIn : opts.rules && typeof opts.rules.playIn === 'boolean' ? opts.rules.playIn : year >= 2021,
       version: 1

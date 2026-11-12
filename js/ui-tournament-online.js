@@ -139,8 +139,80 @@
   const newCode = () => Array.from({ length: 5 }, () => CODE_CH[Math.floor(Math.random() * CODE_CH.length)]).join('');
   const joinLink = () => location.origin + location.pathname + '#/challenge/tournament/join/' + NET.code;
 
+  // ---------- trash talk and chat for the whole room: reactions pop up on every phone, a message panel ----------
+  const REACTS = ['🔥', '😂', '😬', '👀', '🧱', '🐐', 'REACH', 'STEAL', 'COOKED', 'GG'];
+  const CHAT = { list: [], open: false, unread: 0, typingUntil: 0, typingName: '', sentAt: 0, lastReact: 0 };
+  const chatName = () => UI.profile.name() || (TN() && TN().names[mySeat()]) || 'PLAYER';
+  const chatOn = () => !!(NET.role && NET.client && NET.status === 'connected' && /tournament\/online/.test(location.hash) && TN() && TN().page !== 'entry');
+  function bubble(r, name, mine) {
+    let host = document.getElementById('vsBubbles');
+    if (!host) { host = document.createElement('div'); host.id = 'vsBubbles'; host.className = 'vs-bubbles'; document.body.appendChild(host); }
+    const b = document.createElement('div');
+    b.className = 'vs-bubble' + (mine ? ' mine' : '') + (/^[A-Z]/.test(r) ? ' word' : '');
+    b.innerHTML = `<small>${esc(name)}</small><b>${esc(r)}</b>`;
+    host.appendChild(b);
+    setTimeout(() => b.classList.add('go'), 2400);
+    setTimeout(() => b.remove(), 3000);
+  }
+  function showTyping() {
+    const on = Date.now() < CHAT.typingUntil, line = on ? esc(CHAT.typingName || 'Someone') + ' is typing...' : '';
+    const el = document.getElementById('tnTyping'); if (el) el.innerHTML = line;
+    const b = document.getElementById('tnChatTyping'); if (b) b.textContent = on ? ' | typing...' : '';
+  }
+  function addChat(msg) {
+    CHAT.list.push(Object.assign({ at: Date.now() }, msg));
+    if (CHAT.list.length > 100) CHAT.list.shift();
+    if (!msg.mine && !CHAT.open) { CHAT.unread++; bubble('💬 ' + msg.text.slice(0, 40), msg.name, false); }
+    drawChat();
+  }
+  function syncChat() { const box = document.getElementById('tnChat'); if (!chatOn()) { if (box) box.remove(); } else if (!box) drawChat(); }
+  function drawChat() {
+    let box = document.getElementById('tnChat');
+    if (!chatOn()) { if (box) box.remove(); return; }
+    if (!box) {
+      box = document.createElement('div'); box.id = 'tnChat'; box.className = 'vs-chat';
+      document.body.appendChild(box);
+      box.addEventListener('click', e => {
+        if (e.target.closest('[data-chat="toggle"]')) { CHAT.open = !CHAT.open; if (CHAT.open) CHAT.unread = 0; drawChat(); if (CHAT.open) { const i = box.querySelector('input'); if (i) i.focus(); } return; }
+        const rb = e.target.closest('[data-react]');
+        if (rb) {
+          const now = Date.now();
+          if (now - CHAT.lastReact < 1200) return;
+          CHAT.lastReact = now;
+          bubble(rb.dataset.react, chatName(), true); send({ t: 'react', r: rb.dataset.react, name: chatName() });
+        }
+      });
+      box.addEventListener('input', e => {
+        if (e.target.tagName !== 'INPUT' || Date.now() - CHAT.sentAt < 2000) return;
+        CHAT.sentAt = Date.now(); send({ t: 'typing', name: chatName() });
+      });
+      box.addEventListener('submit', e => {
+        e.preventDefault();
+        const i = box.querySelector('input'), text = (i.value || '').trim().slice(0, 300);
+        if (!text) return;
+        i.value = '';
+        addChat({ name: chatName(), text, mine: true });
+        send({ t: 'chat', text, name: chatName() });
+        const again = box.querySelector('input'); if (again) again.focus();
+      });
+    }
+    const msgs = CHAT.list.map(m => `<li class="${m.mine ? 'mine' : ''}"><small>${esc(m.name)}</small><span>${esc(m.text)}</span></li>`).join('');
+    box.innerHTML = `<button type="button" class="vs-chat-btn" data-chat="toggle" aria-expanded="${CHAT.open}">💬 CHAT<small id="tnChatTyping"></small>${CHAT.unread ? `<b>${CHAT.unread}</b>` : ''}</button>
+      ${CHAT.open ? `<div class="vs-chat-panel"><div class="vs-chat-h"><span>ROOM ${esc(NET.code)} CHAT</span><button type="button" data-chat="toggle" aria-label="Close chat">&times;</button></div>
+        <div class="vs-react" role="group" aria-label="Reactions" style="position:static;margin:0 0 6px">${REACTS.map(r => `<button type="button" data-react="${esc(r)}"${/^[A-Z]/.test(r) ? ' class="word"' : ''}>${esc(r)}</button>`).join('')}</div>
+        <ol class="vs-chat-list">${msgs || '<li class="muted">Say something. Trash talk welcome.</li>'}</ol><div class="vs-typing" id="tnTyping" aria-live="polite"></div>
+        <form class="vs-chat-form"><input maxlength="300" placeholder="Message" autocomplete="off" enterkeyhint="send"><button type="submit" class="btn btn-gold btn-small">SEND</button></form></div>` : ''}`;
+    const list = box.querySelector('.vs-chat-list'); if (list) list.scrollTop = list.scrollHeight;
+    showTyping();
+  }
+  window.addEventListener('hashchange', syncChat);
+  setInterval(syncChat, 1500);
+
   function onMsg(m) {
     if (!m || typeof m !== 'object' || m.from === NET.me) return;
+    if (m.t === 'react' && REACTS.indexOf(m.r) >= 0) { bubble(m.r, String(m.name || '').slice(0, 20), false); return; }
+    if (m.t === 'typing') { CHAT.typingUntil = Date.now() + 3500; CHAT.typingName = String(m.name || '').slice(0, 20); showTyping(); setTimeout(showTyping, 3600); return; }
+    if (m.t === 'chat' && m.text) { CHAT.typingUntil = 0; addChat({ name: String(m.name || '').slice(0, 20), text: String(m.text).slice(0, 300), mine: false }); return; }
     if (m.t === 'court') {
       const c = A.court();
       if (c && A.watchN() === m.n) { if (m.k === 'speed') c.setSpeed(+m.v || 1); else if (m.k === 'play') c.play(); else if (m.k === 'pause') c.pause(); else if (m.k === 'skip') c.skipQuarter(); }
@@ -494,6 +566,8 @@
               <small class="muted">${o.board ? 'No wheel: pick anyone left on the board. Every season you picked loads in on each phone.' : 'Every pick comes from the team the wheel lands on.'}</small></div>
             <div><span class="ts-start-k">BENCH</span><div class="ch-chips">${chips([[0, 'JUST THE FIVE'], [3, '8-MAN: +3 BENCH']], o.bench ? 3 : 0, 'bench')}</div>
               <small class="muted">${o.bench ? 'Everyone drafts eight. The first five start, the last three come off the bench.' + (o.cap ? ' The cap grows to $' + C.capFor(o.cap, o.bench) + 'M to cover all eight.' : '') : 'Five players each, all 48 minutes.'}</small></div>
+            ${o.bench ? `<div><span class="ts-start-k">IN THE GAMES</span><div class="ch-chips">${chips([[0, 'BENCH PLAYS'], [1, 'STARTERS ONLY']], o.noBench ? 1 : 0, 'nb')}</div>
+              <small class="muted">${o.noBench ? 'All eight are drafted, but only the five starters play, all 48 minutes.' : 'The bench subs in during the games.'}</small></div>` : ''}
             <div><span class="ts-start-k">SEEDING</span><div class="ch-chips">${chips([['random', 'RANDOM'], ['rating', 'BY TEAM RATING']], o.seeding, 'seed')}</div></div>
             <div><span class="ts-start-k">SHOT CLOCK</span><div class="ch-chips">${chips([[24, '24 SEC'], [0, 'OFF']], o.timer ? 24 : 0, 'timer')}</div></div>
             <div><span class="ts-start-k">RATINGS</span><div class="ch-chips">${[[true, 'ON'], [false, 'OFF']].map(([v, l]) => `<button type="button" class="ch-chip${(o.ratings !== false) === v ? ' on' : ''}" data-rate="${v}"${ds}>${l}</button>`).join('')}</div></div>
@@ -524,12 +598,13 @@
     app.querySelectorAll('[data-dupes]').forEach(b => b.addEventListener('click', () => edit(() => { o.dupes = +b.dataset.dupes; })));
     app.querySelectorAll('[data-board]').forEach(b => b.addEventListener('click', () => edit(() => { o.board = +b.dataset.board; })));
     app.querySelectorAll('[data-bench]').forEach(b => b.addEventListener('click', () => edit(() => { o.bench = +b.dataset.bench; })));
+    app.querySelectorAll('[data-nb]').forEach(b => b.addEventListener('click', () => edit(() => { o.noBench = +b.dataset.nb; })));
     const go = UI.$('#tnGo', app);
     if (go) go.addEventListener('click', () => {
       const c = A.ALL_YEARS.filter(y => t.skip.indexOf(y) < 0);
       if (!c.length) { UI.toast('Switch on at least one season', 'error'); return; }
       const year = c.length === 1 ? c[0] : 0;
-      const cfg = { mode: 'versus', year, seasons: c.length > 1 && c.length < A.ALL_YEARS.length ? c : null, bestOf: o.bestOf, blind: false, cap: C.capFor(+o.cap || 0, o.bench), timer: o.timer ? 24 : 0, turns: (o.order || 'turns') === 'turns', era: +o.era || 2013, injuries: false, board: o.board ? 1 : 0, dupes: year === 0 && o.dupes ? 1 : 0, bench: +o.bench || 0, seed: Math.floor(Math.random() * 2147483646) + 1 };
+      const cfg = { mode: 'versus', year, seasons: c.length > 1 && c.length < A.ALL_YEARS.length ? c : null, bestOf: o.bestOf, blind: false, cap: C.capFor(+o.cap || 0, o.bench), timer: o.timer ? 24 : 0, turns: (o.order || 'turns') === 'turns', era: +o.era || 2013, injuries: false, board: o.board ? 1 : 0, dupes: year === 0 && o.dupes ? 1 : 0, bench: +o.bench || 0, noBench: !!(o.bench && o.noBench), seed: Math.floor(Math.random() * 2147483646) + 1 };
       A.ensure(app, cfg, () => {
         const d = C.seasonData(year || 2013), hn = t.seats.length, bots = A.shuffle(A.CPU_NAMES.slice());
         t.cfg = cfg;
