@@ -658,11 +658,23 @@
     const go = (a, to) => {
       const before = st.log.length;
       if (!C.auctionAct(st, 0, a, to)) return;
-      house(); st.until = Date.now() + DAILY_CLOCK * 1000; save(st.done); stopClock();
-      const autos = st.log.slice(before).filter(x => x.auto);
-      window.scrollTo(0, 0);
-      if (autos.length) { stopClock(); UI.aucReveal(app, { entries: autos, byId, name: i => (i === 0 ? 'YOU' : 'THE HOUSE'), onDone: () => { st.until = Date.now() + DAILY_CLOCK * 1000; draw(app, era, day, st, byId, key, house, save); } }); return; }
-      draw(app, era, day, st, byId, key, house, save);
+      const after = () => {
+        house(); st.until = Date.now() + DAILY_CLOCK * 1000; save(st.done); stopClock();
+        if (!/^#\/daily/.test(location.hash)) return;   // you left while the house was thinking
+        const autos = st.log.slice(before).filter(x => x.auto);
+        window.scrollTo(0, 0);
+        if (autos.length) { stopClock(); UI.aucReveal(app, { entries: autos, byId, name: i => (i === 0 ? 'YOU' : 'THE HOUSE'), onDone: () => { st.until = Date.now() + DAILY_CLOCK * 1000; draw(app, era, day, st, byId, key, house, save); } }); return; }
+        draw(app, era, day, st, byId, key, house, save);
+      };
+      if (!st.done && st.turn === 1) {   // the house takes a moment to answer, a little different every time
+        stopClock(); save(false);
+        const stage = UI.$('.auc-stage', app), note = document.createElement('p'); note.className = 'auc-think'; note.textContent = 'THE HOUSE IS THINKING...';
+        app.querySelectorAll('.auc-go button, .auc-chips button, #aucDown, #aucUp').forEach(b => { b.disabled = true; });
+        if (stage) stage.insertBefore(note, stage.firstChild);
+        setTimeout(after, 1100 + Math.random() * 1400);
+        return;
+      }
+      after();
     };
     const setAmt = v => { DB.amt = Math.max(min, Math.min(max, Math.round(v))); draw(app, era, day, st, byId, key, house, save); };
     const dn = UI.$('#aucDown', app); if (dn) dn.addEventListener('click', () => setAmt(DB.amt - A.raise));

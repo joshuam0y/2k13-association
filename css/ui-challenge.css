@@ -1105,3 +1105,4 @@ a.pr-i:hover { border-color: var(--gold); }
 .rk-theme.lock b { letter-spacing: .3em; }
 .rk-pop-n { font-size: 64px !important; color: var(--gold); line-height: 1; }
 .pf-legal, .rk-legal { font-size: 12px; margin: 8px 0 0; } .pf-legal a, .rk-legal a { color: var(--gold2); }
+.auc-think { margin: 0; text-align: center; font-family: var(--display); letter-spacing: .18em; font-size: 13px; color: var(--gold2); animation: aucThink 1s ease-in-out infinite; } @keyframes aucThink { 50% { opacity: .4; } }
