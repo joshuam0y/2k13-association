@@ -610,6 +610,7 @@
   }
   // every result this day's auction can end in (same ten, same order, same house): the search tries each bid you could make and follows the house's answer
   const REACH = {};
+  const DRK = {};   // the tier and rank line of the day's result once it is worked out, for the share text
   function reachDist(era, day, byId) {
     const rk = day + '|' + era;
     if (REACH[rk]) return REACH[rk];
@@ -731,7 +732,7 @@
         <div id="rkSub" class="rkn"><span class="muted">Sending your score...</span></div>
         <div class="ch-go">${isPr ? `<a class="btn btn-gold" href="#/daily/practice/${esc(prKey)}/${Date.now()}">PLAY AGAIN</a><a class="btn" href="#/daily/practice">ARCHIVE</a>` : `<a class="btn btn-gold" href="#/daily">SEE THE BOARD</a>${pct == null ? '' : '<button type="button" class="btn" id="dlShare">SHARE YOUR SCORE</button>'}`}</div>`;
       const dsh = UI.$('#dlShare', app);
-      const doShare = async btn => { btn.disabled = true; const r = await shareCard({ k: 'DAILY #' + dayNo(day), title: 'OF A PERFECT FIVE', color: '#d4af37', big: pct.toFixed(1) + '%', sub: TH.title, name: UI.profile.account() || '' }, 'Starting Five Daily #' + dayNo(day) + ' \u{1F3C0}\n' + five.map(p => sqEmoji(ovrOf(p))).join('') + '\n' + pct.toFixed(1) + '% of a perfect five', '#/daily'); btn.disabled = false;  };
+      const doShare = async btn => { btn.disabled = true; const r = await shareCard({ k: 'DAILY #' + dayNo(day), title: 'OF A PERFECT FIVE', color: '#d4af37', big: pct.toFixed(1) + '%', sub: TH.title, name: UI.profile.account() || '' }, 'Starting Five Daily #' + dayNo(day) + ' \u{1F3C0}\n' + five.map(p => sqEmoji(ovrOf(p))).join('') + '\n' + pct.toFixed(1) + '% of a perfect five' + (RK[day] ? ' | ' + RK[day].tier : '') + (RK[day] && RK[day].line ? '\n' + RK[day].line.charAt(0) + RK[day].line.slice(1).toLowerCase() : '') + (streakNow().n > 1 ? '\n\u{1F525} ' + streakNow().n + ' day streak' : '') + '\nCan you beat it?', '#/daily'); btn.disabled = false;  };
       if (dsh) dsh.addEventListener('click', () => doShare(dsh));
       if (!isPr && pct != null) {   // the result pops up with the share button every time this screen opens
         const ov = document.createElement('div'); ov.className = 'rk-tour';
@@ -752,7 +753,7 @@
           const dist = reachDist(era, day, byId);
           const tierOf = () => R ? (R.top ? 'THE BEST POSSIBLE' : R.gap >= 99 ? 'LEGENDARY' : R.gap >= 98 ? 'ELITE' : R.gap >= 97 ? 'ALL STAR' : R.gap >= 96 ? 'STARTER LEVEL' : 'ROLE PLAYERS') : (pct >= 97 ? 'LEGENDARY' : pct >= 94 ? 'ELITE' : pct >= 90 ? 'ALL STAR' : pct >= 80 ? 'STARTER LEVEL' : 'ROLE PLAYERS');
           const rankLine = () => R ? (R.top ? 'NO RESULT TODAY BEATS THIS ONE' : 'BETTER THAN ' + Math.floor(R.p) + '% OF ALL ' + R.n.toLocaleString() + ' POSSIBLE RESULTS') : '';
-          const paintRank = () => { const t = q('#fTier'), r = q('#fRank'); if (t) t.textContent = tierOf(); if (r) r.textContent = rankLine(); const pg = UI.$('#rkReach', app); if (pg) pg.textContent = rankLine(); };
+          const paintRank = () => { const t = q('#fTier'), r = q('#fRank'); if (t) t.textContent = tierOf(); if (r) r.textContent = rankLine(); if (R) RK[day] = { tier: tierOf(), line: rankLine() }; const pg = UI.$('#rkReach', app); if (pg) pg.textContent = rankLine(); };
           const sfx = n => { if (window.SFX) try { window.SFX.play(n); } catch (e) { /* silent */ } };
           const count = (el, to, ms, dec, suf, tick) => { const t0 = performance.now(); const step = now => { const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3); el.textContent = (to * e).toFixed(dec) + suf; if (tick && k < 1 && Math.floor(k * 14) !== step.l) { step.l = Math.floor(k * 14); sfx('tick'); } if (k < 1 && ov.isConnected) requestAnimationFrame(step); }; requestAnimationFrame(step); };
           const burst = () => { const box = document.createElement('div'); box.className = 'rk-conf'; for (let n = 0; n < 46; n++) { const c = document.createElement('i'); c.style.cssText = '--x:' + (Math.random() * 100 - 50) + 'vw;--y:' + (-(30 + Math.random() * 55)) + 'vh;--r:' + Math.round(Math.random() * 720 - 360) + 'deg;--d:' + (0.9 + Math.random() * 0.9) + 's;background:' + ['#d4af37', '#f5d76e', '#fff', '#3d78d6', '#e88a8a'][n % 5]; box.appendChild(c); } ov.appendChild(box); setTimeout(() => box.remove(), 2200); };
