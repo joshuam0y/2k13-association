@@ -71,29 +71,36 @@
           ${UI.tile('#/saves', 'load', 'LOAD', { cls: 'mt-half' })}
         </div>
         <nav class="mm-foot" aria-label="About and legal">${UI.infoLinks ? UI.infoLinks() : ''}</nav>
-        <div class="mm-ver muted" id="mmVer"></div>
         ${window.SFX ? `<div class="mm-sfx"><button type="button" class="btn btn-small" id="mmSfx">SOUND EFFECTS: ${window.SFX.on ? 'ON' : 'OFF'}</button></div>` : ''}
       </section>`;
     const sfxB = UI.$('#mmSfx', app); if (sfxB) sfxB.addEventListener('click', () => { window.SFX.set(!window.SFX.on); sfxB.textContent = 'SOUND EFFECTS: ' + (window.SFX.on ? 'ON' : 'OFF'); });
-    // the version: the cache this copy runs from against the newest one on the server; when they differ, one tap clears the old copy
-    (async () => {
-      const el = document.getElementById('mmVer'); if (!el) return;
-      const f = n => (n / 100).toFixed(2);
+  };
+
+
+  // ---------- the version, on every screen: the cache this copy runs from against the newest one on the server; when they differ, one tap clears the old copy ----------
+  (function () {
+    let last = 0;
+    const f = n => (n / 100).toFixed(2);
+    async function paint() {
+      const el = document.getElementById('appVer'); if (!el) return;
+      last = Date.now();
       let run = 0, live = 0;
       try { run = (await caches.keys()).filter(k => /^2k13-v\d+$/.test(k)).map(k => +k.slice(6)).sort((a, b) => b - a)[0] || 0; } catch (e) { /* no cache API */ }
       try { const t = await (await fetch('sw.js', { cache: 'no-store' })).text(); live = +((t.match(/CACHE = '2k13-v(\d+)'/) || [])[1]) || 0; } catch (e) { /* offline */ }
       if (!run && !live) return;
       el.innerHTML = run && live && run < live
-        ? 'VERSION ' + f(run) + ' | NEWEST ' + f(live) + ' <button type="button" class="btn btn-small btn-gold" id="mmUpd">UPDATE NOW</button>'
+        ? 'VERSION ' + f(run) + ' | NEWEST ' + f(live) + ' <button type="button" class="btn btn-small btn-gold" id="appUpd">UPDATE NOW</button>'
         : 'VERSION ' + f(run || live);
-      const b = document.getElementById('mmUpd');
+      const b = document.getElementById('appUpd');
       if (b) b.addEventListener('click', async () => {
         b.disabled = true; b.textContent = 'UPDATING...';
         try { const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r => r.unregister())); (await caches.keys()).forEach(k => caches.delete(k)); } catch (e) { /* reload anyway */ }
         location.reload();
       });
-    })();
-  };
+    }
+    paint();
+    window.addEventListener('hashchange', () => { if (Date.now() - last > 60000) paint(); });   // look again at most once a minute
+  })();
 
   // ---------- shared helpers: positions, best lineup, needs, payroll, player search ----------
   const SLOTS = ['PG', 'SG', 'SF', 'PF', 'C'];

@@ -934,3 +934,5 @@ body.no-assoc-nav .navmore-list a[data-nav="settings"], body.no-assoc-nav .navmo
 .mm-ver { text-align: center; font-size: 11px; letter-spacing: .18em; margin: 6px 0 14px; font-family: var(--display); }
 
 .mm-sfx { display: flex; justify-content: center; margin: 4px 0 14px; }
+.app-ver { text-align: center; font-size: 11px; letter-spacing: .18em; padding: 18px 12px 28px; font-family: var(--display); }
+.app-ver .btn { margin-left: 6px; }
