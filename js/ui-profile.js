@@ -253,8 +253,8 @@
       return /Invalid login/i.test(m) ? 'Wrong email or password.' : /not confirmed/i.test(m) ? 'Confirm your email first: open the link we sent you.' : /already registered|already been registered/i.test(m) ? 'That email already has an account. Sign in instead.' : /rate limit|too many|security purposes/i.test(m) ? 'Too many emails sent for now. Wait a minute or two and try again.' : /fetch|network|failed to/i.test(m) ? 'Could not reach the account service. Check your connection.' : /same.*password|different from the old/i.test(m) ? 'Pick a password you have not used before.' : /reauth|recently/i.test(m) ? 'For safety, sign out, sign in again, then change your password.' : m; };
     const back = '<button type="button" class="btn" data-t="in">BACK</button>';
     // after sign up: the email is on its way. Resend, fix a typo, or just wait: confirming in any tab signs you in here.
-    function waiting(em, kind) {
-      card(`<div class="pf-card-k">CHECK YOUR EMAIL</div><p class="muted">We sent a link to <b>${esc(em)}</b>. Open it on this device and you are signed in. It can take a minute, and it may land in spam.</p>
+    function waiting(em, pw) {   // pw only lives in this closure: it signs this screen in once the link has been opened on any device
+      card(`<div class="pf-card-k">CHECK YOUR EMAIL</div><p class="muted">We sent a link to <b>${esc(em)}</b>. Open it on any device: this screen signs you in by itself once you do. It can take a minute, and it may land in spam.</p>
         <div class="row-btns"><button type="button" class="btn btn-gold" id="pfResend">RESEND EMAIL</button><button type="button" class="btn" data-t="up">WRONG EMAIL</button>${closeBtn}</div>`);
       wireClose();
       el.querySelectorAll('[data-t]').forEach(b => b.addEventListener('click', () => auth(b.dataset.t)));
@@ -270,6 +270,13 @@
       });
       const done = () => { if (P.account() && el.isConnected && el.querySelector('#pfResend')) { window.removeEventListener('a13-profile', done); account(); } };
       window.addEventListener('a13-profile', done);
+      if (pw) {   // the link may be opened on another device (the phone): keep trying to sign in here until the email counts as confirmed
+        let tries = 0;
+        const poll = setInterval(async () => {
+          if (!el.isConnected || !el.querySelector('#pfResend') || P.account() || ++tries > 60) { clearInterval(poll); return; }
+          try { const c = await getClient(); const r = await c.auth.signInWithPassword({ email: em, password: pw }); if (!r.error) { clearInterval(poll); const n = await syncProfile(); startSocial(); fire(); if (n) account(); } } catch (e) { /* not confirmed yet */ }
+        }, 12000);
+      }
     }
     function sentReset(em) {
       card(`<div class="pf-card-k">CHECK YOUR EMAIL</div><p class="muted">If an account uses <b>${esc(em)}</b>, a reset link is on its way. Open it on this device, then choose a new password. The link works once and expires in about an hour. Check spam too.</p>
@@ -327,7 +334,7 @@
             if (r.error) throw r.error;
             // a confirmed email signing up again comes back as a fake user with no identities
             if (r.data.user && Array.isArray(r.data.user.identities) && !r.data.user.identities.length) { auth('in', { email: em, msg: 'That email already has an account. Sign in, or tap Forgot password.', bad: true }); return; }
-            if (!r.data.session) { waiting(em); return; }
+            if (!r.data.session) { waiting(em, pass.value); return; }
             USER = r.data.user; await syncProfile(); startSocial(); fire(); account(); return;
           }
           const r = await c.auth.signInWithPassword({ email: em, password: pass.value });
