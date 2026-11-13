@@ -1003,6 +1003,7 @@
     const yearOf = p => { const y = p && (p.season || cfg.year); return y ? ' <small class="auc-yr">' + esc(short(y)) + '</small>' : ''; };
     const left = st.ids.length - st.i - 1;
     const mineTurn = canAct(st.turn), canRaise = C.aucCanRaise(st, st.turn);
+    if (online() && mineTurn && AB.buzz !== st.i + ':' + st.price) { AB.buzz = st.i + ':' + st.price; try { navigator.vibrate && navigator.vibrate(60); } catch (e) { /* no vibration */ } }
     const min = st.price + A.raise, max = C.aucMax(st, st.turn);
     if (AB.i !== st.i || AB.price !== st.price || AB.amt < min || AB.amt > max) { AB.i = st.i; AB.price = st.price; AB.amt = min; }
     const sideBox = (i, cls) => {
@@ -1037,6 +1038,7 @@
       <div class="auc">
         ${sideBox(0, 'l')}
         <main class="auc-stage">
+          <div class="auc-turn s${st.turn}${online() && mineTurn ? ' me' : ''}" id="aucTurn">${online() ? (mineTurn ? 'YOUR TURN: BID OR PASS' : esc(String(who(st.turn)).toUpperCase()) + "'S TURN") : esc(String(who(st.turn)).toUpperCase()) + "'S TURN: BID OR PASS"}</div>
           ${timed ? `<div class="vs-timer" id="vsTimer"><i style="--w:100%"></i><span>${Math.max(0, Math.ceil((st.until - Date.now()) / 1000))}</span></div>` : ''}
           <section class="auc-card" style="--c1:${esc((tm.colors || ['#444'])[0])}">
             <div class="auc-face">${UI.faceImg(cur, (tm.colors || ['#444'])[0])}</div>
