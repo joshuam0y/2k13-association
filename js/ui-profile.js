@@ -387,13 +387,30 @@
       }
       card(`${tabs}<div class="pf-card-k">YOUR USERNAME</div>${field('pfName', 'CHANGE IT ANY TIME', 'text', 'maxlength="16" value="' + esc(n) + '"')}<small class="muted">Signed in as ${esc(P.email())}. Letters, numbers, _ and - only. It has to be one nobody else has.</small>
         <div class="row-btns"><button type="button" class="btn btn-gold" id="pfSave">SAVE USERNAME</button><a class="btn" href="#/me" id="pfMe">MY PROFILE</a><a class="btn" href="#/ranked" id="pfRk">RANKED</a></div>
-        <div class="pf-card-k">CHANGE PASSWORD</div>${pw('pfNew', 'NEW PASSWORD (AT LEAST 8 CHARACTERS)', 'new-password')}<div class="row-btns"><button type="button" class="btn" id="pfPw">CHANGE PASSWORD</button><button type="button" class="btn" id="pfOut">SIGN OUT</button>${closeBtn}</div>`);
+        <div class="pf-card-k">EMAIL</div><small class="muted">${esc(P.email())} | ${USER && USER.email_confirmed_at ? 'VERIFIED' : 'NOT VERIFIED YET'}</small>
+        <label class="field"><span>NEW EMAIL</span><input id="pfNewEmail" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false"></label>
+        <div class="row-btns"><button type="button" class="btn" id="pfEm">CHANGE EMAIL</button></div><small class="muted">We send a link to the new address. The email changes once you open it.</small>
+        <div class="pf-card-k">CHANGE PASSWORD</div>${pw('pfCur', 'CURRENT PASSWORD', 'current-password')}${pw('pfNew', 'NEW PASSWORD (AT LEAST 8 CHARACTERS)', 'new-password')}<div class="row-btns"><button type="button" class="btn" id="pfPw">CHANGE PASSWORD</button><button type="button" class="btn" id="pfOut">SIGN OUT</button>${closeBtn}</div>`);
       wireClose(); wireShow();
       el.querySelector('#pfPw').addEventListener('click', async e => {
-        const nv = el.querySelector('#pfNew'), bad = pwBad(nv.value), b = e.currentTarget;
+        const nv = el.querySelector('#pfNew'), cu = el.querySelector('#pfCur'), bad = pwBad(nv.value), b = e.currentTarget;
+        if (!cu.value) { say('Type your current password first.', true); return; }
         if (bad) { say(bad, true); return; }
         busy(b, true); say('Saving...');
-        try { const c = await getClient(); const r = await c.auth.updateUser({ password: nv.value }); if (r.error) throw r.error; nv.value = ''; say('Password changed.'); } catch (x) { say(nice(x), true); }
+        try {
+          const c = await getClient();
+          const chk = await c.auth.signInWithPassword({ email: P.email(), password: cu.value });   // the current password has to be right
+          if (chk.error) throw new Error('That is not your current password.');
+          const r = await c.auth.updateUser({ password: nv.value }); if (r.error) throw r.error; nv.value = ''; cu.value = ''; say('Password changed.');
+        } catch (x) { say(nice(x), true); }
+        busy(b, false);
+      });
+      el.querySelector('#pfEm').addEventListener('click', async e => {
+        const ne = el.querySelector('#pfNewEmail'), em = ne.value.trim(), b = e.currentTarget;
+        if (!/^\S+@\S+\.\S+$/.test(em)) { say('Type a real email address.', true); return; }
+        if (em.toLowerCase() === String(P.email()).toLowerCase()) { say('That is already your email.', true); return; }
+        busy(b, true); say('Sending...');
+        try { const c = await getClient(); const r = await c.auth.updateUser({ email: em }, { emailRedirectTo: location.origin + location.pathname }); if (r.error) throw r.error; ne.value = ''; say('We sent a link to ' + em + '. Open it to finish the change.'); } catch (x) { say(nice(x), true); }
         busy(b, false);
       });
       el.querySelectorAll('[data-t]').forEach(b => b.addEventListener('click', () => account(b.dataset.t)));
