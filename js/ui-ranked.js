@@ -558,6 +558,8 @@
   }
   const themeLocked = key => dailyThemeInfo(today()).key === key;   // today's theme stays out of practice and the casual picker until tomorrow
   const THEME = {};
+  const SEEDDAY = {};   // a practice game of a past daily plays that day's exact order: its seed comes from the real day
+  const sd = d => SEEDDAY[d] || d;
   const BUILT = {};
   async function buildTheme(info) {
     if (BUILT[info.key]) return BUILT[info.key];
@@ -590,7 +592,7 @@
     if (PERF[k] != null) return PERF[k];
     const T = THEME[day];
     if (!T) return 0;
-    const st = C.auctionStart({ bench: 0, seed: hash(day + '|ALL'), auction: DAILY }, T.pool), byId = {};
+    const st = C.auctionStart({ bench: 0, seed: hash(sd(day) + '|ALL'), auction: DAILY }, T.pool), byId = {};
     T.pool.forEach(p => { byId[p.id] = p; });
     return (PERF[k] = perfectOf(st.ids.map(id => byId[id]).filter(Boolean), st.per));
   }
@@ -615,12 +617,12 @@
     if (REACH[rk]) return REACH[rk];
     return (REACH[rk] = (async () => {
       const T = THEME[day]; if (!T) return null;
-      const cfg = { bench: 0, seed: hash(day + '|' + era), auction: DAILY }, cl = o => JSON.parse(JSON.stringify(o));
+      const cfg = { bench: 0, seed: hash(sd(day) + '|' + era), auction: DAILY }, cl = o => JSON.parse(JSON.stringify(o));
       let rs = 0;
       const rng = () => { const a = (rs + 0x6D2B79F5) | 0; rs = a; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
       const house = (st, s0) => { rs = s0; let n = 0; while (!st.done && st.turn === 1 && n++ < 50) C.auctionAct(st, 1, houseMove(st, byId, rng)); return rs; };
       const st0 = C.auctionStart(cfg, T.pool);
-      let beam = [{ st: st0, rs: house(st0, hash(day + era + 'house') >>> 0) }], tick = Date.now();
+      let beam = [{ st: st0, rs: house(st0, hash(sd(day) + era + 'house') >>> 0) }], tick = Date.now();
       for (let lvl = 0; lvl < 16 && beam.some(n => !n.st.done); lvl++) {
         const next = new Map();
         for (const node of beam) {
@@ -648,7 +650,7 @@
   // the day's key as a ready-made file (data/reach/<day>.json: the ten players and every reachable score), so the rank is instant; no file for the day, or one that does not match today's ten: search live
   const dayKey = async (day, era) => {
     const T = THEME[day] || await dailyTheme(day), byId = {}; T.pool.forEach(p => { byId[p.id] = p; });
-    const st = C.auctionStart({ bench: 0, seed: hash(day + '|' + era), auction: DAILY }, T.pool);
+    const st = C.auctionStart({ bench: 0, seed: hash(sd(day) + '|' + era), auction: DAILY }, T.pool);
     return { byId, names: st.ids.map(id => byId[id] && byId[id].name) };
   };
   function reachLoad(era, day, byId) {
@@ -656,7 +658,7 @@
     if (REACH[rk]) return REACH[rk];
     return (REACH[rk] = (async () => {
       try {
-        const r = await fetch('data/reach/' + day + '.json', { cache: 'no-cache' });
+        const r = await fetch('data/reach/' + sd(day) + '.json', { cache: 'no-cache' });
         if (r.ok) {
           const j = await r.json(), k = await dayKey(day, era);
           if (j && Array.isArray(j.s) && j.s.length && Array.isArray(j.names) && j.names.slice().sort().join('|') === k.names.slice().sort().join('|')) return j.s.map(x => x / 100);
@@ -690,15 +692,16 @@
   // the result reveal popup: five cards, score, percent, rank stamp, share. Used by the finished game and by the 'already played' screen
   function resultPop(o) {
     const { app, era, day, TH, five, score, pct, byId, doShare } = o;
+    const isP = day.indexOf('practice:') === 0, prKey = isP ? day.slice(9, day.lastIndexOf(':')) : '';
       const ov = document.createElement('div'); ov.className = 'rk-tour';
       ov.className = 'rk-tour rk-fin';
-      ov.innerHTML = `<div class="rk-tour-b rk-fb"><small>DAILY #${dayNo(day)} | ${esc(TH.title)}</small>
+      ov.innerHTML = `<div class="rk-tour-b rk-fb"><small>${isP ? 'PRACTICE' : 'DAILY #' + dayNo(day)} | ${esc(TH.title)}</small>
         <div class="rk-fcards">${five.map(p => `<div class="rk-fc" style="--c1:${esc((p.colors || ['#d4af37'])[0])}"><div class="rk-ff">${UI.faceImg(p, (p.colors || ['#d4af37'])[0])}</div><b>${esc(String(p.name).split(' ').slice(-1)[0])}</b><em>${esc(C.posLabel(p))}</em><u>${esc(p.team || '')}</u><s>${p.season ? esc("'" + String(p.season - 1).slice(2) + '-' + String(p.season).slice(2)) : ''}</s><i class="ch-ovr ${UI.ovrClass(ovrOf(p))}" data-o="${esc(ovrOf(p))}">0</i></div>`).join('')}</div>
         <div class="rk-fsc"><small>LINEUP SCORE</small><b id="fsN">0.0</b></div>
         <div class="rk-fpc"><h2 class="rk-pop-n" id="fpN">0.0%</h2><div class="rk-tier" id="fTier"></div><p class="rk-frk" id="fRank"></p><p>OF A PERFECT FIVE</p></div>
-        <p class="rk-pop-m" id="popMile"></p><p class="rk-pop-s" id="popStd"></p><div class="rk-tour-go rk-fgo"><button type="button" class="btn btn-gold btn-big" id="popShare">SHARE YOUR SCORE</button><button type="button" class="btn" id="popClose">CLOSE</button></div><button type="button" class="rk-skip" id="fSkip">TAP TO SKIP</button></div>`;
+        <p class="rk-pop-m" id="popMile"></p><p class="rk-pop-s" id="popStd"></p><div class="rk-tour-go rk-fgo">${isP ? '<a class="btn btn-gold btn-big" id="popShare" href="#/daily/practice/' + esc(prKey) + '/' + Date.now() + '">PLAY AGAIN</a>' : '<button type="button" class="btn btn-gold btn-big" id="popShare">SHARE YOUR SCORE</button>'}<button type="button" class="btn" id="popClose">CLOSE</button></div><button type="button" class="rk-skip" id="fSkip">TAP TO SKIP</button></div>`;
       document.body.appendChild(ov);
-      { const n = streakNow().n; if (MILES.includes(n)) ov.querySelector('#popMile').textContent = n + ' DAY STREAK'; }
+      if (!isP) { const n = streakNow().n; if (MILES.includes(n)) ov.querySelector('#popMile').textContent = n + ' DAY STREAK'; }
       const shut = () => { ov.remove(); window.removeEventListener('hashchange', shut); };
       window.addEventListener('hashchange', shut);
       ov.querySelector('#popClose').addEventListener('click', shut);
@@ -708,7 +711,7 @@
         const dist = reachLoad(era, day, byId);
         const tierOf = () => R ? (R.top ? 'THE BEST POSSIBLE' : R.gap >= 99 ? 'LEGENDARY' : R.gap >= 98 ? 'ELITE' : R.gap >= 97 ? 'ALL STAR' : R.gap >= 96 ? 'STARTER LEVEL' : 'ROLE PLAYERS') : (pct >= 97 ? 'LEGENDARY' : pct >= 94 ? 'ELITE' : pct >= 90 ? 'ALL STAR' : pct >= 80 ? 'STARTER LEVEL' : 'ROLE PLAYERS');
         const rankLine = () => R ? (R.top ? 'NO RESULT TODAY BEATS THIS ONE' : 'BETTER THAN ' + Math.floor(R.p) + '% OF ALL ' + R.n.toLocaleString() + ' POSSIBLE RESULTS') : '';
-        const paintRank = () => { const t = q('#fTier'), r = q('#fRank'); if (t) t.textContent = tierOf(); if (r) r.textContent = rankLine(); const pg = UI.$('#rkReach', app); if (pg) pg.textContent = rankLine(); };
+        const paintRank = () => { const t = q('#fTier'), r = q('#fRank'); if (t) t.textContent = tierOf(); if (r) r.textContent = rankLine(); const pg = UI.$('#rkReach', app); if (pg) pg.textContent = rankLine(); const tp = UI.$('#rkTierPg', app); if (tp) tp.textContent = tierOf(); };
         const sfx = n => { if (window.SFX) try { window.SFX.play(n); } catch (e) { /* silent */ } };
         const count = (el, to, ms, dec, suf, tick) => { const t0 = performance.now(); const step = now => { const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3); el.textContent = (to * e).toFixed(dec) + suf; if (tick && k < 1 && Math.floor(k * 14) !== step.l) { step.l = Math.floor(k * 14); sfx('tick'); } if (k < 1 && ov.isConnected) requestAnimationFrame(step); }; requestAnimationFrame(step); };
         const burst = () => { const box = document.createElement('div'); box.className = 'rk-conf'; for (let n = 0; n < 46; n++) { const c = document.createElement('i'); c.style.cssText = '--x:' + (Math.random() * 100 - 50) + 'vw;--y:' + (-(30 + Math.random() * 55)) + 'vh;--r:' + Math.round(Math.random() * 720 - 360) + 'deg;--d:' + (0.9 + Math.random() * 0.9) + 's;background:' + ['#d4af37', '#f5d76e', '#fff', '#3d78d6', '#e88a8a'][n % 5]; box.appendChild(c); } ov.appendChild(box); setTimeout(() => box.remove(), 2200); };
@@ -728,13 +731,13 @@
           ov.addEventListener('click', e => { if (!ov.classList.contains('done') && !e.target.closest('button:not(#fSkip)')) finish(); });
         }
       }
-      ov.querySelector('#popShare').addEventListener('click', async () => { const b = ov.querySelector('#popShare'); b.disabled = true; try { await doShare(b); } catch (e) { /* closes anyway */ } b.textContent = 'COPIED'; b.disabled = true; setTimeout(shut, 1000); });
+      if (!isP) ov.querySelector('#popShare').addEventListener('click', async () => { const b = ov.querySelector('#popShare'); b.disabled = true; try { await doShare(b); } catch (e) { /* closes anyway */ } b.textContent = 'COPIED'; b.disabled = true; setTimeout(shut, 1000); });
   }
 
   function remoteDone(app, day, sv) {
     const TH = THEME[day].info, pct = sv.pct;
     app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">DAILY #${dayNo(day)} | ${esc(day)} | ${esc(TH.title)}</div><div class="ch-top-t">YOU ALREADY PLAYED TODAY</div></div><a class="btn btn-small" href="#/daily">BACK</a></div>
-      <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${Number(sv.score).toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div>`}<div class="rk-streak" id="rkStreak"></div><div class="rk-std" id="rkStd"></div><span class="muted">${sv.names ? esc(sv.names.join(', ')) : 'Played on another device.'}</span></section>
+      <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${Number(sv.score).toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div>`}<div class="rk-streak" id="rkStreak"></div><div class="rk-tier on rk-tier-pg" id="rkTierPg"></div><div class="rk-std" id="rkReach"></div><div class="rk-std" id="rkStd"></div><span class="muted">${sv.names ? esc(sv.names.join(', ')) : 'Played on another device.'}</span></section>
       <div class="ch-go"><a class="btn btn-gold" href="#/daily">SEE THE BOARD</a>${pct == null ? '' : '<button type="button" class="btn" id="dlShare">SHARE YOUR SCORE</button>'}</div>`;
     const sk = streakNow(), el = UI.$('#rkStreak', app); if (el && sk.n) el.innerHTML = '<b>' + sk.n + '</b> DAY DAILY STREAK';
     const doShare = async btn => { if (btn) btn.disabled = true; await shareCard({}, 'Starting Five Daily #' + dayNo(day) + ' \u{1F3C0}\n' + (sv.ovrs && sv.ovrs.length ? sv.ovrs.map(sqEmoji).join('') + '\n' : '') + pct.toFixed(1) + '% of a perfect five', '#/daily'); if (btn) btn.disabled = false; };
@@ -754,6 +757,7 @@
     era = ERAS.indexOf(era) >= 0 ? era : 'ALL';
     era = 'ALL';   // the daily is one theme a day, whatever era is picked above
     const day = pr ? 'practice:' + pr.info.key + ':' + pr.n : today(), key = dKey(day);
+    if (pr && pr.info.day) SEEDDAY[day] = pr.info.day;
     if (!pr && UI.profile.signedIn() && TRIED !== UI.profile.account() + '|' + today()) {
       app.innerHTML = '<section class="ch-load"><div class="ch-spin-ring"></div><div>CHECKING YOUR SCORES...</div></section>';
       syncRemote().then(() => { if (/^#\/daily/.test(location.hash)) dailyPage(app, era, pr); });
@@ -766,7 +770,7 @@
     }
     const pool = THEME[day].pool, byId = {};
     pool.forEach(p => { byId[p.id] = p; });
-    const cfg = { bench: 0, seed: hash(day + '|' + era), auction: DAILY };
+    const cfg = { bench: 0, seed: hash(sd(day) + '|' + era), auction: DAILY };
     let saved = ls.get(key, null), st;
     if (!saved && !pr && acctSfx()) {   // a game played as a guest today moves to the account that signs in first
       const gk = 'a13-rk-d-' + day + '-' + DSUF, g = ls.get(gk, null);
@@ -775,7 +779,7 @@
     if (saved && saved.remote && !pr) { remoteDone(app, day, saved); return; }
     if (saved && saved.st) st = saved.st;
     else { st = C.auctionStart(cfg, pool); }   // the same ten in the same order for everyone: a shuffled order made the top of the board a matter of luck
-    const rng = mulberry(hash(day + era + 'house'));
+    const rng = mulberry(hash(sd(day) + era + 'house'));
     const house = () => { let n = 0; while (!st.done && st.turn === 1 && n++ < 50) C.auctionAct(st, 1, houseMove(st, byId, rng)); };
     house();
     const save = fin => ls.set(key, { st, fin: !!fin, score: saved && saved.score, g: !acctSfx() });
@@ -797,13 +801,13 @@
       const perfectScore = dailyPerfect(era, day);
       const pct = score != null && perfectScore > 0 ? Math.min(100, 100 * score / perfectScore) : null;
       app.innerHTML = `${hdr}<div class="vs-sides vs-compact">${sideBox(0, 'YOU')}${sideBox(1, 'THE HOUSE')}</div>
-        <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${score == null ? '-' : score.toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div>`}<div class="rk-streak" id="rkStreak"></div><div class="rk-std" id="rkStd"></div><div class="rk-std" id="rkReach"></div><span class="muted">The house scored ${hs == null ? '-' : hs.toFixed(1)}. ${score != null && hs != null ? (score > hs ? 'You beat the house.' : score < hs ? 'The house won this one.' : 'A tie.') : ''}</span></section>
+        <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${score == null ? '-' : score.toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div>`}<div class="rk-streak" id="rkStreak"></div><div class="rk-tier on rk-tier-pg" id="rkTierPg"></div><div class="rk-std" id="rkReach"></div><div class="rk-std" id="rkStd"></div><span class="muted">The house scored ${hs == null ? '-' : hs.toFixed(1)}. ${score != null && hs != null ? (score > hs ? 'You beat the house.' : score < hs ? 'The house won this one.' : 'A tie.') : ''}</span></section>
         <div id="rkSub" class="rkn"><span class="muted">Sending your score...</span></div>
         <div class="ch-go">${isPr ? `<a class="btn btn-gold" href="#/daily/practice/${esc(prKey)}/${Date.now()}">PLAY AGAIN</a><a class="btn" href="#/daily/practice">ARCHIVE</a>` : `<a class="btn btn-gold" href="#/daily">SEE THE BOARD</a>${pct == null ? '' : '<button type="button" class="btn" id="dlShare">SHARE YOUR SCORE</button>'}`}</div>`;
       const dsh = UI.$('#dlShare', app);
       const doShare = async btn => { btn.disabled = true; const r = await shareCard({ k: 'DAILY #' + dayNo(day), title: 'OF A PERFECT FIVE', color: '#d4af37', big: pct.toFixed(1) + '%', sub: TH.title, name: UI.profile.account() || '' }, 'Starting Five Daily #' + dayNo(day) + ' \u{1F3C0}\n' + five.map(p => sqEmoji(ovrOf(p))).join('') + '\n' + pct.toFixed(1) + '% of a perfect five', '#/daily'); btn.disabled = false;  };
       if (dsh) dsh.addEventListener('click', () => doShare(dsh));
-      if (!isPr && pct != null) resultPop({ app, era, day, TH, five, score, pct, byId, doShare });   // the result pops up with the share button every time this screen opens
+      if (pct != null) resultPop({ app, era, day, TH, five, score, pct, byId, doShare });   // the result pops up with the share button every time this screen opens
       const paintStreak = () => { const sk = UI.$('#rkStreak', app), n = streakNow(); if (sk && n.n) sk.innerHTML = '<b>' + n.n + '</b> DAY DAILY STREAK' + (n.best > n.n ? ' | BEST ' + n.best : ''); };
       paintStreak();
       const showStd = async () => {   // where you finished and the average, once the score is on the board
