@@ -1194,3 +1194,4 @@ a.pr-i:hover { border-color: var(--gold); }
 .rk-conf i { position: absolute; left: 50%; top: 55%; width: 8px; height: 12px; opacity: 0; animation: rkConf var(--d) ease-out forwards; }
 @keyframes rkConf { 0% { opacity: 1; transform: translate(0, 0) rotate(0); } 100% { opacity: 0; transform: translate(var(--x), var(--y)) rotate(var(--r)); } }
 .vs-auc-won .ch-ovr { margin-right: 4px; }
+.rk-fc em { font-style: normal; font-size: 10px; letter-spacing: .08em; color: var(--muted); font-family: var(--display); }
