@@ -1154,3 +1154,6 @@ a.pr-i:hover { border-color: var(--gold); }
   .vs-join { flex-direction: column; align-items: stretch; }
   .vs-join .btn { width: 100%; min-height: 54px; font-size: 18px; }
 }
+/* nothing may cover the top bar: the banners sit at the bottom and the popups start under it, so STARTING FIVE always takes you home */
+.rk-rejoin, .rk-offline { top: auto !important; bottom: env(safe-area-inset-bottom, 0px); }
+.rk-tour, .rk-avpanel { top: var(--top-h, 56px); }
