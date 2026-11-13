@@ -1,0 +1,37 @@
+name: Apply ratings update
+# Merges the ready ratings pull request on or after its effective date, but only after the issue asking you to run daily_key.sql is closed.
+on:
+  schedule:
+    - cron: '5 8 * * 3'
+    - cron: '0 16 * * 2'
+  issues:
+    types: [closed]
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  pages: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remind on Tuesday, merge on or after the effective date
+        run: |
+          issue=$(gh issue list --label ratings-update --state open --json number --jq '.[0].number // empty')
+          pr=$(gh pr list --label ratings-update --state open --json number,title --jq '.[0]')
+          if [ -z "$pr" ]; then echo "no ratings pull request"; exit 0; fi
+          num=$(echo "$pr" | python3 -c "import sys,json;print(json.load(sys.stdin)['number'])")
+          eff=$(echo "$pr" | python3 -c "import sys,json,re;print(re.search(r'\d{4}-\d\d-\d\d', json.load(sys.stdin)['title']).group(0))")
+          today=$(TZ=America/Los_Angeles date +%F)
+          if [ "${{ github.event.schedule }}" = "0 16 * * 2" ]; then
+            if [ -n "$issue" ]; then gh issue comment "$issue" --body "Reminder: run the SQL and close this issue before $eff, or the new ratings do not go live."; fi
+            exit 0
+          fi
+          if [[ "$today" < "$eff" ]]; then echo "not before $eff"; exit 0; fi
+          if [ -n "$issue" ]; then gh issue comment "$issue" --body "Waiting for the SQL: run it and close this issue, then the new ratings go live."; exit 0; fi
+          gh pr merge "$num" --squash --delete-branch
+          gh api -X POST "repos/${{ github.repository }}/pages/builds" || true

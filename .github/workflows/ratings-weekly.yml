@@ -1,0 +1,54 @@
+name: Weekly ratings update
+# Every Sunday night (Pacific): move the 2026-27 ratings a little toward real production, rebuild the daily answer keys for the days they take effect,
+# and open a pull request plus an issue. The ratings only go live (ratings-apply.yml) once the issue is closed, on or after the effective Wednesday.
+on:
+  schedule:
+    - cron: '30 7 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install the browser driver
+        run: npm install --no-save puppeteer-core
+      - name: Update ratings and rebuild the answer keys
+        run: |
+          set -o pipefail
+          if ! node tools/update-ratings.js --write | tee ratings.txt; then echo "ESPN check failed, nothing changed"; exit 0; fi
+          if git diff --quiet; then echo "no rating changed"; exit 0; fi
+          eff=$(TZ=America/Los_Angeles date -d 'next wednesday' +%F)
+          python3 - <<'PY'
+          import re
+          s = open('sw.js').read()
+          s = re.sub(r"2k13-v(\d+)", lambda m: '2k13-v' + str(int(m.group(1)) + 1), s, count=1)
+          open('sw.js', 'w').write(s)
+          PY
+          (python3 -m http.server 8123 >/dev/null 2>&1 &)
+          sleep 3
+          CHROME_PATH=/usr/bin/google-chrome node tools/gen-reach.js "$eff" 60
+          branch="ratings/$eff"
+          git config user.name "ratings-bot"
+          git config user.email "ratings-bot@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add -A
+          git commit -m "Ratings update effective $eff"
+          git push -u origin "$branch"
+          gh label create ratings-update --force --color d4af37 || true
+          gh pr create --title "Ratings update effective $eff" --label ratings-update --body "Weekly ratings update (ESPN stats, capped at 6 points from the season-opening ratings). Goes live on $eff once the issue is closed. $(grep -E 'moves:|Ty Jerome' ratings.txt | tr '\n' ' ')"
+          gh issue create --title "Run daily_key.sql before $eff (ratings update)" --label ratings-update --assignee "${{ github.repository_owner }}" --body "A ratings update is ready and goes live on **$eff** at 12:05 am Pacific.
+
+          1. Open https://supabase.com/dashboard/project/feozimahsjhnvlqlkwyh/sql/new
+          2. Paste the contents of https://raw.githubusercontent.com/${{ github.repository }}/$branch/supabase/daily_key.sql and click Run.
+          3. Close this issue. The ratings are applied on or after $eff, once this is closed.
+
+          If this stays open, the ratings do not go live and nothing breaks."
