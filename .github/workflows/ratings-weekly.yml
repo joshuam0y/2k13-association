@@ -1,13 +1,12 @@
 name: Weekly ratings update
 # Every Sunday night (Pacific): move the 2026-27 ratings a little toward real production, rebuild the daily answer keys for the days they take effect,
-# and open a pull request plus an issue. The ratings only go live (ratings-apply.yml) once the issue is closed, on or after the effective Wednesday.
+# and push them on a branch (ratings/<date>) with an issue for you. The ratings only go live (ratings-apply.yml) once the issue is closed, on or after the effective Wednesday.
 on:
   schedule:
     - cron: '30 7 * * 1'
   workflow_dispatch:
 permissions:
   contents: write
-  pull-requests: write
   issues: write
 jobs:
   update:
@@ -44,8 +43,7 @@ jobs:
           git commit -m "Ratings update effective $eff"
           git push -u origin "$branch"
           gh label create ratings-update --force --color d4af37 || true
-          gh pr create --title "Ratings update effective $eff" --label ratings-update --body "Weekly ratings update (ESPN stats, capped at 6 points from the season-opening ratings). Goes live on $eff once the issue is closed. $(grep -E 'moves:|Ty Jerome' ratings.txt | tr '\n' ' ')"
-          gh issue create --title "Run daily_key.sql before $eff (ratings update)" --label ratings-update --assignee "${{ github.repository_owner }}" --body "A ratings update is ready and goes live on **$eff** at 12:05 am Pacific.
+          gh issue create --title "Run daily_key.sql before $eff (ratings update)" --label ratings-update --assignee "${{ github.repository_owner }}" --body "A ratings update is ready on the branch ratings/$eff and goes live on **$eff** at 12:05 am Pacific. $(grep -E 'moves:|Ty Jerome' ratings.txt | tr '\n' ' ')
 
           1. Open https://supabase.com/dashboard/project/feozimahsjhnvlqlkwyh/sql/new
           2. Paste the contents of https://raw.githubusercontent.com/${{ github.repository }}/$branch/supabase/daily_key.sql and click Run.

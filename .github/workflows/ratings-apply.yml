@@ -1,5 +1,5 @@
 name: Apply ratings update
-# Merges the ready ratings pull request on or after its effective date, but only after the issue asking you to run daily_key.sql is closed.
+# Merges a ready ratings branch on or after its effective date, but only after the issue asking you to run daily_key.sql is closed.
 on:
   schedule:
     - cron: '5 8 * * 3'
@@ -9,7 +9,6 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
-  pull-requests: write
   issues: write
   pages: write
 jobs:
@@ -19,19 +18,24 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Remind on Tuesday, merge on or after the effective date
         run: |
-          issue=$(gh issue list --label ratings-update --state open --json number --jq '.[0].number // empty')
-          pr=$(gh pr list --label ratings-update --state open --json number,title --jq '.[0]')
-          if [ -z "$pr" ]; then echo "no ratings pull request"; exit 0; fi
-          num=$(echo "$pr" | python3 -c "import sys,json;print(json.load(sys.stdin)['number'])")
-          eff=$(echo "$pr" | python3 -c "import sys,json,re;print(re.search(r'\d{4}-\d\d-\d\d', json.load(sys.stdin)['title']).group(0))")
+          git config user.name "ratings-bot"
+          git config user.email "ratings-bot@users.noreply.github.com"
           today=$(TZ=America/Los_Angeles date +%F)
-          if [ "${{ github.event.schedule }}" = "0 16 * * 2" ]; then
-            if [ -n "$issue" ]; then gh issue comment "$issue" --body "Reminder: run the SQL and close this issue before $eff, or the new ratings do not go live."; fi
-            exit 0
-          fi
-          if [[ "$today" < "$eff" ]]; then echo "not before $eff"; exit 0; fi
-          if [ -n "$issue" ]; then gh issue comment "$issue" --body "Waiting for the SQL: run it and close this issue, then the new ratings go live."; exit 0; fi
-          gh pr merge "$num" --squash --delete-branch
-          gh api -X POST "repos/${{ github.repository }}/pages/builds" || true
+          for ref in $(git branch -r --list 'origin/ratings/*' | sed 's#^ *origin/##'); do
+            eff="${ref#ratings/}"
+            issue=$(gh issue list --label ratings-update --state all --search "$eff in:title" --json number,state --jq '.[0] | "\(.number) \(.state)"')
+            num="${issue% *}"; state="${issue#* }"
+            if [ "${{ github.event.schedule }}" = "0 16 * * 2" ]; then
+              if [ "$state" = "OPEN" ]; then gh issue comment "$num" --body "Reminder: run the SQL and close this issue before $eff, or the new ratings do not go live."; fi
+              continue
+            fi
+            if [[ "$today" < "$eff" ]]; then echo "$ref: not before $eff"; continue; fi
+            if [ "$state" != "CLOSED" ]; then [ -n "$num" ] && gh issue comment "$num" --body "Waiting for the SQL: run it and close this issue, then the new ratings go live."; continue; fi
+            git checkout main && git pull -q
+            git merge --no-edit "origin/$ref" && git push origin main && git push origin --delete "$ref"
+            gh api -X POST "repos/${{ github.repository }}/pages/builds" || true
+          done
