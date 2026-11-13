@@ -123,6 +123,20 @@
   window.UI = window.UI || {};
   UI.profile = P;
 
+  // coming back from an email link (the address is in the page link until the account service reads it): say what just happened
+  const ARR = (String(location.hash).match(/type=(signup|email_change)/) || [])[1] || '';
+  let ARRSHOWN = false;
+  function welcome() {
+    if (!ARR || ARRSHOWN) return; ARRSHOWN = true;
+    const nm = P.account() || '', chg = ARR === 'email_change';
+    const ov = document.createElement('div'); ov.className = 'rk-tour';
+    ov.innerHTML = `<div class="rk-tour-b"><small>STARTING FIVE</small><h2 class="rk-pop-n" style="font-size:40px !important">${chg ? 'EMAIL UPDATED' : 'EMAIL CONFIRMED'}</h2><p>${chg ? 'Your account now uses the new address.' : 'You are signed in' + (nm ? ' as <b>' + esc(nm) + '</b>' : '') + '. Welcome to Starting Five.'}</p><div class="rk-tour-go"><a class="btn btn-gold btn-big" href="#/daily" id="wlGo">${chg ? 'BACK TO THE GAME' : "PLAY TODAY'S DAILY"}</a><button type="button" class="btn" id="wlClose">CLOSE</button></div></div>`;
+    document.body.appendChild(ov);
+    const shut = () => ov.remove();
+    ov.querySelector('#wlClose').addEventListener('click', shut); ov.querySelector('#wlGo').addEventListener('click', shut);
+    if (window.SFX) try { window.SFX.play('chime'); } catch (e) { /* silent */ }
+  }
+
   // ---------- the connection ----------
   function getClient() {
     if (sb) return Promise.resolve(sb);
@@ -134,7 +148,7 @@
           sb.auth.onAuthStateChange((evt, session) => {
             USER = session ? session.user : null;
             if (evt === 'PASSWORD_RECOVERY') setTimeout(() => openPanel('recover'), 0);
-            if (USER && (evt === 'SIGNED_IN' || evt === 'INITIAL_SESSION' || evt === 'USER_UPDATED')) setTimeout(() => syncProfile().then(startSocial), 0);
+            if (USER && (evt === 'SIGNED_IN' || evt === 'INITIAL_SESSION' || evt === 'USER_UPDATED')) setTimeout(() => syncProfile().then(startSocial).then(() => { if (ARR) welcome(); }), 0);
             if (!USER && evt === 'SIGNED_OUT') { del(KEY); del(OLD); stopSocial(); fire(); }
           });
           res(sb);
