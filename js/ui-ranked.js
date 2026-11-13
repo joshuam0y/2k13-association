@@ -58,8 +58,9 @@
   const seasonTag = se => (se ? "'" + String(se - 1).slice(2) + "-'" + String(se).slice(2) : '');
 
   // ---------- rank tiers: Bronze to Legend, three divisions each up to Diamond (III is the lowest, I the highest). Everyone starts at 1200. ----------
-  const TIER_DEF = [['BRONZE', '#cd7f32', [0, 1100, 1150]], ['SILVER', '#c4ccd6', [1200, 1250, 1300]], ['GOLD', '#f2c230', [1350, 1400, 1450]], ['PLATINUM', '#4fd6c7', [1500, 1550, 1600]], ['DIAMOND', '#5eb8ff', [1650, 1700, 1750]]];
-  const TIER_TOP = [['MASTER', '#c47bff', 1800], ['GRANDMASTER', '#ff5d5d', 1900], ['LEGEND', '#ffb347', 2000]];
+  // 100 points a division: a win against an even player is about +16, so each division is a real climb (Silver to Gold about 19 net wins, Legend about 100)
+  const TIER_DEF = [['BRONZE', '#cd7f32', [0, 1000, 1100]], ['SILVER', '#c4ccd6', [1200, 1300, 1400]], ['GOLD', '#f2c230', [1500, 1600, 1700]], ['PLATINUM', '#4fd6c7', [1800, 1900, 2000]], ['DIAMOND', '#5eb8ff', [2100, 2200, 2300]]];
+  const TIER_TOP = [['MASTER', '#c47bff', 2400], ['GRANDMASTER', '#ff5d5d', 2600], ['LEGEND', '#ffb347', 2800]];
   const ROMAN = ['III', 'II', 'I'];
   const TIERS = [];
   TIER_DEF.forEach(t => t[2].forEach((f, i) => TIERS.push({ name: t[0] + ' ' + ROMAN[i], base: t[0], color: t[1], floor: f })));
