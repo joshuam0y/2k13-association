@@ -1219,3 +1219,8 @@ a.pr-i:hover { border-color: var(--gold); }
 .rk-tier.on { opacity: 1; transform: none; }
 .rk-tier-pg { justify-self: center; margin: 4px auto 0; width: fit-content; font-size: 18px; padding: 6px 16px; }
 .rk-tier-pg:empty { display: none; }
+/* the five cards sitting on the result pages */
+.rk-fstat { max-width: 620px; margin: 0 auto 16px; }
+.rk-fstat .rk-ff { max-width: 76px; }
+.rk-fstat .rk-fc b { font-size: 13px; } .rk-fstat .rk-fc i { font-size: 26px; } .rk-fstat .rk-fc u { font-size: 11px; }
+@media (max-width: 420px) { .rk-fstat .rk-fc b { font-size: 10px; } .rk-fstat .rk-fc i { font-size: 19px; } }

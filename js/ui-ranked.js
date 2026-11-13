@@ -689,6 +689,8 @@
       if (!l || !l.fin || (l.score != null && Math.abs(Number(l.score) - Number(r.score)) > 0.05)) ls.set(k, { fin: true, sent: true, remote: true, score: Number(r.score), pct: r.pct == null ? null : Number(r.pct), names: r.lineup && Array.isArray(r.lineup.names) ? r.lineup.names : null, ovrs: r.lineup && Array.isArray(r.lineup.ovrs) ? r.lineup.ovrs : null });
     });
   }
+  // the five player cards (face, last name, position, team chip, season, overall): in the reveal they flip in and count up, on the result pages they just sit there
+  const fiveCards = (five, still) => `<div class="rk-fcards${still ? ' rk-fstat' : ''}">${five.map(p => `<div class="rk-fc${still ? ' in' : ''}" style="--c1:${esc((p.colors || ['#d4af37'])[0])}"><div class="rk-ff">${UI.faceImg(p, (p.colors || ['#d4af37'])[0])}</div><b>${esc(String(p.name).split(' ').slice(-1)[0])}</b><em>${esc(C.posLabel(p))}</em><u>${esc(p.team || '')}</u><s>${p.season ? esc("'" + String(p.season - 1).slice(2) + '-' + String(p.season).slice(2)) : ''}</s><i class="ch-ovr ${UI.ovrClass(ovrOf(p))}" data-o="${esc(ovrOf(p))}">${still ? esc(ovrOf(p)) : 0}</i></div>`).join('')}</div>`;
   // the result reveal popup: five cards, score, percent, rank stamp, share. Used by the finished game and by the 'already played' screen
   function resultPop(o) {
     const { app, era, day, TH, five, score, pct, byId, doShare } = o;
@@ -696,7 +698,7 @@
       const ov = document.createElement('div'); ov.className = 'rk-tour';
       ov.className = 'rk-tour rk-fin';
       ov.innerHTML = `<div class="rk-tour-b rk-fb"><small>${isP ? 'PRACTICE' : 'DAILY #' + dayNo(day)} | ${esc(TH.title)}</small>
-        <div class="rk-fcards">${five.map(p => `<div class="rk-fc" style="--c1:${esc((p.colors || ['#d4af37'])[0])}"><div class="rk-ff">${UI.faceImg(p, (p.colors || ['#d4af37'])[0])}</div><b>${esc(String(p.name).split(' ').slice(-1)[0])}</b><em>${esc(C.posLabel(p))}</em><u>${esc(p.team || '')}</u><s>${p.season ? esc("'" + String(p.season - 1).slice(2) + '-' + String(p.season).slice(2)) : ''}</s><i class="ch-ovr ${UI.ovrClass(ovrOf(p))}" data-o="${esc(ovrOf(p))}">0</i></div>`).join('')}</div>
+        ${fiveCards(five)}
         <div class="rk-fsc"><small>LINEUP SCORE</small><b id="fsN">0.0</b></div>
         <div class="rk-fpc"><h2 class="rk-pop-n" id="fpN">0.0%</h2><div class="rk-tier" id="fTier"></div><p class="rk-frk" id="fRank"></p><p>OF A PERFECT FIVE</p></div>
         <p class="rk-pop-m" id="popMile"></p><p class="rk-pop-s" id="popStd"></p><div class="rk-tour-go rk-fgo">${isP ? '<a class="btn btn-gold btn-big" id="popShare" href="#/daily/practice/' + esc(prKey) + '/' + Date.now() + '">PLAY AGAIN</a>' : '<button type="button" class="btn btn-gold btn-big" id="popShare">SHARE YOUR SCORE</button>'}<button type="button" class="btn" id="popClose">CLOSE</button></div><button type="button" class="rk-skip" id="fSkip">TAP TO SKIP</button></div>`;
@@ -736,15 +738,15 @@
 
   function remoteDone(app, day, sv) {
     const TH = THEME[day].info, pct = sv.pct;
+    const pool = (THEME[day] && THEME[day].pool) || [], byId = {}; pool.forEach(p => { byId[p.id] = p; });
+    const five = (sv.names || []).map(n => pool.find(p => p.name === n)).filter(Boolean);   // the five players are looked up in the day's ten
     app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">DAILY #${dayNo(day)} | ${esc(day)} | ${esc(TH.title)}</div><div class="ch-top-t">YOU ALREADY PLAYED TODAY</div></div><a class="btn btn-small" href="#/daily">BACK</a></div>
-      <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${Number(sv.score).toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div>`}<div class="rk-streak" id="rkStreak"></div><div class="rk-tier on rk-tier-pg" id="rkTierPg"></div><div class="rk-std" id="rkReach"></div><div class="rk-std" id="rkStd"></div><span class="muted">${sv.names ? esc(sv.names.join(', ')) : 'Played on another device.'}</span></section>
+      <section class="rk-score">${five.length === 5 ? fiveCards(five, true) : ''}<small>YOUR LINEUP SCORE</small><b>${Number(sv.score).toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div>`}<div class="rk-streak" id="rkStreak"></div><div class="rk-tier on rk-tier-pg" id="rkTierPg"></div><div class="rk-std" id="rkReach"></div><div class="rk-std" id="rkStd"></div>${five.length === 5 ? '' : '<span class="muted">' + (sv.names ? esc(sv.names.join(', ')) : 'Played on another device.') + '</span>'}</section>
       <div class="ch-go"><a class="btn btn-gold" href="#/daily">SEE THE BOARD</a>${pct == null ? '' : '<button type="button" class="btn" id="dlShare">SHARE YOUR SCORE</button>'}</div>`;
     const sk = streakNow(), el = UI.$('#rkStreak', app); if (el && sk.n) el.innerHTML = '<b>' + sk.n + '</b> DAY DAILY STREAK';
     const doShare = async btn => { if (btn) btn.disabled = true; await shareCard({}, 'Starting Five Daily #' + dayNo(day) + ' \u{1F3C0}\n' + (sv.ovrs && sv.ovrs.length ? sv.ovrs.map(sqEmoji).join('') + '\n' : '') + pct.toFixed(1) + '% of a perfect five', '#/daily'); if (btn) btn.disabled = false; };
     const sh = UI.$('#dlShare', app); if (sh) sh.addEventListener('click', () => doShare(sh));
     // the same reveal as right after a game, rebuilt from the saved names: the five players are looked up in the day's ten
-    const pool = (THEME[day] && THEME[day].pool) || [], byId = {}; pool.forEach(p => { byId[p.id] = p; });
-    const five = (sv.names || []).map(n => pool.find(p => p.name === n)).filter(Boolean);
     if (pct != null && five.length === 5 && sv.score != null) resultPop({ app, era: 'ALL', day, TH, five, score: Number(sv.score), pct, byId, doShare });
     UI.profile.rpc('daily_stats', { p_day: day }).then(t => {
       if (!t || !t.rank) return;
@@ -801,7 +803,7 @@
       const perfectScore = dailyPerfect(era, day);
       const pct = score != null && perfectScore > 0 ? Math.min(100, 100 * score / perfectScore) : null;
       app.innerHTML = `${hdr}<div class="vs-sides vs-compact">${sideBox(0, 'YOU')}${sideBox(1, 'THE HOUSE')}</div>
-        <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${score == null ? '-' : score.toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div>`}<div class="rk-streak" id="rkStreak"></div><div class="rk-tier on rk-tier-pg" id="rkTierPg"></div><div class="rk-std" id="rkReach"></div><div class="rk-std" id="rkStd"></div><span class="muted">The house scored ${hs == null ? '-' : hs.toFixed(1)}. ${score != null && hs != null ? (score > hs ? 'You beat the house.' : score < hs ? 'The house won this one.' : 'A tie.') : ''}</span></section>
+        <section class="rk-score">${fiveCards(five, true)}<small>YOUR LINEUP SCORE</small><b>${score == null ? '-' : score.toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div>`}<div class="rk-streak" id="rkStreak"></div><div class="rk-tier on rk-tier-pg" id="rkTierPg"></div><div class="rk-std" id="rkReach"></div><div class="rk-std" id="rkStd"></div><span class="muted">The house scored ${hs == null ? '-' : hs.toFixed(1)}. ${score != null && hs != null ? (score > hs ? 'You beat the house.' : score < hs ? 'The house won this one.' : 'A tie.') : ''}</span></section>
         <div id="rkSub" class="rkn"><span class="muted">Sending your score...</span></div>
         <div class="ch-go">${isPr ? `<a class="btn btn-gold" href="#/daily/practice/${esc(prKey)}/${Date.now()}">PLAY AGAIN</a><a class="btn" href="#/daily/practice">ARCHIVE</a>` : `<a class="btn btn-gold" href="#/daily">SEE THE BOARD</a>${pct == null ? '' : '<button type="button" class="btn" id="dlShare">SHARE YOUR SCORE</button>'}`}</div>`;
       const dsh = UI.$('#dlShare', app);
