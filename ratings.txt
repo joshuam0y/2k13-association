@@ -1,0 +1,6 @@
+ESPN players 321 | league players 454 | matched 301 | qualified 251 | most games 13
+moves: 160 up 79 down 81
+UP   Derik Queen 70>74 (12g), Nolan Traoré 66>69 (10g), Moritz Wagner 70>73 (11g), Yaxel Lendeborg 73>76 (12g), Quenton Jackson 68>71 (12g), Cedric Coward 69>72 (10g), Cam Spencer 73>76 (11g), Joan Beringer 59>62 (12g), Aaron Wiggins 71>73 (12g), Day'Ron Sharpe 72>74 (11g)
+DOWN Scoot Henderson 79>76 (11g), Mikal Bridges 82>79 (11g), Rudy Gobert 83>80 (11g), Bub Carrington 77>75 (13g), Bilal Coulibaly 76>74 (12g), AJ Dybantsa 79>77 (9g), Alex Sarr 82>80 (12g), Stephon Castle 86>84 (12g), Jalen Green 79>77 (11g), Dillon Brooks 81>79 (11g)
+Ty Jerome 79 > 80 (10 games, 26.2 ppg)
+written: 172 ratings changed
