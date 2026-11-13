@@ -1191,6 +1191,7 @@
       try { st = await UI.profile.rpc('daily_stats', { p_day: day }); } catch (e) { /* before the latest SQL */ }
       if (yday >= DAILY_START) { try { yst = await UI.profile.rpc('daily_stats', { p_day: yday }); } catch (e) { /* before the latest SQL */ } }
       const perf = TH ? dailyPerfect('ALL', day) : 0, pctOf = sc => (perf > 0 ? Math.min(100, 100 * Number(sc) / perf).toFixed(1) + '%' : '');
+      if (!body.isConnected) return;   // you left while the boards were loading
       const me = UI.profile.account(), done = ls.get(dKey(day), null), played = done && done.fin, sk = streakNow();
       const left = (() => { const t = new Date().toLocaleTimeString('en-GB', Object.assign({ hour12: false }, PT)).split(':'), ms = 86400000 - ((+t[0]) * 3600 + (+t[1]) * 60 + (+t[2])) * 1000; return Math.floor(ms / 3600000) + 'H ' + (Math.floor(ms / 60000) % 60) + 'M'; })();
       const avgOf = x => x.avg_pct != null ? f1(x.avg_pct) + '%' : f1(x.avg_score);
@@ -1216,6 +1217,7 @@
           if (!signed) { board.innerHTML = msg('Sign in to see how your friends did.'); return; }
           board.innerHTML = msg('Loading...');
           let fr = null; try { fr = ((await UI.profile.rpc('my_friends')) || []).map(x => x.username); } catch (e) { fr = null; }
+          if (!board.isConnected) return;
           if (!fr) { board.innerHTML = msg('Friends boards arrive with the latest SQL.'); return; }
           const set = new Set(fr.concat(me || [])), list = (rows || []).filter(r => set.has(r.username));
           board.innerHTML = todayTbl(list) || msg(fr.length ? 'None of your friends have played today.' : 'No friends yet. Add some from their profiles.');
@@ -1223,6 +1225,7 @@
         }
         board.innerHTML = msg('Loading...');
         let wk = null; try { wk = (await UI.profile.rpc('lb_daily_week', { p_limit: 50 })) || []; } catch (e) { wk = null; }
+        if (!board.isConnected) return;
         board.innerHTML = !wk ? msg('The weekly board arrives with the latest SQL.') : wk.length ? table(['#', 'PLAYER', 'DAYS', 'AVERAGE', 'TOTAL POINTS'], wk.map((x, i) => [i + 1, nameCell(x, me), x.days, f1(x.avg_pct) + '%', '<b>' + f1(x.total) + '</b>'])) + '<p class="muted rk-sub">Monday to Sunday, Pacific. Ranked by total points: every daily percentage added up, so playing every day climbs the board.</p>' : msg('No scores this week yet.');
       };
       app.querySelectorAll('#dyTabs [data-bt]').forEach(b => b.addEventListener('click', () => show(b.dataset.bt)));
