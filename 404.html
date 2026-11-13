@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Starting Five</title>
+<meta name="theme-color" content="#000000"></head>
+<body style="background:#000;color:#b8b8bd;font-family:Arial,sans-serif;text-align:center;padding:48px 16px">
+Loading Starting Five...
+<script>
+// short links: playstartingfive.com/daily (and the version Instagram mangles, /%23/daily) go to the game's own address, #/daily
+(function () {
+  var p = location.pathname; try { p = decodeURIComponent(p); } catch (e) { /* keep it */ }
+  p = p.replace(/^\/+/, '').replace(/\/+$/, '');
+  if (p.indexOf('#/') === 0) p = p.slice(2);
+  if (p === 'index.html') p = '';
+  location.replace('/' + (location.search || '') + (p ? '#/' + p : ''));
+})();
+</script></body></html>

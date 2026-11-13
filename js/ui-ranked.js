@@ -104,7 +104,7 @@
   }
   // sharing is just the text and link, copied (no picture)
   async function shareCard(o, text, hash) {
-    const all = text + '\n' + (location.host + location.pathname + (hash || '')).replace(/index\.html$/, '');
+    const all = text + '\n' + (/^#\/[a-z]/.test(hash || '') ? location.host + '/' + hash.slice(2) : (location.host + location.pathname + (hash || '')).replace(/index\.html$/, ''));   // a plain path (/daily): some apps break the # in a link
     try { await navigator.clipboard.writeText(all); UI.toast('Copied. Paste it anywhere.'); }
     catch (e) {
       const t = document.createElement('textarea'); t.value = all; t.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(t); t.select();
