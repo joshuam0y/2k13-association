@@ -1224,3 +1224,39 @@ a.pr-i:hover { border-color: var(--gold); }
 .rk-fstat .rk-ff { max-width: 76px; }
 .rk-fstat .rk-fc b { font-size: 13px; } .rk-fstat .rk-fc i { font-size: 26px; } .rk-fstat .rk-fc u { font-size: 11px; }
 @media (max-width: 420px) { .rk-fstat .rk-fc b { font-size: 10px; } .rk-fstat .rk-fc i { font-size: 19px; } }
+/* one colour for each tier: the stamp, the big percent's glow and the page stamp all follow it */
+[data-t="best"] { --tc: #fff2b0; } [data-t="legend"] { --tc: #ff9d1f; } [data-t="elite"] { --tc: #b266ff; }
+[data-t="allstar"] { --tc: #3d9bff; } [data-t="starter"] { --tc: #3fb96a; } [data-t="role"] { --tc: #9a9aa2; }
+.rk-tier[data-t] { background: var(--tc); color: #000; }
+.rk-tier[data-t="best"] { background: linear-gradient(100deg, #fff2b0, #ffd24a 45%, #fff 55%, #ffd24a); box-shadow: 0 0 18px rgba(255, 226, 120, .55); }
+.rk-tier[data-t="legend"] { box-shadow: 0 0 16px rgba(255, 157, 31, .5); }
+.rk-tier[data-t="elite"] { box-shadow: 0 0 14px rgba(178, 102, 255, .5); color: #120022; }
+.rk-tier[data-t="allstar"] { box-shadow: 0 0 12px rgba(61, 155, 255, .45); color: #00162e; }
+.rk-tier[data-t="role"] { color: #111; }
+.rk-fb[data-t] .rk-pop-n { color: var(--tc); text-shadow: 0 0 26px color-mix(in srgb, var(--tc) 45%, transparent); }
+.rk-fb[data-t] { border-color: var(--tc); box-shadow: 0 0 30px color-mix(in srgb, var(--tc) 22%, transparent); }
+
+/* phone auction, compact: the player, the price and the whole bid bar fit on one screen without hiding each other */
+@media (max-width: 560px) {
+  .auc-stage > .auc-card { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; padding: 8px 10px; }
+  .auc-stage > .auc-card .auc-face { width: 44px; height: 44px; }
+  .auc-stage > .auc-card .auc-price { grid-column: auto; flex-direction: column; align-items: flex-end; border-top: 0; padding-top: 0; justify-content: center; }
+  .auc-stage > .auc-card .auc-price b { font-size: 30px; }
+  .auc-stage > .auc-card .auc-price small { font-size: 9px; letter-spacing: .1em; }
+  .auc-stage > .auc-card .auc-info h2 { font-size: 18px; margin: 0 0 2px; }
+  .auc-stage > .auc-card .auc-info p { font-size: 12px; }
+  .auc-stage > .auc-bid { gap: 6px; padding: 6px 0; }
+  .auc-stage > .auc-bid .auc-maxline { font-size: 11px; line-height: 1.2; }
+  .auc-stage > .auc-bid .auc-maxline span { display: none; }
+  .auc-stage > .auc-bid .auc-step { grid-template-columns: 44px minmax(0, 1fr) 44px; gap: 6px; }
+  .auc-stage > .auc-bid .auc-step .btn { min-height: 40px; font-size: 22px; }
+  .auc-stage > .auc-bid .auc-amt { padding: 2px; flex-direction: row; gap: 8px; }
+  .auc-stage > .auc-bid .auc-amt b { font-size: 26px; }
+  .auc-stage > .auc-bid .auc-amt small { font-size: 9px; }
+  .auc-stage > .auc-bid .auc-chips { gap: 4px; flex-wrap: nowrap; }
+  .auc-stage > .auc-bid .auc-chips .btn { padding: 4px 8px; min-height: 30px; font-size: 13px; }
+  .auc-stage > .auc-bid .auc-go { grid-template-columns: 1.2fr 1fr; gap: 6px; }
+  .auc-stage > .auc-bid .auc-go .btn { min-height: 44px; font-size: 16px; }
+  .auc-stage > .auc-bid .auc-go .btn small { font-size: 10px; }
+  .auc-stage > .auc-wait { padding: 8px; }
+}
