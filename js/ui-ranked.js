@@ -69,7 +69,11 @@
   const tierBadge = r => { const t = tierOf(r); return `<span class="tier" style="--tc:${t.color}">${iconSvg(t, 16)}${esc(t.name)}</span>`; };
   // a profile picture is a team logo the player picked, or the first letter of the name
   // a profile picture is a rank icon (your current rank by default, or any rank you have reached) or a team logo
+  // profile pictures: the thirty current teams, always the same ones (not whatever league is loaded)
+  const AVT = [['ATL', 'Atlanta', 'Hawks', '#e03a3e', '#c1d32f'], ['BOS', 'Boston', 'Celtics', '#007a33', '#ba9653'], ['BKN', 'Brooklyn', 'Nets', '#1d1d1d', '#9a9a9a'], ['CHA', 'Charlotte', 'Hornets', '#1d1160', '#00788c'], ['CHI', 'Chicago', 'Bulls', '#ce1141', '#000000'], ['CLE', 'Cleveland', 'Cavaliers', '#860038', '#fdbb30'], ['DAL', 'Dallas', 'Mavericks', '#00538c', '#b8c4ca'], ['DEN', 'Denver', 'Nuggets', '#0e2240', '#fec524'], ['DET', 'Detroit', 'Pistons', '#c8102e', '#1d42ba'], ['GSW', 'Golden State', 'Warriors', '#1d428a', '#ffc72c'], ['HOU', 'Houston', 'Rockets', '#ce1141', '#c4ced4'], ['IND', 'Indiana', 'Pacers', '#002d62', '#fdbb30'], ['LAC', 'Los Angeles', 'Clippers', '#c8102e', '#1d428a'], ['LAL', 'Los Angeles', 'Lakers', '#552583', '#fdb927'], ['MEM', 'Memphis', 'Grizzlies', '#5d76a9', '#12173f'], ['MIA', 'Miami', 'Heat', '#98002e', '#f9a01b'], ['MIL', 'Milwaukee', 'Bucks', '#00471b', '#eee1c6'], ['MIN', 'Minnesota', 'Timberwolves', '#0c2340', '#236192'], ['NOH', 'New Orleans', 'Pelicans', '#0c2340', '#c8102e'], ['NYK', 'New York', 'Knicks', '#006bb6', '#f58426'], ['OKC', 'Oklahoma City', 'Thunder', '#007ac1', '#ef3b24'], ['ORL', 'Orlando', 'Magic', '#0077c0', '#c4ced4'], ['PHI', 'Philadelphia', '76ers', '#006bb6', '#ed174c'], ['PHX', 'Phoenix', 'Suns', '#1d1160', '#e56020'], ['POR', 'Portland', 'Trail Blazers', '#e03a3e', '#000000'], ['SAC', 'Sacramento', 'Kings', '#5a2d81', '#63727a'], ['SAS', 'San Antonio', 'Spurs', '#c4ced4', '#000000'], ['TOR', 'Toronto', 'Raptors', '#ce1141', '#000000'], ['UTA', 'Utah', 'Jazz', '#002b5c', '#f9a01b'], ['WAS', 'Washington', 'Wizards', '#002b5c', '#e31837']].map(r => ({ abbr: r[0], city: r[1], name: r[2], colors: [r[3], r[4]] }));
   const avatarHtml = (val, name, size, rating) => {
+    const at = val && val.indexOf('rank:') !== 0 ? AVT.find(x => x.abbr === val) : null;
+    if (at) return `<span class="pf-av logo" style="--sz:${size}px">${UI.logoFor(at, size)}</span>`;
     if (val && val.indexOf('rank:') !== 0) return `<span class="pf-av logo" style="--sz:${size}px">${UI.logo(val, size)}</span>`;
     const k = val ? val.slice(5) : 'auto', t = k === 'auto' ? tierOf(rating || 1200) : (TIERS.find(x => x.name === k) || tierOf(1200));
     return `<span class="pf-av rank" style="width:${size}px;height:${size}px" title="${esc(t.name)}">${iconSvg(t, Math.round(size * 0.82))}</span>`;
@@ -147,7 +151,7 @@
     const by = {}; let top = -1; rows.forEach(r => { by[String(r.day).slice(0, 10)] = r; if (r.pct != null && Number(r.pct) > top) top = Number(r.pct); });
     const days = []; for (let d = today(), i = 0; i < 30 && d >= DAILY_START; i++, d = dayBefore(d)) days.unshift(d);
     box.innerHTML = '<div class="ch-step-k">LAST 30 DAYS</div><div class="dh-grid">' + days.map(k => { const r = by[k], pc = r && r.pct != null ? Number(r.pct) : null;
-      return `<i class="dh-s ${r ? sqB(pc) : ''}${pc != null && pc === top ? ' best' : ''}" title="${k}${r ? ': ' + (pc != null ? pc.toFixed(1) + '%' : Number(r.score).toFixed(1)) : ''}"></i>`; }).join('') + '</div>';
+      return `<i class="dh-s ${r ? sqB(pc) : ''}${pc != null && pc === top ? ' best' : ''}" title="${k}${r ? ': ' + (pc != null ? pc.toFixed(1) + '%' : Number(r.score).toFixed(1)) : ''}">${pc != null ? Math.round(pc) : ''}</i>`; }).join('') + '</div><div class="dh-key"><span>LOWER</span><i class="dh-s b1"></i><i class="dh-s b2"></i><i class="dh-s b3"></i><i class="dh-s b4"></i><i class="dh-s b5"></i><span>HIGHER</span><em>Each square is a day, with its percent of a perfect five. The outlined one is your best.</em></div>';
   }
   const regionName = r => { const x = REGIONS.find(y => y[0] === r); return x ? x[1].trim() : (r || ''); };
   const NOT_SET_UP = 'The ranked boards are not switched on yet. The site owner needs to run supabase/community.sql once in the Supabase SQL editor.';
@@ -746,14 +750,14 @@
           const q = x => ov.querySelector(x), cards = [].slice.call(ov.querySelectorAll('.rk-fc')), seenK = dKey(day) + '-rv', first = !ls.get(seenK, false), T = [];
           let R = null, stamped = false, upd = false;   // R: where this score sits among every result today's auction can end in
           const dist = reachDist(era, day, byId);
-          const tierOf = () => R ? (R.top ? 'THE BEST POSSIBLE' : R.p >= 99 ? 'LEGENDARY' : R.p >= 95 ? 'ELITE' : R.p >= 80 ? 'ALL STAR' : R.p >= 50 ? 'STARTER LEVEL' : 'ROLE PLAYERS') : (pct >= 97 ? 'LEGENDARY' : pct >= 94 ? 'ELITE' : pct >= 90 ? 'ALL STAR' : pct >= 80 ? 'STARTER LEVEL' : 'ROLE PLAYERS');
+          const tierOf = () => R ? (R.top ? 'THE BEST POSSIBLE' : R.gap >= 99 ? 'LEGENDARY' : R.gap >= 98 ? 'ELITE' : R.gap >= 97 ? 'ALL STAR' : R.gap >= 96 ? 'STARTER LEVEL' : 'ROLE PLAYERS') : (pct >= 97 ? 'LEGENDARY' : pct >= 94 ? 'ELITE' : pct >= 90 ? 'ALL STAR' : pct >= 80 ? 'STARTER LEVEL' : 'ROLE PLAYERS');
           const rankLine = () => R ? (R.top ? 'NO RESULT TODAY BEATS THIS ONE' : 'BETTER THAN ' + Math.floor(R.p) + '% OF ALL ' + R.n.toLocaleString() + ' POSSIBLE RESULTS') : '';
           const paintRank = () => { const t = q('#fTier'), r = q('#fRank'); if (t) t.textContent = tierOf(); if (r) r.textContent = rankLine(); const pg = UI.$('#rkReach', app); if (pg) pg.textContent = rankLine(); };
           const sfx = n => { if (window.SFX) try { window.SFX.play(n); } catch (e) { /* silent */ } };
           const count = (el, to, ms, dec, suf, tick) => { const t0 = performance.now(); const step = now => { const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3); el.textContent = (to * e).toFixed(dec) + suf; if (tick && k < 1 && Math.floor(k * 14) !== step.l) { step.l = Math.floor(k * 14); sfx('tick'); } if (k < 1 && ov.isConnected) requestAnimationFrame(step); }; requestAnimationFrame(step); };
           const burst = () => { const box = document.createElement('div'); box.className = 'rk-conf'; for (let n = 0; n < 46; n++) { const c = document.createElement('i'); c.style.cssText = '--x:' + (Math.random() * 100 - 50) + 'vw;--y:' + (-(30 + Math.random() * 55)) + 'vh;--r:' + Math.round(Math.random() * 720 - 360) + 'deg;--d:' + (0.9 + Math.random() * 0.9) + 's;background:' + ['#d4af37', '#f5d76e', '#fff', '#3d78d6', '#e88a8a'][n % 5]; box.appendChild(c); } ov.appendChild(box); setTimeout(() => box.remove(), 2200); };
           const finish = () => { T.forEach(clearTimeout); cards.forEach(c => { c.classList.add('in'); const o = c.querySelector('[data-o]'); o.textContent = o.dataset.o; }); q('#fsN').textContent = score.toFixed(1); q('#fpN').textContent = pct.toFixed(1) + '%'; if (R) paintRank(); else q('#fTier').textContent = 'RANKING...'; stamped = true; ov.classList.add('done'); };
-          dist.then(D => { if (D) { const below = D.filter(x => x < score - 0.0001).length; R = { n: D.length, p: 100 * below / D.length, top: score >= D[D.length - 1] - 0.0001 }; } dist.__fin = true; if (stamped || ov.classList.contains('done')) paintRank(); });
+          dist.then(D => { if (D) { const below = D.filter(x => x < score - 0.0001).length; R = { n: D.length, p: 100 * below / D.length, top: score >= D[D.length - 1] - 0.0001, gap: 100 * score / D[D.length - 1] }; } dist.__fin = true; if (stamped || ov.classList.contains('done')) paintRank(); });
           if (!first || window.matchMedia('(prefers-reduced-motion: reduce)').matches) finish();
           else {
             ls.set(seenK, true);
@@ -762,7 +766,7 @@
             const t1 = 500 + cards.length * 650 + 350;
             at(t1, () => { q('.rk-fsc').classList.add('in'); count(q('#fsN'), score, 1400, 1, '', true); });
             at(t1 + 1700, () => { q('.rk-fpc').classList.add('in'); count(q('#fpN'), pct, 1800, 1, '%', true); });
-            const stamp = () => { if (stamped || !ov.isConnected) return; stamped = true; paintRank(); q('.rk-fpc').classList.add('stamp'); sfx('crowd'); if (R ? (R.top || R.p >= 95) : pct >= 94) burst(); T.push(setTimeout(() => ov.classList.add('done'), 800)); };
+            const stamp = () => { if (stamped || !ov.isConnected) return; stamped = true; paintRank(); q('.rk-fpc').classList.add('stamp'); sfx('crowd'); if (R ? (R.top || R.gap >= 98) : pct >= 94) burst(); T.push(setTimeout(() => ov.classList.add('done'), 800)); };
             at(t1 + 3700, () => { upd = true; if (R || dist.__fin) stamp(); else q('#fTier').textContent = 'RANKING...'; });
             dist.then(() => { if (upd && !stamped) stamp(); });
             ov.addEventListener('click', e => { if (!ov.classList.contains('done') && !e.target.closest('button:not(#fSkip)')) finish(); });
@@ -907,7 +911,7 @@
           <div class="ch-step-k">RANK ICONS</div>
           <div class="pf-picks"><button type="button" class="pf-pick wide${!avatar || avatar === 'rank:auto' ? ' on' : ''}" data-av="rank:auto">${iconSvg(tierOf(curRating), 38)}<small>MY RANK</small></button>${TIERS.map(t => { const lock = t.floor > peakRating; return `<button type="button" class="pf-pick${avatar === 'rank:' + t.name ? ' on' : ''}${lock ? ' lock' : ''}" data-av="rank:${esc(t.name)}"${lock ? ' disabled' : ''} title="${esc(t.name)}${lock ? ' (reach ' + t.floor + ' to unlock)' : ''}">${iconSvg(t, 38)}</button>`; }).join('')}</div>
           <div class="ch-step-k">TEAM LOGOS</div>
-          <div class="pf-picks">${UI.teams().map(t => `<button type="button" class="pf-pick${avatar === t.abbr ? ' on' : ''}" data-av="${esc(t.abbr)}" title="${esc(UI.teamName(t.abbr))}">${UI.logo(t.abbr, 38)}</button>`).join('')}</div>
+          <div class="pf-picks">${AVT.map(t => `<button type="button" class="pf-pick${avatar === t.abbr ? ' on' : ''}" data-av="${esc(t.abbr)}" title="${esc(t.city + ' ' + t.name)}">${UI.logoFor(t, 38)}</button>`).join('')}</div>
           <span class="pf-msg" id="avMsg"></span></div></div>
         <div class="ch-step"><div class="ch-step-k">ABOUT YOU</div>
           <label class="field"><span>REGION (FOR THE REGION BOARDS)</span><select id="meRegion">${regionOpts(row.region)}</select></label>
