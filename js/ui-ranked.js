@@ -604,6 +604,43 @@
     const target = st.o.start + Math.round(avg * (0.4 + 1.6 * w) - st.o.start + (rng() - 0.5) * 1.5);
     return st.price + st.o.raise <= target && C.aucCanRaise(st, 1) ? 'raise' : 'pass';
   }
+  // every result this day's auction can end in (same ten, same order, same house): the search tries each bid you could make and follows the house's answer
+  const REACH = {};
+  function reachDist(era, day, byId) {
+    const rk = day + '|' + era;
+    if (REACH[rk]) return REACH[rk];
+    return (REACH[rk] = (async () => {
+      const T = THEME[day]; if (!T) return null;
+      const cfg = { bench: 0, seed: hash(day + '|' + era), auction: DAILY }, cl = o => JSON.parse(JSON.stringify(o));
+      let rs = 0;
+      const rng = () => { const a = (rs + 0x6D2B79F5) | 0; rs = a; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+      const house = (st, s0) => { rs = s0; let n = 0; while (!st.done && st.turn === 1 && n++ < 50) C.auctionAct(st, 1, houseMove(st, byId, rng)); return rs; };
+      const st0 = C.auctionStart(cfg, T.pool);
+      let beam = [{ st: st0, rs: house(st0, hash(day + era + 'house') >>> 0) }], tick = Date.now();
+      for (let lvl = 0; lvl < 16 && beam.some(n => !n.st.done); lvl++) {
+        const next = new Map();
+        for (const node of beam) {
+          if (Date.now() - tick > 30) { await new Promise(r => setTimeout(r, 0)); tick = Date.now(); }   // keep the page smooth
+          const a = node.st;
+          if (a.done) { const k = JSON.stringify([a.won[0].slice().sort(), a.spent]); if (!next.has(k)) next.set(k, node); continue; }
+          const i0 = a.i, seen = new Set();
+          const rec = (st, r, depth) => {
+            if (st.done || st.i !== i0) { const k = JSON.stringify([st.won[0].slice().sort(), st.spent, st.won[1].slice().sort(), st.i, r]); if (!next.has(k)) next.set(k, { st, rs: r }); return; }
+            const vk = JSON.stringify([st.price, st.holder, st.turn, st.spent, st.won[0].length, st.won[1].length, r]);
+            if (seen.has(vk) || depth > 60) return; seen.add(vk);
+            if (st.turn === 1) { const s2 = cl(st); rec(s2, house(s2, r), depth + 1); return; }
+            { const s2 = cl(st); C.auctionAct(s2, 0, 'pass'); rec(s2, r, depth + 1); }
+            const mx = C.aucMax(st, 0);
+            for (let t = st.price + st.o.raise; t <= mx; t++) { const s2 = cl(st); if (C.auctionAct(s2, 0, 'raise', t)) rec(s2, r, depth + 1); }
+          };
+          rec(cl(a), node.rs, 0);
+        }
+        beam = Array.from(next.values());
+      }
+      const out = beam.filter(n => n.st.done).map(n => UI.ranked.lineupScore(n.st.won[0].map(id => byId[id]))).filter(x => x != null).sort((x, y) => x - y);
+      return out.length ? out : null;
+    })().catch(() => null));
+  }
   // guests: the score is only sent as a nameless tally (counts in the day's numbers, never on a board)
   const guestId = () => { try { let g = localStorage.getItem('a13-gid'); if (!g) { g = Math.random().toString(36).slice(2) + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); localStorage.setItem('a13-gid', g); } return g; } catch (e) { return null; } };
   async function sendGuest(day, score, pct) {
@@ -686,7 +723,7 @@
       const perfectScore = dailyPerfect(era, day);
       const pct = score != null && perfectScore > 0 ? Math.min(100, 100 * score / perfectScore) : null;
       app.innerHTML = `${hdr}<div class="vs-sides vs-compact">${sideBox(0, 'YOU')}${sideBox(1, 'THE HOUSE')}</div>
-        <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${score == null ? '-' : score.toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div>`}<div class="rk-streak" id="rkStreak"></div><div class="rk-std" id="rkStd"></div><span class="muted">The house scored ${hs == null ? '-' : hs.toFixed(1)}. ${score != null && hs != null ? (score > hs ? 'You beat the house.' : score < hs ? 'The house won this one.' : 'A tie.') : ''}</span></section>
+        <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${score == null ? '-' : score.toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div>`}<div class="rk-streak" id="rkStreak"></div><div class="rk-std" id="rkStd"></div><div class="rk-std" id="rkReach"></div><span class="muted">The house scored ${hs == null ? '-' : hs.toFixed(1)}. ${score != null && hs != null ? (score > hs ? 'You beat the house.' : score < hs ? 'The house won this one.' : 'A tie.') : ''}</span></section>
         <div id="rkSub" class="rkn"><span class="muted">Sending your score...</span></div>
         <div class="ch-go">${isPr ? `<a class="btn btn-gold" href="#/daily/practice/${esc(prKey)}/${Date.now()}">PLAY AGAIN</a><a class="btn" href="#/daily/practice">ARCHIVE</a>` : `<a class="btn btn-gold" href="#/daily">SEE THE BOARD</a>${pct == null ? '' : '<button type="button" class="btn" id="dlShare">SHARE YOUR SCORE</button>'}`}</div>`;
       const dsh = UI.$('#dlShare', app);
@@ -698,7 +735,7 @@
         ov.innerHTML = `<div class="rk-tour-b rk-fb"><small>DAILY #${dayNo(day)} | ${esc(TH.title)}</small>
           <div class="rk-fcards">${five.map(p => `<div class="rk-fc"><div class="rk-ff">${UI.faceImg(p, '#d4af37')}</div><b>${esc(String(p.name).split(' ').slice(-1)[0])}</b><i class="ch-ovr ${UI.ovrClass(ovrOf(p))}" data-o="${esc(ovrOf(p))}">0</i></div>`).join('')}</div>
           <div class="rk-fsc"><small>LINEUP SCORE</small><b id="fsN">0.0</b></div>
-          <div class="rk-fpc"><h2 class="rk-pop-n" id="fpN">0.0%</h2><div class="rk-tier" id="fTier"></div><p>OF A PERFECT FIVE</p></div>
+          <div class="rk-fpc"><h2 class="rk-pop-n" id="fpN">0.0%</h2><div class="rk-tier" id="fTier"></div><p class="rk-frk" id="fRank"></p><p>OF A PERFECT FIVE</p></div>
           <p class="rk-pop-m" id="popMile"></p><p class="rk-pop-s" id="popStd"></p><div class="rk-tour-go rk-fgo"><button type="button" class="btn btn-gold btn-big" id="popShare">SHARE YOUR SCORE</button><button type="button" class="btn" id="popClose">CLOSE</button></div><button type="button" class="rk-skip" id="fSkip">TAP TO SKIP</button></div>`;
         document.body.appendChild(ov);
         { const n = streakNow().n; if (MILES.includes(n)) ov.querySelector('#popMile').textContent = n + ' DAY STREAK'; }
@@ -707,11 +744,16 @@
         ov.querySelector('#popClose').addEventListener('click', shut);
         { // the reveal: five cards flip in with their overalls, the lineup score and then the percentage count up, a rank stamp lands; played in full once a day, instant after that
           const q = x => ov.querySelector(x), cards = [].slice.call(ov.querySelectorAll('.rk-fc')), seenK = dKey(day) + '-rv', first = !ls.get(seenK, false), T = [];
-          const tier = pct >= 97 ? 'LEGENDARY' : pct >= 94 ? 'ELITE' : pct >= 90 ? 'ALL STAR' : pct >= 80 ? 'STARTER LEVEL' : 'ROLE PLAYERS';
+          let R = null, stamped = false, upd = false;   // R: where this score sits among every result today's auction can end in
+          const dist = reachDist(era, day, byId);
+          const tierOf = () => R ? (R.top ? 'THE BEST POSSIBLE' : R.p >= 99 ? 'LEGENDARY' : R.p >= 95 ? 'ELITE' : R.p >= 80 ? 'ALL STAR' : R.p >= 50 ? 'STARTER LEVEL' : 'ROLE PLAYERS') : (pct >= 97 ? 'LEGENDARY' : pct >= 94 ? 'ELITE' : pct >= 90 ? 'ALL STAR' : pct >= 80 ? 'STARTER LEVEL' : 'ROLE PLAYERS');
+          const rankLine = () => R ? (R.top ? 'NO RESULT TODAY BEATS THIS ONE' : 'BETTER THAN ' + Math.floor(R.p) + '% OF ALL ' + R.n.toLocaleString() + ' POSSIBLE RESULTS') : '';
+          const paintRank = () => { const t = q('#fTier'), r = q('#fRank'); if (t) t.textContent = tierOf(); if (r) r.textContent = rankLine(); const pg = UI.$('#rkReach', app); if (pg) pg.textContent = rankLine(); };
           const sfx = n => { if (window.SFX) try { window.SFX.play(n); } catch (e) { /* silent */ } };
           const count = (el, to, ms, dec, suf, tick) => { const t0 = performance.now(); const step = now => { const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3); el.textContent = (to * e).toFixed(dec) + suf; if (tick && k < 1 && Math.floor(k * 14) !== step.l) { step.l = Math.floor(k * 14); sfx('tick'); } if (k < 1 && ov.isConnected) requestAnimationFrame(step); }; requestAnimationFrame(step); };
           const burst = () => { const box = document.createElement('div'); box.className = 'rk-conf'; for (let n = 0; n < 46; n++) { const c = document.createElement('i'); c.style.cssText = '--x:' + (Math.random() * 100 - 50) + 'vw;--y:' + (-(30 + Math.random() * 55)) + 'vh;--r:' + Math.round(Math.random() * 720 - 360) + 'deg;--d:' + (0.9 + Math.random() * 0.9) + 's;background:' + ['#d4af37', '#f5d76e', '#fff', '#3d78d6', '#e88a8a'][n % 5]; box.appendChild(c); } ov.appendChild(box); setTimeout(() => box.remove(), 2200); };
-          const finish = () => { T.forEach(clearTimeout); cards.forEach(c => { c.classList.add('in'); const o = c.querySelector('[data-o]'); o.textContent = o.dataset.o; }); q('#fsN').textContent = score.toFixed(1); q('#fpN').textContent = pct.toFixed(1) + '%'; q('#fTier').textContent = tier; ov.classList.add('done'); };
+          const finish = () => { T.forEach(clearTimeout); cards.forEach(c => { c.classList.add('in'); const o = c.querySelector('[data-o]'); o.textContent = o.dataset.o; }); q('#fsN').textContent = score.toFixed(1); q('#fpN').textContent = pct.toFixed(1) + '%'; if (R) paintRank(); else q('#fTier').textContent = 'RANKING...'; stamped = true; ov.classList.add('done'); };
+          dist.then(D => { if (D) { const below = D.filter(x => x < score - 0.0001).length; R = { n: D.length, p: 100 * below / D.length, top: score >= D[D.length - 1] - 0.0001 }; } dist.__fin = true; if (stamped || ov.classList.contains('done')) paintRank(); });
           if (!first || window.matchMedia('(prefers-reduced-motion: reduce)').matches) finish();
           else {
             ls.set(seenK, true);
@@ -720,8 +762,9 @@
             const t1 = 500 + cards.length * 650 + 350;
             at(t1, () => { q('.rk-fsc').classList.add('in'); count(q('#fsN'), score, 1400, 1, '', true); });
             at(t1 + 1700, () => { q('.rk-fpc').classList.add('in'); count(q('#fpN'), pct, 1800, 1, '%', true); });
-            at(t1 + 3700, () => { q('#fTier').textContent = tier; q('.rk-fpc').classList.add('stamp'); sfx('crowd'); if (pct >= 90) burst(); });
-            at(t1 + 4500, () => ov.classList.add('done'));
+            const stamp = () => { if (stamped || !ov.isConnected) return; stamped = true; paintRank(); q('.rk-fpc').classList.add('stamp'); sfx('crowd'); if (R ? (R.top || R.p >= 95) : pct >= 94) burst(); T.push(setTimeout(() => ov.classList.add('done'), 800)); };
+            at(t1 + 3700, () => { upd = true; if (R || dist.__fin) stamp(); else q('#fTier').textContent = 'RANKING...'; });
+            dist.then(() => { if (upd && !stamped) stamp(); });
             ov.addEventListener('click', e => { if (!ov.classList.contains('done') && !e.target.closest('button:not(#fSkip)')) finish(); });
           }
         }
