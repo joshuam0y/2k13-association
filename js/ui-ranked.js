@@ -713,7 +713,7 @@
     const sideBox = (i, name) => {
       const won = st.won[i].map(id => ({ p: byId[id], price: (st.log.filter(x => x.id === id)[0] || {}).price }));
       return `<div class="vs-side${st.turn === i ? ' on' : ''}"><div class="vs-side-h"><div><small>${name}</small><b>${money(A.budget - st.spent[i])} left</b><small class="vs-pay">${st.won[i].length} of ${per} spots</small></div></div>
-        <ol class="vs-auc-won">${won.map(w => `<li>${w.p ? '<b class="ch-ovr ' + UI.ovrClass(ovrOf(w.p)) + '">' + esc(ovrOf(w.p)) + '</b> ' : ''}${esc(w.p ? w.p.name : '?')}${w.p ? ' <small class="muted">' + esc(C.posLabel(w.p)) + '</small>' : ''} <small class="muted">${money(w.price || 0)}</small></li>`).join('') || '<li class="muted">Nobody yet</li>'}</ol></div>`;
+        <ol class="vs-auc-won">${won.map(w => `<li>${w.p ? '<b class="ch-ovr ' + UI.ovrClass(ovrOf(w.p)) + '">' + esc(ovrOf(w.p)) + '</b> ' : ''}${esc(w.p ? w.p.name : '?')}${w.p ? ' <small class="muted">' + esc(C.posLabel(w.p)) + (w.p.team ? ' | ' + esc(w.p.team) : '') + (w.p.season ? " '" + String(w.p.season - 1).slice(2) + '-' + String(w.p.season).slice(2) : '') + '</small>' : ''} <small class="muted">${money(w.price || 0)}</small></li>`).join('') || '<li class="muted">Nobody yet</li>'}</ol></div>`;
     };
     const TH = (THEME[day] || {}).info || { title: eraName(era), kind: '' }, isPr = day.indexOf('practice:') === 0, prKey = isPr ? day.slice(9, day.lastIndexOf(':')) : '';
     const hdr = `<div class="ch-top"><div><div class="ch-top-k">${isPr ? 'PRACTICE' : 'DAILY #' + dayNo(day) + ' | ' + esc(day)} | ${esc(TH.title)}</div><div class="ch-top-t">${st.done ? 'YOUR FIVE IS SET' : 'PLAYER ' + (st.i + 1) + ' OF ' + st.ids.length}</div></div><a class="btn btn-small" href="${isPr ? '#/daily/practice' : '#/daily'}">BACK</a></div>`;
@@ -733,7 +733,7 @@
         const ov = document.createElement('div'); ov.className = 'rk-tour';
         ov.className = 'rk-tour rk-fin';
         ov.innerHTML = `<div class="rk-tour-b rk-fb"><small>DAILY #${dayNo(day)} | ${esc(TH.title)}</small>
-          <div class="rk-fcards">${five.map(p => `<div class="rk-fc"><div class="rk-ff">${UI.faceImg(p, '#d4af37')}</div><b>${esc(String(p.name).split(' ').slice(-1)[0])}</b><em>${esc(C.posLabel(p))}</em><i class="ch-ovr ${UI.ovrClass(ovrOf(p))}" data-o="${esc(ovrOf(p))}">0</i></div>`).join('')}</div>
+          <div class="rk-fcards">${five.map(p => `<div class="rk-fc" style="--c1:${esc((p.colors || ['#d4af37'])[0])}"><div class="rk-ff">${UI.faceImg(p, (p.colors || ['#d4af37'])[0])}</div><b>${esc(String(p.name).split(' ').slice(-1)[0])}</b><em>${esc(C.posLabel(p))}</em><u>${esc(p.team || '')}</u><s>${p.season ? esc("'" + String(p.season - 1).slice(2) + '-' + String(p.season).slice(2)) : ''}</s><i class="ch-ovr ${UI.ovrClass(ovrOf(p))}" data-o="${esc(ovrOf(p))}">0</i></div>`).join('')}</div>
           <div class="rk-fsc"><small>LINEUP SCORE</small><b id="fsN">0.0</b></div>
           <div class="rk-fpc"><h2 class="rk-pop-n" id="fpN">0.0%</h2><div class="rk-tier" id="fTier"></div><p class="rk-frk" id="fRank"></p><p>OF A PERFECT FIVE</p></div>
           <p class="rk-pop-m" id="popMile"></p><p class="rk-pop-s" id="popStd"></p><div class="rk-tour-go rk-fgo"><button type="button" class="btn btn-gold btn-big" id="popShare">SHARE YOUR SCORE</button><button type="button" class="btn" id="popClose">CLOSE</button></div><button type="button" class="rk-skip" id="fSkip">TAP TO SKIP</button></div>`;
