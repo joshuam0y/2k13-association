@@ -601,6 +601,15 @@
     const target = st.o.start + Math.round(avg * (0.4 + 1.6 * w) - st.o.start + (rng() - 0.5) * 1.5);
     return st.price + st.o.raise <= target && C.aucCanRaise(st, 1) ? 'raise' : 'pass';
   }
+  // guests: the score is only sent as a nameless tally (counts in the day's numbers, never on a board)
+  const guestId = () => { try { let g = localStorage.getItem('a13-gid'); if (!g) { g = Math.random().toString(36).slice(2) + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); localStorage.setItem('a13-gid', g); } return g; } catch (e) { return null; } };
+  async function sendGuest(day, score, pct) {
+    const g = guestId(), k = 'a13-gsent-' + day;
+    try { if (!g || localStorage.getItem(k)) return; await UI.profile.rpc('submit_daily_guest', { p_day: day, p_gid: g, p_score: score, p_pct: pct == null ? null : Math.round(pct * 100) / 100 }); localStorage.setItem(k, '1'); } catch (e) { /* before the latest SQL */ }
+  }
+  function claimGuest(day) {   // signed in now: the nameless tally entry goes, the named score replaces it
+    try { const k = 'a13-gsent-' + day; if (localStorage.getItem(k)) { UI.profile.rpc('claim_guest_daily', { p_day: day, p_gid: guestId() }).catch(() => {}); localStorage.removeItem(k); } } catch (e) { /* private mode */ }
+  }
   // signed in on another device: the dailies already on the server count here too (no second try, and the streak carries over)
   let TRIED = '';
   async function syncRemote() {
@@ -705,12 +714,18 @@
       if (!UI.profile.signedIn()) {   // anyone can play; an account only puts the score on the board
         sub.innerHTML = '<b>YOUR SCORE IS SAVED ON THIS DEVICE.</b> <span class="muted">Sign in to put it on the board.</span><button type="button" class="btn btn-gold" data-pf="open">SIGN IN</button>';
         UI.profile.wire(app, () => dailyPage(app, era));
+        sendGuest(day, score, pct).then(async () => {
+          let t = null; try { t = await UI.profile.rpc('daily_stats', { p_day: day }); } catch (e) { return; }
+          if (!t || !t.played) return;
+          const line = t.played + ' PLAYED TODAY | AVERAGE ' + (t.avg_pct != null ? t.avg_pct + '%' : t.avg_score), a = UI.$('#rkStd', app), b2 = document.getElementById('popStd');
+          if (a) a.textContent = line; if (b2) b2.textContent = line;
+        });
         return;
       }
       const cur = ls.get(key, {});
       if (cur.sent) { sub.innerHTML = `<b>SCORE SENT.</b> <span class="muted">One try a day for each era.</span>`; showStd(); return; }
       UI.profile.rpc('submit_daily', { p_day: day, p_era: era, p_score: score, p_lineup: { names: five.map(p => p.name), seasons: five.map(p => p.season || null), score, era }, p_pct: pct == null ? null : Math.round(pct * 100) / 100 })
-        .then(ok => { streakBump(day); paintStreak(); ls.set(key, Object.assign(cur, { st, fin: true, sent: true, score })); sub.innerHTML = ok ? '<b>SCORE SENT.</b> <span class="muted">You are on today\'s board.</span>' : '<b>ALREADY ON THE BOARD.</b> <span class="muted">One score a day for each era.</span>'; showStd(); })
+        .then(ok => { claimGuest(day); streakBump(day); paintStreak(); ls.set(key, Object.assign(cur, { st, fin: true, sent: true, score })); sub.innerHTML = ok ? '<b>SCORE SENT.</b> <span class="muted">You are on today\'s board.</span>' : '<b>ALREADY ON THE BOARD.</b> <span class="muted">One score a day for each era.</span>'; showStd(); })
         .catch(e => { sub.innerHTML = '<span class="rk-err">' + esc(failMsg(e)) + '</span>'; });
       return;
     }

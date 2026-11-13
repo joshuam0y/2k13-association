@@ -205,16 +205,47 @@ grant execute on function public.lobby_list() to authenticated, anon;
 grant execute on function public.lb_ratings(text, text, int) to authenticated, anon;
 grant execute on function public.lb_daily(date, text, text, int) to authenticated, anon;
 
--- the daily in numbers: how many played, the average, the winner and (for you) where you finished
+-- guests: a nameless score kept only to count in the day's numbers (never on a board, never a rank)
+create table if not exists public.daily_guests (
+  day date not null, gid text not null, score numeric not null, pct numeric, created_at timestamptz not null default now(),
+  primary key (day, gid)
+);
+alter table public.daily_guests enable row level security;
+create or replace function public.submit_daily_guest(p_day date, p_gid text, p_score numeric, p_pct numeric default null) returns boolean
+language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  if p_gid is null or length(p_gid) < 8 or length(p_gid) > 64 or p_score is null or p_score < 0 or p_score > 130 then return false; end if;
+  if p_pct is not null and (p_pct < 0 or p_pct > 100) then p_pct := null; end if;
+  if abs(p_day - (now() at time zone 'America/Los_Angeles')::date) > 1 then return false; end if;
+  insert into public.daily_guests (day, gid, score, pct) values (p_day, p_gid, p_score, p_pct) on conflict do nothing;
+  get diagnostics n = row_count;
+  return n > 0;
+end $$;
+-- a guest who signs in: their score is on the board with a name now, so the nameless one goes
+create or replace function public.claim_guest_daily(p_day date, p_gid text) returns void
+language sql security definer set search_path = public as $$
+  delete from public.daily_guests where day = p_day and gid = p_gid and auth.uid() is not null
+$$;
+grant execute on function public.submit_daily_guest(date, text, numeric, numeric) to anon, authenticated;
+grant execute on function public.claim_guest_daily(date, text) to authenticated;
+-- everything played on a day, named or not
+create or replace function public.daily_pool(p_day date) returns table (score numeric, pct numeric)
+language sql stable security definer set search_path = public as $$
+  select score, pct from public.daily_scores where day = p_day and era = 'ALL'
+  union all select score, pct from public.daily_guests where day = p_day
+$$;
+
+-- the daily in numbers: how many played (guests too), the average, the winner and (for you) where you finished
 create or replace function public.daily_stats(p_day date) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare me uuid := auth.uid(); n int; avgp numeric; avgs numeric; bestp numeric; mine numeric; rk int; below int; wn text; ws numeric; wp numeric;
 begin
-  select count(*), round(avg(pct), 1), round(avg(score), 1), max(pct) into n, avgp, avgs, bestp from public.daily_scores where day = p_day and era = 'ALL';
+  select count(*), round(avg(pct), 1), round(avg(score), 1), max(pct) into n, avgp, avgs, bestp from public.daily_pool(p_day);
   select score into mine from public.daily_scores where day = p_day and era = 'ALL' and user_id = me;
   if mine is not null then
-    select count(*) + 1 into rk from public.daily_scores where day = p_day and era = 'ALL' and score > mine;
-    select count(*) into below from public.daily_scores where day = p_day and era = 'ALL' and score < mine;
+    select count(*) + 1 into rk from public.daily_pool(p_day) where score > mine;
+    select count(*) into below from public.daily_pool(p_day) where score < mine;
   end if;
   select p.username, d.score, d.pct into wn, ws, wp from public.daily_scores d join public.profiles p on p.id = d.user_id
     where d.day = p_day and d.era = 'ALL' order by d.score desc, d.created_at asc limit 1;
