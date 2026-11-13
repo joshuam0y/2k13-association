@@ -148,7 +148,7 @@
           sb.auth.onAuthStateChange((evt, session) => {
             USER = session ? session.user : null;
             if (evt === 'PASSWORD_RECOVERY') setTimeout(() => openPanel('recover'), 0);
-            if (USER && (evt === 'SIGNED_IN' || evt === 'INITIAL_SESSION' || evt === 'USER_UPDATED')) setTimeout(() => syncProfile().then(startSocial).then(() => { if (ARR) welcome(); }), 0);
+            if (USER && (evt === 'SIGNED_IN' || evt === 'INITIAL_SESSION' || evt === 'USER_UPDATED')) setTimeout(() => syncProfile().then(nm => { if (!nm && evt === 'SIGNED_IN') openPanel('name'); return nm; }).then(startSocial).then(() => { if (ARR) welcome(); }), 0);
             if (!USER && evt === 'SIGNED_OUT') { del(KEY); del(OLD); stopSocial(); fire(); }
           });
           res(sb);
@@ -341,7 +341,7 @@
           if (r.error) throw r.error;
           USER = r.data.user;
           const n = await syncProfile(); startSocial(); fire();
-          if (!n) { say('Signed in, but this account has no username yet. Contact the site owner.', true); busy(go, false); return; }
+          if (!n) { needName(); return; }
           account();
         } catch (e) {
           say(nice(e), true);
@@ -457,6 +457,32 @@
       ['#pfMe', '#pfRk'].forEach(q => { const a = el.querySelector(q); if (a) a.addEventListener('click', () => close()); });
     }
 
+    // signed in but no profile row (an account made by hand, or a sign-up that did not finish): pick the name here
+    function needName() {
+      const pre = esc((USER && USER.user_metadata && USER.user_metadata.username) || '');
+      card(`<div class="pf-card-k">PICK YOUR USERNAME</div><p class="muted">Your account is ready. Pick the name other players will see.</p>${field('pfName', 'USERNAME (3 TO 16 LETTERS, NUMBERS, _ OR -)', 'text', 'maxlength="16" value="' + pre + '"')}
+        <div class="row-btns"><button type="button" class="btn btn-gold" id="pfClaim">SAVE USERNAME</button><button type="button" class="btn" id="pfOut">SIGN OUT</button>${closeBtn}</div>`);
+      wireClose();
+      const inp = el.querySelector('#pfName'), go = el.querySelector('#pfClaim');
+      el.querySelector('#pfOut').addEventListener('click', () => { P.signOut(); close(); });
+      const claim = async () => {
+        const v = inp.value.trim(), err = P.check(v);
+        if (err) { say(err, true); return; }
+        busy(go, true); say('Saving...');
+        try {
+          const r = await P.rpc('claim_profile', { p_name: v });
+          if (r !== 'ok') { say(r || 'Could not save that name.', true); busy(go, false); return; }
+          const n = await syncProfile(); startSocial(); fire();
+          if (n) { account(); return; }
+          say('Could not save that name. Try again in a minute.', true);
+        } catch (e) { say(/does not exist|schema cache|Could not find/i.test(String((e && e.message) || e)) ? 'Naming is not switched on yet. The site owner needs to run the latest SQL.' : nice(e), true); }
+        busy(go, false);
+      };
+      go.addEventListener('click', claim);
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') claim(); });
+      inp.focus();
+    }
+    if (view === 'name') { getClient().then(needName); return; }
     if (view === 'recover') { getClient().then(recover); return; }
     if (view === 'linkbad') { auth('forgot', { msg: 'That link expired or was already used. Enter your email for a fresh one. If you just created your account, try signing in first: it may already be confirmed.', bad: true }); return; }
     if (P.signedIn()) getClient().then(() => account(), () => account()); else auth('in');

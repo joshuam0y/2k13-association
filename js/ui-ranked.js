@@ -645,6 +645,27 @@
       return out.length ? out : null;
     })().catch(() => null));
   }
+  // the day's key as a ready-made file (data/reach/<day>.json: the ten players and every reachable score), so the rank is instant; no file for the day, or one that does not match today's ten: search live
+  const dayKey = async (day, era) => {
+    const T = THEME[day] || await dailyTheme(day), byId = {}; T.pool.forEach(p => { byId[p.id] = p; });
+    const st = C.auctionStart({ bench: 0, seed: hash(day + '|' + era), auction: DAILY }, T.pool);
+    return { byId, names: st.ids.map(id => byId[id] && byId[id].name) };
+  };
+  function reachLoad(era, day, byId) {
+    const rk = 'L' + day + '|' + era;
+    if (REACH[rk]) return REACH[rk];
+    return (REACH[rk] = (async () => {
+      try {
+        const r = await fetch('data/reach/' + day + '.json', { cache: 'no-cache' });
+        if (r.ok) {
+          const j = await r.json(), k = await dayKey(day, era);
+          if (j && Array.isArray(j.s) && j.s.length && Array.isArray(j.names) && j.names.slice().sort().join('|') === k.names.slice().sort().join('|')) return j.s.map(x => x / 100);
+        }
+      } catch (e) { /* no file: search below */ }
+      return reachDist(era, day, byId);
+    })());
+  }
+  UI.ranked.reachFor = async day => { const k = await dayKey(day, 'ALL'), D = await reachDist('ALL', day, k.byId); return D ? { names: k.names, best: D[D.length - 1], s: D.map(x => Math.round(x * 100)) } : null; };
   // guests: the score is only sent as a nameless tally (counts in the day's numbers, never on a board)
   const guestId = () => { try { let g = localStorage.getItem('a13-gid'); if (!g) { g = Math.random().toString(36).slice(2) + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); localStorage.setItem('a13-gid', g); } return g; } catch (e) { return null; } };
   async function sendGuest(day, score, pct) {
@@ -749,7 +770,7 @@
         { // the reveal: five cards flip in with their overalls, the lineup score and then the percentage count up, a rank stamp lands; played in full once a day, instant after that
           const q = x => ov.querySelector(x), cards = [].slice.call(ov.querySelectorAll('.rk-fc')), seenK = dKey(day) + '-rv', first = !ls.get(seenK, false), T = [];
           let R = null, stamped = false, upd = false;   // R: where this score sits among every result today's auction can end in
-          const dist = reachDist(era, day, byId);
+          const dist = reachLoad(era, day, byId);
           const tierOf = () => R ? (R.top ? 'THE BEST POSSIBLE' : R.gap >= 99 ? 'LEGENDARY' : R.gap >= 98 ? 'ELITE' : R.gap >= 97 ? 'ALL STAR' : R.gap >= 96 ? 'STARTER LEVEL' : 'ROLE PLAYERS') : (pct >= 97 ? 'LEGENDARY' : pct >= 94 ? 'ELITE' : pct >= 90 ? 'ALL STAR' : pct >= 80 ? 'STARTER LEVEL' : 'ROLE PLAYERS');
           const rankLine = () => R ? (R.top ? 'NO RESULT TODAY BEATS THIS ONE' : 'BETTER THAN ' + Math.floor(R.p) + '% OF ALL ' + R.n.toLocaleString() + ' POSSIBLE RESULTS') : '';
           const paintRank = () => { const t = q('#fTier'), r = q('#fRank'); if (t) t.textContent = tierOf(); if (r) r.textContent = rankLine(); const pg = UI.$('#rkReach', app); if (pg) pg.textContent = rankLine(); };
@@ -762,12 +783,12 @@
           else {
             ls.set(seenK, true);
             const at = (ms, fn) => T.push(setTimeout(() => { if (ov.isConnected) fn(); }, ms));
-            cards.forEach((c, k) => at(500 + k * 650, () => { c.classList.add('in'); sfx('chime'); count(c.querySelector('[data-o]'), +c.querySelector('[data-o]').dataset.o, 450, 0, '', false); }));
-            const t1 = 500 + cards.length * 650 + 350;
-            at(t1, () => { q('.rk-fsc').classList.add('in'); count(q('#fsN'), score, 1400, 1, '', true); });
-            at(t1 + 1700, () => { q('.rk-fpc').classList.add('in'); count(q('#fpN'), pct, 1800, 1, '%', true); });
-            const stamp = () => { if (stamped || !ov.isConnected) return; stamped = true; paintRank(); q('.rk-fpc').classList.add('stamp'); sfx('crowd'); if (R ? (R.top || R.gap >= 98) : pct >= 94) burst(); T.push(setTimeout(() => ov.classList.add('done'), 800)); };
-            at(t1 + 3700, () => { upd = true; if (R || dist.__fin) stamp(); else q('#fTier').textContent = 'RANKING...'; });
+            cards.forEach((c, k) => at(300 + k * 380, () => { c.classList.add('in'); sfx('chime'); count(c.querySelector('[data-o]'), +c.querySelector('[data-o]').dataset.o, 300, 0, '', false); }));
+            const t1 = 300 + cards.length * 380 + 150;
+            at(t1, () => { q('.rk-fsc').classList.add('in'); count(q('#fsN'), score, 900, 1, '', true); });
+            at(t1 + 1000, () => { q('.rk-fpc').classList.add('in'); count(q('#fpN'), pct, 1200, 1, '%', true); });
+            const stamp = () => { if (stamped || !ov.isConnected) return; stamped = true; paintRank(); q('.rk-fpc').classList.add('stamp'); sfx('crowd'); if (R ? (R.top || R.gap >= 98) : pct >= 94) burst(); T.push(setTimeout(() => ov.classList.add('done'), 600)); };
+            at(t1 + 2250, () => { upd = true; if (R || dist.__fin) stamp(); else q('#fTier').textContent = 'RANKING...'; });
             dist.then(() => { if (upd && !stamped) stamp(); });
             ov.addEventListener('click', e => { if (!ov.classList.contains('done') && !e.target.closest('button:not(#fSkip)')) finish(); });
           }

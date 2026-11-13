@@ -161,15 +161,30 @@ language sql security definer set search_path = public as $$
   order by d.score desc, d.created_at asc limit least(greatest(p_limit, 1), 100)
 $$;
 
+-- the answer key: for each day the ten players and the best score the auction can reach (filled from supabase/daily_key.sql)
+create table if not exists public.daily_key (day date primary key, names text[] not null, best numeric not null);
+alter table public.daily_key enable row level security;
+revoke all on public.daily_key from anon, authenticated;
+
 -- one daily score a player, era and day; the day has to be today (UTC) give or take one
 drop function if exists public.submit_daily(date, text, numeric, jsonb);
 create or replace function public.submit_daily(p_day date, p_era text, p_score numeric, p_lineup jsonb, p_pct numeric default null) returns boolean
 language plpgsql security definer set search_path = public as $$
-declare me uuid := auth.uid(); n int;
+declare me uuid := auth.uid(); n int; k record;
 begin
   if me is null or p_score is null or p_score < 0 or p_score > 130 then return false; end if;
   if p_pct is not null and (p_pct < 0 or p_pct > 100) then p_pct := null; end if;
   if abs(p_day - (now() at time zone 'America/Los_Angeles')::date) > 1 then return false; end if;
+  -- the day's answer key (when there is one): five different players out of that day's ten, and a score the auction can actually reach
+  select * into k from public.daily_key where day = p_day;
+  if found then
+    if p_score > k.best + 1 then raise exception 'That score is not possible for today.'; end if;
+    if jsonb_typeof(p_lineup->'names') is distinct from 'array' or jsonb_array_length(p_lineup->'names') <> 5
+       or (select count(distinct x) from jsonb_array_elements_text(p_lineup->'names') x) <> 5
+       or exists (select 1 from jsonb_array_elements_text(p_lineup->'names') x where x <> all (k.names)) then
+      raise exception 'That lineup is not from today''s ten.';
+    end if;
+  end if;
   insert into public.daily_scores (day, era, user_id, score, lineup, pct) values (p_day, p_era, me, p_score, p_lineup, p_pct) on conflict do nothing;
   get diagnostics n = row_count;
   return n > 0;
@@ -218,6 +233,7 @@ begin
   if p_gid is null or length(p_gid) < 8 or length(p_gid) > 64 or p_score is null or p_score < 0 or p_score > 130 then return false; end if;
   if p_pct is not null and (p_pct < 0 or p_pct > 100) then p_pct := null; end if;
   if abs(p_day - (now() at time zone 'America/Los_Angeles')::date) > 1 then return false; end if;
+  if exists (select 1 from public.daily_key k where k.day = p_day and p_score > k.best + 1) then return false; end if;
   insert into public.daily_guests (day, gid, score, pct) values (p_day, p_gid, p_score, p_pct) on conflict do nothing;
   get diagnostics n = row_count;
   return n > 0;
@@ -472,3 +488,18 @@ begin
   return true;
 end $$;
 grant execute on function public.report_user(text, text) to authenticated;
+
+-- an account with no profile row yet (made by hand, or a sign-up that did not finish) picks its username
+create or replace function public.claim_profile(p_name text) returns text
+language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); n text := trim(coalesce(p_name, ''));
+begin
+  if me is null then return 'Sign in first.'; end if;
+  if exists (select 1 from public.profiles where id = me) then return 'ok'; end if;
+  if n !~ '^[A-Za-z0-9_-]{3,16}$' then return 'Use 3 to 16 letters, numbers, _ or -.'; end if;
+  if exists (select 1 from public.profiles where lower(username) = lower(n)) then return 'That username is taken. Pick another.'; end if;
+  insert into public.profiles (id, username) values (me, n);
+  return 'ok';
+exception when unique_violation then return 'That username is taken. Pick another.';
+end $$;
+grant execute on function public.claim_profile(text) to authenticated;

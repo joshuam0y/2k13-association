@@ -20,3 +20,7 @@ Vanilla JS basketball draft and sim site (no build step). GitHub Pages deploys o
 ## Daily
 - The daily day turns over at midnight Pacific. Daily #1 is 2026-11-12 (`DAILY_START`).
 - Today's theme stays hidden in the practice archive until tomorrow.
+
+## Daily answer key
+- `data/reach/<day>.json` holds the day's ten players and every score the auction can reach (makes the rank stamp instant; no file means a live search). `supabase/daily_key.sql` holds the same ten and best score for the server check in `submit_daily`.
+- Both are generated for 60 days from 2026-11-13 (last day 2027-01-11). Regenerate before then, and whenever ratings or the theme list change: serve the repo on port 8123, then run the generator that loops `UI.ranked.reachFor(day)` over the days, write the files, and re-run `daily_key.sql` in Supabase.
