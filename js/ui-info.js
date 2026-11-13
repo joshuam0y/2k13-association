@@ -37,7 +37,6 @@
       <h3>Why can I not play the same person again?</h3><p>Each matchup counts once, so ratings cannot be farmed. A rematch is allowed if nobody new is searching, or you both ask.</p>
       <h3>Where do the ratings come from?</h3><p>They are built from real stats and fitted to the 2K13 scale. Old seasons are adjusted for the pace, rules and talent level of their era, so they are estimates.</p>
       <h3>Why does a player look different or have no photo?</h3><p>Photos come from public sources. If none is found, the site draws a face for that player.</p>
-      <h3>Can I install it?</h3><p>Yes. On a phone, use Add to Home Screen in your browser. It then opens like an app.</p>
       <h3>Is it affiliated with the NBA or 2K?</h3><p>No. See the Disclaimer.</p>`],
     privacy: ['PRIVACY POLICY', `
       <p class="muted">Last updated ${UPDATED}.</p>
