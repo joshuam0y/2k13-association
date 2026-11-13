@@ -1,6 +1,7 @@
 // Writes the daily answer key for a run of days: data/reach/<day>.json (the ten players and every score the auction can reach, for the rank stamp)
 // and supabase/daily_key.sql (the same ten and the best score, for the server check). Run it again whenever ratings change.
-//   Serve the repo (python3 -m http.server 8123), then:  node tools/gen-reach.js 2026-11-18 60
+//   Serve the repo (python3 -m http.server 8123), then:  node tools/gen-reach.js 2026-11-18 60   (--no-sql leaves supabase/daily_key.sql alone)
+// It also freezes each day's ten players with that day's ratings in data/days/<day>.json so a practice replay always matches the real day.
 // needs puppeteer-core and Chrome (CHROME_PATH, default the Mac one).
 const fs = require('fs'), path = require('path');
 const pp = require('puppeteer-core');
@@ -21,13 +22,14 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     if (!r || r.err || !r.names || r.names.length < 5 || !r.s || !r.s.length) { console.log(day, 'FAILED', JSON.stringify(r).slice(0, 120)); process.exitCode = 1; continue; }
     fs.mkdirSync(ROOT + 'data/reach', { recursive: true });
     fs.writeFileSync(ROOT + 'data/reach/' + day + '.json', JSON.stringify({ names: r.names, best: r.best, s: r.s }));
+    if (r.players && r.players.length >= 5) { fs.mkdirSync(ROOT + 'data/days', { recursive: true }); fs.writeFileSync(ROOT + 'data/days/' + day + '.json', JSON.stringify({ ids: r.ids, players: r.players })); }   // the board frozen as played, for practice replays
     rows.push({ day, names: r.names, best: r.best });
     console.log(day, 'results', r.s.length, 'best', r.best.toFixed(2));
   }
   const q = s => "'" + String(s).replace(/'/g, "''") + "'";
   const sql = "-- answer key for the daily: the ten players and the best score the auction can reach, one row a day. Run once in the Supabase SQL editor (after community.sql).\n-- Regenerate before the last day here passes, and after every ratings update; a day with no row is simply not checked.\ninsert into public.daily_key (day, names, best) values\n" +
     rows.map(r => '  (' + q(r.day) + ', array[' + r.names.map(q).join(', ') + '], ' + r.best.toFixed(2) + ')').join(',\n') + "\non conflict (day) do update set names = excluded.names, best = excluded.best;\n";
-  if (rows.length) fs.writeFileSync(ROOT + 'supabase/daily_key.sql', sql);
+  if (rows.length && !process.argv.includes('--no-sql')) fs.writeFileSync(ROOT + 'supabase/daily_key.sql', sql);
   console.log('DONE', rows.length);
   await b.close();
 })();
