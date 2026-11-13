@@ -131,6 +131,8 @@
     return { n, done, best: Math.max(best, n) };
   }
   // the daily record on a profile: how many played, the average and best percentage of a perfect five, and the streaks
+  const sqEmoji = o => o >= 90 ? '\u{1F7EA}' : o >= 80 ? '\u{1F7E6}' : o >= 70 ? '\u{1F7E9}' : o >= 60 ? '\u{1F7E8}' : '\u{1F7E5}';   // the share squares, by player rating
+  const ovrOf = p => (p.baseOvr != null ? p.baseOvr : (p.ovr || 0));
   const MILES = [3, 7, 30, 100];   // streak milestones
   const sqB = pc => pc == null ? 'bp' : pc >= 95 ? 'b5' : pc >= 85 ? 'b4' : pc >= 70 ? 'b3' : pc >= 50 ? 'b2' : 'b1';
   const dailyBlock = dd => !dd || !dd.played ? '' : `<div class="ch-step"><div class="ch-step-k">DAILY AUCTION</div>
@@ -619,7 +621,7 @@
     let rows = null; try { rows = await UI.profile.rpc('daily_history', { p_name: me }); } catch (e) { return; }
     (rows || []).forEach(r => {
       const d = String(r.day).slice(0, 10), k = dKey(d), l = ls.get(k, null);
-      if (!l || !l.fin || (l.score != null && Math.abs(Number(l.score) - Number(r.score)) > 0.05)) ls.set(k, { fin: true, sent: true, remote: true, score: Number(r.score), pct: r.pct == null ? null : Number(r.pct), names: r.lineup && Array.isArray(r.lineup.names) ? r.lineup.names : null });
+      if (!l || !l.fin || (l.score != null && Math.abs(Number(l.score) - Number(r.score)) > 0.05)) ls.set(k, { fin: true, sent: true, remote: true, score: Number(r.score), pct: r.pct == null ? null : Number(r.pct), names: r.lineup && Array.isArray(r.lineup.names) ? r.lineup.names : null, ovrs: r.lineup && Array.isArray(r.lineup.ovrs) ? r.lineup.ovrs : null });
     });
   }
   function remoteDone(app, day, sv) {
@@ -628,7 +630,7 @@
       <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${Number(sv.score).toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div>`}<div class="rk-streak" id="rkStreak"></div><div class="rk-std" id="rkStd"></div><span class="muted">${sv.names ? esc(sv.names.join(', ')) : 'Played on another device.'}</span></section>
       <div class="ch-go"><a class="btn btn-gold" href="#/daily">SEE THE BOARD</a>${pct == null ? '' : '<button type="button" class="btn" id="dlShare">SHARE YOUR SCORE</button>'}</div>`;
     const sk = streakNow(), el = UI.$('#rkStreak', app); if (el && sk.n) el.innerHTML = '<b>' + sk.n + '</b> DAY DAILY STREAK';
-    const sh = UI.$('#dlShare', app); if (sh) sh.addEventListener('click', () => shareCard({}, 'Starting Five Daily #' + dayNo(day) + ' \u{1F3C0}\n' + pct.toFixed(1) + '% of a perfect five', '#/daily'));
+    const sh = UI.$('#dlShare', app); if (sh) sh.addEventListener('click', () => shareCard({}, 'Starting Five Daily #' + dayNo(day) + ' \u{1F3C0}\n' + (sv.ovrs && sv.ovrs.length ? sv.ovrs.map(sqEmoji).join('') + '\n' : '') + pct.toFixed(1) + '% of a perfect five', '#/daily'));
     UI.profile.rpc('daily_stats', { p_day: day }).then(t => {
       if (!t || !t.rank) return;
       const beat = t.played > 1 ? Math.round(100 * t.below / (t.played - 1)) : null, a = UI.$('#rkStd', app);
@@ -687,7 +689,7 @@
         <div id="rkSub" class="rkn"><span class="muted">Sending your score...</span></div>
         <div class="ch-go">${isPr ? `<a class="btn btn-gold" href="#/daily/practice/${esc(prKey)}/${Date.now()}">PLAY AGAIN</a><a class="btn" href="#/daily/practice">ARCHIVE</a>` : `<a class="btn btn-gold" href="#/daily">SEE THE BOARD</a>${pct == null ? '' : '<button type="button" class="btn" id="dlShare">SHARE YOUR SCORE</button>'}`}</div>`;
       const dsh = UI.$('#dlShare', app);
-      const doShare = async btn => { btn.disabled = true; const r = await shareCard({ k: 'DAILY #' + dayNo(day), title: 'OF A PERFECT FIVE', color: '#d4af37', big: pct.toFixed(1) + '%', sub: TH.title, name: UI.profile.account() || '' }, 'Starting Five Daily #' + dayNo(day) + ' \u{1F3C0}\n' + five.map(p => { const o = p.baseOvr != null ? p.baseOvr : (p.ovr || 0); return o >= 90 ? '\u{1F7EA}' : o >= 80 ? '\u{1F7E6}' : o >= 70 ? '\u{1F7E9}' : o >= 60 ? '\u{1F7E8}' : '\u{1F7E5}'; }).join('') + '\n' + pct.toFixed(1) + '% of a perfect five', '#/daily'); btn.disabled = false;  };
+      const doShare = async btn => { btn.disabled = true; const r = await shareCard({ k: 'DAILY #' + dayNo(day), title: 'OF A PERFECT FIVE', color: '#d4af37', big: pct.toFixed(1) + '%', sub: TH.title, name: UI.profile.account() || '' }, 'Starting Five Daily #' + dayNo(day) + ' \u{1F3C0}\n' + five.map(p => sqEmoji(ovrOf(p))).join('') + '\n' + pct.toFixed(1) + '% of a perfect five', '#/daily'); btn.disabled = false;  };
       if (dsh) dsh.addEventListener('click', () => doShare(dsh));
       if (!isPr && pct != null) {   // the result pops up with the share button every time this screen opens
         const ov = document.createElement('div'); ov.className = 'rk-tour';
@@ -724,7 +726,7 @@
       }
       const cur = ls.get(key, {});
       if (cur.sent) { sub.innerHTML = `<b>SCORE SENT.</b> <span class="muted">One try a day for each era.</span>`; showStd(); return; }
-      UI.profile.rpc('submit_daily', { p_day: day, p_era: era, p_score: score, p_lineup: { names: five.map(p => p.name), seasons: five.map(p => p.season || null), score, era }, p_pct: pct == null ? null : Math.round(pct * 100) / 100 })
+      UI.profile.rpc('submit_daily', { p_day: day, p_era: era, p_score: score, p_lineup: { names: five.map(p => p.name), seasons: five.map(p => p.season || null), ovrs: five.map(ovrOf), score, era }, p_pct: pct == null ? null : Math.round(pct * 100) / 100 })
         .then(ok => { claimGuest(day); streakBump(day); paintStreak(); ls.set(key, Object.assign(cur, { st, fin: true, sent: true, score })); sub.innerHTML = ok ? '<b>SCORE SENT.</b> <span class="muted">You are on today\'s board.</span>' : '<b>ALREADY ON THE BOARD.</b> <span class="muted">One score a day for each era.</span>'; showStd(); })
         .catch(e => { sub.innerHTML = '<span class="rk-err">' + esc(failMsg(e)) + '</span>'; });
       return;
