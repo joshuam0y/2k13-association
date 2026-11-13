@@ -676,7 +676,7 @@
     const sideBox = (i, name) => {
       const won = st.won[i].map(id => ({ p: byId[id], price: (st.log.filter(x => x.id === id)[0] || {}).price }));
       return `<div class="vs-side${st.turn === i ? ' on' : ''}"><div class="vs-side-h"><div><small>${name}</small><b>${money(A.budget - st.spent[i])} left</b><small class="vs-pay">${st.won[i].length} of ${per} spots</small></div></div>
-        <ol class="vs-auc-won">${won.map(w => `<li>${esc(w.p ? w.p.name : '?')} <small class="muted">${money(w.price || 0)}</small></li>`).join('') || '<li class="muted">Nobody yet</li>'}</ol></div>`;
+        <ol class="vs-auc-won">${won.map(w => `<li>${w.p ? '<b class="ch-ovr ' + UI.ovrClass(ovrOf(w.p)) + '">' + esc(ovrOf(w.p)) + '</b> ' : ''}${esc(w.p ? w.p.name : '?')} <small class="muted">${money(w.price || 0)}</small></li>`).join('') || '<li class="muted">Nobody yet</li>'}</ol></div>`;
     };
     const TH = (THEME[day] || {}).info || { title: eraName(era), kind: '' }, isPr = day.indexOf('practice:') === 0, prKey = isPr ? day.slice(9, day.lastIndexOf(':')) : '';
     const hdr = `<div class="ch-top"><div><div class="ch-top-k">${isPr ? 'PRACTICE' : 'DAILY #' + dayNo(day) + ' | ' + esc(day)} | ${esc(TH.title)}</div><div class="ch-top-t">${st.done ? 'YOUR FIVE IS SET' : 'PLAYER ' + (st.i + 1) + ' OF ' + st.ids.length}</div></div><a class="btn btn-small" href="${isPr ? '#/daily/practice' : '#/daily'}">BACK</a></div>`;
@@ -694,12 +694,37 @@
       if (dsh) dsh.addEventListener('click', () => doShare(dsh));
       if (!isPr && pct != null) {   // the result pops up with the share button every time this screen opens
         const ov = document.createElement('div'); ov.className = 'rk-tour';
-        ov.innerHTML = `<div class="rk-tour-b"><small>DAILY #${dayNo(day)} | ${esc(TH.title)}</small><h2 class="rk-pop-n">${pct.toFixed(1)}%</h2><p>OF A PERFECT FIVE | LINEUP SCORE ${score.toFixed(1)}</p><p class="rk-pop-m" id="popMile"></p><p class="rk-pop-s" id="popStd"></p><div class="rk-tour-go"><button type="button" class="btn btn-gold btn-big" id="popShare">SHARE YOUR SCORE</button><button type="button" class="btn" id="popClose">CLOSE</button></div></div>`;
+        ov.className = 'rk-tour rk-fin';
+        ov.innerHTML = `<div class="rk-tour-b rk-fb"><small>DAILY #${dayNo(day)} | ${esc(TH.title)}</small>
+          <div class="rk-fcards">${five.map(p => `<div class="rk-fc"><div class="rk-ff">${UI.faceImg(p, '#d4af37')}</div><b>${esc(String(p.name).split(' ').slice(-1)[0])}</b><i class="ch-ovr ${UI.ovrClass(ovrOf(p))}" data-o="${esc(ovrOf(p))}">0</i></div>`).join('')}</div>
+          <div class="rk-fsc"><small>LINEUP SCORE</small><b id="fsN">0.0</b></div>
+          <div class="rk-fpc"><h2 class="rk-pop-n" id="fpN">0.0%</h2><div class="rk-tier" id="fTier"></div><p>OF A PERFECT FIVE</p></div>
+          <p class="rk-pop-m" id="popMile"></p><p class="rk-pop-s" id="popStd"></p><div class="rk-tour-go rk-fgo"><button type="button" class="btn btn-gold btn-big" id="popShare">SHARE YOUR SCORE</button><button type="button" class="btn" id="popClose">CLOSE</button></div><button type="button" class="rk-skip" id="fSkip">TAP TO SKIP</button></div>`;
         document.body.appendChild(ov);
         { const n = streakNow().n; if (MILES.includes(n)) ov.querySelector('#popMile').textContent = n + ' DAY STREAK'; }
         const shut = () => { ov.remove(); window.removeEventListener('hashchange', shut); };
         window.addEventListener('hashchange', shut);
         ov.querySelector('#popClose').addEventListener('click', shut);
+        { // the reveal: five cards flip in with their overalls, the lineup score and then the percentage count up, a rank stamp lands; played in full once a day, instant after that
+          const q = x => ov.querySelector(x), cards = [].slice.call(ov.querySelectorAll('.rk-fc')), seenK = dKey(day) + '-rv', first = !ls.get(seenK, false), T = [];
+          const tier = pct >= 97 ? 'LEGENDARY' : pct >= 94 ? 'ELITE' : pct >= 90 ? 'ALL STAR' : pct >= 80 ? 'STARTER LEVEL' : 'ROLE PLAYERS';
+          const sfx = n => { if (window.SFX) try { window.SFX.play(n); } catch (e) { /* silent */ } };
+          const count = (el, to, ms, dec, suf, tick) => { const t0 = performance.now(); const step = now => { const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3); el.textContent = (to * e).toFixed(dec) + suf; if (tick && k < 1 && Math.floor(k * 14) !== step.l) { step.l = Math.floor(k * 14); sfx('tick'); } if (k < 1 && ov.isConnected) requestAnimationFrame(step); }; requestAnimationFrame(step); };
+          const burst = () => { const box = document.createElement('div'); box.className = 'rk-conf'; for (let n = 0; n < 46; n++) { const c = document.createElement('i'); c.style.cssText = '--x:' + (Math.random() * 100 - 50) + 'vw;--y:' + (-(30 + Math.random() * 55)) + 'vh;--r:' + Math.round(Math.random() * 720 - 360) + 'deg;--d:' + (0.9 + Math.random() * 0.9) + 's;background:' + ['#d4af37', '#f5d76e', '#fff', '#3d78d6', '#e88a8a'][n % 5]; box.appendChild(c); } ov.appendChild(box); setTimeout(() => box.remove(), 2200); };
+          const finish = () => { T.forEach(clearTimeout); cards.forEach(c => { c.classList.add('in'); const o = c.querySelector('[data-o]'); o.textContent = o.dataset.o; }); q('#fsN').textContent = score.toFixed(1); q('#fpN').textContent = pct.toFixed(1) + '%'; q('#fTier').textContent = tier; ov.classList.add('done'); };
+          if (!first || window.matchMedia('(prefers-reduced-motion: reduce)').matches) finish();
+          else {
+            ls.set(seenK, true);
+            const at = (ms, fn) => T.push(setTimeout(() => { if (ov.isConnected) fn(); }, ms));
+            cards.forEach((c, k) => at(500 + k * 650, () => { c.classList.add('in'); sfx('chime'); count(c.querySelector('[data-o]'), +c.querySelector('[data-o]').dataset.o, 450, 0, '', false); }));
+            const t1 = 500 + cards.length * 650 + 350;
+            at(t1, () => { q('.rk-fsc').classList.add('in'); count(q('#fsN'), score, 1400, 1, '', true); });
+            at(t1 + 1700, () => { q('.rk-fpc').classList.add('in'); count(q('#fpN'), pct, 1800, 1, '%', true); });
+            at(t1 + 3700, () => { q('#fTier').textContent = tier; q('.rk-fpc').classList.add('stamp'); sfx('crowd'); if (pct >= 90) burst(); });
+            at(t1 + 4500, () => ov.classList.add('done'));
+            ov.addEventListener('click', e => { if (!ov.classList.contains('done') && !e.target.closest('button:not(#fSkip)')) finish(); });
+          }
+        }
         ov.querySelector('#popShare').addEventListener('click', async () => { const b = ov.querySelector('#popShare'); b.disabled = true; try { await doShare(b); } catch (e) { /* closes anyway */ } b.textContent = 'COPIED'; b.disabled = true; setTimeout(shut, 1000); });
       }
       const paintStreak = () => { const sk = UI.$('#rkStreak', app), n = streakNow(); if (sk && n.n) sk.innerHTML = '<b>' + n.n + '</b> DAY DAILY STREAK' + (n.best > n.n ? ' | BEST ' + n.best : ''); };

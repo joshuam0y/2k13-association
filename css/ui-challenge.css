@@ -1168,3 +1168,29 @@ a.pr-i:hover { border-color: var(--gold); }
   .auc-stage > .auc-card .auc-price { padding-top: 4px; }
   .auc-stage > .auc-card .auc-price b { font-size: 32px; }
 }
+
+/* the result reveal: cards flip in with their overalls, then the score, then the percentage and a rank stamp */
+.rk-fb { max-width: 520px; position: relative; overflow: hidden; }
+.rk-fcards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; width: 100%; }
+.rk-fc { display: grid; justify-items: center; gap: 3px; opacity: 0; transform: translateY(14px) scale(.8) rotateY(90deg); transition: opacity .35s, transform .45s cubic-bezier(.2, 1.4, .4, 1); min-width: 0; }
+.rk-fc.in { opacity: 1; transform: none; }
+.rk-ff { width: 100%; max-width: 64px; aspect-ratio: 1; border-radius: 50%; overflow: hidden; background: #111; border: 2px solid var(--gold); }
+.rk-ff > *, .rk-ff img, .rk-ff svg { width: 100% !important; height: 100% !important; object-fit: cover; object-position: top center; display: block; }
+.rk-fc b { font-family: var(--display); font-size: 11px; letter-spacing: .04em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rk-fc i { font-style: normal; font-family: var(--display); font-size: 22px; line-height: 1; }
+.rk-fsc, .rk-fpc { opacity: 0; transform: scale(.9); transition: opacity .3s, transform .3s; display: grid; gap: 4px; justify-items: center; }
+.rk-fsc.in, .rk-fpc.in, .rk-fin.done .rk-fsc, .rk-fin.done .rk-fpc { opacity: 1; transform: none; }
+.rk-fsc b { font-family: var(--display); font-size: 34px; line-height: 1; color: #fff; }
+.rk-fin .rk-pop-n { font-size: 76px !important; text-shadow: 0 0 24px rgba(212, 175, 55, .35); }
+.rk-tier { font-family: var(--display); letter-spacing: .24em; font-size: 15px; color: #000; background: var(--gold); padding: 4px 12px; opacity: 0; transform: scale(2.4) rotate(-6deg); }
+.rk-fpc.stamp .rk-tier, .rk-fin.done .rk-tier { opacity: 1; transform: none; transition: transform .35s cubic-bezier(.2, 1.6, .4, 1), opacity .15s; }
+.rk-fpc.stamp .rk-pop-n { animation: rkThump .5s ease-out; }
+@keyframes rkThump { 0% { transform: scale(1); } 40% { transform: scale(1.22); } 100% { transform: scale(1); } }
+.rk-fin .rk-fgo, .rk-fin .rk-pop-m, .rk-fin .rk-pop-s { opacity: 0; pointer-events: none; transition: opacity .4s; }
+.rk-fin.done .rk-fgo, .rk-fin.done .rk-pop-m, .rk-fin.done .rk-pop-s { opacity: 1; pointer-events: auto; }
+.rk-skip { border: 0; background: none; color: var(--muted); font-family: var(--display); letter-spacing: .18em; font-size: 10px; cursor: pointer; }
+.rk-fin.done .rk-skip { display: none; }
+.rk-conf { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.rk-conf i { position: absolute; left: 50%; top: 55%; width: 8px; height: 12px; opacity: 0; animation: rkConf var(--d) ease-out forwards; }
+@keyframes rkConf { 0% { opacity: 1; transform: translate(0, 0) rotate(0); } 100% { opacity: 0; transform: translate(var(--x), var(--y)) rotate(var(--r)); } }
+.vs-auc-won .ch-ovr { margin-right: 4px; }
