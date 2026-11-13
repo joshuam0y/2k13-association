@@ -114,10 +114,11 @@
   const dayBefore = d => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() - 1); return x.toISOString().slice(0, 10); };
   // a daily save belongs to the account that played it (guests share one), so a second account on the same device plays its own
   const acctSfx = () => (UI.profile.signedIn() && UI.profile.account() ? '-' + String(UI.profile.account()).toLowerCase() : '');
-  const dKey = day => 'a13-rk-d-' + day + '-T' + acctSfx();
+  const DSUF = 'T2';   // bump it to clear every saved daily on every device at once
+  const dKey = day => 'a13-rk-d-' + day + '-' + DSUF + acctSfx();
   function dailyDays() {
     const days = new Set();
-    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i), m = /^a13-rk-d-(\d{4}-\d\d-\d\d)-T(-.+)?$/.exec(k || ''); if (m && (m[2] || '') === acctSfx()) { const v = JSON.parse(localStorage.getItem(k) || 'null'); if (v && (v.fin || v.sent)) days.add(m[1]); } } } catch (e) { /* private mode */ }
+    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i), m = new RegExp('^a13-rk-d-(\\d{4}-\\d\\d-\\d\\d)-' + DSUF + '(-.+)?$').exec(k || ''); if (m && (m[2] || '') === acctSfx()) { const v = JSON.parse(localStorage.getItem(k) || 'null'); if (v && (v.fin || v.sent)) days.add(m[1]); } } } catch (e) { /* private mode */ }
     return days;
   }
   const streakBump = () => {};   // nothing to store: the finished auctions are the record
@@ -645,7 +646,7 @@
     const cfg = { bench: 0, seed: hash(day + '|' + era), auction: DAILY };
     let saved = ls.get(key, null), st;
     if (!saved && !pr && acctSfx()) {   // a game played as a guest today moves to the account that signs in first
-      const gk = 'a13-rk-d-' + day + '-T', g = ls.get(gk, null);
+      const gk = 'a13-rk-d-' + day + '-' + DSUF, g = ls.get(gk, null);
       if (g && g.st && g.g) { saved = Object.assign({}, g, { sent: false }); ls.set(key, saved); try { localStorage.removeItem(gk); } catch (e) { /* private mode */ } }
     }
     if (saved && saved.remote && !pr) { remoteDone(app, day, saved); return; }
