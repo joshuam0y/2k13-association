@@ -114,7 +114,7 @@
   const dayBefore = d => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() - 1); return x.toISOString().slice(0, 10); };
   // a daily save belongs to the account that played it (guests share one), so a second account on the same device plays its own
   const acctSfx = () => (UI.profile.signedIn() && UI.profile.account() ? '-' + String(UI.profile.account()).toLowerCase() : '');
-  const DSUF = 'T4';   // bump it to clear every saved daily on every device at once
+  const DSUF = 'T5';   // bump it to clear every saved daily on every device at once
   const dKey = day => 'a13-rk-d-' + day + '-' + DSUF + acctSfx();
   function dailyDays() {
     const days = new Set();
