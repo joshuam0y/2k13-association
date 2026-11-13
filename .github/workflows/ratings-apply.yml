@@ -1,5 +1,5 @@
 name: Apply ratings update
-# Merges a ready ratings branch on or after its effective date, but only after the issue asking you to run daily_key.sql is closed.
+# Merges a ready ratings branch on or after its effective date. If the answer key could not be sent automatically there is an open issue; it waits until that is closed.
 on:
   schedule:
     - cron: '5 8 * * 3'
@@ -34,7 +34,8 @@ jobs:
               continue
             fi
             if [[ "$today" < "$eff" ]]; then echo "$ref: not before $eff"; continue; fi
-            if [ "$state" != "CLOSED" ]; then [ -n "$num" ] && gh issue comment "$num" --body "Waiting for the SQL: run it and close this issue, then the new ratings go live."; continue; fi
+            # an open issue means the SQL still has to be run by hand; no issue means the key was sent automatically
+            if [ "$state" = "OPEN" ]; then gh issue comment "$num" --body "Waiting for the SQL: run it and close this issue, then the new ratings go live."; continue; fi
             git checkout main && git pull -q
             git merge --no-edit "origin/$ref" && git push origin main && git push origin --delete "$ref"
             gh api -X POST "repos/${{ github.repository }}/pages/builds" || true

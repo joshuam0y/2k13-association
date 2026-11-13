@@ -1,0 +1,28 @@
+name: Send the answer key
+# Sends the answer key of a ratings branch to Supabase by itself (the same step the weekly job does), for example to catch up a branch made before the automatic setup existed.
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to read the key from, like ratings/2026-11-18'
+        required: true
+      from:
+        description: 'First day to send, like 2026-11-18'
+        required: true
+permissions:
+  contents: read
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    env:
+      DAILY_KEY_SECRET: ${{ secrets.DAILY_KEY_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Take the answer-key files from the ratings branch
+        run: |
+          git fetch origin "${{ inputs.branch }}"
+          git checkout FETCH_HEAD -- data/reach
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node tools/push-daily-key.js "${{ inputs.from }}" 60

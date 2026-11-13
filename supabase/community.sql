@@ -169,6 +169,30 @@ create table if not exists public.daily_key (day date primary key, names text[] 
 alter table public.daily_key enable row level security;
 revoke all on public.daily_key from anon, authenticated;
 
+-- the weekly ratings job can write the key by itself: it calls set_daily_key with a secret only GitHub knows (its hash is stored here, once).
+-- It can only add or replace answer-key rows for days after today, nothing else.
+create table if not exists public.daily_key_secret (id int primary key default 1 check (id = 1), hash text not null);
+alter table public.daily_key_secret enable row level security;
+revoke all on public.daily_key_secret from anon, authenticated;
+create or replace function public.set_daily_key(p_secret text, p_rows jsonb) returns int
+language plpgsql security definer set search_path = public as $$
+declare h text; n int := 0; r jsonb; d date; names text[]; b numeric;
+begin
+  select hash into h from public.daily_key_secret where id = 1;
+  if h is null or p_secret is null or encode(sha256(convert_to(p_secret, 'utf8')), 'hex') <> h then raise exception 'not allowed'; end if;
+  if jsonb_typeof(p_rows) is distinct from 'array' or jsonb_array_length(p_rows) > 400 then raise exception 'bad rows'; end if;
+  for r in select * from jsonb_array_elements(p_rows) loop
+    d := (r->>'day')::date; b := (r->>'best')::numeric;
+    names := array(select jsonb_array_elements_text(r->'names'));
+    if array_length(names, 1) is distinct from 10 or b < 40 or b > 130 then raise exception 'bad row for %', d; end if;
+    if d <= (now() at time zone 'America/Los_Angeles')::date then continue; end if;   -- today and the past are never rewritten
+    insert into public.daily_key (day, names, best) values (d, names, b) on conflict (day) do update set names = excluded.names, best = excluded.best;
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+grant execute on function public.set_daily_key(text, jsonb) to anon, authenticated;
+
 -- one daily score a player, era and day; the day has to be today (UTC) give or take one
 drop function if exists public.submit_daily(date, text, numeric, jsonb);
 create or replace function public.submit_daily(p_day date, p_era text, p_score numeric, p_lineup jsonb, p_pct numeric default null) returns boolean
