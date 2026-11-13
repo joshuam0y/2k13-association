@@ -1180,7 +1180,7 @@ a.pr-i:hover { border-color: var(--gold); }
 .rk-fc i { font-style: normal; font-family: var(--display); font-size: 22px; line-height: 1; }
 .rk-fsc, .rk-fpc { opacity: 0; transform: scale(.9); transition: opacity .3s, transform .3s; display: grid; gap: 4px; justify-items: center; }
 .rk-fsc.in, .rk-fpc.in, .rk-fin.done .rk-fsc, .rk-fin.done .rk-fpc { opacity: 1; transform: none; }
-.rk-fsc b { font-family: var(--display); font-size: 34px; line-height: 1; color: #fff; }
+.rk-fsc b { font-family: var(--display); font-size: 34px; line-height: 1; color: var(--gold2); }
 .rk-fin .rk-pop-n { font-size: 76px !important; text-shadow: 0 0 24px rgba(212, 175, 55, .35); }
 .rk-tier { font-family: var(--display); letter-spacing: .24em; font-size: 15px; color: #000; background: var(--gold); padding: 4px 12px; opacity: 0; transform: scale(2.4) rotate(-6deg); }
 .rk-fpc.stamp .rk-tier, .rk-fin.done .rk-tier { opacity: 1; transform: none; transition: transform .35s cubic-bezier(.2, 1.6, .4, 1), opacity .15s; }
