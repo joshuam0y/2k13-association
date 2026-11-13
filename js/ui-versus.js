@@ -1054,7 +1054,7 @@
     bindNet(app); bindReact(app);
     UI.$('#vsSetup', app).addEventListener('click', () => go('setup'));
     const fresh = () => { st.until = cfg.timer ? Date.now() + cfg.timer * 1000 : null; };
-    const done = () => { cfg.sides[0].picks = st.won[0].slice(); cfg.sides[1].picks = st.won[1].slice(); fresh(); if (window.SFX) window.SFX.play('chime'); push(); draft(app); window.scrollTo(0, 0); };
+    const done = () => { cfg.sides[0].picks = st.won[0].slice(); cfg.sides[1].picks = st.won[1].slice(); fresh(); if (window.SFX) window.SFX.play('chime'); push(); draft(app); };   // no jump to the top: the bid bar stays where your thumb is
     const setAmt = v => { AB.amt = Math.max(min, Math.min(max, Math.round(v))); auctionPage(app, cfg, B); };
     const dn = UI.$('#aucDown', app); if (dn) dn.addEventListener('click', () => setAmt(AB.amt - A.raise));
     const up = UI.$('#aucUp', app); if (up) up.addEventListener('click', () => setAmt(AB.amt + A.raise));

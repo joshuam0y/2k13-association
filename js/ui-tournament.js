@@ -459,7 +459,7 @@
     const step = () => {
       C.auctionNRunAI(st, B.byId, Math.random, i => i < humDone());
       if (st.done) { finishAuc(app, cfg, B); return; }
-      st.until = cfg.timer ? Date.now() + cfg.timer * 1000 : null; save(); draft(app); window.scrollTo(0, 0);
+      st.until = cfg.timer ? Date.now() + cfg.timer * 1000 : null; save(); draft(app);
     };
     aucView(app, { t: TN, cfg, B, st, w: st.turn, hot: true, now: () => Date.now(), still: () => TN.auc === st && TN.page === 'draft', quit, redraw: () => draft(app),
       act: (a, to) => { if (C.auctionNAct(st, st.turn, a, to)) step(); }, expire: () => { if (C.auctionNAct(st, st.turn, 'pass')) step(); } });

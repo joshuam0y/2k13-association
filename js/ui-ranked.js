@@ -760,7 +760,6 @@
         house(); st.until = Date.now() + DAILY_CLOCK * 1000; save(st.done); stopClock();
         if (!/^#\/daily/.test(location.hash)) return;   // you left while the house was thinking
         const autos = st.log.slice(before).filter(x => x.auto);
-        window.scrollTo(0, 0);
         if (autos.length) { stopClock(); UI.aucReveal(app, { entries: autos, byId, name: i => (i === 0 ? 'YOU' : 'THE HOUSE'), onDone: () => { st.until = Date.now() + DAILY_CLOCK * 1000; draw(app, era, day, st, byId, key, house, save); } }); return; }
         draw(app, era, day, st, byId, key, house, save);
       };

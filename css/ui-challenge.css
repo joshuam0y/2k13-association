@@ -1157,3 +1157,14 @@ a.pr-i:hover { border-color: var(--gold); }
 /* nothing may cover the top bar: the banners sit at the bottom and the popups start under it, so STARTING FIVE always takes you home */
 .rk-rejoin, .rk-offline { top: auto !important; bottom: env(safe-area-inset-bottom, 0px); }
 .rk-tour, .rk-avpanel { top: var(--top-h, 56px); }
+
+/* phone auction: the player and the bid bar stay on screen, your team is a scroll below */
+@media (max-width: 900px) {
+  .auc-stage { display: contents; }
+  .auc-stage > * { grid-column: 1 / -1; order: -1; }
+  .auc-stage > .auc-card { position: sticky; top: var(--top-h, 56px); z-index: 20; margin: 0; background: var(--bg); }
+  .auc-stage > .auc-bid, .auc-stage > .auc-wait, .auc-stage > .auc-think { position: sticky; bottom: var(--mb-h, var(--bar-h)); z-index: 20; background: var(--bg); padding: 8px 0; box-shadow: 0 -8px 10px var(--bg); }
+  .auc-stage > .auc-card .auc-face { width: 48px; height: 48px; }
+  .auc-stage > .auc-card .auc-price { padding-top: 4px; }
+  .auc-stage > .auc-card .auc-price b { font-size: 32px; }
+}
