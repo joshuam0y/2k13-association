@@ -1219,7 +1219,7 @@
         }
         board.innerHTML = msg('Loading...');
         let wk = null; try { wk = (await UI.profile.rpc('lb_daily_week', { p_limit: 50 })) || []; } catch (e) { wk = null; }
-        board.innerHTML = !wk ? msg('The weekly board arrives with the latest SQL.') : wk.length ? table(['#', 'PLAYER', 'DAYS', 'AVERAGE', 'TOTAL'], wk.map((x, i) => [i + 1, nameCell(x, me), x.days, f1(x.avg_pct) + '%', '<b>' + f1(x.total) + '</b>'])) + '<p class="muted rk-sub">Monday to Sunday, Pacific. Percentages added up.</p>' : msg('No scores this week yet.');
+        board.innerHTML = !wk ? msg('The weekly board arrives with the latest SQL.') : wk.length ? table(['#', 'PLAYER', 'DAYS', 'AVERAGE', 'TOTAL POINTS'], wk.map((x, i) => [i + 1, nameCell(x, me), x.days, f1(x.avg_pct) + '%', '<b>' + f1(x.total) + '</b>'])) + '<p class="muted rk-sub">Monday to Sunday, Pacific. Ranked by total points: every daily percentage added up, so playing every day climbs the board.</p>' : msg('No scores this week yet.');
       };
       app.querySelectorAll('#dyTabs [data-bt]').forEach(b => b.addEventListener('click', () => show(b.dataset.bt)));
       show('today');
