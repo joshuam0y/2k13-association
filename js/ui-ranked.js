@@ -114,7 +114,7 @@
   const dayBefore = d => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() - 1); return x.toISOString().slice(0, 10); };
   // a daily save belongs to the account that played it (guests share one), so a second account on the same device plays its own
   const acctSfx = () => (UI.profile.signedIn() && UI.profile.account() ? '-' + String(UI.profile.account()).toLowerCase() : '');
-  const DSUF = 'T3';   // bump it to clear every saved daily on every device at once
+  const DSUF = 'T4';   // bump it to clear every saved daily on every device at once
   const dKey = day => 'a13-rk-d-' + day + '-' + DSUF + acctSfx();
   function dailyDays() {
     const days = new Set();
@@ -662,13 +662,7 @@
     }
     if (saved && saved.remote && !pr) { remoteDone(app, day, saved); return; }
     if (saved && saved.st) st = saved.st;
-    else {
-      st = C.auctionStart(cfg, pool);
-      if (!pr) {   // the same ten for everyone, but each player meets them in their own order (nothing is sold yet, so the ids can move)
-        const r = mulberry(hash(day + '|order|' + (acctSfx() || guestId() || 'guest')));
-        for (let i = st.ids.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); const t = st.ids[i]; st.ids[i] = st.ids[j]; st.ids[j] = t; }
-      }
-    }
+    else { st = C.auctionStart(cfg, pool); }   // the same ten in the same order for everyone: a shuffled order made the top of the board a matter of luck
     const rng = mulberry(hash(day + era + 'house'));
     const house = () => { let n = 0; while (!st.done && st.turn === 1 && n++ < 50) C.auctionAct(st, 1, houseMove(st, byId, rng)); };
     house();
