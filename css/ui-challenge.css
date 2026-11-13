@@ -1260,3 +1260,8 @@ a.pr-i:hover { border-color: var(--gold); }
   .auc-stage > .auc-bid .auc-go .btn small { font-size: 10px; }
   .auc-stage > .auc-wait { padding: 8px; }
 }
+/* the result page takes its tier's colour too (border, percent), the same as the popup */
+.rk-score[data-t] { border-color: var(--tc); box-shadow: 0 0 26px color-mix(in srgb, var(--tc) 16%, transparent); }
+.rk-score[data-t] .rk-pct b { color: var(--tc); }
+.rk-score[data-t] .rk-fc { border-color: color-mix(in srgb, var(--tc) 55%, #000); }
+@media (max-width: 420px) { .rk-fstat .rk-fc b { font-size: 9px; letter-spacing: 0; } .rk-fstat .rk-fc { padding-left: 1px; padding-right: 1px; } }
