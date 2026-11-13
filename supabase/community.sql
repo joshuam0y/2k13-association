@@ -223,9 +223,10 @@ end $$;
 grant execute on function public.daily_stats(date) to authenticated, anon;
 
 -- a player's last 30 days of dailies (the squares on a profile)
-create or replace function public.daily_history(p_name text) returns table (day date, score numeric, pct numeric)
+drop function if exists public.daily_history(text);
+create or replace function public.daily_history(p_name text) returns table (day date, score numeric, pct numeric, lineup jsonb)
 language sql security definer set search_path = public as $$
-  select d.day, d.score, d.pct from public.daily_scores d join public.profiles p on p.id = d.user_id
+  select d.day, d.score, d.pct, d.lineup from public.daily_scores d join public.profiles p on p.id = d.user_id
   where lower(p.username) = lower(p_name) and d.era = 'ALL' and d.day >= (now() at time zone 'America/Los_Angeles')::date - 29
   order by d.day
 $$;

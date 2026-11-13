@@ -600,11 +600,41 @@
     const target = st.o.start + Math.round(avg * (0.4 + 1.6 * w) - st.o.start + (rng() - 0.5) * 1.5);
     return st.price + st.o.raise <= target && C.aucCanRaise(st, 1) ? 'raise' : 'pass';
   }
+  // signed in on another device: the dailies already on the server count here too (no second try, and the streak carries over)
+  let TRIED = '';
+  async function syncRemote() {
+    if (!UI.profile.signedIn()) return;
+    const me = UI.profile.account(), tk = me + '|' + today(); if (!me || TRIED === tk) return;
+    TRIED = tk;
+    let rows = null; try { rows = await UI.profile.rpc('daily_history', { p_name: me }); } catch (e) { return; }
+    (rows || []).forEach(r => {
+      const d = String(r.day).slice(0, 10), k = dKey(d), l = ls.get(k, null);
+      if (!l || !l.fin || (l.score != null && Math.abs(Number(l.score) - Number(r.score)) > 0.05)) ls.set(k, { fin: true, sent: true, remote: true, score: Number(r.score), pct: r.pct == null ? null : Number(r.pct), names: r.lineup && Array.isArray(r.lineup.names) ? r.lineup.names : null });
+    });
+  }
+  function remoteDone(app, day, sv) {
+    const TH = THEME[day].info, pct = sv.pct;
+    app.innerHTML = `<div class="ch-top"><div><div class="ch-top-k">DAILY #${dayNo(day)} | ${esc(day)} | ${esc(TH.title)}</div><div class="ch-top-t">YOU ALREADY PLAYED TODAY</div></div><a class="btn btn-small" href="#/daily">BACK</a></div>
+      <section class="rk-score"><small>YOUR LINEUP SCORE</small><b>${Number(sv.score).toFixed(1)}</b>${pct == null ? '' : `<div class="rk-pct"><b>${pct.toFixed(1)}%</b> OF A PERFECT FIVE</div>`}<div class="rk-streak" id="rkStreak"></div><div class="rk-std" id="rkStd"></div><span class="muted">${sv.names ? esc(sv.names.join(', ')) : 'Played on another device.'}</span></section>
+      <div class="ch-go"><a class="btn btn-gold" href="#/daily">SEE THE BOARD</a>${pct == null ? '' : '<button type="button" class="btn" id="dlShare">SHARE YOUR SCORE</button>'}</div>`;
+    const sk = streakNow(), el = UI.$('#rkStreak', app); if (el && sk.n) el.innerHTML = '<b>' + sk.n + '</b> DAY DAILY STREAK';
+    const sh = UI.$('#dlShare', app); if (sh) sh.addEventListener('click', () => shareCard({}, 'Starting Five Daily #' + dayNo(day) + ' \u{1F3C0}\n' + pct.toFixed(1) + '% of a perfect five', '#/daily'));
+    UI.profile.rpc('daily_stats', { p_day: day }).then(t => {
+      if (!t || !t.rank) return;
+      const beat = t.played > 1 ? Math.round(100 * t.below / (t.played - 1)) : null, a = UI.$('#rkStd', app);
+      if (a) a.textContent = '#' + t.rank + ' OF ' + t.played + (beat != null ? ' | YOU BEAT ' + beat + '% OF PLAYERS' : '') + ' | AVERAGE ' + (t.avg_pct != null ? t.avg_pct + '%' : t.avg_score);
+    }).catch(() => {});
+  }
   function dailyPage(app, era, pr) {   // pr: a practice round of any theme {info, n}: no board, no streak
     stopRefresh();
     era = ERAS.indexOf(era) >= 0 ? era : 'ALL';
     era = 'ALL';   // the daily is one theme a day, whatever era is picked above
     const day = pr ? 'practice:' + pr.info.key + ':' + pr.n : today(), key = dKey(day);
+    if (!pr && UI.profile.signedIn() && TRIED !== UI.profile.account() + '|' + today()) {
+      app.innerHTML = '<section class="ch-load"><div class="ch-spin-ring"></div><div>CHECKING YOUR SCORES...</div></section>';
+      syncRemote().then(() => { if (/^#\/daily/.test(location.hash)) dailyPage(app, era, pr); });
+      return;
+    }
     if (!THEME[day]) {
       app.innerHTML = '<section class="ch-load"><div class="ch-spin-ring"></div><div>LOADING THE THEME...</div></section>';
       (pr ? buildTheme(pr.info).then(t => { THEME[day] = t; }) : dailyTheme(day)).then(() => { if (/^#\/daily/.test(location.hash)) dailyPage(app, era, pr); }).catch(e => { app.innerHTML = '<p class="rk-err">' + esc(e.message || e) + '</p>'; });
@@ -618,6 +648,7 @@
       const gk = 'a13-rk-d-' + day + '-T', g = ls.get(gk, null);
       if (g && g.st && g.g) { saved = Object.assign({}, g, { sent: false }); ls.set(key, saved); try { localStorage.removeItem(gk); } catch (e) { /* private mode */ } }
     }
+    if (saved && saved.remote && !pr) { remoteDone(app, day, saved); return; }
     if (saved && saved.st) st = saved.st;
     else { st = C.auctionStart(cfg, pool); }
     const rng = mulberry(hash(day + era + 'house'));
@@ -1064,6 +1095,7 @@
     const body = UI.$('#dyBody', app);
     try {
       let TH = null; try { await dailyTheme(day); TH = THEME[day].info; } catch (e) { /* the theme card stays out */ }
+      await syncRemote();
       let rows = []; try { rows = (await UI.profile.rpc('lb_daily', { p_day: day, p_era: 'ALL', p_region: null, p_limit: 100 })) || []; } catch (e) { rows = null; }
       let st = null, yst = null; const yday = dayBefore(day);
       try { st = await UI.profile.rpc('daily_stats', { p_day: day }); } catch (e) { /* before the latest SQL */ }
