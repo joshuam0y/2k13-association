@@ -88,7 +88,7 @@ grant select on public.ratings to anon;
 create or replace function public.finalize_series(p_key text) returns void
 language plpgsql security definer set search_path = public as $$
 declare r1 public.series_reports; r2 public.series_reports; n int; ua uuid; ub uuid; aw int; bw int;
-        ra int; rb int; na int; nb int; ea numeric; sa numeric; k int := 32;
+        ra int; rb int; na int; nb int; ea numeric; sa numeric; k int := 32; lad text;
 begin
   select * into r1 from public.series_reports where key = p_key order by id limit 1;
   select * into r2 from public.series_reports where key = p_key and reporter <> r1.reporter order by id limit 1;
@@ -108,15 +108,18 @@ begin
     on conflict (a, b) do update set a_wins = public.rivalries.a_wins + aw, b_wins = public.rivalries.b_wins + bw, last_at = now();
   -- the ladder, only when both asked for a ranked series
   if r1.ranked and r2.ranked then
-    insert into public.ratings (user_id, era) values (r1.reporter, r1.era), (r2.reporter, r1.era) on conflict do nothing;
-    select rating into ra from public.ratings where user_id = r1.reporter and era = r1.era;
-    select rating into rb from public.ratings where user_id = r2.reporter and era = r1.era;
-    ea := 1 / (1 + power(10, (rb - ra) / 400.0));
-    sa := case when r1.my_wins > r1.opp_wins then 1 else 0 end;
-    na := round(ra + k * (sa - ea)); nb := round(rb + k * ((1 - sa) - (1 - ea)));
-    update public.ratings set rating = na, peak = greatest(peak, na), games = games + 1, wins = wins + sa::int, losses = losses + (1 - sa)::int, updated_at = now() where user_id = r1.reporter and era = r1.era;
-    update public.ratings set rating = nb, peak = greatest(peak, nb), games = games + 1, wins = wins + (1 - sa)::int, losses = losses + sa::int, updated_at = now() where user_id = r2.reporter and era = r1.era;
-    update public.series set d1 = na - ra, d2 = nb - rb where key = p_key;
+    -- one rating for matchmaking ('ALL') and, for a match that spun an era ('B:key'), the rating for that era too; the change shown is the overall one
+    foreach lad in array (case when r1.era like 'B:%' then array['ALL', r1.era] else array[r1.era] end) loop
+      insert into public.ratings (user_id, era) values (r1.reporter, lad), (r2.reporter, lad) on conflict do nothing;
+      select rating into ra from public.ratings where user_id = r1.reporter and era = lad;
+      select rating into rb from public.ratings where user_id = r2.reporter and era = lad;
+      ea := 1 / (1 + power(10, (rb - ra) / 400.0));
+      sa := case when r1.my_wins > r1.opp_wins then 1 else 0 end;
+      na := round(ra + k * (sa - ea)); nb := round(rb + k * ((1 - sa) - (1 - ea)));
+      update public.ratings set rating = na, peak = greatest(peak, na), games = games + 1, wins = wins + sa::int, losses = losses + (1 - sa)::int, updated_at = now() where user_id = r1.reporter and era = lad;
+      update public.ratings set rating = nb, peak = greatest(peak, nb), games = games + 1, wins = wins + (1 - sa)::int, losses = losses + sa::int, updated_at = now() where user_id = r2.reporter and era = lad;
+      if lad = 'ALL' or r1.era not like 'B:%' then update public.series set d1 = na - ra, d2 = nb - rb where key = p_key; end if;
+    end loop;
   end if;
   -- each player's best lineup so far
   update public.profiles p set best_score = r1.score, best_lineup = r1.lineup where p.id = r1.reporter and r1.score is not null and (p.best_score is null or r1.score > p.best_score);

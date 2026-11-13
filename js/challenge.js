@@ -275,7 +275,7 @@
   }
 
   // ---------- auction draft (versus): a hidden pool, bid for every player ----------
-  // cfg.auction = { budget: 20, start: 1, raise: 1, pool: 10, quality: 'stars' | 'mixed' | 'any', show: 0 | 1 (the pool is visible) }.
+  // cfg.auction = { budget: 20, start: 1, raise: 1, pool: 10, quality: 'elite' (top 40) | 'stars' (top 60) | 'mixed' (top 200) | 'any', show: 0 | 1 (the pool is visible) }.
   // A player goes up at the start price, held by whoever opens that round (the opener alternates); the other side raises or passes;
   // a pass sells him to the side that holds the bid, at that price. Each side must keep the start price for every slot it still has to
   // fill, a full side stops bidding, and the other side takes what is left at no cost.
@@ -303,11 +303,21 @@
       return st;   // a side out of money still gets its turn: it can only pass
     }
   }
+  // a ranked draw is balanced: at least two guards, two forwards and two bigs among the ten, so neither side can be left with an unplayable lineup. The order stays the shuffled one.
+  function posGroup(p) { var s = String(p.pos || '').toUpperCase(); if (/C/.test(s)) return 'B'; return /^(PG|SG|G)/.test(s) ? 'G' : 'F'; }
+  function balancedDraw(shuf, n) {
+    var need = { G: 2, F: 2, B: 2 }, take = {}, out = [], i, g;
+    for (i = 0; i < shuf.length; i++) { g = posGroup(shuf[i]); if (need[g] > 0) { need[g]--; take[i] = 1; } }
+    var left = n - Object.keys(take).length;
+    for (i = 0; i < shuf.length && left > 0; i++) if (!take[i]) { take[i] = 1; left--; }
+    for (i = 0; i < shuf.length; i++) if (take[i]) out.push(shuf[i]);
+    return out.slice(0, n);
+  }
   function auctionStart(cfg, players) {
     var o = aucOpts(cfg.auction), per = vsPer(cfg), n = Math.max(o.pool, 2 * per), rng = mulberry32(((cfg.seed || 1) ^ 0xA0C710) >>> 0);
     var sorted = players.slice().sort(function (a, b) { return b.ovr - a.ovr || (a.id < b.id ? -1 : 1); });
-    var top = o.quality === 'stars' ? Math.max(n, 60) : o.quality === 'mixed' ? Math.max(n, 200) : sorted.length;
-    var pool = shuffle(sorted.slice(0, top), rng).slice(0, n);
+    var top = o.quality === 'elite' ? Math.max(n, 40) : o.quality === 'stars' ? Math.max(n, 60) : o.quality === 'mixed' ? Math.max(n, 200) : sorted.length;
+    var shuf = shuffle(sorted.slice(0, top), rng), pool = o.quality === 'elite' ? balancedDraw(shuf, n) : shuf.slice(0, n);
     var st = { o: o, per: per, first: cfg.first ? 1 : 0, ids: pool.map(function (p) { return p.id; }), i: -1, price: o.start, holder: 0, turn: 1, spent: [0, 0], won: [[], []], log: [], done: false };
     return aucNext(st);
   }
@@ -358,7 +368,7 @@
   function auctionNStart(cfg, n, players) {
     var o = aucOpts(cfg.auction), per = vsPer(cfg), size = Math.max(o.pool || 0, n * per), rng = mulberry32(((cfg.seed || 1) ^ 0xA0C7A1) >>> 0);
     var sorted = players.slice().sort(function (a, b) { return b.ovr - a.ovr || (a.id < b.id ? -1 : 1); });
-    var top = o.quality === 'stars' ? Math.max(size, 60 * Math.ceil(n / 2)) : o.quality === 'mixed' ? Math.max(size, 200 * Math.ceil(n / 2)) : sorted.length;
+    var top = o.quality === 'elite' ? Math.max(size, 40 * Math.ceil(n / 2)) : o.quality === 'stars' ? Math.max(size, 60 * Math.ceil(n / 2)) : o.quality === 'mixed' ? Math.max(size, 200 * Math.ceil(n / 2)) : sorted.length;
     var pool = shuffle(sorted.slice(0, top), rng).slice(0, size);
     var st = { o: o, per: per, n: n, first: cfg.first ? cfg.first % n : 0, ids: pool.map(function (p) { return p.id; }), i: -1, price: o.start, holder: 0, turn: 0, active: [], spent: [], won: [], log: [], done: false };
     for (var k = 0; k < n; k++) { st.spent.push(0); st.won.push([]); }

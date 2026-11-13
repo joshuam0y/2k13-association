@@ -1265,3 +1265,5 @@ a.pr-i:hover { border-color: var(--gold); }
 .rk-score[data-t] .rk-pct b { color: var(--tc); }
 .rk-score[data-t] .rk-fc { border-color: color-mix(in srgb, var(--tc) 55%, #000); }
 @media (max-width: 420px) { .rk-fstat .rk-fc b { font-size: 9px; letter-spacing: 0; } .rk-fstat .rk-fc { padding-left: 1px; padding-right: 1px; } }
+.rk-spec { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.rk-spec-i { font-family: var(--display); letter-spacing: .14em; font-size: 12px; padding: 4px 10px; color: #000; background: linear-gradient(100deg, var(--gold2), var(--gold)); }

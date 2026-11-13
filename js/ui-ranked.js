@@ -11,11 +11,31 @@
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode */ } }
   };
   const DECADES = [1940, 1950, 1960, 1970, 1980, 1990, 2000, 2010, 2020];
-  const ERAS = DECADES.map(d => d + 's').concat(['ALL']);
-  const eraName = e => (e === 'ALL' ? 'ALL-TIME' : e);
+  // ranked era buckets: every match spins one, both players get the same ten-from-forty draw from it. One matchmaking rating ('ALL') plus a rating for each bucket ('B:key').
+  const BUCKETS = [
+    { key: 'classic', label: 'CLASSIC', sub: '1947-79', from: 1947, to: 1979, color: '#c98a2b' },
+    { key: 'golden', label: '80S AND 90S', sub: '1980-99', from: 1980, to: 1999, color: '#d1503f' },
+    { key: 'noughts', label: '2000S', sub: '2000-09', from: 2000, to: 2009, color: '#3d78d6' },
+    { key: 'tens', label: '2010S', sub: '2010-19', from: 2010, to: 2019, color: '#9b4fd6' },
+    { key: 'now', label: '2020S', sub: '2020-27', from: 2020, to: 2027, color: '#3f9d57' },
+    { key: 'all', label: 'ALL-TIME', sub: 'EVERY ERA', from: 1947, to: 2027, color: '#d4af37' }
+  ];
+  const bucketByKey = k => BUCKETS.find(b => b.key === k) || null;
+  const bucketFor = seed => BUCKETS[Math.abs(Math.imul((seed | 0) ^ 0x2545F491, 2654435761)) % BUCKETS.length];   // the same answer on both phones
+  // an era you are 100+ points better at than your overall rating (after 5 games there) gets a badge
+  const specialist = rows => {
+    const all = (rows || []).find(r => r.era === 'ALL'); if (!all) return '';
+    const chips = (rows || []).filter(r => /^B:/.test(r.era) && ((r.games != null ? r.games : (r.wins || 0) + (r.losses || 0)) >= 5) && r.rating - all.rating >= 100).sort((x, y) => y.rating - x.rating)
+      .map(r => `<span class="rk-spec-i">${esc(eraName(r.era))} SPECIALIST</span>`);
+    return chips.length ? `<div class="rk-spec">${chips.join('')}</div>` : '';
+  };
+  const ladderOf = e => (/^B:/.test(e) ? 'ALL' : e);   // the rating a result moves for matchmaking: always the overall one
+  const ERAS = ['ALL'].concat(BUCKETS.map(b => 'B:' + b.key));
+  const eraName = e => (e === 'ALL' ? 'OVERALL' : /^B:/.test(e) ? (bucketByKey(e.slice(2)) || { label: e }).label : e);
   const decKey = y => ((y - 1) - (y - 1) % 10) + 's';
   // the era a game belongs to: its decade when every season in it is from one decade, else all-time
   function eraOf(cfg) {
+    if (cfg.bucket && bucketByKey(cfg.bucket)) return 'B:' + cfg.bucket;
     const ys = cfg.year ? [cfg.year] : (cfg.seasons && cfg.seasons.length ? cfg.seasons : null);
     if (!ys) return 'ALL';
     const ks = [...new Set(ys.map(decKey))];
@@ -196,7 +216,7 @@
     const cur = lastGet();
     if (cur && cur.key === info.key) return;
     let before = { rating: 1200, games: 0, rank: 0, of: 0 };
-    try { before = (await ratingNow(info.era)) || before; } catch (e) { /* the result screen copes without it */ }
+    try { before = (await ratingNow(ladderOf(info.era))) || before; } catch (e) { /* the result screen copes without it */ }
     const again = lastGet();
     if (again && again.key === info.key) return;
     lastSet({ key: info.key, era: info.era, opp: info.opp, bestOf: info.bestOf, before: { rating: before.rating, games: before.games, rank: before.rank, of: before.of }, at: Date.now() });
@@ -227,7 +247,7 @@
       if (stopped || !/^#\/ranked\/result/.test(location.hash)) return;
       tries++;
       let now = null;
-      try { now = await ratingNow(last.era); } catch (e) { /* retry */ }
+      try { now = await ratingNow(ladderOf(last.era)); } catch (e) { /* retry */ }
       if (stopped) return;
       if (now && now.games > (last.before ? last.before.games : 0)) return show(now);
       if (tries > 60) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">RANKED | ${esc(eraName(last.era))}</div><h1 class="ch-hero-t">STILL WAITING.</h1><p class="ch-hero-p">${esc(last.opp || 'The other player')} has not reported the score yet. It counts as soon as they do, or about fifteen minutes after the series if they never do. Check your profile later.</p></section>${acts}`; return; }
@@ -236,7 +256,7 @@
     const show = now => {
       const b = last.before || { rating: 1200 }, d = now.rating - b.rating, won = d > 0 || (d === 0 && now.wins > (b.wins || 0));
       const tb = tierOf(b.rating), ta = tierOf(now.rating);
-      const rk = now.of ? `#${now.rank} of ${now.of} in ${esc(eraName(last.era))}` : '';
+      const rk = now.of ? `#${now.rank} of ${now.of} overall` : '';
       app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">RANKED | ${esc(eraName(last.era))} | VS ${esc(last.opp || '')}</div><h1 class="ch-hero-t">${last.forfeit === 'win' ? 'WIN BY FORFEIT.' : last.forfeit === 'loss' ? 'YOU FORFEITED.' : won ? 'YOU WON.' : 'YOU LOST.'}</h1></section>
         <section class="rk-elo ${won ? 'up' : 'down'}"><small>RATING</small>
           <div class="rk-elo-n"><span class="rk-elo-from">${b.rating}</span><span class="rk-elo-arrow">${won ? '&#9650;' : '&#9660;'}</span><b id="rkEloNow">${b.rating}</b></div>
@@ -244,7 +264,7 @@
           <div class="rk-tier">${tierIcon(now.rating, 96)}${tierBadge(now.rating)}${ta.next ? `<div class="rk-bar"><i style="--w:${ta.pct}%"></i></div><small class="muted">${ta.next.floor - now.rating} POINTS TO ${esc(ta.next.name)}</small>` : '<small class="muted">THE TOP RANK</small>'}</div>
           ${ta.idx !== tb.idx ? `<div class="rk-promo ${ta.idx > tb.idx ? 'up' : 'down'}">${ta.idx > tb.idx ? 'RANK UNLOCKED: ' : 'DROPPED TO '}${esc(ta.name)}</div>` : ''}
           <button type="button" class="btn btn-small${ta.idx > tb.idx ? ' btn-gold' : ''}" id="rkShare">${ta.idx > tb.idx ? 'SHARE YOUR NEW RANK' : 'SHARE THIS RESULT'}</button>
-          <div class="rk-elo-meta"><span>${now.wins}-${now.losses} ranked this era</span>${rk ? `<span>${rk}</span>` : ''}${b.rank && now.rank !== b.rank ? `<span>${now.rank < b.rank ? 'UP' : 'DOWN'} ${Math.abs(b.rank - now.rank)} PLACE${Math.abs(b.rank - now.rank) > 1 ? 'S' : ''}</span>` : ''}</div></section>${acts}`;
+          <div class="rk-elo-meta"><span>${now.wins}-${now.losses} ranked</span>${rk ? `<span>${rk}</span>` : ''}${b.rank && now.rank !== b.rank ? `<span>${now.rank < b.rank ? 'UP' : 'DOWN'} ${Math.abs(b.rank - now.rank)} PLACE${Math.abs(b.rank - now.rank) > 1 ? 'S' : ''}</span>` : ''}</div></section>${acts}`;
       if (ta.idx > tb.idx && window.SFX) setTimeout(() => window.SFX.play('crowd'), 500);
       const shareBtn = UI.$('#rkShare', app);
       if (shareBtn) shareBtn.addEventListener('click', async () => {
@@ -380,7 +400,7 @@
   };
 
   UI.userLink = (name, tab) => `<a class="u-link" href="#/u/${encodeURIComponent(name)}"${tab ? ' target="_blank" rel="noopener"' : ''}>${esc(name)}</a>`;   // a name you can click to see that player's profile
-  UI.ranked = { tierIcon, ratingOf: n => RATINGS[String(n).toLowerCase()], streak: streakNow, tierOf, tierBadge, avatarHtml, eraOf, lineupScore, report, started, forfeit, concede, noteForfeit, playedBefore, lobbyCard, prefetch, lobbyStart, lobbyStop, ERAS, eraName, regionName, REGIONS };
+  UI.ranked = { BUCKETS, bucketFor, bucketByKey, tierIcon, ratingOf: n => RATINGS[String(n).toLowerCase()], streak: streakNow, tierOf, tierBadge, avatarHtml, eraOf, lineupScore, report, started, forfeit, concede, noteForfeit, playedBefore, lobbyCard, prefetch, lobbyStart, lobbyStop, ERAS, eraName, regionName, REGIONS };
 
   // ---------- helpers for the pages ----------
   const eraOpts = cur => ERAS.map(e => `<option value="${e}"${e === cur ? ' selected' : ''}>${esc(eraName(e))}</option>`).join('');
@@ -410,7 +430,8 @@
         <div class="rk-notify" id="rkNotify"></div>
         <button type="button" class="btn btn-small" id="rkTourBtn">TAKE THE TOUR</button>
         <details class="rk-det"><summary>HOW RANKED WORKS</summary><ol>
-          <li>Bid on ten hidden players. $20 each, bids start at $1, 24 seconds a bid, five players each. Ratings stay hidden until the series ends.</li>
+          <li>Every match spins an era (Classic, 80s and 90s, 2000s, 2010s, 2020s or All-Time). The ten players come from that era's forty best, with at least two guards, two forwards and two bigs.</li>
+          <li>Bid on those ten hidden players. $20 each, bids start at $1, 24 seconds a bid, five players each. Ratings stay hidden until the series ends.</li>
           <li>Best of 7. All five play every minute.</li>
           <li>Win to climb, lose to drop. Beating higher ratings pays more.</li>
           <li>Both phones must report the same score.</li>
@@ -796,7 +817,7 @@
       return `<div class="vs-side${st.turn === i ? ' on' : ''}"><div class="vs-side-h"><div><small>${name}</small><b>${money(A.budget - st.spent[i])} left</b><small class="vs-pay">${st.won[i].length} of ${per} spots</small></div></div>
         <ol class="vs-auc-won">${won.map(w => `<li>${w.p ? '<b class="ch-ovr ' + UI.ovrClass(ovrOf(w.p)) + '">' + esc(ovrOf(w.p)) + '</b> ' : ''}${esc(w.p ? w.p.name : '?')}${w.p ? ' <small class="muted">' + esc(C.posLabel(w.p)) + (w.p.team ? ' | ' + esc(w.p.team) : '') + (w.p.season ? " '" + String(w.p.season - 1).slice(2) + '-' + String(w.p.season).slice(2) : '') + '</small>' : ''} <small class="muted">${money(w.price || 0)}</small></li>`).join('') || '<li class="muted">Nobody yet</li>'}</ol></div>`;
     };
-    const TH = (THEME[day] || {}).info || { title: eraName(era), kind: '' }, isPr = day.indexOf('practice:') === 0, prKey = isPr ? day.slice(9, day.lastIndexOf(':')) : '';
+    const TH = (THEME[day] || {}).info || { title: era === 'ALL' ? 'ALL-TIME' : eraName(era), kind: '' }, isPr = day.indexOf('practice:') === 0, prKey = isPr ? day.slice(9, day.lastIndexOf(':')) : '';
     const hdr = `<div class="ch-top"><div><div class="ch-top-k">${isPr ? 'PRACTICE' : 'DAILY #' + dayNo(day) + ' | ' + esc(day)} | ${esc(TH.title)}</div><div class="ch-top-t">${st.done ? 'YOUR FIVE IS SET' : 'PLAYER ' + (st.i + 1) + ' OF ' + st.ids.length}</div></div><a class="btn btn-small" href="${isPr ? '#/daily/practice' : '#/daily'}">BACK</a></div>`;
     if (st.done) {
       stopClock();
@@ -957,7 +978,7 @@
           <div class="ch-go"><button type="button" class="btn btn-gold" id="meSave">SAVE</button><span class="pf-msg" id="meMsg"></span></div></div>
         ${most.length ? `<div class="ch-step"><div class="ch-step-k">MOST DRAFTED</div>${table(['PLAYER', 'SEASON', 'TIMES'], most.map(m => [esc(m.n), esc(yr(m.se) || 'ANY'), '<b>' + m.c + '</b>']), true)}</div>` : ''}
         ${dailyBlock(myDaily)}
-        ${rat.data && rat.data.length ? `<div class="ch-step"><div class="ch-step-k">YOUR LADDER RATINGS</div>${table(['ERA', 'RATING', 'W-L'], rat.data.slice().sort((x, y) => y.rating - x.rating).map(r => [esc(eraName(r.era)), '<b>' + r.rating + '</b> ' + tierBadge(r.rating), wl(r.wins, r.losses)]), true)}</div>` : ''}
+        ${rat.data && rat.data.length ? `<div class="ch-step"><div class="ch-step-k">YOUR LADDER RATINGS</div>${specialist(rat.data)}${table(['ERA', 'RATING', 'W-L'], rat.data.slice().sort((x, y) => y.rating - x.rating).map(r => [esc(eraName(r.era)), '<b>' + r.rating + '</b> ' + tierBadge(r.rating), wl(r.wins, r.losses)]), true)}</div>` : ''}
         ${(ser.data || []).length ? `<div class="ch-step"><div class="ch-step-k">MATCH HISTORY</div><div class="hist-l">${(ser.data || []).slice(0, 15).map(x => {
           const mine = x.p1 === id, mw = mine ? x.w1 : x.w2, tw = mine ? x.w2 : x.w1, won = mw > tw, dd = mine ? x.d1 : x.d2, who = names[mine ? x.p2 : x.p1] || '?';
           const lu = ((rep.data || []).find(r => r.key && r.key === x.key) || {}).lineup;
@@ -1070,7 +1091,7 @@
         ${d.mutual && d.mutual.length ? `<div class="ch-step"><div class="ch-step-k">FRIENDS YOU SHARE</div><p class="rk-lineup">${d.mutual.map(n => `<span>${UI.userLink(n)}</span>`).join('')}</p></div>` : ''}
         ${d.vs ? `<div class="ch-step"><div class="ch-step-k">YOU VS ${esc(d.username.toUpperCase())}</div><p class="rk-vs"><b>${d.vs.me}</b><span>-</span><b>${d.vs.them}</b></p><small class="muted">${d.vs.me > d.vs.them ? 'You lead the rivalry.' : d.vs.me < d.vs.them ? 'They lead the rivalry.' : 'Tied.'} One series counts for each draft.</small></div>` : ''}
         ${dailyBlock(d.daily)}
-        ${d.ratings && d.ratings.length ? `<div class="ch-step"><div class="ch-step-k">LADDER RATINGS</div>${table(['ERA', 'RATING', 'RANK', 'W-L'], d.ratings.map(r => [esc(eraName(r.era)), '<b>' + r.rating + '</b> ' + tierBadge(r.rating), '#' + r.rank + (r.of ? ' of ' + r.of : ''), wl(r.wins, r.losses)]), true)}</div>` : ''}
+        ${d.ratings && d.ratings.length ? `<div class="ch-step"><div class="ch-step-k">LADDER RATINGS</div>${specialist(d.ratings)}${table(['ERA', 'RATING', 'RANK', 'W-L'], d.ratings.map(r => [esc(eraName(r.era)), '<b>' + r.rating + '</b> ' + tierBadge(r.rating), '#' + r.rank + (r.of ? ' of ' + r.of : ''), wl(r.wins, r.losses)]), true)}</div>` : ''}
         ${d.most && d.most.length ? `<div class="ch-step"><div class="ch-step-k">MOST DRAFTED</div>${table(['PLAYER', 'SEASON', 'TIMES'], d.most.map(m => [esc(m.name), esc(yr(m.season) || 'ANY'), '<b>' + m.count + '</b>']), true)}</div>` : ''}
         <div class="ch-go"><a class="btn" href="#/ranked">RANKED</a><a class="btn" href="#/me">MY PROFILE</a></div>`;
       fillHist(app, d.username);
