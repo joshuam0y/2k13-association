@@ -133,10 +133,11 @@
   // the daily record on a profile: how many played, the average and best percentage of a perfect five, and the streaks
   const sqEmoji = o => o >= 90 ? '\u{1F7EA}' : o >= 80 ? '\u{1F7E6}' : o >= 70 ? '\u{1F7E9}' : o >= 60 ? '\u{1F7E8}' : '\u{1F7E5}';   // the share squares, by player rating
   const ovrOf = p => (p.baseOvr != null ? p.baseOvr : (p.ovr || 0));
+  const f1 = v => Number(v).toFixed(1);   // percentages and scores always show one decimal
   const MILES = [3, 7, 30, 100];   // streak milestones
   const sqB = pc => pc == null ? 'bp' : pc >= 95 ? 'b5' : pc >= 85 ? 'b4' : pc >= 70 ? 'b3' : pc >= 50 ? 'b2' : 'b1';
   const dailyBlock = dd => !dd || !dd.played ? '' : `<div class="ch-step"><div class="ch-step-k">DAILY AUCTION</div>
-      <div class="rk-cards"><div class="rk-card"><small>PLAYED</small><b>${dd.played}</b></div><div class="rk-card"><small>AVERAGE</small><b>${dd.avg_pct != null ? dd.avg_pct + '%' : '-'}</b></div><div class="rk-card"><small>BEST</small><b>${dd.best_pct != null ? dd.best_pct + '%' : '-'}</b></div></div>
+      <div class="rk-cards"><div class="rk-card"><small>PLAYED</small><b>${dd.played}</b></div><div class="rk-card"><small>AVERAGE</small><b>${dd.avg_pct != null ? f1(dd.avg_pct) + '%' : '-'}</b></div><div class="rk-card"><small>BEST</small><b>${dd.best_pct != null ? f1(dd.best_pct) + '%' : '-'}</b></div></div>
       <div class="rk-cards two"><div class="rk-card"><small>STREAK</small><b>${dd.streak || 0}</b></div><div class="rk-card"><small>BEST STREAK</small><b>${dd.best_streak || 0}</b></div></div>
       <div class="dh-miles">${MILES.map(m => `<span class="dh-m${(dd.best_streak || 0) >= m ? ' on' : ''}">${m} DAY</span>`).join('')}</div><div class="dh" data-dh></div></div>`;
   // the last 30 days as squares, colored by the percentage of a perfect five
@@ -634,7 +635,7 @@
     UI.profile.rpc('daily_stats', { p_day: day }).then(t => {
       if (!t || !t.rank) return;
       const beat = t.played > 1 ? Math.round(100 * t.below / (t.played - 1)) : null, a = UI.$('#rkStd', app);
-      if (a) a.textContent = '#' + t.rank + ' OF ' + t.played + (beat != null ? ' | YOU BEAT ' + beat + '% OF PLAYERS' : '') + ' | AVERAGE ' + (t.avg_pct != null ? t.avg_pct + '%' : t.avg_score);
+      if (a) a.textContent = '#' + t.rank + ' OF ' + t.played + (beat != null ? ' | YOU BEAT ' + beat + '% OF PLAYERS' : '') + ' | AVERAGE ' + (t.avg_pct != null ? f1(t.avg_pct) + '%' : f1(t.avg_score));
     }).catch(() => {});
   }
   function dailyPage(app, era, pr) {   // pr: a practice round of any theme {info, n}: no board, no streak
@@ -707,7 +708,7 @@
         if (isPr || !UI.profile.signedIn()) return;
         let t = null; try { t = await UI.profile.rpc('daily_stats', { p_day: day }); } catch (e) { return; }
         if (!t || !t.rank) return;
-        const beat = t.played > 1 ? Math.round(100 * t.below / (t.played - 1)) : null, avg = t.avg_pct != null ? t.avg_pct + '%' : t.avg_score;
+        const beat = t.played > 1 ? Math.round(100 * t.below / (t.played - 1)) : null, avg = t.avg_pct != null ? f1(t.avg_pct) + '%' : f1(t.avg_score);
         const line = '#' + t.rank + ' OF ' + t.played + (beat != null ? ' | YOU BEAT ' + beat + '% OF PLAYERS' : '') + ' | AVERAGE ' + avg;
         const a = UI.$('#rkStd', app), b = document.getElementById('popStd'); if (a) a.textContent = line; if (b) b.textContent = line;
       };
@@ -719,7 +720,7 @@
         sendGuest(day, score, pct).then(async () => {
           let t = null; try { t = await UI.profile.rpc('daily_stats', { p_day: day }); } catch (e) { return; }
           if (!t || !t.played) return;
-          const line = t.played + ' PLAYED TODAY | AVERAGE ' + (t.avg_pct != null ? t.avg_pct + '%' : t.avg_score), a = UI.$('#rkStd', app), b2 = document.getElementById('popStd');
+          const line = t.played + ' PLAYED TODAY | AVERAGE ' + (t.avg_pct != null ? f1(t.avg_pct) + '%' : f1(t.avg_score)), a = UI.$('#rkStd', app), b2 = document.getElementById('popStd');
           if (a) a.textContent = line; if (b2) b2.textContent = line;
         });
         return;
@@ -1121,9 +1122,9 @@
       const perf = TH ? dailyPerfect('ALL', day) : 0, pctOf = sc => (perf > 0 ? Math.min(100, 100 * Number(sc) / perf).toFixed(1) + '%' : '');
       const me = UI.profile.account(), done = ls.get(dKey(day), null), played = done && done.fin, sk = streakNow();
       const left = (() => { const t = new Date().toLocaleTimeString('en-GB', Object.assign({ hour12: false }, PT)).split(':'), ms = 86400000 - ((+t[0]) * 3600 + (+t[1]) * 60 + (+t[2])) * 1000; return Math.floor(ms / 3600000) + 'H ' + (Math.floor(ms / 60000) % 60) + 'M'; })();
-      const avgOf = x => x.avg_pct != null ? x.avg_pct + '%' : x.avg_score;
-      const statLine = st && st.played ? `<p class="rk-stat"><b>${st.played}</b> PLAYED TODAY | AVERAGE <b>${avgOf(st)}</b>${st.best_pct != null ? ' | BEST <b>' + st.best_pct + '%</b>' : ''}</p>` : '';
-      const yest = yst && yst.played ? `<div class="rk-theme"><small>YESTERDAY | DAILY #${dayNo(yday)}</small><b>${esc(yst.winner || '')} WON${yst.winner_pct != null ? ' WITH ' + yst.winner_pct + '%' : ''}</b><span class="muted">${yst.played} played | average ${avgOf(yst)}</span></div>` : '';
+      const avgOf = x => x.avg_pct != null ? f1(x.avg_pct) + '%' : f1(x.avg_score);
+      const statLine = st && st.played ? `<p class="rk-stat"><b>${st.played}</b> PLAYED TODAY | AVERAGE <b>${avgOf(st)}</b>${st.best_pct != null ? ' | BEST <b>' + f1(st.best_pct) + '%</b>' : ''}</p>` : '';
+      const yest = yst && yst.played ? `<div class="rk-theme"><small>YESTERDAY | DAILY #${dayNo(yday)}</small><b>${esc(yst.winner || '')} WON${yst.winner_pct != null ? ' WITH ' + f1(yst.winner_pct) + '%' : ''}</b><span class="muted">${yst.played} played | average ${avgOf(yst)}</span></div>` : '';
       body.innerHTML = `${TH ? `<div class="rk-theme"><small>DAILY #${dayNo(day)} | ${esc(TH.kind)}</small><b>${esc(TH.title)}</b><span class="muted">${esc(TH.tag)}</span></div>` : ''}
         <p class="rk-streak">${sk.n ? '<b>' + sk.n + '</b> DAY STREAK' + (sk.done ? ' | TODAY DONE' : ' | PLAY TODAY TO KEEP IT') : 'START A STREAK: PLAY ONE A DAY'}</p>
         <div class="ch-go"><a class="btn btn-gold btn-big" href="#/daily/play">${played ? "SEE TODAY'S RESULT" : done ? "FINISH TODAY'S AUCTION" : "PLAY TODAY'S AUCTION"}</a><a class="btn" href="#/daily/practice">PRACTICE ARCHIVE</a></div>
@@ -1133,9 +1134,10 @@
         ${statLine}
         <div class="rk-bt" id="dyTabs"><button type="button" class="btn btn-small btn-gold" data-bt="today">TODAY</button><button type="button" class="btn btn-small" data-bt="friends">FRIENDS</button><button type="button" class="btn btn-small" data-bt="week">THIS WEEK</button></div>
         <div id="dyBoard"></div>
+        <p class="muted rk-sub">OF PERFECT: your score next to the best five of today's ten players. 100% means you ended with exactly those five.</p>
         <div class="ch-go"><a class="btn" href="#/ranked">RANKED</a></div>`;
       const board = UI.$('#dyBoard', app), msg = t => '<p class="muted">' + t + '</p>';
-      const todayTbl = list => list && list.length ? table(perf > 0 ? ['#', 'PLAYER', 'SCORE', 'OF PERFECT'] : ['#', 'PLAYER', 'SCORE'], list.map((x, i) => [i + 1, nameCell(x, me), '<b>' + Number(x.score).toFixed(1) + '</b>'].concat(perf > 0 ? [pctOf(x.score)] : []))) : '';
+      const todayTbl = list => list && list.length ? table(perf > 0 ? ['#', 'PLAYER', 'SCORE', 'OF PERFECT FIVE'] : ['#', 'PLAYER', 'SCORE'], list.map((x, i) => [i + 1, nameCell(x, me), '<b>' + Number(x.score).toFixed(1) + '</b>'].concat(perf > 0 ? [pctOf(x.score)] : []))) : '';
       const show = async kind => {
         app.querySelectorAll('#dyTabs [data-bt]').forEach(b => b.classList.toggle('btn-gold', b.dataset.bt === kind));
         if (kind === 'today') { board.innerHTML = todayTbl(rows) || msg('No scores yet today.'); return; }
@@ -1150,7 +1152,7 @@
         }
         board.innerHTML = msg('Loading...');
         let wk = null; try { wk = (await UI.profile.rpc('lb_daily_week', { p_limit: 50 })) || []; } catch (e) { wk = null; }
-        board.innerHTML = !wk ? msg('The weekly board arrives with the latest SQL.') : wk.length ? table(['#', 'PLAYER', 'DAYS', 'AVERAGE', 'TOTAL'], wk.map((x, i) => [i + 1, nameCell(x, me), x.days, x.avg_pct + '%', '<b>' + x.total + '</b>'])) + '<p class="muted rk-sub">Monday to Sunday, Pacific. Percentages added up.</p>' : msg('No scores this week yet.');
+        board.innerHTML = !wk ? msg('The weekly board arrives with the latest SQL.') : wk.length ? table(['#', 'PLAYER', 'DAYS', 'AVERAGE', 'TOTAL'], wk.map((x, i) => [i + 1, nameCell(x, me), x.days, f1(x.avg_pct) + '%', '<b>' + f1(x.total) + '</b>'])) + '<p class="muted rk-sub">Monday to Sunday, Pacific. Percentages added up.</p>' : msg('No scores this week yet.');
       };
       app.querySelectorAll('#dyTabs [data-bt]').forEach(b => b.addEventListener('click', () => show(b.dataset.bt)));
       show('today');
