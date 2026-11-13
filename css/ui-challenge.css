@@ -1147,3 +1147,10 @@ a.pr-i:hover { border-color: var(--gold); }
 .auc-turn.s1 { border-color: #3d78d6; }
 .auc-turn.me { background: var(--gold); border-color: var(--gold); color: #000; font-size: 18px; animation: aucTurn 1.1s ease-in-out infinite; }
 @keyframes aucTurn { 50% { filter: brightness(1.25); } }
+/* room codes: big and easy to type on a phone */
+.vs-join input { font-size: 32px; letter-spacing: .4em; text-align: center; padding: 14px 8px; min-height: 64px; text-indent: .4em; }
+.vs-join input::placeholder { letter-spacing: .4em; opacity: .35; }
+@media (max-width: 600px) {
+  .vs-join { flex-direction: column; align-items: stretch; }
+  .vs-join .btn { width: 100%; min-height: 54px; font-size: 18px; }
+}
