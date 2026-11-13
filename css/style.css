@@ -936,3 +936,41 @@ body.no-assoc-nav .navmore-list a[data-nav="settings"], body.no-assoc-nav .navmo
 .mm-sfx { display: flex; justify-content: center; margin: 4px 0 14px; }
 .app-ver { text-align: center; font-size: 11px; letter-spacing: .18em; padding: 18px 12px 28px; font-family: var(--display); }
 .app-ver .btn { margin-left: 6px; }
+
+/* main menu, smaller: the title, the tiles and the gaps take less room on a laptop and much less on a phone */
+.mm-2k { font-size: clamp(46px, 6.4vw, 88px); }
+.mm-a { font-size: clamp(26px, 3.6vw, 50px); }
+.mm-k { font-size: 12px; margin: 8px 0 18px; }
+.mm-joint { font-size: clamp(13px, 1.5vw, 17px); }
+.mm-grid { grid-template-rows: 130px 130px auto auto; gap: 10px; }
+.mm-grid .mt-hero { padding: 20px; }
+.mm-grid .mt-hero .ic { width: 42px; height: 42px; }
+.mm-grid .mt-hero .mt-l { font-size: clamp(26px, 3vw, 38px); }
+.mm-grid .mtile { padding: 14px; }
+.mm-grid .mt-l { font-size: 20px; }
+.mm-grid .mt-s { font-size: 11px; }
+.mm-grid .mt-assoc, .mm-grid .mt-continue { min-height: 84px; }
+.mm-grid .mt-half { min-height: 76px; }
+@media (max-width: 900px) {
+  .mm-grid { grid-template-rows: none; grid-auto-rows: minmax(92px, auto); }
+  .mm-grid .mt-hero, .mm-grid .mt-hero.mt-challenge, .mm-grid .mt-hero.mt-versus { min-height: 110px; padding: 14px; }
+}
+@media (max-width: 560px) {
+  .mm-2k { font-size: 44px; }
+  .mm-a { font-size: 24px; letter-spacing: .08em; }
+  .mm-brand { gap: 0 10px; }
+  .mm-joint { font-size: 12px; letter-spacing: .16em; margin-top: 6px; }
+  .mm-k { font-size: 10px; letter-spacing: .2em; margin: 6px 0 12px; }
+  .mm-grid { grid-auto-rows: minmax(84px, auto); gap: 8px; }
+  .mm-grid .mt-hero, .mm-grid .mt-hero.mt-challenge, .mm-grid .mt-hero.mt-versus { min-height: 96px; padding: 12px; }
+  .mm-grid .mt-hero .ic { width: 30px; height: 30px; }
+  .mm-grid .mt-hero .mt-l { font-size: 24px; }
+  .mm-grid .mtile { min-height: 84px; padding: 12px; }
+  .mm-grid .mt-l { font-size: 17px; }
+  .mm-grid .mt-assoc, .mm-grid .mt-continue { min-height: 84px; }
+  .mm-grid .mt-tn { min-height: 60px; }
+}
+@media (min-width: 901px) {
+  .mm-grid { grid-template-rows: none; grid-auto-rows: minmax(82px, auto); }
+  .mm-grid .mt-hero, .mm-grid .mt-hero.mt-challenge, .mm-grid .mt-hero.mt-versus { grid-row: span 1; min-height: 132px; }
+}
