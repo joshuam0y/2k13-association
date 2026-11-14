@@ -788,6 +788,7 @@
     rightsList().forEach(function (src) {
       var p = players[src.id], r = src.rights;
       if (!p || p.team !== 'DRAFT' || !r || !isTeam(state, r.team)) return;
+      if (+r.draftYear > (state.year || 2013)) return;   // an older start year: drafted in this league's future
       p.team = r.team;
       p.rights = JSON.parse(JSON.stringify(r));
       p.draftYear = r.draftYear; p.realPick = r.pick; p.undrafted = false;
