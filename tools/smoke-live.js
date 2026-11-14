@@ -45,6 +45,33 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     const made = await p.evaluate(() => { try { UI.state.game = window.LEAGUE.newLeague('OKC', { seed: 1 }); UI.state.slot = UI.state.slot || 1; return true; } catch (e) { return String(e); } });
     if (made === true) { await visit('with league'); await p.evaluate(() => { location.hash = '#/home'; }); }
     else { console.log('FAIL could not start a league:', made); bad++; }
+    // the daily tutorial: the first tap on Play shows four slides once, finishing starts the auction, later taps go straight in, the button replays it
+    const tour = await p.evaluate(async () => {
+      const w = ms => new Promise(r => setTimeout(r, ms)), out = [];
+      const until = async (f, ms = 8000) => { const t = Date.now(); while (Date.now() - t < ms) { if (f()) return true; await w(100); } return false; };
+      const slide = () => { const el = document.querySelector('#rkTour small'); return el ? el.textContent : ''; };
+      try { localStorage.removeItem('a13-dy-tour'); localStorage.removeItem('a13-rk-d-' + new Date().toISOString().slice(0, 10)); } catch (e) { return ['no storage']; }
+      location.hash = '#/home'; await w(300); location.hash = '#/daily';
+      out.push(['hub shows Play and How to play', await until(() => document.querySelector('#dyHow') && document.querySelector('a[href="#/daily/play"]'))]);
+      document.querySelector('a[href="#/daily/play"]').click();
+      out.push(['first tap opens the tour on slide 1 of 4', await until(() => /HOW TO PLAY \| 1 OF 4/.test(slide()))]);
+      out.push(['the tap did not start the auction yet', location.hash === '#/daily']);
+      for (let i = 2; i <= 4; i++) { document.querySelector('#tNext').click(); out.push(['slide ' + i + ' of 4', await until(() => new RegExp('HOW TO PLAY \\| ' + i + ' OF 4').test(slide()))]); }
+      out.push(['last slide says GOT IT', document.querySelector('#tNext').textContent.trim() === 'GOT IT']);
+      document.querySelector('#tNext').click();
+      out.push(['finishing starts the auction and sets the flag', await until(() => location.hash === '#/daily/play') && localStorage.getItem('a13-dy-tour') === '1']);
+      await w(1500);   // let the auction page finish loading before leaving it
+      location.hash = '#/daily'; await until(() => document.querySelector('#dyHow')); await w(300);
+      document.querySelector('a[href="#/daily/play"]').click(); await w(400);
+      out.push(['next time Play goes straight in, no tour', !document.querySelector('#rkTour') && location.hash === '#/daily/play']);
+      location.hash = '#/daily'; await until(() => document.querySelector('#dyHow'));
+      document.querySelector('#dyHow').click();
+      out.push(['the button replays it', await until(() => /HOW TO PLAY \| 1 OF 4/.test(slide()))]);
+      document.querySelector('#tSkip').click(); out.push(['skip closes it', !document.querySelector('#rkTour')]);
+      return out;
+    });
+    for (const t of tour) { if (typeof t === 'string') { console.log('FAIL daily tutorial:', t); bad++; } else { console.log(t[1] ? 'ok  ' : 'FAIL', 'daily tutorial:', t[0]); if (!t[1]) bad++; } }
+    await p.evaluate(() => { location.hash = '#/home'; });
   } catch (e) { console.log('FAIL', e.message); bad++; }
   await sleep(300);
   console.log(errs.length ? 'FAIL ' + errs.length + ' page errors' : 'ok   no page errors'); errs.slice(0, 8).forEach(e => console.log('  ', e));
