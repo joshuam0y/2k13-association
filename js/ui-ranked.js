@@ -1188,17 +1188,27 @@
     ['RANKS', 'Start at 1200, the bottom of Silver. Climb through Bronze, Silver, Gold, Platinum, Diamond, Master, Grandmaster, Legend. You can drop too.'],
     ['IF YOU DROP', 'The game pauses. A banner gives you 90 seconds to rejoin. Miss it and you forfeit. The Forfeit button ends a game at once.']
   ];
-  function openTour(done) {
+  // the daily's first-time tour: the goal, the bidding, the budget and clock, the score
+  const DTOURKEY = 'a13-dy-tour';
+  const DTOUR = [
+    ['THE GOAL', "Build the best five from today's ten players. You're scored against the best five possible."],
+    ['HOW TO BID', 'Ten players come up one at a time, starting at $1. Raise the bid, or pass and the house gets him at the current price.'],
+    ['BUDGET AND CLOCK', '$20 total, five spots, 24 seconds a bid. Keep $1 for every spot you still need to fill.'],
+    ['YOUR SCORE', 'Your score is a percent of the best five. 100% means you picked exactly those five. One try a day.']
+  ];
+  // set: which tour to run (slides, label, the localStorage flag it sets); the default is the Ranked tour
+  function openTour(done, set) {
+    const S = set || { slides: TOUR, label: 'RANKED TOUR', key: TOURKEY, icons: true };
     let i = 0, el = document.getElementById('rkTour');
     if (el) el.remove();
     el = document.createElement('div'); el.id = 'rkTour'; el.className = 'rk-tour'; document.body.appendChild(el);
-    const close = () => { try { localStorage.setItem(TOURKEY, '1'); } catch (e) { /* private mode */ } el.remove(); if (done) done(); };
+    const close = () => { try { localStorage.setItem(S.key, '1'); } catch (e) { /* private mode */ } el.remove(); if (done) done(); };
     const draw = () => {
-      const [t, p] = TOUR[i], last = i === TOUR.length - 1;
-      el.innerHTML = `<div class="rk-tour-b"><small>RANKED TOUR | ${i + 1} OF ${TOUR.length}</small>
-        ${i === 4 ? `<div class="rk-tour-ic">${[0, 3, 6, 9, 12, 13, 14, 15, 16, 17].map(k => iconSvg(TIERS[k] || TIERS[TIERS.length - 1], 36)).join('')}</div>` : ''}
+      const [t, p] = S.slides[i], last = i === S.slides.length - 1;
+      el.innerHTML = `<div class="rk-tour-b"><small>${S.label} | ${i + 1} OF ${S.slides.length}</small>
+        ${S.icons && i === 4 ? `<div class="rk-tour-ic">${[0, 3, 6, 9, 12, 13, 14, 15, 16, 17].map(k => iconSvg(TIERS[k] || TIERS[TIERS.length - 1], 36)).join('')}</div>` : ''}
         <h2>${esc(t)}</h2><p>${esc(p)}</p>
-        <div class="rk-tour-dots">${TOUR.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div>
+        <div class="rk-tour-dots">${S.slides.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div>
         <div class="rk-tour-go">${i ? '<button type="button" class="btn" id="tBack">BACK</button>' : '<button type="button" class="btn" id="tSkip">SKIP</button>'}<button type="button" class="btn btn-gold btn-big" id="tNext">${last ? 'GOT IT' : 'NEXT'}</button></div></div>`;
       const nx = el.querySelector('#tNext'), bk = el.querySelector('#tBack'), sk = el.querySelector('#tSkip');
       nx.addEventListener('click', () => { if (last) close(); else { i++; draw(); } });
@@ -1208,6 +1218,9 @@
     draw();
   }
   UI.ranked.tour = openTour;
+  const DSET = { slides: DTOUR, label: 'HOW TO PLAY', key: DTOURKEY };
+  const dailyTourSeen = () => { try { return localStorage.getItem(DTOURKEY) === '1'; } catch (e) { return true; } };   // no storage: never nag
+  UI.ranked.dailyTour = done => openTour(done, DSET);
   UI.ranked.theme = dailyTheme; UI.ranked.themeInfo = dailyThemeInfo;
   UI.ranked.dailyToday = () => Object.assign({ info: dailyThemeInfo(today()) }, streakNow());
   UI.ranked.themePast = themePast; UI.ranked.themeCatalog = themeCatalog; UI.ranked.themeLocked = themeLocked; UI.ranked.themeBuild = key => buildTheme(themeCatalog().find(t => t.key === key));   // for the theme list and checks
@@ -1281,7 +1294,7 @@
       const yest = yst && yst.played ? `<div class="rk-theme"><small>YESTERDAY | DAILY #${dayNo(yday)}</small><b>${esc(yst.winner || '')} WON${yst.winner_pct != null ? ' WITH ' + f1(yst.winner_pct) + '%' : ''}</b><span class="muted">${yst.played} played | average ${avgOf(yst)}</span></div>` : '';
       body.innerHTML = `${TH ? `<div class="rk-theme"><small>DAILY #${dayNo(day)} | ${esc(TH.kind)}</small><b>${esc(TH.title)}</b><span class="muted">${esc(TH.tag)}</span></div>` : ''}
         <p class="rk-streak">${sk.n ? '<b>' + sk.n + '</b> DAY STREAK' + (sk.done ? ' | TODAY DONE' : ' | PLAY TODAY TO KEEP IT') : 'START A STREAK: PLAY ONE A DAY'}</p>
-        <div class="ch-go"><a class="btn btn-gold btn-big" href="#/daily/play">${played ? "SEE TODAY'S RESULT" : done ? "FINISH TODAY'S AUCTION" : "PLAY TODAY'S AUCTION"}</a><a class="btn" href="#/daily/practice">PRACTICE ARCHIVE</a></div>
+        <div class="ch-go"><a class="btn btn-gold btn-big" href="#/daily/play">${played ? "SEE TODAY'S RESULT" : done ? "FINISH TODAY'S AUCTION" : "PLAY TODAY'S AUCTION"}</a><a class="btn" href="#/daily/practice">PRACTICE ARCHIVE</a><button type="button" class="btn" id="dyHow">HOW TO PLAY</button></div>
         ${signed ? '' : '<p class="muted rk-sub">No account needed. Sign in to put your score on the board.</p>'}
         ${yest}
         <div class="rk-theme lock"><small>TOMORROW</small><b>???</b><span class="muted">Opens in ${left}</span></div>
@@ -1314,6 +1327,10 @@
       };
       app.querySelectorAll('#dyTabs [data-bt]').forEach(b => b.addEventListener('click', () => show(b.dataset.bt)));
       show('today');
+      // how to play: the button replays it any time; the first tap on Play Today's Auction shows it once, before anything has been started
+      const how = UI.$('#dyHow', app); if (how) how.addEventListener('click', () => UI.ranked.dailyTour());
+      const playBtn = app.querySelector('a.btn-gold.btn-big[href="#/daily/play"]');
+      if (playBtn && !done && !dailyTourSeen()) playBtn.addEventListener('click', e => { e.preventDefault(); UI.ranked.dailyTour(() => { location.hash = '#/daily/play'; }); });
       // the numbers stay current while the page is open: every 30 seconds the played count, average and best, and the board when it is on Today
       stopRefresh();
       REFRESH = setInterval(async () => {
