@@ -12,8 +12,9 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const b = await pp.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox'] });
   const p = await b.newPage(), errs = [];
   p.on('pageerror', e => errs.push('pageerror ' + e.message));
-  p.on('console', m => { if (m.type() === 'error') errs.push('console ' + m.text().slice(0, 160)); });
-  p.on('requestfailed', r => errs.push('reqfail ' + r.url().slice(0, 100)));
+  // other hosts (headshots on cdn.nba.com) and plain resource-load lines are network noise, not app errors; the site's own files and thrown errors count
+  p.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errs.push('console ' + m.text().slice(0, 160)); });
+  p.on('requestfailed', r => { if (r.url().startsWith(BASE)) errs.push('reqfail ' + r.url().slice(0, 100)); });
   let bad = 0;
   try {
     await p.goto(BASE + '/#/home', { waitUntil: 'load' }); await sleep(2500);
@@ -25,6 +26,25 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       console.log(ok ? 'ok  ' : 'FAIL', 'key', day, ok ? 'best ' + f.best : JSON.stringify(r).slice(0, 120));
       if (!ok) bad++;
     }
+    // every registered page, first with no league, then with a fresh one loaded: no thrown errors, no blank screen
+    const names = await p.evaluate(() => Object.keys(UI.pages || {}).sort());
+    const visit = async label => {
+      let n = 0, blank = [], before = errs.length;
+      for (const name of names) {
+        const e0 = errs.length;
+        await p.evaluate(n => { location.hash = '#/' + n; }, name); await sleep(120);
+        const len = await p.evaluate(() => (document.getElementById('app') || {}).innerText ? document.getElementById('app').innerText.trim().length : 0);
+        if (!len) blank.push(name);
+        if (errs.length > e0) errs.splice(e0, errs.length - e0, ...errs.slice(e0).map(x => x + ' [page ' + name + ' ' + label + ']'));
+        n++;
+      }
+      console.log(blank.length || errs.length > before ? 'FAIL' : 'ok  ', label + ':', n, 'pages' + (blank.length ? ', blank: ' + blank.join(',') : '') + (errs.length > before ? ', ' + (errs.length - before) + ' errors' : ''));
+      if (blank.length) bad++;
+    };
+    await visit('no league');
+    const made = await p.evaluate(() => { try { UI.state.game = window.LEAGUE.newLeague('OKC', { seed: 1 }); UI.state.slot = UI.state.slot || 1; return true; } catch (e) { return String(e); } });
+    if (made === true) { await visit('with league'); await p.evaluate(() => { location.hash = '#/home'; }); }
+    else { console.log('FAIL could not start a league:', made); bad++; }
   } catch (e) { console.log('FAIL', e.message); bad++; }
   await sleep(300);
   console.log(errs.length ? 'FAIL ' + errs.length + ' page errors' : 'ok   no page errors'); errs.slice(0, 8).forEach(e => console.log('  ', e));
