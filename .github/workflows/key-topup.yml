@@ -1,0 +1,53 @@
+name: Top up the answer key
+# The weekly ratings job only rebuilds the daily answer key when a rating changes. If ratings go quiet the key would run out,
+# so every Monday this checks how many days of key are left and, when fewer than 30, extends it by 60 days with the ratings as they are.
+# It stands down while a ratings branch is waiting (that branch carries its own new key) and sends the new rows to Supabase itself.
+on:
+  schedule:
+    - cron: '30 9 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+jobs:
+  topup:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DAILY_KEY_SECRET: ${{ secrets.DAILY_KEY_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Extend the key when it is running low
+        run: |
+          set -eo pipefail
+          if [ -n "$(git ls-remote --heads origin 'ratings/*')" ]; then echo "a ratings branch is waiting, it brings its own key"; exit 0; fi
+          last=$(ls data/reach | sed 's/\.json$//' | sort | tail -1)
+          read left start <<< "$(node -e "
+            const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date());
+            const last = process.argv[1], d = new Date(last + 'T12:00:00Z');
+            const left = Math.round((Date.parse(last + 'T12:00:00Z') - Date.parse(today + 'T12:00:00Z')) / 864e5);
+            d.setUTCDate(d.getUTCDate() + 1);
+            console.log(left, d.toISOString().slice(0, 10));
+          " "$last")"
+          echo "last day on file $last, $left days left"
+          if [ "$left" -ge 30 ]; then echo "enough key left"; exit 0; fi
+          npm install --no-save puppeteer-core
+          python3 - <<'PY'
+          import re
+          s = open('sw.js').read()
+          s = re.sub(r"2k13-v(\d+)", lambda m: '2k13-v' + str(int(m.group(1)) + 1), s, count=1)
+          open('sw.js', 'w').write(s)
+          PY
+          (python3 -m http.server 8123 >/dev/null 2>&1 &)
+          sleep 3
+          CHROME_PATH=/usr/bin/google-chrome node tools/gen-reach.js "$start" 60
+          git config user.name "ratings-bot"
+          git config user.email "ratings-bot@users.noreply.github.com"
+          git add -A
+          git commit -m "Answer key topped up from $start"
+          git push origin main
+          gh api -X POST "repos/${{ github.repository }}/pages/builds" || true
+          node tools/push-daily-key.js "$start" 60

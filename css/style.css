@@ -580,6 +580,8 @@ table.stats, table.stand { width: 100%; border-collapse: collapse; font-size: 15
   .topbar { flex-wrap: wrap; height: auto; gap: 0 12px; padding-top: 10px; }
   .wordmark { flex: 1; }
   .userchip { order: 2; }
+  .userchip:empty { display: none; }   /* an empty chip still cost a 12px gap, so the bar looked 20px short on the right */
+  .topbar:has(.userchip:empty) .pf-chip { margin-right: 0; }
   .mainnav { order: 3; flex: 0 0 calc(100% + var(--gutter) * 2); height: 44px; overflow-x: auto; scrollbar-width: none; margin: 6px calc(var(--gutter) * -1) 0; padding: 0 6px; }
   .mainnav::-webkit-scrollbar { display: none; }
   .mainnav > a, .navmore summary { padding: 0 11px; font-size: 14px; }

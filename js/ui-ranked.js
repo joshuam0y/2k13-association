@@ -461,7 +461,7 @@
     const counts = async () => {   // how many are online in each mode
       const el = UI.$('#rkCnt', app);
       if (!el || !/^#\/ranked$/.test(location.hash)) { if (CNT) { clearInterval(CNT); CNT = null; } return; }
-      try { const d = await UI.profile.rpc('online_counts'); el.textContent = d ? d.searching + ' SEARCHING | ' + d.ranked + ' PLAYING | ' + d.casual + ' CASUAL ROOMS' : ''; } catch (e) { /* the SQL is not run yet */ }
+      try { const d = await UI.profile.rpc('online_counts'); el.textContent = d && typeof d.searching === 'number' ? d.searching + ' SEARCHING | ' + d.ranked + ' PLAYING | ' + d.casual + ' CASUAL ROOMS' : ''; } catch (e) { /* the SQL is not run yet */ }
     };
     counts(); CNT = setInterval(counts, 10000);
     const tb = UI.$('#rkTourBtn', app); if (tb) tb.addEventListener('click', () => openTour());
