@@ -511,12 +511,13 @@
   // team on opening night) and the rotation's mood. It moves part of the way to its target after each
   // chunk of days; the engine turns it into a small edge (about -3 to +2.5 for every player).
   function chemClamp(v, a, b) { return v < a ? a : v > b ? b : v; }
-  function chemParts(state, abbr) {
+  // byTeam (optional): abbr -> that team's non-retired players in league order, so updateChemistry scans the league once, not once per team
+  function chemParts(state, abbr, byTeam) {
     var st = state.season && state.season.standings && state.season.standings[abbr], t = state.teams[abbr];
     var last = st && st.last10 && st.last10.length ? st.last10.reduce(function (a, b) { return a + b; }, 0) / st.last10.length : 0.5;
     var ps = state.season && state.season.playerStats || {};
-    var rot = Object.keys(state.players).map(function (id) { return state.players[id]; })
-      .filter(function (p) { return p.team === abbr && !p.retired; })
+    var rot = (byTeam ? (byTeam[abbr] || []).slice() : Object.keys(state.players).map(function (id) { return state.players[id]; })
+      .filter(function (p) { return p.team === abbr && !p.retired; }))
       .sort(function (a, b) { return ((ps[b.id] || {}).min || b.ovr / 10) - ((ps[a.id] || {}).min || a.ovr / 10); }).slice(0, 8);
     var open = (t && t.openRoster) || [];
     var cont = rot.length && open.length ? rot.filter(function (p) { return open.indexOf(p.id) >= 0; }).length / rot.length : 1;
@@ -524,8 +525,10 @@
     return { winning: Math.round((last - 0.5) * 50), continuity: Math.round((cont - 0.65) * 40), mood: Math.round((mood - 60) * 0.4) };
   }
   function updateChemistry(state, rate) {
+    var byTeam = {};
+    Object.keys(state.players).forEach(function (id) { var p = state.players[id]; if (p && !p.retired) (byTeam[p.team] || (byTeam[p.team] = [])).push(p); });
     Object.keys(state.teams).forEach(function (a) {
-      var t = state.teams[a], c = chemParts(state, a), cur = t.chem != null ? t.chem : 60, target = chemClamp(60 + c.winning + c.continuity + c.mood, 15, 98);
+      var t = state.teams[a], c = chemParts(state, a, byTeam), cur = t.chem != null ? t.chem : 60, target = chemClamp(60 + c.winning + c.continuity + c.mood, 15, 98);
       t.chem = Math.round(chemClamp(cur + (target - cur) * (rate || 0.2), 10, 99));
       t.chemParts = c;
     });

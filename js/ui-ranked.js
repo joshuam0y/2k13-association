@@ -29,6 +29,14 @@
       .map(r => `<span class="rk-spec-i">${esc(eraName(r.era))} SPECIALIST</span>`);
     return chips.length ? `<div class="rk-spec">${chips.join('')}</div>` : '';
   };
+  // "favorite era" is one of the six era buckets, never Overall: old results (all-time, or a decade) are mapped onto the nearest bucket
+  const favKey = e => {
+    if (!e) return e;
+    if (/^B:/.test(e)) return e;
+    if (e === 'ALL') return 'B:all';
+    const m = /^(\d{4})s$/.exec(e); if (!m) return e;
+    const y = +m[1]; return y < 1980 ? 'B:classic' : y < 2000 ? 'B:golden' : y < 2010 ? 'B:noughts' : y < 2020 ? 'B:tens' : 'B:now';
+  };
   const ladderOf = e => (/^B:/.test(e) ? 'ALL' : e);   // the rating a result moves for matchmaking: always the overall one
   const ERAS = ['ALL'].concat(BUCKETS.map(b => 'B:' + b.key));
   const eraName = e => (e === 'ALL' ? 'OVERALL' : /^B:/.test(e) ? (bucketByKey(e.slice(2)) || { label: e }).label : e);
@@ -405,6 +413,7 @@
 
   // ---------- helpers for the pages ----------
   const eraOpts = cur => ERAS.map(e => `<option value="${e}"${e === cur ? ' selected' : ''}>${esc(eraName(e))}</option>`).join('');
+  const favOpts = cur => ERAS.filter(e => e !== 'ALL').map(e => `<option value="${e}"${e === cur ? ' selected' : ''}>${esc(eraName(e))}</option>`).join('');   // the six eras, no Overall
   const regionOpts = cur => REGIONS.map(([v, n]) => `<option value="${esc(v)}"${v === (cur || '') ? ' selected' : ''}>${esc(n.replace(/^ +/, '    '))}</option>`).join('');
   async function myRow() {
     const c = await UI.profile.client(), id = UI.profile.userId();
@@ -750,7 +759,9 @@
         const count = (el, to, ms, dec, suf, tick) => { const t0 = performance.now(); const step = now => { const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3); el.textContent = (to * e).toFixed(dec) + suf; if (tick && k < 1 && Math.floor(k * 14) !== step.l) { step.l = Math.floor(k * 14); sfx('tick'); } if (k < 1 && ov.isConnected) requestAnimationFrame(step); }; requestAnimationFrame(step); };
         const burst = () => { const box = document.createElement('div'); box.className = 'rk-conf'; for (let n = 0; n < 46; n++) { const c = document.createElement('i'); c.style.cssText = '--x:' + (Math.random() * 100 - 50) + 'vw;--y:' + (-(30 + Math.random() * 55)) + 'vh;--r:' + Math.round(Math.random() * 720 - 360) + 'deg;--d:' + (0.9 + Math.random() * 0.9) + 's;background:' + ['#d4af37', '#f5d76e', '#fff', '#3d78d6', '#e88a8a'][n % 5]; box.appendChild(c); } ov.appendChild(box); setTimeout(() => box.remove(), 2200); };
         const finish = () => { T.forEach(clearTimeout); cards.forEach(c => { c.classList.add('in'); const o = c.querySelector('[data-o]'); o.textContent = o.dataset.o; }); q('#fsN').textContent = score.toFixed(1); q('#fpN').textContent = pct.toFixed(1) + '%'; if (R) paintRank(); else q('#fTier').textContent = 'RANKING...'; stamped = true; ov.classList.add('done'); };
-        dist.then(D => { if (D) { const below = D.filter(x => x < score - 0.0001).length; R = { n: D.length, p: 100 * below / D.length, top: score >= D[D.length - 1] - 0.0001, gap: 100 * score / D[D.length - 1] }; } dist.__fin = true; if (stamped || ov.classList.contains('done')) paintRank(); });
+        // the rank on the page itself does not wait for the popup: it shows as soon as it is worked out, even if the popup was closed early
+        const pagePaint = () => { const tk = TIERKEY[tierOf()] || '', rg = UI.$('#rkReach', app); if (rg) rg.textContent = rankLine(); const tp = UI.$('#rkTierPg', app); if (tp) { tp.textContent = tierOf(); tp.dataset.t = tk; const sc = tp.closest('.rk-score'); if (sc) sc.dataset.t = tk; } };
+        dist.then(D => { if (D) { const below = D.filter(x => x < score - 0.0001).length; R = { n: D.length, p: 100 * below / D.length, top: score >= D[D.length - 1] - 0.0001, gap: 100 * score / D[D.length - 1] }; } dist.__fin = true; if (ov.isConnected && (stamped || ov.classList.contains('done'))) paintRank(); pagePaint(); });
         if (!first || window.matchMedia('(prefers-reduced-motion: reduce)').matches) finish();
         else {
           ls.set(seenK, true);
@@ -957,9 +968,9 @@
       const games = (ser.data || []).map(s => ({ won: (s.p1 === id ? s.w1 > s.w2 : s.w2 > s.w1), era: s.era, at: s.created_at, ranked: s.ranked }));
       const W = games.filter(g => g.won).length, L = games.length - W;
       let streak = 0; for (const g of games) { if (g.won === games[0].won) streak++; else break; }
-      const count = {}; games.forEach(g => { count[g.era] = (count[g.era] || 0) + 1; });
+      const count = {}; games.forEach(g => { const k = favKey(g.era); count[k] = (count[k] || 0) + 1; });
       const auto = Object.keys(count).sort((a, b) => count[b] - count[a])[0] || null;
-      const fav = row.fav_era || auto;
+      const fav = favKey(row.fav_era) || auto;
       const oppIds = [...new Set((riv.data || []).map(r => (r.a === id ? r.b : r.a)).concat((ser.data || []).map(x => (x.p1 === id ? x.p2 : x.p1))))];
       const names = {};
       if (oppIds.length) { const p = await c.from('profiles').select('id,username').in('id', oppIds); (p.data || []).forEach(x => { names[x.id] = x.username; }); }
@@ -984,7 +995,7 @@
           <span class="pf-msg" id="avMsg"></span></div></div>
         <div class="ch-step"><div class="ch-step-k">ABOUT YOU</div>
           <label class="field"><span>REGION (FOR THE REGION BOARDS)</span><select id="meRegion">${regionOpts(row.region)}</select></label>
-          <label class="field"><span>FAVORITE ERA</span><select id="meFav"><option value="">${auto ? 'THE ERA I PLAY MOST (' + esc(eraName(auto)) + ')' : 'THE ERA I PLAY MOST'}</option>${eraOpts(row.fav_era || '___')}</select></label>
+          <label class="field"><span>FAVORITE ERA</span><select id="meFav"><option value="">${auto ? 'THE ERA I PLAY MOST (' + esc(eraName(auto)) + ')' : 'THE ERA I PLAY MOST'}</option>${favOpts(favKey(row.fav_era) || '___')}</select></label>
           <small class="muted">Region is only what you pick. Nothing reads your location.</small>
           <div class="ch-go"><button type="button" class="btn btn-gold" id="meSave">SAVE</button><span class="pf-msg" id="meMsg"></span></div></div>
         ${most.length ? `<div class="ch-step"><div class="ch-step-k">MOST DRAFTED</div>${table(['PLAYER', 'SEASON', 'TIMES'], most.map(m => [esc(m.n), esc(yr(m.se) || 'ANY'), '<b>' + m.c + '</b>']), true)}</div>` : ''}
@@ -1090,7 +1101,7 @@
       const d = await UI.profile.rpc('public_profile', { p_name: name });
       if (!d) { app.innerHTML = `<section class="ch-hero"><div class="ch-hero-k">PROFILE</div><h1 class="ch-hero-t">${esc(name.toUpperCase())}</h1></section><div class="rkn"><b>${esc(name.toUpperCase())} IS A GUEST.</b><span class="muted">Guests play with a room code and a name, so they have no profile, no ladder rating and no friends list. They can make an account any time.</span></div><div class="ch-go"><a class="btn" href="#/ranked">RANKED</a><a class="btn" href="#/me">MY PROFILE</a></div>`; return; }
       if (d.self) { location.replace('#/me'); return; }
-      const fav = d.fav_era || d.auto_era, bl = d.best_lineup, yr = se => (se ? "'" + String(se - 1).slice(2) + "-'" + String(se).slice(2) : '');
+      const fav = favKey(d.fav_era || d.auto_era), bl = d.best_lineup, yr = se => (se ? "'" + String(se - 1).slice(2) + "-'" + String(se).slice(2) : '');
       const total = d.wins + d.losses, signed = UI.profile.signedIn();
       const fr = !signed ? '' : d.friend === 'friends' ? '<span class="vs-fr ok">&#10003; YOU ARE FRIENDS</span><button type="button" class="btn btn-small" id="uRm">UNFRIEND</button>' : d.friend === 'sent' ? '<span class="muted">REQUEST SENT</span><button type="button" class="btn btn-small" id="uRm">CANCEL REQUEST</button>' : `<button type="button" class="btn btn-gold" id="uAdd">${d.friend === 'incoming' ? 'ACCEPT FRIEND REQUEST' : 'ADD AS FRIEND'}</button>`;
       app.innerHTML = `<div class="pf-head">${avatarHtml(d.avatar, d.username, 72, ((d.ratings || []).find(r => r.era === 'ALL') || { rating: 1200 }).rating)}<section class="ch-hero"><div class="ch-hero-k">PROFILE${d.region ? ' | ' + esc(regionName(d.region).toUpperCase()) : ''}</div><h1 class="ch-hero-t">${esc(d.username).toUpperCase()}</h1>
@@ -1265,7 +1276,8 @@
       const me = UI.profile.account(), done = ls.get(dKey(day), null), played = done && done.fin, sk = streakNow();
       const left = (() => { const t = new Date().toLocaleTimeString('en-GB', Object.assign({ hour12: false }, PT)).split(':'), ms = 86400000 - ((+t[0]) * 3600 + (+t[1]) * 60 + (+t[2])) * 1000; return Math.floor(ms / 3600000) + 'H ' + (Math.floor(ms / 60000) % 60) + 'M'; })();
       const avgOf = x => x.avg_pct != null ? f1(x.avg_pct) + '%' : f1(x.avg_score);
-      const statLine = st && st.played ? `<p class="rk-stat"><b>${st.played}</b> PLAYED TODAY | AVERAGE <b>${avgOf(st)}</b>${st.best_pct != null ? ' | BEST <b>' + f1(st.best_pct) + '%</b>' : ''}</p>` : '';
+      const statHtml = x => (x && x.played ? `<p class="rk-stat"><b>${x.played}</b> PLAYED TODAY | AVERAGE <b>${avgOf(x)}</b>${x.best_pct != null ? ' | BEST <b>' + f1(x.best_pct) + '%</b>' : ''}</p>` : '');
+      const statLine = statHtml(st);
       const yest = yst && yst.played ? `<div class="rk-theme"><small>YESTERDAY | DAILY #${dayNo(yday)}</small><b>${esc(yst.winner || '')} WON${yst.winner_pct != null ? ' WITH ' + f1(yst.winner_pct) + '%' : ''}</b><span class="muted">${yst.played} played | average ${avgOf(yst)}</span></div>` : '';
       body.innerHTML = `${TH ? `<div class="rk-theme"><small>DAILY #${dayNo(day)} | ${esc(TH.kind)}</small><b>${esc(TH.title)}</b><span class="muted">${esc(TH.tag)}</span></div>` : ''}
         <p class="rk-streak">${sk.n ? '<b>' + sk.n + '</b> DAY STREAK' + (sk.done ? ' | TODAY DONE' : ' | PLAY TODAY TO KEEP IT') : 'START A STREAK: PLAY ONE A DAY'}</p>
@@ -1280,7 +1292,9 @@
         <div class="ch-go"><a class="btn" href="#/ranked">RANKED</a></div>`;
       const board = UI.$('#dyBoard', app), msg = t => '<p class="muted">' + t + '</p>';
       const todayTbl = list => list && list.length ? table(perf > 0 ? ['#', 'PLAYER', 'SCORE', 'OF PERFECT FIVE'] : ['#', 'PLAYER', 'SCORE'], list.map((x, i) => [i + 1, nameCell(x, me), '<b>' + Number(x.score).toFixed(1) + '</b>'].concat(perf > 0 ? [pctOf(x.score)] : []))) : '';
+      let curTab = 'today';
       const show = async kind => {
+        curTab = kind;
         app.querySelectorAll('#dyTabs [data-bt]').forEach(b => b.classList.toggle('btn-gold', b.dataset.bt === kind));
         if (kind === 'today') { board.innerHTML = todayTbl(rows) || msg('No scores yet today.'); return; }
         if (kind === 'friends') {
@@ -1300,6 +1314,17 @@
       };
       app.querySelectorAll('#dyTabs [data-bt]').forEach(b => b.addEventListener('click', () => show(b.dataset.bt)));
       show('today');
+      // the numbers stay current while the page is open: every 30 seconds the played count, average and best, and the board when it is on Today
+      stopRefresh();
+      REFRESH = setInterval(async () => {
+        if (!body.isConnected || location.hash !== '#/daily') { stopRefresh(); return; }
+        let n = null, r = null;
+        try { n = await UI.profile.rpc('daily_stats', { p_day: day }); } catch (e) { /* try again next time */ }
+        try { r = await UI.profile.rpc('lb_daily', { p_day: day, p_era: 'ALL', p_region: null, p_limit: 100 }); } catch (e) { /* try again next time */ }
+        if (!body.isConnected) return;
+        if (n && n.played) { const el = body.querySelector('.rk-stat'); if (el) el.outerHTML = statHtml(n); }
+        if (r && curTab === 'today') { rows = r; board.innerHTML = todayTbl(rows) || msg('No scores yet today.'); }
+      }, 30000);
     } catch (e) { body.innerHTML = '<p class="rk-err">' + esc(failMsg(e)) + '</p>'; }
   }
   P.daily = function (app, arg) {

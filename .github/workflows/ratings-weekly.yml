@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
+      DAILY_KEY_SECRET: ${{ secrets.DAILY_KEY_SECRET }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,6 +44,11 @@ jobs:
           git commit -m "Ratings update effective $eff"
           git push -u origin "$branch"
           gh label create ratings-update --force --color d4af37 || true
+          # send the new answer key to Supabase by itself; only when that does not work is there an issue asking you to paste the SQL
+          if node tools/push-daily-key.js "$eff" 60; then
+            echo "answer key sent, no issue needed"
+            exit 0
+          fi
           gh issue create --title "Run daily_key.sql before $eff (ratings update)" --label ratings-update --assignee "${{ github.repository_owner }}" --body "A ratings update is ready on the branch ratings/$eff and goes live on **$eff** at 12:05 am Pacific. $(grep -E 'moves:|Ty Jerome' ratings.txt | tr '\n' ' ')
 
           1. Open https://supabase.com/dashboard/project/feozimahsjhnvlqlkwyh/sql/new

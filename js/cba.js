@@ -219,6 +219,20 @@
     return sum;
   }
 
+  // every team's payroll in one pass over the league (same rules and same summing order as payroll, so the totals are identical)
+  function payrolls(state, year) {
+    if (year == null) year = salaryYear(state);
+    var out = {}, P = (state && state.players) || {}, T = (state && state.teams) || {};
+    for (var a in T) out[a] = 0;
+    for (var id in P) {
+      var p = P[id];
+      if (!p || p.retired || !(p.team in out) || isTwoWay(p) || isStashed(p, year)) continue;
+      out[p.team] += salaryOf(p, year);
+    }
+    for (var b in T) { var dm = T[b] && T[b].deadMoney; if (isArr(dm)) dm.forEach(function (d) { if (d && d.year === year) out[b] += d.amount || 0; }); }
+    return out;
+  }
+
   function capSpace(state, abbr, year) {
     if (year == null) year = salaryYear(state);
     return Math.max(0, rules(year).cap - payroll(state, abbr, year));
@@ -578,7 +592,7 @@
     rules: rules, eraOf: eraOf,
     setFuture: function (fn) { futureHook = fn || null; ruleCache = {}; }, salaryYear: salaryYear, salaryOf: salaryOf,
     maxSalary: maxSalary, minSalary: minSalary, rookieScale: rookieScale, rookieContract: rookieContract,
-    payroll: payroll, capSpace: capSpace, capStatus: capStatus, rosterCount: rosterCount, twoWayCount: twoWayCount,
+    payroll: payroll, payrolls: payrolls, capSpace: capSpace, capStatus: capStatus, rosterCount: rosterCount, twoWayCount: twoWayCount,
     birdRights: birdRights, canSign: canSign, maxIncoming: maxIncoming, validateTrade: validateTrade,
     luxuryTax: luxuryTax, taxBill: taxBill, money: money
   };

@@ -112,7 +112,12 @@
       ctx.pay[p.team] += salaryOf(p, year);
     }
     var C = cba();
-    if (C && typeof C.payroll === "function") {
+    if (C && typeof C.payrolls === "function") {
+      try {
+        var all = C.payrolls(state, year);
+        Object.keys(ctx.pay).forEach(function (a) { var v = all[a]; if (typeof v === "number" && isFinite(v)) ctx.pay[a] = v; });
+      } catch (e) { /* keep ours */ }
+    } else if (C && typeof C.payroll === "function") {
       Object.keys(ctx.pay).forEach(function (a) {
         try { var v = C.payroll(state, a, year); if (typeof v === "number" && isFinite(v)) ctx.pay[a] = v; } catch (e) { /* keep ours */ }
       });
