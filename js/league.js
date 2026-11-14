@@ -155,6 +155,7 @@
     rightsPlayers.forEach(function (pr) {
       var r = pr.rights;
       if (state.players[pr.id] || !r || !teamAbbrs[r.team]) return;
+      if (other && +r.draftYear > state.year) return;   // a later era's draft rights do not exist yet
       // another start year: only rights to players still overseas (the rest are in the league file or gone)
       if (other && !(+pr.arrivalYear > state.year) && !(+r.draftYear >= state.year)) return;
       var p = clone(pr);

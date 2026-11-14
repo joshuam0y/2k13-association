@@ -70,10 +70,12 @@
 }
 @media (min-width: 900px) {
   .rk-row {
-    grid-template-columns: minmax(0, 1fr) 200px 120px 300px; grid-template-areas: 'who deal hit act' 'note note note note';
+    grid-template-columns: minmax(0, 1fr) 230px 170px 290px; grid-template-areas: 'who deal hit act' 'note note note note';
     align-items: center; padding: 0 14px 0 0; row-gap: 0;
   }
   .rk-act { padding-left: 0; }
+  .rk-deal b, .rk-hit b { white-space: nowrap; }
+  .rk-deal, .rk-hit { padding-top: 8px; padding-bottom: 8px; }
   .rk-note { padding: 0 0 10px 12px; }
 }
 
